@@ -1028,6 +1028,14 @@ input[type="range"].slider { width: 100%; height: 4px; accent-color: var(--accen
 }
 .settings-card .s-row {
   display: flex !important; flex-direction: column !important; gap: 0 !important;
+  /* The base .s-row rule (used when settings-card wasn't yet the Apple
+     grouped-list style) sets align-items: flex-end for its original
+     row-wrap layout. That declaration was never overridden here, and
+     since flex-direction is now column, align-items controls the
+     *horizontal* axis instead — flex-end right-aligned and shrink-wrapped
+     every row instead of stretching it full width, leaving a large empty
+     gap on the left of every settings field. Explicitly restore stretch. */
+  align-items: stretch !important;
 }
 .settings-card .s-field {
   padding: .85rem 1.25rem !important;
