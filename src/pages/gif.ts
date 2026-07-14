@@ -66,7 +66,7 @@ export function mountGif(root: HTMLElement) {
           <span class="badge gif">🎞️ GIF</span>
           <h1 class="page-title">GIF Optimiser</h1>
         </div>
-        <p class="page-desc">Two-pass palettegen · paletteuse Bayer dithering · GIF-to-WebM VP9 conversion · FFmpeg.wasm</p>
+        <p class="page-sub">Two-pass palettegen · paletteuse Bayer dithering · GIF-to-WebM VP9 conversion · FFmpeg.wasm</p>
       </div>
       <div class="settings-card" id="gif-settings"></div>
       <div id="dz-mount"></div>
@@ -115,7 +115,7 @@ export function mountGif(root: HTMLElement) {
             <option value="15" ${s.fps===15?'selected':''}>15 fps</option>
             <option value="10" ${s.fps===10?'selected':''}>10 fps</option>
           </select>
-        </div>` : `<div class="s-field"><p style="font-size:.82rem;color:var(--text-3);line-height:1.6">Converts to WebM VP9 for 70–95% size reduction. <br>Great for websites that accept video.</p></div>`}
+        </div>` : `<div class="s-field full"><p style="font-size:.82rem;color:var(--text-3);line-height:1.6">Converts to WebM VP9 for 70–95% size reduction. <br>Great for websites that accept video.</p></div>`}
       </div>`;
 
     card.querySelector('#out-gif')?.addEventListener('click',   () => { s.gifToVideo=false; renderSettings(); });

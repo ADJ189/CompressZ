@@ -73,7 +73,7 @@ export function mountVideo(root: HTMLElement) {
           <span class="badge video">🎬 Video</span>
           <h1 class="page-title">Video Compressor</h1>
         </div>
-        <p class="page-desc">FFmpeg.wasm (WASM${ffHasMT() ? ' MT' : ''}) · MediaRecorder — auto-selected per browser</p>
+        <p class="page-sub">FFmpeg.wasm (WASM${ffHasMT() ? ' MT' : ''}) · MediaRecorder — auto-selected per browser</p>
         <div class="caps-row">
           <span class="cap browser">${navigator.userAgent.includes('Chrome') ? 'Chrome' : navigator.userAgent.includes('Firefox') ? 'Firefox' : 'Safari'}</span>
           <span class="cap primary">FFmpeg.wasm</span>

@@ -170,14 +170,24 @@ async function detectLanguage(pageBlob: Blob, Tesseract: any): Promise<OcrLangua
 // ── Tesseract loader (UMD script tag) ─────────────────────────
 let tessLoading: Promise<any> | null = null;
 function loadTesseract(): Promise<any> {
+  if ((window as any).Tesseract) return Promise.resolve((window as any).Tesseract);
   if (tessLoading) return tessLoading;
   tessLoading = new Promise((resolve, reject) => {
-    if ((window as any).Tesseract) { resolve((window as any).Tesseract); return; }
     const s = document.createElement('script');
     s.src     = TESS_UMD;
-    s.onload  = () => { const T=(window as any).Tesseract; T?resolve(T):reject(new Error('Tesseract not on window')); };
+    s.onload  = () => {
+      const T = (window as any).Tesseract;
+      if (T) resolve(T); else reject(new Error('Tesseract not on window'));
+    };
     s.onerror = () => reject(new Error('Failed to load Tesseract.js'));
     document.head.appendChild(s);
+  }).catch(err => {
+    // Release the lock on failure — otherwise a single transient CDN
+    // hiccup would permanently break Tesseract for the rest of the
+    // session, since every later call would just return this same
+    // cached rejected promise.
+    tessLoading = null;
+    throw err;
   });
   return tessLoading;
 }
@@ -241,24 +251,39 @@ async function renderPages(
 
 // ── PaddleOCR-VL 1.5 engine ───────────────────────────────────
 let paddleInstance: any = null;
+// Tracks which recognition model (Latin vs CJK) is currently loaded into
+// paddleInstance, since the two script families use different rec models.
+let paddleInstanceIsCJK: boolean | null = null;
 let paddleLoading: Promise<any> | null = null;
 
 async function getPaddle(isCJK: boolean): Promise<any> {
-  if (paddleInstance) return paddleInstance;
+  // Reuse the cached instance only if it was loaded with the matching
+  // recognition model — otherwise a document that switches between, say,
+  // English and Chinese in the same session would silently keep using
+  // whichever model happened to load first, producing garbled text.
+  if (paddleInstance && paddleInstanceIsCJK === isCJK) return paddleInstance;
   if (paddleLoading) return paddleLoading;
+
   paddleLoading = (async () => {
-    const mod = await import(/* @vite-ignore */ PADDLE_CDN) as any;
-    const ocr = mod?.default ?? mod?.ocr ?? mod;
-    if (typeof ocr?.init !== 'function') throw new Error('PaddleOCR init not found in module');
-    await ocr.init({
-      detModelURL: PADDLE_DET,
-      recModelURL: isCJK ? PADDLE_REC_CJK : PADDLE_REC_EN,
-      clsModelURL: PADDLE_CLS,
-      enableCls:   true,
-    });
-    paddleInstance = ocr;
-    paddleLoading  = null;
-    return ocr;
+    try {
+      const mod = await import(/* @vite-ignore */ PADDLE_CDN) as any;
+      const ocr = mod?.default ?? mod?.ocr ?? mod;
+      if (typeof ocr?.init !== 'function') throw new Error('PaddleOCR init not found in module');
+      await ocr.init({
+        detModelURL: PADDLE_DET,
+        recModelURL: isCJK ? PADDLE_REC_CJK : PADDLE_REC_EN,
+        clsModelURL: PADDLE_CLS,
+        enableCls:   true,
+      });
+      paddleInstance      = ocr;
+      paddleInstanceIsCJK = isCJK;
+      return ocr;
+    } finally {
+      // Release the lock unconditionally — on success this simply lets
+      // the next differently-scripted call reload, and on failure it
+      // lets the user retry instead of permanently falling back.
+      paddleLoading = null;
+    }
   })();
   return paddleLoading;
 }

@@ -79,7 +79,7 @@ export function mountImages(root: HTMLElement) {
           <span class="badge img">🖼️ Images</span>
           <h1 class="page-title">Image Compressor</h1>
         </div>
-        <p class="page-desc">GPU-decoded · OffscreenCanvas · JPEG · PNG · WebP · AVIF · BMP · TIFF · HEIC</p>
+        <p class="page-sub">GPU-decoded · OffscreenCanvas · JPEG · PNG · WebP · AVIF · BMP · TIFF · HEIC</p>
         <div id="fmt-warn" class="compat-warn" style="display:none"></div>
       </div>
 

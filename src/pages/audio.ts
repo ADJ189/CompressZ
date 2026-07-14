@@ -82,7 +82,7 @@ export function mountAudio(root: HTMLElement) {
           <span class="badge audio">🎵 Audio</span>
           <h1 class="page-title">Audio Compressor</h1>
         </div>
-        <p class="page-desc">FFmpeg.wasm · MP3 · AAC · OGG · Opus · FLAC · WAV · Also extracts audio from MP4/MKV/MOV</p>
+        <p class="page-sub">FFmpeg.wasm · MP3 · AAC · OGG · Opus · FLAC · WAV · Also extracts audio from MP4/MKV/MOV</p>
       </div>
       <div class="settings-card" id="audio-settings"></div>
       <div id="dz-mount"></div>
@@ -116,7 +116,7 @@ export function mountAudio(root: HTMLElement) {
             <select class="si" id="br-sel">
               ${bOpts.map(b=>`<option value="${b}" ${s.bitrate===b?'selected':''}>${b} kbps</option>`).join('')}
             </select>
-          </div>` : ll ? `<div class="s-field"><span class="s-label" style="color:var(--green)">✓ Lossless — no bitrate setting</span></div>` : ''}
+          </div>` : ll ? `<div class="s-field full"><span class="s-label" style="color:var(--green)">✓ Lossless — no bitrate setting</span></div>` : ''}
         <div class="s-field">
           <span class="s-label">Sample rate</span>
           <select class="si" id="sr-sel">
