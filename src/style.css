@@ -1046,8 +1046,16 @@ input[type="range"].slider { width: 100%; height: 4px; accent-color: var(--accen
   color: var(--text-2) !important; text-transform: none !important;
   letter-spacing: 0 !important;
 }
-.settings-card .s-field > div[style] {
+.settings-card .s-field > div[style],
+.settings-card .s-field > p[style] {
   grid-column: 2; font-size: .72rem; color: var(--text-4); margin-top: .15rem;
+}
+
+/* Fields with a single, label-less child (info notes, standalone messages)
+   should span the full row instead of being squeezed into the 160px label
+   column by the two-column grid above. */
+.settings-card .s-field.full {
+  display: block !important;
 }
 
 /* Inline sub-hint below the control */

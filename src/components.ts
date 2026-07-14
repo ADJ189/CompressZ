@@ -93,7 +93,7 @@ export function renderFileCard(entry: FileEntry, cbs: FileCardCallbacks): HTMLEl
     `;
   }
   if (entry.status === 'error') {
-    metaHtml += `<span class="err-msg">⚠ ${entry.error?.slice(0, 70) ?? 'Error'}</span>`;
+    metaHtml += `<span class="err-msg">⚠ ${esc(entry.error?.slice(0, 70) ?? 'Error')}</span>`;
   }
 
   // progress
