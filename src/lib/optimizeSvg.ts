@@ -51,6 +51,7 @@ export async function optimizeSvg(
     prev = svg;
     svg = svg.replace(/\s+on[a-z]+\s*=\s*"[^"]*"/gi, '');
     svg = svg.replace(/\s+on[a-z]+\s*=\s*'[^']*'/gi, '');
+    svg = svg.replace(/\s+on[a-z]+\s*=\s*[^\s"'=<>`]+/gi, '');
   } while (svg !== prev);
   svg = svg.replace(/(href|xlink:href)\s*=\s*"(\s*javascript:[^"]*)"/gi, '$1="#"');
   svg = svg.replace(/(href|xlink:href)\s*=\s*'(\s*javascript:[^']*)'/gi, "$1='#'");
