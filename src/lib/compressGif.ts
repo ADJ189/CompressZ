@@ -1,5 +1,5 @@
 import type { CompressOptions, CompressResult } from './types';
-import { getFFmpeg, ffFetch } from './ffmpeg';
+import { getFFmpeg, ffFetch, setProgressHandler } from './ffmpeg';
 
 export async function compressGif(
   file: File,
@@ -10,7 +10,7 @@ export async function compressGif(
   const ff = await getFFmpeg() as any;
   onProgress?.(6);
 
-  ff.on('progress', ({ progress }: { progress: number }) =>
+  setProgressHandler(ff, ({ progress }) =>
     onProgress?.(6 + Math.round(progress * 85)));
 
   await ff.writeFile('input.gif', await ffFetch(file));

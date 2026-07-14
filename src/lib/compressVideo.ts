@@ -1,5 +1,5 @@
 import type { CompressOptions, CompressResult } from './types';
-import { getFFmpeg, ffFetch, ffHasMT } from './ffmpeg';
+import { getFFmpeg, ffFetch, ffHasMT, setProgressHandler } from './ffmpeg';
 
 export async function compressVideo(
   file: File,
@@ -29,7 +29,7 @@ async function videoViaFFmpeg(
 
   const ff = await getFFmpeg() as any;
   onProgress?.(4);
-  ff.on('progress', ({ progress }: { progress: number }) =>
+  setProgressHandler(ff, ({ progress }) =>
     onProgress?.(4 + Math.round(progress * 88)));
 
   const ext  = file.name.match(/\.[^.]+$/)?.[0] ?? '.mp4';

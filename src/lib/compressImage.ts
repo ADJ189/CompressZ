@@ -1,9 +1,26 @@
 import type { CompressOptions, CompressResult, ImageFormat } from './types';
 
+// AVIF *encoding* support varies a lot more than decoding support (notably
+// Safari can display AVIF but can't encode it via canvas, and older Firefox
+// versions can't either). Feature-detect once via toDataURL instead of
+// sniffing the user agent string, which is fragile and easy to get wrong
+// across Chromium forks, WebKit variants, and future browser releases.
+let _avifEncodeSupport: boolean | null = null;
+function supportsAvifEncode(): boolean {
+  if (_avifEncodeSupport !== null) return _avifEncodeSupport;
+  try {
+    const c = document.createElement('canvas');
+    c.width = c.height = 1;
+    _avifEncodeSupport = c.toDataURL('image/avif').startsWith('data:image/avif');
+  } catch {
+    _avifEncodeSupport = false;
+  }
+  return _avifEncodeSupport;
+}
+
 export function getBestFormat(requested: ImageFormat): ImageFormat {
-  if (typeof navigator === 'undefined') return requested;
-  // AVIF encoding not supported in Firefox
-  if (requested === 'image/avif' && navigator.userAgent.includes('Firefox/')) return 'image/webp';
+  if (typeof document === 'undefined') return requested;
+  if (requested === 'image/avif' && !supportsAvifEncode()) return 'image/webp';
   return requested;
 }
 

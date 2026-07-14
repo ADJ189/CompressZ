@@ -44,6 +44,14 @@ export async function optimizeSvg(
     svg  = svg.replace(/<script\b[^>]*(?:\/>|>[\s\S]*?<\/script(?:\s[^>]*)?>)/gi, '');
   } while (svg !== prev);
 
+  // Strip inline event-handler attributes (onload, onclick, onmouseover, …)
+  // and javascript: URIs — <script> removal alone leaves these XSS vectors
+  // intact if the SVG is ever rendered inline (e.g. via innerHTML or <object>).
+  svg = svg.replace(/\s+on[a-z]+\s*=\s*"[^"]*"/gi, '');
+  svg = svg.replace(/\s+on[a-z]+\s*=\s*'[^']*'/gi, '');
+  svg = svg.replace(/(href|xlink:href)\s*=\s*"(\s*javascript:[^"]*)"/gi, '$1="#"');
+  svg = svg.replace(/(href|xlink:href)\s*=\s*'(\s*javascript:[^']*)'/gi, "$1='#'");
+
   // Remove hidden elements
   do {
     prev = svg;

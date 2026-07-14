@@ -1,5 +1,5 @@
 import type { CompressOptions, CompressResult, AudioFormat } from './types';
-import { getFFmpeg, ffFetch } from './ffmpeg';
+import { getFFmpeg, ffFetch, setProgressHandler } from './ffmpeg';
 
 const DEFAULT_BITRATE: Record<AudioFormat, number> = {
   mp3: 192, aac: 160, ogg: 128, opus: 96, flac: 0, wav: 0,
@@ -23,7 +23,7 @@ export async function compressAudio(
   const ff = await getFFmpeg() as any;
   onProgress?.(6);
 
-  ff.on('progress', ({ progress }: { progress: number }) =>
+  setProgressHandler(ff, ({ progress }) =>
     onProgress?.(6 + Math.round(progress * 88)));
 
   const fmt  = (options.audioFormat ?? 'mp3') as AudioFormat;
