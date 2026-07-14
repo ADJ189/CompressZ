@@ -10,7 +10,7 @@ Nothing ever leaves your device.
 [![Cloudflare Pages](https://img.shields.io/badge/Cloudflare_Pages-deployed-F38020?logo=cloudflare&logoColor=white)](https://compressz.pages.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-22c55e.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-22c55e.svg)](LICENSE)
 
 </div>
 
@@ -136,6 +136,7 @@ compressz/
 ├── vite.config.ts            # Vite 6, esnext, COOP/COEP dev headers
 ├── tsconfig.json
 ├── package.json
+├── CHANGELOG.md
 └── .github/dependabot.yml    # Weekly grouped updates, major versions pinned
 ```
 
@@ -189,4 +190,6 @@ CompressZ has no backend. Files never leave your browser. See [Privacy Policy](h
 
 ---
 
-Made with ❤️ by ADJ and team · MIT License
+See [CHANGELOG.md](CHANGELOG.md) for release history.
+
+Made with ❤️ by ADJ and team · Apache License 2.0
