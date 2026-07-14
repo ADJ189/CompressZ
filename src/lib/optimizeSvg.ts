@@ -52,6 +52,9 @@ export async function optimizeSvg(
     svg = svg.replace(/\s+on[a-z]+\s*=\s*"[^"]*"/gi, '');
     svg = svg.replace(/\s+on[a-z]+\s*=\s*'[^']*'/gi, '');
   } while (svg !== prev);
+  // Fallback neutralization for malformed/unquoted leftovers to avoid `on*=`
+  // surviving multi-character replacements.
+  svg = svg.replace(/\s+on[a-z]+\s*=/gi, ' ');
   svg = svg.replace(/(href|xlink:href)\s*=\s*"(\s*javascript:[^"]*)"/gi, '$1="#"');
   svg = svg.replace(/(href|xlink:href)\s*=\s*'(\s*javascript:[^']*)'/gi, "$1='#'");
 
