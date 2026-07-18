@@ -6,6 +6,7 @@ import { mountVideo }  from './pages/video';
 import { mountAudio }  from './pages/audio';
 import { mountGif }    from './pages/gif';
 import { mountOcr }    from './pages/ocr';
+import { mountConvert } from './pages/convert';
 
 // ── Theme ─────────────────────────────────────────────────────
 const html      = document.documentElement;
@@ -106,6 +107,7 @@ on('compress/video',  () => { setActiveNav('compress/video');  mountPage(mountVi
 on('compress/audio',  () => { setActiveNav('compress/audio');  mountPage(mountAudio); });
 on('compress/gif',    () => { setActiveNav('compress/gif');    mountPage(mountGif); });
 on('compress/ocr',    () => { setActiveNav('compress/ocr');    mountPage(mountOcr); });
+on('convert',         () => { setActiveNav('convert');         mountPage(mountConvert); });
 on('about',           () => { setActiveNav('about');           showStatic('tpl-about'); });
 on('docs',            () => { setActiveNav('docs');            showStatic('tpl-docs'); });
 on('privacy',         () => { setActiveNav('privacy');         showStatic('tpl-privacy'); });

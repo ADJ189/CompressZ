@@ -530,6 +530,7 @@ img, svg { display: block; }
 .badge.gif   { background:rgba(16,185,129,.1); color:var(--emerald); }
 .badge.svg   { background:rgba(251,146,60,.1); color:#fb923c; }
 .badge.ocr   { background:rgba(99,102,241,.1); color:var(--accent); }
+.badge.convert { background:rgba(20,184,166,.1); color:#14b8a6; }
 .badge.priv  { background:rgba(91,95,199,.1);  color:var(--accent); }
 
 /* Settings card */
@@ -1173,3 +1174,22 @@ input[type="range"].slider::-webkit-slider-thumb:hover {
   .settings-card .s-field { grid-template-columns: 1fr; }
   .em-grid { grid-template-columns: 80px 1fr 1fr; }
 }
+
+/* ── Convert page: category tabs ──────────────────────────────── */
+.cv-tabs {
+  display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1.1rem;
+}
+.cv-tab {
+  display: flex; align-items: center; gap: .45rem;
+  padding: .5rem .9rem; border-radius: 100px;
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text-3); font-size: .82rem; font-weight: 600;
+  cursor: pointer; transition: var(--t);
+}
+.cv-tab:hover { border-color: var(--border-mid); color: var(--text); }
+.cv-tab.on {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+}
+.cv-tab-icon { font-size: .95rem; line-height: 1; }
+
+.fc-pct { font-size: .78rem; font-weight: 600; color: var(--text-3); font-family: var(--mono); }
