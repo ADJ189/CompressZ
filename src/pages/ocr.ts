@@ -46,6 +46,7 @@ interface OcrOptions {
   extractText: boolean;
   oem:         0 | 1 | 3;
   psm:         number;
+  symbolMode:  boolean; // include Greek letters + equation layout charset (θ, π, Σ, ∞…)
 }
 interface WordBox   { text:string; x:number; y:number; w:number; h:number; confidence:number; }
 interface PageResult{ text:string; confidence:number; words:WordBox[]; }
@@ -350,15 +351,31 @@ async function runPaddle(
 }
 
 // ── Tesseract engine ──────────────────────────────────────────
+// equ  = Tesseract's math/equation-layout module (operators, fractions,
+//        super/subscripts — genuinely improves detection of equation
+//        regions, but full formula transcription stays rough; there is
+//        no drop-in LaTeX-quality math OCR available client-side).
+// grc  = Ancient Greek traineddata. Its alphabet is exactly the Greek
+//        letters (θ, π, α, β, Σ, Δ, Ω…) used constantly in scientific
+//        and math text, so it's the reliable half of "symbol mode" —
+//        combining it with the base language via Tesseract's native
+//        `lang1+lang2` syntax lets the recognizer match Greek glyphs
+//        inline with normal text instead of mis-reading them as Latin
+//        look-alikes (θ→"O", π→"n", etc.).
 async function runTesseract(
   pages: RenderedPage[],
   lang: OcrLanguage,
   oem: 0|1|3,
   psm: number,
   onProgress?: (pct:number, label:string) => void,
+  symbolMode = false,
 ): Promise<PageResult[]> {
   const Tesseract = await loadTesseract();
-  const tessLang  = LANGUAGES[lang]?.tessCode ?? 'eng';
+  const baseLang  = LANGUAGES[lang]?.tessCode ?? 'eng';
+  // Multi-script combinations (e.g. chi_sim+grc) load but rarely help, so
+  // symbol mode only appends the extra traineddata for Latin/auto text.
+  const canAddSymbols = symbolMode && (LANGUAGES[lang]?.script === 'latin' || lang === 'auto');
+  const tessLang  = canAddSymbols ? `${baseLang}+equ+grc` : baseLang;
   const worker    = await Tesseract.createWorker(tessLang, oem, {
     workerPath:TESS_WKR, langPath:TESS_LANGS, corePath:TESS_CORE, logger:()=>{},
   });
@@ -465,15 +482,20 @@ async function runOcr(
     } catch { resolvedLang = 'eng'; }
   }
 
-  const useEngine = options.engine === 'auto'
+  const requestsSymbols = options.symbolMode
+    && (LANGUAGES[resolvedLang]?.script === 'latin' || resolvedLang === 'auto');
+  // PaddleOCR-VL's rec models are fixed (Latin or CJK) and can't load extra
+  // traineddata, so symbol mode always runs on Tesseract regardless of the
+  // engine selected in Settings.
+  const useEngine = requestsSymbols
     ? 'tesseract'
-    : options.engine;
+    : options.engine === 'auto' ? 'tesseract' : options.engine;
 
-  onProgress?.(28, `Starting ${useEngine === 'paddle' ? 'PaddleOCR-VL 1.5' : 'Tesseract.js 5'}…`);
+  onProgress?.(28, `Starting ${useEngine === 'paddle' ? 'PaddleOCR-VL 1.5' : 'Tesseract.js 5'}${requestsSymbols ? ' (+ Greek/math symbols)' : ''}…`);
 
   const pageResults = useEngine === 'paddle'
     ? await runPaddle(pages, resolvedLang, onProgress)
-    : await runTesseract(pages, resolvedLang, options.oem, options.psm, onProgress);
+    : await runTesseract(pages, resolvedLang, options.oem, options.psm, onProgress, requestsSymbols);
 
   onProgress?.(85, 'Building searchable PDF…');
   const pdf = await buildSearchablePdf(pdfBytes, pages, pageResults, options.overlayMode, onProgress);
@@ -486,7 +508,7 @@ async function runOcr(
     text: options.extractText
       ? pageResults.map((p,i)=>`--- Page ${i+1} ---\n${p.text}`).join('\n\n')
       : undefined,
-    engineUsed:   useEngine==='paddle' ? 'PaddleOCR-VL 1.5' : `Tesseract.js 5 · ${LANGUAGES[resolvedLang]?.tessCode}`,
+    engineUsed:   useEngine==='paddle' ? 'PaddleOCR-VL 1.5' : `Tesseract.js 5 · ${LANGUAGES[resolvedLang]?.tessCode}${requestsSymbols?'+equ+grc':''}`,
     pagesOcrd:    pageResults.length,
     confidence:   Math.round(avgConf),
     originalSize: file.size,
@@ -522,9 +544,10 @@ export function mountOcr(root: HTMLElement): void {
   let extractText = true;
   let oem: 0|1|3  = 1;
   let psm         = 3;
+  let symbolMode  = false;
 
   function buildOptions(): OcrOptions {
-    return { engine, language, renderDpi, overlayMode, extractText, oem, psm };
+    return { engine, language, renderDpi, overlayMode, extractText, oem, psm, symbolMode };
   }
 
   function addFiles(fs: File[]) {
@@ -705,6 +728,20 @@ export function mountOcr(root: HTMLElement): void {
           </div>
         </div>
 
+        ${(language==='auto' || LANGUAGES[language]?.script==='latin') ? `
+        <div class="s-field full">
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.84rem;font-weight:500;color:var(--text)">
+            <input type="checkbox" id="symbol-toggle" ${symbolMode?'checked':''}>
+            Math &amp; Greek symbols (θ π α β Σ Δ ∞ …)
+          </label>
+          <div style="font-size:.7rem;color:var(--text-4);margin-top:.25rem">
+            Loads Tesseract's Greek (<code style="font-family:var(--mono)">grc</code>) and equation-layout
+            (<code style="font-family:var(--mono)">equ</code>) traineddata alongside your selected language.
+            Greek letters recognize reliably; full equation transcription is still rough — treat it as
+            "recovers more of the symbols" rather than "solves the formula." Forces the Tesseract engine.
+          </div>
+        </div>` : ''}
+
         ${engine==='tesseract' ? `
         <div class="s-field">
           <span class="s-label">OCR Model</span>
@@ -760,6 +797,9 @@ export function mountOcr(root: HTMLElement): void {
 
     card.querySelector('#lang-sel')!.addEventListener('change', e=>{
       language=(e.target as HTMLSelectElement).value as OcrLanguage; renderSettings();
+    });
+    card.querySelector('#symbol-toggle')?.addEventListener('change', e=>{
+      symbolMode=(e.target as HTMLInputElement).checked;
     });
     card.querySelector('#oem-1')?.addEventListener('click',  ()=>{ oem=1; renderSettings(); });
     card.querySelector('#oem-3')?.addEventListener('click',  ()=>{ oem=3; renderSettings(); });
