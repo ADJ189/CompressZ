@@ -18,7 +18,7 @@ Nothing ever leaves your device.
 
 ## Overview
 
-CompressZ compresses images, PDFs, video, audio, and GIFs — and runs OCR on scanned PDFs — entirely inside your browser using WebAssembly, Canvas API, WebCodecs, and two neural OCR engines. No backend. No uploads. No tracking.
+CompressZ compresses images, PDFs, video, audio, and GIFs; converts between video, audio, image, PDF, DOCX, and PPTX formats; and runs OCR on scanned PDFs — entirely inside your browser using WebAssembly, Canvas API, WebCodecs, and two neural OCR engines. No backend. No uploads. No tracking.
 
 ---
 
@@ -32,7 +32,8 @@ CompressZ compresses images, PDFs, video, audio, and GIFs — and runs OCR on sc
 | **Audio** | MP3 · AAC · OGG · Opus · FLAC · WAV | FFmpeg.wasm |
 | **GIF** | GIF → GIF or WebM VP9 | FFmpeg.wasm (two-pass palettegen) |
 | **SVG** | SVG | Pure TypeScript, zero dependencies |
-| **PDF OCR** | Scanned PDF → searchable PDF + TXT | PaddleOCR-VL 1.5 (primary) + Tesseract.js 5 |
+| **PDF OCR** | Scanned PDF → searchable PDF + TXT | PaddleOCR-VL 1.5 (primary) + Tesseract.js 5, optional Greek/math symbols |
+| **Convert** | Video ⇄ video · Audio ⇄ audio · Image ⇄ image · PDF ⇄ Images · DOCX → PDF/TXT/HTML · PPTX → PDF/TXT | FFmpeg.wasm, pdf-lib, mammoth.js, html2canvas, zero-dep ZIP |
 
 ---
 
@@ -60,6 +61,11 @@ CompressZ compresses images, PDFs, video, audio, and GIFs — and runs OCR on sc
 | Limitations | Poor on handwriting, struggles with complex layouts, needs high DPI |
 | Rating | Handwriting ●●○○○ · Tables ●●●○○ · Print ●●●●● · Low quality ●●○○○ · Speed ●●●●● |
 
+An optional **Math & Greek symbols** toggle loads Tesseract's `grc` (Greek)
+and `equ` (equation layout) traineddata alongside the selected language —
+reliable for inline Greek letters (θ, π, Σ, …), best-effort for full
+equations. Always runs on Tesseract regardless of the engine picked above.
+
 ### Auto Mode
 
 Auto selects PaddleOCR-VL 1.5 by default. Language/script is auto-detected from the first page render using Tesseract's OSD (Orientation & Script Detection, PSM=0), mapping detected scripts to the correct language model.
@@ -76,6 +82,31 @@ Auto selects PaddleOCR-VL 1.5 by default. Language/script is auto-detected from 
 | Rare languages | Tesseract.js (100+ lang coverage) |
 | Low-quality / noisy scans | PaddleOCR-VL 1.5 |
 | Batch processing (speed) | Tesseract.js |
+
+---
+
+## Convert
+
+A dedicated format-conversion tool, separate from the compressors above —
+these change the *format*, not primarily the size:
+
+| Direction | Formats | Notes |
+|-----------|---------|-------|
+| Video → Video | MP4 · WebM · MOV · MKV · AVI · GIF | FFmpeg.wasm, near-lossless (CRF 18) |
+| Audio → Audio | MP3 · AAC · OGG · Opus · FLAC · WAV | FFmpeg.wasm |
+| Image → Image | JPEG · PNG · WebP · AVIF | Canvas, quality 0.95 |
+| PDF → Images | PNG · JPEG (one per page, zipped if multi-page) | pdf.js |
+| Images → PDF | Any number of images → one PDF | pdf-lib, reorderable before combining |
+| Word (.docx) → PDF/TXT/HTML | — | mammoth.js + html2canvas + pdf-lib |
+| PowerPoint (.pptx) → PDF/TXT | — | Text extracted directly from slide XML |
+
+**Honesty about limits, on purpose:** DOCX→PDF is an image-based PDF (text
+isn't selectable — use the TXT output if you need that), and PPTX
+conversion is a text reconstruction, not a visual/layout-accurate one —
+there's no realistic client-side engine for full OOXML slide rendering.
+Legacy `.doc`/`.ppt` aren't supported; save as `.docx`/`.pptx` first.
+Multi-page PDF→Images bundling needs `CompressionStream` (Chrome/Edge 80+,
+Firefox 113+, Safari 16.4+) — single-page PDFs work everywhere regardless.
 
 ---
 
