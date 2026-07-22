@@ -168,6 +168,8 @@ compressz/
 ├── tsconfig.json
 ├── package.json
 ├── CHANGELOG.md
+├── CREDITS.md                # Open-source attributions & licenses
+├── PRIVACY.md                # Standalone copy of the in-app privacy page
 └── .github/dependabot.yml    # Weekly grouped updates, major versions pinned
 ```
 
@@ -217,7 +219,16 @@ The `public/_headers` file sets COOP/COEP automatically, enabling SharedArrayBuf
 
 ## Privacy
 
-CompressZ has no backend. Files never leave your browser. See [Privacy Policy](https://compressz.pages.dev/privacy) for full details.
+CompressZ has no backend. Files never leave your browser. See [PRIVACY.md](PRIVACY.md) (also live at [/privacy](https://compressz.pages.dev/privacy)) for full details.
+
+---
+
+## Credits & Acknowledgments
+
+CompressZ is built on PDF.js, pdf-lib, FFmpeg.wasm, Tesseract.js,
+PaddleOCR/Paddle.js, mammoth.js, html2canvas, Vite, and TypeScript —
+see [CREDITS.md](CREDITS.md) for the full list with licenses and links.
+None of those projects are affiliated with or endorse CompressZ.
 
 ---
 

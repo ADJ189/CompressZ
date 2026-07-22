@@ -2,6 +2,45 @@
 
 All notable changes to CompressZ are documented in this file.
 
+## [Unreleased] — OCR Layout Rework & Docs Cleanup
+
+### Fixed — Duplicated CSS causing layout/scaling bugs
+
+- `.dz`, `.settings-card`, `.seg`, `select.si`, the range slider, `.file-card`,
+  `.fc-btn`, and `.btn-sm` were each defined **twice** — an original rule set,
+  followed later in the file by a near-identical block re-declaring the same
+  selectors with `!important` to win the cascade. That's what produced the
+  reported scaling glitches (e.g. the settings rows collapsing to a
+  left-aligned sliver at some widths, per the bug the old comment in the CSS
+  already documented). Consolidated every duplicated selector into one
+  definition, removed all non-essential `!important`s, and shrank the
+  shipped CSS from ~52 KB to ~34 KB in the process.
+
+### Changed — PDF OCR page: two-column layout
+
+- Restructured `pages/ocr.ts` and its CSS into a two-column grid on screens
+  ≥960px: **drop zone + file queue on the left**, **engine picker and
+  customization settings on the right**, with the right-hand settings rail
+  `position: sticky` so it stays reachable while a long file queue scrolls.
+  Below 960px it stacks into a single column (drop zone first), matching the
+  existing mobile breakpoint.
+- Narrowed the engine-comparison-matrix label column (110px → 84px) so it
+  reads comfortably at the new, narrower right-column width.
+
+### Docs — Credits, privacy, and repo docs
+
+- Added `CREDITS.md`: full attribution and license table for every
+  open-source project CompressZ depends on or loads at runtime (PDF.js,
+  pdf-lib, FFmpeg.wasm, Tesseract.js + tessdata, PaddleOCR/Paddle.js,
+  mammoth.js, html2canvas, Vite, TypeScript).
+- Added `PRIVACY.md`: a standalone copy of the in-app `/privacy` page so
+  it's readable directly from the repo.
+- Updated the in-app **About**, **Docs**, and **Privacy** pages with a
+  Credits section / expanded third-party library list, and linked
+  `CREDITS.md` from both.
+- README: added a Credits & Acknowledgments section, linked `PRIVACY.md`,
+  and added both new files to the architecture tree.
+
 ## [Unreleased] — OCR Symbols & Dedicated Convert Page
 
 ### Added — OCR: Math & Greek symbol recognition

@@ -317,6 +317,9 @@
 
   <h2>Video compression tiers</h2>
   <p>Three-tier fallback: (1) FFmpeg.wasm with multithreading when SharedArrayBuffer is available, (2) WebCodecs GPU-accelerated H.264 on Chrome/Safari, (3) MediaRecorder canvas capture as universal fallback.</p>
+
+  <h2>Credits &amp; acknowledgments</h2>
+  <p>CompressZ is built on the work of several open-source projects, none of which are affiliated with or endorse CompressZ: <strong>PDF.js</strong> and <strong>pdf-lib</strong> (PDF rendering/generation), <strong>FFmpeg.wasm</strong> (video/audio/GIF), <strong>Tesseract.js</strong> and the underlying <strong>Tesseract OCR</strong> engine (100+ language OCR), <strong>PaddleOCR / PP-OCRv3</strong> via <strong>Paddle.js</strong> (primary OCR engine), and <strong>mammoth.js</strong> with <strong>html2canvas</strong> (Word document conversion). Full attribution and license details for every dependency are in <a href="https://github.com/ADJ189/compressz/blob/main/CREDITS.md" target="_blank" rel="noopener" style="color:var(--accent)">CREDITS.md</a> on GitHub.</p>
 </div>
 </template>
 
@@ -374,6 +377,10 @@
     <li><code>overlayMode</code> — Add invisible text over original PDF vs. new image PDF.</li>
     <li><code>extractText</code> — Also export a <code>.txt</code> file.</li>
   </ul>
+  <p style="font-size:.82rem;color:var(--text-3)">The OCR page is laid out in two columns on wider screens: drop your files and watch the queue on the left, pick an engine and tune settings on the right (settings stay in view while the file list scrolls). Below ~960px width it stacks into a single column, drop zone first.</p>
+
+  <h2>Credits</h2>
+  <p>CompressZ's compression and OCR engines are built on PDF.js, pdf-lib, FFmpeg.wasm, Tesseract.js, PaddleOCR/Paddle.js, mammoth.js, and html2canvas — see <a href="https://github.com/ADJ189/compressz/blob/main/CREDITS.md" target="_blank" rel="noopener" style="color:var(--accent)">CREDITS.md</a> for full license attribution.</p>
 
   <h2>Deployment</h2>
   <ul>
@@ -402,7 +409,7 @@
     <span class="badge priv">🔒</span>
     <h1>Privacy Policy</h1>
   </div>
-  <p class="page-sub">Last updated: June 2026</p>
+  <p class="page-sub">Last updated: July 2026</p>
 
   <div class="pp-box">
     <p><strong>The short version:</strong> CompressZ processes all files locally in your browser. We do not have servers that receive your files. We collect no personal data, run no analytics, and set no cookies. Your files and their contents are never transmitted to us or any third party.</p>
@@ -426,13 +433,14 @@
   <p>You can verify this yourself by opening your browser's Network tab while using CompressZ — you will see no requests containing your file data.</p>
 
   <h2>4. Third-party libraries loaded at runtime</h2>
-  <p>Some compression engines are loaded from CDN on first use and cached by your browser thereafter:</p>
+  <p>Some compression engines are loaded from CDN on first use and cached by your browser thereafter. Full license attribution for each is in <a href="https://github.com/ADJ189/compressz/blob/main/CREDITS.md" target="_blank" rel="noopener" style="color:var(--accent)">CREDITS.md</a> on GitHub:</p>
   <ul>
     <li><strong>FFmpeg.wasm</strong> — loaded from <code>esm.sh</code> (video/audio/GIF). These are WebAssembly binaries only; no file data is sent to esm.sh.</li>
     <li><strong>PDF.js</strong> — loaded from <code>cdn.jsdelivr.net</code> (PDF rendering).</li>
     <li><strong>pdf-lib</strong> — loaded from <code>cdn.jsdelivr.net</code> (PDF generation).</li>
-    <li><strong>Tesseract.js</strong> — loaded from <code>cdn.jsdelivr.net</code> (OCR model weights).</li>
+    <li><strong>Tesseract.js</strong> — loaded from <code>cdn.jsdelivr.net</code> and <code>tessdata.projectnaptha.com</code> (OCR engine and trained language data).</li>
     <li><strong>PaddleOCR</strong> — loaded from <code>cdn.jsdelivr.net</code> and <code>paddlejs.bj.bcebos.com</code> (OCR model weights).</li>
+    <li><strong>mammoth.js</strong> and <strong>html2canvas</strong> — loaded from <code>cdn.jsdelivr.net</code> (Word document conversion).</li>
   </ul>
   <p>These CDN requests are for static assets (JavaScript and model weights) only. Your file content is never included in these requests. Standard CDN access logs (IP address, timestamp, asset requested) may be retained by the CDN providers per their own privacy policies.</p>
   <p>Google Fonts is used for typography and is loaded from <code>fonts.googleapis.com</code>. This may log your IP address per <a href="https://policies.google.com/privacy" target="_blank" rel="noopener" style="color:var(--accent)">Google's privacy policy</a>. To avoid this entirely, you can use CompressZ offline after caching.</p>
