@@ -533,29 +533,53 @@ img, svg { display: block; }
 .badge.convert { background:rgba(20,184,166,.1); color:#14b8a6; }
 .badge.priv  { background:rgba(91,95,199,.1);  color:var(--accent); }
 
-/* Settings card */
+/* Settings card — grouped-list style, single source of truth (previously
+   duplicated further down the file with !important overrides, which is
+   what caused the settings rows to render with a left-aligned empty gap
+   at some viewport widths — the base .s-row's align-items:flex-end never
+   got reset for the column layout below). */
 .settings-card {
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--r-lg); padding: 1.15rem 1.4rem; margin-bottom: 1.1rem;
+  border-radius: var(--r-xl); padding: 0; overflow: hidden;
+  box-shadow: var(--shadow-sm); margin-bottom: 1.1rem;
 }
-.s-row  { display: flex; flex-wrap: wrap; gap: .9rem; align-items: flex-end; }
-.s-field { display: flex; flex-direction: column; gap: .3rem; min-width: 120px; }
+.s-row {
+  display: flex; flex-direction: column; align-items: stretch; gap: 0;
+}
+.s-field {
+  padding: .85rem 1.25rem; border-bottom: 1px solid var(--border);
+  display: grid; grid-template-columns: 160px 1fr; align-items: center;
+  gap: .65rem; min-width: 0; transition: background var(--t);
+}
+.s-field:last-child { border-bottom: none; }
+.s-field:hover { background: var(--bg); }
+/* Fields with a single, label-less child (info notes, standalone messages)
+   span the full row instead of being squeezed into the 160px label column. */
+.s-field.full { display: block; }
+.s-field > div[style], .s-field > p[style], .s-field .s-hint {
+  grid-column: 2; font-size: .72rem; color: var(--text-4); margin-top: .15rem;
+}
 .s-label {
-  font-size: .72rem; font-weight: 600; text-transform: uppercase;
-  letter-spacing: .05em; color: var(--text-4);
+  font-size: .82rem; font-weight: 600; color: var(--text-2);
 }
 .s-label strong { color: var(--accent); }
 .s-label em { font-style: normal; color: var(--text-4); font-weight: 400; }
 
+/* Segmented control — pill style */
 .seg {
-  display: flex; background: var(--bg2);
-  border: 1px solid var(--border); border-radius: var(--r-sm); overflow: hidden;
+  display: inline-flex; background: var(--bg2);
+  border: 1px solid var(--border); border-radius: 100px;
+  padding: 2px; gap: 1px; overflow: visible;
 }
 .seg button {
-  flex: 1; padding: .32rem .7rem; font-size: .8rem; font-weight: 600;
-  color: var(--text-4); transition: var(--t);
+  flex: 0 1 auto; padding: .28rem .85rem; font-size: .8rem; font-weight: 500;
+  color: var(--text-3); border-radius: 100px; letter-spacing: -.01em;
+  transition: all var(--t);
 }
-.seg button.on { background: var(--accent); color: #fff; }
+.seg button.on {
+  background: var(--surface); color: var(--text); font-weight: 600;
+  box-shadow: 0 1px 4px rgba(0,0,0,.1), 0 0 0 .5px var(--border);
+}
 
 .fmt-pills { display: flex; flex-wrap: wrap; gap: .3rem; }
 .pill {
@@ -566,16 +590,37 @@ img, svg { display: block; }
 }
 .pill.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 
-select.si, input.ti {
-  padding: .38rem .65rem; background: var(--bg2);
-  border: 1px solid var(--border); border-radius: var(--r-sm);
-  font-size: .82rem; color: var(--text);
+select.si {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r-sm);
+  padding: .38rem 2rem .38rem .7rem; font-size: .84rem; font-weight: 500; color: var(--text);
   appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right .6rem center;
   transition: var(--t); cursor: pointer;
 }
-select.si:focus, input.ti:focus { outline: none; border-color: var(--accent); }
-input.ti  { cursor: text; }
-input[type="range"].slider { width: 100%; height: 4px; accent-color: var(--accent); cursor: pointer; }
+select.si:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+input.ti {
+  padding: .38rem .65rem; background: var(--bg2);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  font-size: .82rem; color: var(--text); transition: var(--t); cursor: text;
+}
+input.ti:focus { outline: none; border-color: var(--accent); }
+
+input[type="range"].slider {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 4px; background: var(--border-mid); border-radius: 2px;
+  outline: none; cursor: pointer; accent-color: var(--accent);
+}
+input[type="range"].slider::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; border: 1.5px solid var(--border-mid);
+  box-shadow: 0 1px 4px rgba(0,0,0,.15), 0 0 0 .5px rgba(0,0,0,.06);
+  cursor: pointer; transition: var(--t);
+}
+input[type="range"].slider::-webkit-slider-thumb:hover {
+  box-shadow: 0 2px 8px rgba(91,95,199,.3), 0 0 0 3px var(--accent-glow);
+  border-color: var(--accent);
+}
 
 /* PDF presets */
 .pdf-presets { display: grid; grid-template-columns: repeat(3,1fr); gap: .55rem; }
@@ -638,9 +683,11 @@ input[type="range"].slider { width: 100%; height: 4px; accent-color: var(--accen
 
 /* ── Drop zone ────────────────────────────────────────────── */
 .dz {
-  border: 2px dashed var(--border-mid); border-radius: var(--r-xl);
-  background: var(--surface); transition: var(--t2); margin-bottom: 1.1rem;
-  position: relative; overflow: hidden;
+  border: 1.5px dashed var(--border-mid); border-radius: var(--r-xl);
+  background: var(--glass); backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  transition: all var(--t2); margin-bottom: 1.1rem;
+  position: relative; overflow: hidden; box-shadow: var(--shadow-sm);
 }
 .dz::before {
   content: '';
@@ -648,23 +695,29 @@ input[type="range"].slider { width: 100%; height: 4px; accent-color: var(--accen
   background: linear-gradient(135deg, var(--accent-glow), rgba(139,92,246,.05));
   opacity: 0; transition: opacity var(--t2); pointer-events: none;
 }
-.dz.drag-active { border-color: var(--accent); }
+.dz.drag-active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 80%, transparent);
+  box-shadow: 0 0 0 3px var(--accent-glow), var(--shadow-md);
+  transform: scale(1.005);
+}
 .dz.drag-active::before { opacity: 1; }
 .dz-inner {
   display: flex; flex-direction: column; align-items: center;
-  justify-content: center; padding: 2.5rem 2rem; gap: .55rem; text-align: center;
+  justify-content: center; padding: 2.75rem 2rem; gap: .7rem; text-align: center;
   position: relative; z-index: 1;
 }
-.dz-icon  { font-size: 2.2rem; margin-bottom: .2rem; }
-.dz-title { font-size: .95rem; font-weight: 600; color: var(--text-2); }
-.dz-sub   { font-size: .8rem; color: var(--text-3); font-family: var(--mono); }
+.dz-icon  { font-size: 2rem; margin-bottom: .1rem; }
+.dz-title { font-size: 1rem; font-weight: 700; letter-spacing: -.01em; color: var(--text); }
+.dz-sub   { font-size: .8rem; color: var(--text-4); font-family: var(--sans); }
 .dz-btn {
-  margin-top: .45rem; padding: .45rem 1.1rem;
-  background: var(--bg2); border: 1px solid var(--border-mid);
-  border-radius: var(--r-sm); font-size: .85rem; font-weight: 600;
-  cursor: pointer; transition: var(--t2); color: var(--text-2);
+  margin-top: .55rem; padding: .5rem 1.35rem;
+  background: var(--accent); border: none;
+  border-radius: 100px; font-size: .84rem; font-weight: 600;
+  cursor: pointer; transition: var(--t2); color: #fff;
+  box-shadow: 0 2px 8px rgba(91,95,199,.28); letter-spacing: -.01em;
 }
-.dz-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; transform: translateY(-1px); }
+.dz-btn:hover { background: var(--accent-2); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(91,95,199,.36); }
 .dz-add {
   display: inline-flex; align-items: center; gap: .45rem;
   padding: .65rem 1.1rem; font-size: .8rem; font-weight: 600;
@@ -677,8 +730,8 @@ input[type="range"].slider { width: 100%; height: 4px; accent-color: var(--accen
 .batch-bar  { display: flex; align-items: center; gap: .65rem; flex-wrap: wrap; margin-bottom: .8rem; }
 .batch-info { font-size: .8rem; color: var(--text-3); }
 .btn-sm {
-  padding: .3rem .8rem; border-radius: var(--r-sm);
-  font-size: .78rem; font-weight: 600;
+  padding: .3rem .8rem; border-radius: 100px;
+  font-size: .79rem; font-weight: 600;
   border: 1px solid transparent; transition: var(--t); cursor: pointer;
 }
 .btn-run  { background: var(--accent); color: #fff; }
@@ -693,13 +746,15 @@ input[type="range"].slider { width: 100%; height: 4px; accent-color: var(--accen
 .file-card  {
   display: flex; align-items: center; gap: .8rem;
   padding: .85rem 1rem; background: var(--surface);
-  border: 1px solid var(--border); border-radius: var(--r);
-  transition: border-color var(--t);
+  border: 1px solid var(--border); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-xs);
+  transition: box-shadow var(--t2), border-color var(--t2);
   animation: cardIn .2s var(--ease) both;
 }
+.file-card:hover { box-shadow: var(--shadow-sm); }
 @keyframes cardIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
-.file-card.is-done        { border-color: var(--green-border); }
-.file-card.is-error       { border-color: rgba(244,63,94,.25); }
+.file-card.is-done        { border-color: var(--green-border); background: color-mix(in srgb, var(--green-soft) 40%, var(--surface)); }
+.file-card.is-error       { border-color: rgba(244,63,94,.22); }
 .file-card.is-compressing { border-color: rgba(91,95,199,.18); }
 .fc-ico  { font-size: 1.3rem; flex-shrink: 0; }
 .fc-info { flex: 1; min-width: 0; }
@@ -724,8 +779,8 @@ input[type="range"].slider { width: 100%; height: 4px; accent-color: var(--accen
 .fc-progress-label { font-size: .66rem; font-family: var(--mono); color: var(--text-4); margin-top: .18rem; }
 .fc-actions { display: flex; gap: .38rem; align-items: center; flex-shrink: 0; }
 .fc-btn {
-  padding: .3rem .72rem; border-radius: var(--r-xs);
-  font-size: .76rem; font-weight: 600;
+  padding: .3rem .8rem; border-radius: 100px;
+  font-size: .76rem; font-weight: 600; letter-spacing: -.01em;
   border: 1px solid var(--border); background: var(--bg2); color: var(--text-3);
   transition: var(--t); cursor: pointer;
 }
@@ -734,7 +789,8 @@ input[type="range"].slider { width: 100%; height: 4px; accent-color: var(--accen
 .fc-btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
 .fc-btn.dl            { background: var(--green-soft); border-color: var(--green-border); color: var(--green); }
 .fc-btn.dl:hover      { background: rgba(34,197,94,.18); }
-.fc-btn.icon          { padding: .3rem .42rem; }
+.fc-btn.icon          { border-radius: 50%; padding: .3rem; width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center; }
 .fc-btn.icon:hover    { border-color: var(--rose); color: var(--rose); }
 
 /* ════════════════════════════════════════════════════════════
@@ -866,10 +922,44 @@ input[type="range"].slider { width: 100%; height: 4px; accent-color: var(--accen
   .ocr-engines     { grid-template-columns: 1fr; }
   .how-row         { grid-template-columns: 1fr; }
   .s-row           { flex-direction: column; }
+  .s-field         { grid-template-columns: 1fr; }
+  .em-pros-cons    { grid-template-columns: 1fr; }
+  .em-grid         { grid-template-columns: 80px 1fr 1fr; }
+  .ocr-layout      { grid-template-columns: 1fr; }
+  .ocr-layout .ocr-side { position: static; }
 }
 @media (min-width: 769px) {
   .sidebar-overlay { display: none !important; }
   .sidebar { transform: none !important; }
+}
+
+/* ════════════════════════════════════════════════════════════
+   OCR PAGE — TWO-COLUMN LAYOUT
+   Left: drop zone + file queue (the thing you do first, and
+   the thing that grows). Right: engine picker + customization,
+   sticky so settings stay reachable while you scroll a long
+   file list. Collapses to a single stacked column at ≤960px.
+════════════════════════════════════════════════════════════ */
+.tool-wrap.tool-wrap-wide { max-width: 1180px; }
+
+.ocr-layout {
+  display: grid;
+  grid-template-columns: 1.15fr .85fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+.ocr-layout .ocr-main { min-width: 0; }
+.ocr-layout .ocr-side {
+  min-width: 0;
+  position: sticky;
+  top: 1.25rem;
+  max-height: calc(100vh - 2.5rem);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+@media (max-width: 960px) {
+  .ocr-layout { grid-template-columns: 1fr; }
+  .ocr-layout .ocr-side { position: static; max-height: none; }
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -896,7 +986,7 @@ input[type="range"].slider { width: 100%; height: 4px; accent-color: var(--accen
 
 .em-grid {
   display: grid;
-  grid-template-columns: 110px 1fr 1fr;
+  grid-template-columns: 84px 1fr 1fr;
   gap: 0;
 }
 
@@ -977,203 +1067,6 @@ input[type="range"].slider { width: 100%; height: 4px; accent-color: var(--accen
 }
 .em-pros .em-pc-item { border-left: 2px solid var(--green); }
 .em-cons .em-pc-item { border-left: 2px solid rgba(245,158,11,.5); }
-
-/* ════════════════════════════════════════════════════════════
-   APPLE-STYLE DROP ZONE + SETTINGS
-════════════════════════════════════════════════════════════ */
-
-/* Drop zone — frosted glass Apple card */
-.dz {
-  border: 1.5px dashed var(--border-mid) !important;
-  border-radius: var(--r-xl) !important;
-  background: var(--glass) !important;
-  backdrop-filter: blur(12px) saturate(160%);
-  -webkit-backdrop-filter: blur(12px) saturate(160%);
-  transition: all var(--t2) !important;
-  box-shadow: var(--shadow-sm);
-}
-.dz.drag-active {
-  border-color: var(--accent) !important;
-  background: color-mix(in srgb, var(--accent-soft) 80%, transparent) !important;
-  box-shadow: 0 0 0 3px var(--accent-glow), var(--shadow-md);
-  transform: scale(1.005);
-}
-.dz-inner { padding: 2.75rem 2rem !important; gap: .7rem !important; }
-.dz-icon  { font-size: 2rem !important; margin-bottom: .1rem !important; }
-.dz-title { font-size: 1rem !important; font-weight: 700 !important;
-  letter-spacing: -.01em; color: var(--text) !important; }
-.dz-sub   { font-size: .8rem !important; color: var(--text-4) !important;
-  font-family: var(--sans) !important; }
-.dz-btn {
-  margin-top: .55rem !important; padding: .5rem 1.35rem !important;
-  background: var(--accent) !important; border: none !important;
-  border-radius: 100px !important; font-size: .84rem !important;
-  font-weight: 600 !important; color: #fff !important;
-  box-shadow: 0 2px 8px rgba(91,95,199,.28) !important;
-  letter-spacing: -.01em;
-}
-.dz-btn:hover {
-  background: var(--accent-2) !important; transform: translateY(-2px) !important;
-  box-shadow: 0 6px 20px rgba(91,95,199,.36) !important;
-}
-
-/* Settings card — Apple grouped-list style */
-.settings-card {
-  background: var(--surface) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: var(--r-xl) !important;
-  padding: 0 !important;
-  overflow: hidden !important;
-  box-shadow: var(--shadow-sm) !important;
-  margin-bottom: 1.1rem !important;
-}
-.settings-card .s-row {
-  display: flex !important; flex-direction: column !important; gap: 0 !important;
-  /* The base .s-row rule (used when settings-card wasn't yet the Apple
-     grouped-list style) sets align-items: flex-end for its original
-     row-wrap layout. That declaration was never overridden here, and
-     since flex-direction is now column, align-items controls the
-     *horizontal* axis instead — flex-end right-aligned and shrink-wrapped
-     every row instead of stretching it full width, leaving a large empty
-     gap on the left of every settings field. Explicitly restore stretch. */
-  align-items: stretch !important;
-}
-.settings-card .s-field {
-  padding: .85rem 1.25rem !important;
-  border-bottom: 1px solid var(--border) !important;
-  display: grid !important;
-  grid-template-columns: 160px 1fr !important;
-  align-items: center !important;
-  gap: .65rem !important;
-  min-width: 0 !important;
-  transition: background var(--t);
-}
-.settings-card .s-field:last-child { border-bottom: none !important; }
-.settings-card .s-field:hover { background: var(--bg) !important; }
-.settings-card .s-label {
-  font-size: .82rem !important; font-weight: 600 !important;
-  color: var(--text-2) !important; text-transform: none !important;
-  letter-spacing: 0 !important;
-}
-.settings-card .s-field > div[style],
-.settings-card .s-field > p[style] {
-  grid-column: 2; font-size: .72rem; color: var(--text-4); margin-top: .15rem;
-}
-
-/* Fields with a single, label-less child (info notes, standalone messages)
-   should span the full row instead of being squeezed into the 160px label
-   column by the two-column grid above. */
-.settings-card .s-field.full {
-  display: block !important;
-}
-
-/* Inline sub-hint below the control */
-.settings-card .s-field .s-hint {
-  grid-column: 2; font-size: .72rem; color: var(--text-4); margin-top: .18rem;
-}
-
-/* Apple-style segmented control */
-.seg {
-  display: inline-flex !important;
-  background: var(--bg2) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: 100px !important;
-  padding: 2px !important;
-  gap: 1px !important;
-  overflow: visible !important;
-}
-.seg button {
-  flex: 0 1 auto !important;
-  padding: .28rem .85rem !important;
-  font-size: .8rem !important; font-weight: 500 !important;
-  color: var(--text-3) !important;
-  border-radius: 100px !important;
-  transition: all var(--t) !important;
-  letter-spacing: -.01em !important;
-}
-.seg button.on {
-  background: var(--surface) !important;
-  color: var(--text) !important;
-  font-weight: 600 !important;
-  box-shadow: 0 1px 4px rgba(0,0,0,.1), 0 0 0 .5px var(--border) !important;
-}
-
-/* Apple-style select */
-select.si {
-  background: var(--bg2) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: var(--r-sm) !important;
-  padding: .38rem 2rem .38rem .7rem !important;
-  font-size: .84rem !important; font-weight: 500 !important;
-  color: var(--text) !important;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") !important;
-  background-repeat: no-repeat !important;
-  background-position: right .6rem center !important;
-  cursor: pointer !important;
-}
-select.si:focus { outline: none !important; border-color: var(--accent) !important;
-  box-shadow: 0 0 0 3px var(--accent-glow) !important; }
-
-/* Apple-style range slider */
-input[type="range"].slider {
-  -webkit-appearance: none !important;
-  appearance: none !important;
-  height: 4px !important;
-  background: var(--border-mid) !important;
-  border-radius: 2px !important;
-  outline: none !important;
-  cursor: pointer !important;
-  accent-color: var(--accent) !important;
-}
-input[type="range"].slider::-webkit-slider-thumb {
-  -webkit-appearance: none !important;
-  width: 18px; height: 18px;
-  border-radius: 50%;
-  background: #fff;
-  border: 1.5px solid var(--border-mid);
-  box-shadow: 0 1px 4px rgba(0,0,0,.15), 0 0 0 .5px rgba(0,0,0,.06);
-  cursor: pointer;
-  transition: var(--t);
-}
-input[type="range"].slider::-webkit-slider-thumb:hover {
-  box-shadow: 0 2px 8px rgba(91,95,199,.3), 0 0 0 3px var(--accent-glow);
-  border-color: var(--accent);
-}
-
-/* File card — Apple list row */
-.file-card {
-  border-radius: var(--r-lg) !important;
-  border: 1px solid var(--border) !important;
-  background: var(--surface) !important;
-  box-shadow: var(--shadow-xs) !important;
-  transition: box-shadow var(--t2), border-color var(--t2) !important;
-}
-.file-card:hover { box-shadow: var(--shadow-sm) !important; }
-.file-card.is-done   { border-color: var(--green-border) !important; background: color-mix(in srgb, var(--green-soft) 40%, var(--surface)) !important; }
-.file-card.is-error  { border-color: rgba(244,63,94,.22) !important; }
-
-/* Action buttons — pill style */
-.fc-btn {
-  border-radius: 100px !important;
-  font-size: .76rem !important; font-weight: 600 !important;
-  padding: .3rem .8rem !important;
-  letter-spacing: -.01em !important;
-  border: 1px solid var(--border) !important;
-}
-.fc-btn.primary { background: var(--accent) !important; border-color: var(--accent) !important; }
-.fc-btn.primary:hover { background: var(--accent-2) !important; }
-.fc-btn.dl { background: var(--green-soft) !important; border-color: var(--green-border) !important; color: var(--green) !important; }
-.fc-btn.icon { border-radius: 50% !important; padding: .3rem !important; width:28px; height:28px;
-  display:inline-flex; align-items:center; justify-content:center; }
-
-/* Batch bar — pill buttons */
-.btn-sm { border-radius: 100px !important; font-size: .79rem !important; font-weight: 600 !important; }
-
-@media (max-width: 680px) {
-  .em-pros-cons { grid-template-columns: 1fr; }
-  .settings-card .s-field { grid-template-columns: 1fr; }
-  .em-grid { grid-template-columns: 80px 1fr 1fr; }
-}
 
 /* ── Convert page: category tabs ──────────────────────────────── */
 .cv-tabs {
