@@ -586,7 +586,7 @@ export function mountOcr(root: HTMLElement): void {
   let dzWrap!:ReturnType<typeof createDropZone>;
 
   root.innerHTML = `
-    <div class="tool-wrap">
+    <div class="tool-wrap tool-wrap-wide">
       <span class="back-link" data-nav="">← Home</span>
       <div class="page-header">
         <div class="header-top">
@@ -600,18 +600,20 @@ export function mountOcr(root: HTMLElement): void {
         </p>
       </div>
 
-      <!-- Engine comparison box -->
-      <div class="ocr-engine-matrix" id="engine-matrix"></div>
+      <div class="ocr-layout">
+        <!-- Left: drop your files, watch them process -->
+        <div class="ocr-main">
+          <div id="dz-mount"></div>
+          <div class="batch-bar" id="batch-bar" style="display:none"></div>
+          <div class="file-list" id="ocr-list"></div>
+        </div>
 
-      <!-- Settings -->
-      <div class="settings-card" id="ocr-settings"></div>
-
-      <!-- Drop zone -->
-      <div id="dz-mount"></div>
-
-      <!-- Batch -->
-      <div class="batch-bar" id="batch-bar" style="display:none"></div>
-      <div class="file-list" id="ocr-list"></div>
+        <!-- Right: pick an engine, tune the settings -->
+        <div class="ocr-side">
+          <div class="ocr-engine-matrix" id="engine-matrix"></div>
+          <div class="settings-card" id="ocr-settings"></div>
+        </div>
+      </div>
     </div>`;
 
   listEl  = root.querySelector('#ocr-list')!;
