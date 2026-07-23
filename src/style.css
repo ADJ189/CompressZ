@@ -217,7 +217,7 @@ img, svg { display: block; }
 }
 .sb-logo-icon svg { width: 32px; height: 32px; }
 .sb-logo-text {
-  font-weight: 800; font-size: .95rem; letter-spacing: -.03em;
+  font-weight: 800; font-size: .95rem; letter-spacing: -.03em; line-height: 1.4;
   white-space: nowrap; overflow: hidden;
   background: linear-gradient(135deg, var(--text) 30%, var(--accent-2));
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
@@ -243,9 +243,9 @@ img, svg { display: block; }
   display: flex; flex-direction: column; gap: .15rem;
 }
 .sb-section-label {
-  font-size: .64rem; font-weight: 700; letter-spacing: .1em;
+  font-size: .64rem; font-weight: 700; letter-spacing: .1em; line-height: 1.6;
   text-transform: uppercase; color: var(--text-4);
-  padding: .6rem .65rem .25rem;
+  padding: .65rem .65rem .3rem;
   white-space: nowrap; overflow: hidden;
   transition: opacity var(--t2);
 }
