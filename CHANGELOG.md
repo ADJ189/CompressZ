@@ -4,6 +4,17 @@ All notable changes to CompressZ are documented in this file.
 
 ## [Unreleased] — OCR Layout Rework & Docs Cleanup
 
+### Fixed — Sidebar section labels clipped on some browsers
+
+- `.sb-section-label` ("OVERVIEW", "COMPRESS", "TOOLS", "INFO") and
+  `.sb-logo-text` had `overflow: hidden` but no explicit `line-height`, so
+  each inherited the browser/font-stack default `normal` — a value that
+  isn't fixed, it's computed per user agent and active font fallback. On
+  browsers where that computed line-height came out shorter than the bold
+  uppercase glyphs' actual height, `overflow: hidden` sliced the tops off
+  the text. Gave both an explicit `line-height` so the box is always tall
+  enough regardless of browser/font metrics.
+
 ### Fixed — Duplicated CSS causing layout/scaling bugs
 
 - `.dz`, `.settings-card`, `.seg`, `select.si`, the range slider, `.file-card`,
