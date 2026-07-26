@@ -19,10 +19,17 @@ export interface CompressOptions {
   videoCodec?: VideoCodec;
   videoPreset?: 'ultrafast' | 'fast' | 'medium' | 'slow';
   fps?: number;
+  videoTenBit?: boolean;   // 10-bit (yuv420p10le) — only meaningful for h265/av1
+  videoProxy?: boolean;    // edit proxy: all-intra (GOP=1), locked fps, small size
+  videoTwoPass?: boolean;  // 2-pass encode — only applies when a bitrate target is set (bitrate/targetSize mode)
   // Audio
   audioFormat?: AudioFormat;
   audioBitrate?: number;
   audioSampleRate?: number;
+  audioPassthrough?: boolean;      // remux only (-c:a copy) — preserves lossless/surround tracks untouched
+  audioTrackMode?: 'first' | 'all'; // video only: keep just the default audio track, or every audio track present
+  audioDownmixStereo?: boolean;     // video only: force included (transcoded, not copied) tracks to stereo
+  subtitleMode?: 'none' | 'all';    // video only: drop subtitles, or passthrough every subtitle track (no burn-in)
   // PDF
   pdfCompressionLevel?: PdfLevel;
   pdfRenderScale?: number;
@@ -90,6 +97,7 @@ export function getOutputExtension(result: CompressResult): string {
   if (mime === 'application/pdf')  return 'pdf';
   if (mime === 'video/webm')       return 'webm';
   if (mime === 'video/mp4')        return 'mp4';
+  if (mime === 'video/x-matroska') return 'mkv';
   if (mime === 'audio/mpeg')       return 'mp3';
   if (mime === 'audio/mp4')        return 'm4a';  // AAC in MP4 container
   if (mime === 'audio/opus')       return 'opus';

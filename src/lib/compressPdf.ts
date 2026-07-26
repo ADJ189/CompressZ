@@ -31,6 +31,11 @@ export async function compressPdf(
   const jpegQuality  = options.quality        ?? preset.jpegQuality;
   const renderScale  = options.pdfRenderScale ?? preset.renderScale;
   const targetSizeKB = options.targetSizeKB   ?? 0;
+  // Metadata stripping used to be baked into the "extreme" preset only —
+  // there was no way to strip title/author/producer tags while keeping
+  // "low" or "recommended" image quality. An explicit option now overrides
+  // the preset default in either direction.
+  const stripMeta    = options.stripMetadata ?? preset.stripMeta;
 
   const { PDFDocument, PDFName, PDFRawStream } =
     await import(/* @vite-ignore */ PDFLIB_ESM) as any;
@@ -44,7 +49,7 @@ export async function compressPdf(
       const result = await structuralCompress(
         arrayBuffer, file.size, level,
         PDFDocument, PDFName, PDFRawStream,
-        jpegQuality, preset.targetDpi, preset.stripMeta,
+        jpegQuality, preset.targetDpi, stripMeta,
         targetSizeKB, onProgress,
       );
       if (result.compressedSize < file.size * 0.98) return result;
@@ -57,7 +62,7 @@ export async function compressPdf(
   onProgress?.(10);
   return canvasRender(
     arrayBuffer, file, level,
-    jpegQuality, renderScale, preset.stripMeta, targetSizeKB,
+    jpegQuality, renderScale, stripMeta, targetSizeKB,
     PDFDocument, onProgress,
   );
 }
