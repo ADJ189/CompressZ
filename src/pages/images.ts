@@ -80,6 +80,7 @@ export function mountImages(root: HTMLElement) {
           <h1 class="page-title">Image Compressor</h1>
         </div>
         <p class="page-sub">GPU-decoded · OffscreenCanvas · JPEG · PNG · WebP · AVIF · BMP · TIFF · HEIC</p>
+        <p class="page-sub" style="color:var(--text-4)">🔒 EXIF/GPS metadata is always stripped — re-encoding through canvas doesn't carry it over</p>
         <div id="fmt-warn" class="compat-warn" style="display:none"></div>
       </div>
 

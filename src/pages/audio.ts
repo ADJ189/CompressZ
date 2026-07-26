@@ -22,6 +22,7 @@ export function mountAudio(root: HTMLElement) {
   const isLossless = (f: AudioFormat) => f === 'flac' || f === 'wav';
 
   function buildOptions(): CompressOptions {
+    if (s.passthrough) return { audioPassthrough: true, stripMetadata: s.stripMeta };
     const o: CompressOptions = { audioFormat: s.fmt, stripMetadata: s.stripMeta };
     if (!isLossless(s.fmt)) o.audioBitrate = s.bitrate;
     if (s.sampleRate > 0)   o.audioSampleRate = s.sampleRate;
@@ -60,14 +61,29 @@ export function mountAudio(root: HTMLElement) {
   function downloadEntry(entry: FileEntry) {
     if (!entry.result) return;
     const EXT_MAP: Record<AudioFormat, string> = { mp3:'mp3', aac:'m4a', ogg:'ogg', opus:'opus', flac:'flac', wav:'wav' };
+    const passthroughExt = entry.options.audioPassthrough
+      ? (entry.file.name.match(/\.([^.]+)$/)?.[1]?.toLowerCase() ?? 'mka')
+      : null;
+    const ext = passthroughExt
+      && /^(mkv|mka|m4a|mp4|mov|wav|flac|ogg|opus)$/.test(passthroughExt)
+      ? passthroughExt : (entry.options.audioPassthrough ? 'mka' : EXT_MAP[s.fmt]);
     const a = Object.assign(document.createElement('a'), {
       href: URL.createObjectURL(entry.result.blob),
-      download: entry.file.name.replace(/\.[^.]+$/, '') + '_compressed.' + EXT_MAP[s.fmt],
+      download: entry.file.name.replace(/\.[^.]+$/, '') + '_compressed.' + ext,
     });
     a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
   }
 
-  function compressAll() { s.files.forEach(f => { if (f.status === 'idle' || f.status === 'error') compressEntry(f); }); }
+  // BUG FIX: previously fired every entry's compressEntry() from inside
+  // .forEach() without awaiting — since all audio jobs share one FFmpeg.wasm
+  // singleton and write to fixed temp filenames (input{ext}/output.{fmt}),
+  // running them "concurrently" raced on the same virtual files. Process
+  // the queue one file at a time.
+  async function compressAll() {
+    for (const f of s.files) {
+      if (f.status === 'idle' || f.status === 'error') await compressEntry(f);
+    }
+  }
   function downloadAll()  { s.files.filter(f => f.status === 'done').forEach(downloadEntry); }
   function clearAll()     { s.files = []; render(); }
   const cbs = { onCompress: compressEntry, onDownload: downloadEntry, onRemove: (id: string) => { s.files = s.files.filter(f => f.id !== id); render(); } };
@@ -104,26 +120,35 @@ export function mountAudio(root: HTMLElement) {
 
     card.innerHTML = `
       <div class="s-row">
+        <div class="s-field full">
+          <span class="s-label">Passthrough <em>copy the audio stream as-is — no transcode, preserves lossless/surround tracks (TrueHD, DTS, etc.)</em></span>
+          <div class="seg" role="group" aria-label="Passthrough mode">
+            <button class="${!s.passthrough?'on':''}" aria-pressed="${!s.passthrough?'true':'false'}" id="pt-off">Transcode</button>
+            <button class="${s.passthrough?'on':''}" aria-pressed="${s.passthrough?'true':'false'}" id="pt-on">Passthrough</button>
+          </div>
+        </div>
+        ${s.passthrough ? '' : `
         <div class="s-field">
           <span class="s-label">Output format</span>
           <div class="fmt-pills" id="fmt-pills">
             ${formats.map(f=>`<button class="pill${s.fmt===f?' on':''}" data-fmt="${f}">${f.toUpperCase()}</button>`).join('')}
           </div>
-        </div>
-        ${!ll && bOpts.length ? `
+        </div>`}
+        ${s.passthrough ? '' : !ll && bOpts.length ? `
           <div class="s-field">
             <span class="s-label">Bitrate</span>
             <select class="si" id="br-sel">
               ${bOpts.map(b=>`<option value="${b}" ${s.bitrate===b?'selected':''}>${b} kbps</option>`).join('')}
             </select>
           </div>` : ll ? `<div class="s-field full"><span class="s-label" style="color:var(--green)">✓ Lossless — no bitrate setting</span></div>` : ''}
+        ${s.passthrough ? '' : `
         <div class="s-field">
           <span class="s-label">Sample rate</span>
           <select class="si" id="sr-sel">
             <option value="0" ${s.sampleRate===0?'selected':''}>Source rate</option>
             ${[48000,44100,32000,22050].map(r=>`<option value="${r}" ${s.sampleRate===r?'selected':''}>${r/1000} kHz</option>`).join('')}
           </select>
-        </div>
+        </div>`}
         <div class="s-field">
           <span class="s-label">Metadata</span>
           <div class="seg" role="group" aria-label="Metadata handling">
@@ -142,6 +167,8 @@ export function mountAudio(root: HTMLElement) {
     card.querySelector('#sr-sel')?.addEventListener('change', e => { s.sampleRate = +(e.target as HTMLSelectElement).value; });
     card.querySelector('#strip-on')?.addEventListener('click', ()  => { s.stripMeta = true; renderSettings(); });
     card.querySelector('#strip-off')?.addEventListener('click', () => { s.stripMeta = false; renderSettings(); });
+    card.querySelector('#pt-off')?.addEventListener('click', () => { s.passthrough = false; renderSettings(); });
+    card.querySelector('#pt-on')?.addEventListener('click',  () => { s.passthrough = true;  renderSettings(); });
   }
 
   function render() {

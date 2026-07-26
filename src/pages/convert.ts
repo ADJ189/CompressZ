@@ -202,7 +202,15 @@ export function mountConvert(root: HTMLElement): void {
     a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
   }
   function downloadEntry(e: ConvertEntry) { if (e.resultBlob && e.resultName) dlBlob(e.resultBlob, e.resultName); }
-  function processAll() { files.forEach(f => { if (f.status === 'idle' || f.status === 'error') processEntry(f); }); }
+  // BUG FIX: previously fired every entry's processEntry() from inside
+  // .forEach() without awaiting — video/audio conversions share the same
+  // FFmpeg.wasm singleton and fixed temp filenames, so concurrent calls
+  // raced on the same virtual files. Process the queue one file at a time.
+  async function processAll() {
+    for (const f of files) {
+      if (f.status === 'idle' || f.status === 'error') await processEntry(f);
+    }
+  }
   function downloadAll() { files.filter(f => f.status === 'done').forEach(downloadEntry); }
   function clearAll() { files = []; render(); }
 

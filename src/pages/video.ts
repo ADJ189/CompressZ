@@ -11,6 +11,8 @@ export function mountVideo(root: HTMLElement) {
   // ── State — persisted in videoStore across navigations ──────
   const s = videoStore;
 
+  const supportsTenBit = () => s.codec === 'h265' || s.codec === 'av1';
+
   function buildOptions(): CompressOptions {
     const o: CompressOptions = { videoCodec: s.codec, videoPreset: s.preset };
     if (s.mode === 'crf')        o.quality     = s.crfQuality / 100;
@@ -18,8 +20,65 @@ export function mountVideo(root: HTMLElement) {
     if (s.mode === 'targetSize') o.targetSizeKB = s.targetSizeMB * 1024;
     if (s.maxWidth > 0)          o.maxWidth     = s.maxWidth;
     if (s.fps > 0)               o.fps          = s.fps;
+    if (s.tenBit && supportsTenBit()) o.videoTenBit = true;
+    if (s.proxy)                 o.videoProxy   = true;
+    if (s.mode !== 'crf' && s.twoPass) o.videoTwoPass = true;
+    if (s.audioPassthrough)      o.audioPassthrough = true;
+    if (s.audioTrackMode === 'all') o.audioTrackMode = 'all';
+    if (s.audioDownmix && !s.audioPassthrough) o.audioDownmixStereo = true;
+    if (s.subtitleMode === 'all') o.subtitleMode = 'all';
     return o;
   }
+
+  function applyProxyPreset() {
+    s.codec    = 'h264';
+    s.preset   = 'ultrafast';
+    s.maxWidth = s.maxWidth || 960;
+    s.fps      = s.fps || 24;
+    s.proxy    = true;
+    renderSettings();
+  }
+
+  // ── Per-file settings editing ────────────────────────────────
+  // Every queued file carries its own `options` snapshot (taken from the
+  // panel at the moment it was added). Clicking the ✎ button on a file
+  // card loads that snapshot back into the panel for editing; Save writes
+  // it back to that one file only — other queued files are untouched.
+  // This is what makes the queue a real "different settings per file"
+  // batch queue rather than one shared config applied to everything.
+  function loadOptionsIntoPanel(o: CompressOptions) {
+    s.mode = o.targetSizeKB ? 'targetSize' : o.videoBitrate ? 'bitrate' : 'crf';
+    if (o.quality != null)      s.crfQuality   = Math.round(o.quality * 100);
+    if (o.videoBitrate != null) s.bitrate      = Math.round(o.videoBitrate / 1000);
+    if (o.targetSizeKB != null) s.targetSizeMB = +(o.targetSizeKB / 1024).toFixed(2);
+    s.codec  = o.videoCodec ?? 'h264';
+    s.preset = o.videoPreset ?? 'fast';
+    s.maxWidth = o.maxWidth ?? 0;
+    s.fps      = o.fps ?? 0;
+    s.tenBit   = !!o.videoTenBit;
+    s.proxy    = !!o.videoProxy;
+    s.twoPass  = !!o.videoTwoPass;
+    s.audioPassthrough = !!o.audioPassthrough;
+    s.audioTrackMode   = o.audioTrackMode === 'all' ? 'all' : 'first';
+    s.audioDownmix     = !!o.audioDownmixStereo;
+    s.subtitleMode      = o.subtitleMode === 'all' ? 'all' : 'none';
+  }
+
+  function editEntry(entry: FileEntry) {
+    s.editingId = entry.id;
+    loadOptionsIntoPanel(entry.options);
+    renderSettings();
+    root.querySelector('#video-settings')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function saveEditedEntry() {
+    const entry = s.files.find(f => f.id === s.editingId);
+    if (entry) { entry.options = buildOptions(); toast(`Settings saved for ${entry.file.name}`, 'success'); }
+    s.editingId = null;
+    renderSettings();
+  }
+
+  function cancelEdit() { s.editingId = null; renderSettings(); }
 
   function addFiles(fs: File[]) {
     const valid = fs.filter(f => f.type.startsWith('video/') || /\.(mp4|webm|mov|avi|mkv|m4v|flv|wmv|ogv|3gp)$/i.test(f.name));
@@ -32,7 +91,14 @@ export function mountVideo(root: HTMLElement) {
   }
 
   async function compressEntry(entry: FileEntry) {
-    entry.status = 'compressing'; entry.progress = 0; entry.options = buildOptions();
+    // NOTE: previously this reassigned `entry.options = buildOptions()`
+    // here, which threw away each file's own snapshot and silently made
+    // every queued file compress with whatever the panel happened to show
+    // at the moment "Compress" was clicked — the queue only *looked* like
+    // it supported per-file settings. Now it uses the entry's own options,
+    // which either came from the panel at add-time or from an explicit
+    // per-file edit (see editEntry/saveEditedEntry above).
+    entry.status = 'compressing'; entry.progress = 0;
     patchFileCard(entry, cbs);
     try {
       entry.result = await compressVideo(entry.file, entry.options, p => {
@@ -58,10 +124,27 @@ export function mountVideo(root: HTMLElement) {
     a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
   }
 
-  function compressAll() { s.files.forEach(f => { if (f.status === 'idle' || f.status === 'error') compressEntry(f); }); }
+  // BUG FIX: this used to fire every entry's compressEntry() from inside
+  // .forEach() without awaiting any of them — since every video job goes
+  // through the same shared FFmpeg.wasm singleton and writes to fixed
+  // in-memory filenames (vin.*/vout.*), running two jobs "concurrently"
+  // actually raced on the same virtual files and could silently corrupt
+  // or cross-deliver output between queued files. Processing the queue
+  // strictly one file at a time is both correct and no slower — FFmpeg.wasm
+  // was never actually running two encodes in parallel anyway.
+  async function compressAll() {
+    for (const f of s.files) {
+      if (f.status === 'idle' || f.status === 'error') await compressEntry(f);
+    }
+  }
   function downloadAll()  { s.files.filter(f => f.status === 'done').forEach(downloadEntry); }
-  function clearAll()     { s.files = []; render(); }
-  const cbs = { onCompress: compressEntry, onDownload: downloadEntry, onRemove: (id: string) => { s.files = s.files.filter(f => f.id !== id); render(); } };
+  function clearAll()     { s.files = []; s.editingId = null; render(); }
+  const cbs = {
+    onCompress: compressEntry,
+    onDownload: downloadEntry,
+    onRemove: (id: string) => { s.files = s.files.filter(f => f.id !== id); if (s.editingId === id) s.editingId = null; render(); },
+    onEdit: editEntry,
+  };
 
   let batchEl!: HTMLElement; let listEl!: HTMLElement; let dzWrap!: ReturnType<typeof createDropZone>;
 
@@ -96,7 +179,20 @@ export function mountVideo(root: HTMLElement) {
   function renderSettings() {
     const card = root.querySelector('#video-settings')!;
     const crf  = Math.round(18 + (1 - s.crfQuality / 100) * 17);
+    const editingEntry = s.editingId ? s.files.find(f => f.id === s.editingId) : null;
+    const twoPassEligible = s.mode !== 'crf';
+    const forcedMkv = s.audioTrackMode === 'all' || s.subtitleMode === 'all';
     card.innerHTML = `
+      ${editingEntry ? `
+      <div class="edit-banner">
+        <span>✎ Editing settings for <strong>${escHtml(editingEntry.file.name)}</strong> — other queued files are unaffected</span>
+        <div class="edit-banner-actions">
+          <button class="fc-btn primary" id="edit-save">Save to this file</button>
+          <button class="fc-btn" id="edit-cancel">Cancel</button>
+        </div>
+      </div>` : `
+      <p class="page-sub" style="margin:0 0 .6rem">These settings apply to files as you add them to the queue. Use ✎ on a queued file to give it its own settings.</p>
+      `}
       <div class="s-row">
         <div class="s-field">
           <span class="s-label">Mode</span>
@@ -139,6 +235,61 @@ export function mountVideo(root: HTMLElement) {
             ${[60,30,25,24,15].map(f=>`<option value="${f}" ${s.fps===f?'selected':''}>${f}</option>`).join('')}
           </select>
         </div>
+        ${supportsTenBit() ? `
+        <div class="s-field">
+          <span class="s-label">Bit depth</span>
+          <div class="seg" role="group" aria-label="Bit depth">
+            <button class="${!s.tenBit?'on':''}" aria-pressed="${!s.tenBit?'true':'false'}" id="bit-8">8-bit</button>
+            <button class="${s.tenBit?'on':''}" aria-pressed="${s.tenBit?'true':'false'}" id="bit-10">10-bit</button>
+          </div>
+        </div>` : ''}
+        ${twoPassEligible ? `
+        <div class="s-field">
+          <span class="s-label">2-pass <em>slower, more accurate bitrate targeting</em></span>
+          <div class="seg" role="group" aria-label="Two-pass encoding">
+            <button class="${!s.twoPass?'on':''}" aria-pressed="${!s.twoPass?'true':'false'}" id="tp-off">Off</button>
+            <button class="${s.twoPass?'on':''}" aria-pressed="${s.twoPass?'true':'false'}" id="tp-on">On</button>
+          </div>
+        </div>` : ''}
+        <div class="s-field full">
+          <span class="s-label">Edit proxy <em>all-intra, no B-frames — fast NLE scrubbing, not for delivery</em></span>
+          <div class="seg" role="group" aria-label="Edit proxy mode">
+            <button class="${!s.proxy?'on':''}" aria-pressed="${!s.proxy?'true':'false'}" id="proxy-off">Off</button>
+            <button class="${s.proxy?'on':''}" aria-pressed="${s.proxy?'true':'false'}" id="proxy-on">On</button>
+          </div>
+          <button class="link-btn" id="proxy-quick" type="button" style="margin-top:.4rem">⚡ Apply proxy quick-preset (H.264 · 960px · 24fps · ultrafast)</button>
+        </div>
+
+        <div class="s-field full" style="border-top:1px solid var(--border);padding-top:.8rem;margin-top:.2rem">
+          <span class="s-label">Audio tracks <em>which audio streams to keep in the output</em></span>
+          <div class="seg" role="group" aria-label="Audio track mode">
+            <button class="${s.audioTrackMode==='first'?'on':''}" aria-pressed="${s.audioTrackMode==='first'?'true':'false'}" id="at-first">Default track only</button>
+            <button class="${s.audioTrackMode==='all'?'on':''}" aria-pressed="${s.audioTrackMode==='all'?'true':'false'}" id="at-all">Keep all tracks</button>
+          </div>
+        </div>
+        <div class="s-field">
+          <span class="s-label">Audio handling</span>
+          <div class="seg" role="group" aria-label="Audio handling">
+            <button class="${!s.audioPassthrough?'on':''}" aria-pressed="${!s.audioPassthrough?'true':'false'}" id="ap-off">Transcode</button>
+            <button class="${s.audioPassthrough?'on':''}" aria-pressed="${s.audioPassthrough?'true':'false'}" id="ap-on">Passthrough</button>
+          </div>
+        </div>
+        ${!s.audioPassthrough ? `
+        <div class="s-field">
+          <span class="s-label">Downmix</span>
+          <div class="seg" role="group" aria-label="Downmix to stereo">
+            <button class="${!s.audioDownmix?'on':''}" aria-pressed="${!s.audioDownmix?'true':'false'}" id="dm-off">Keep channels</button>
+            <button class="${s.audioDownmix?'on':''}" aria-pressed="${s.audioDownmix?'true':'false'}" id="dm-on">Stereo</button>
+          </div>
+        </div>` : ''}
+        <div class="s-field full">
+          <span class="s-label">Subtitles <em>passthrough only — no burn-in rendering</em></span>
+          <div class="seg" role="group" aria-label="Subtitle mode">
+            <button class="${s.subtitleMode==='none'?'on':''}" aria-pressed="${s.subtitleMode==='none'?'true':'false'}" id="sub-none">Drop</button>
+            <button class="${s.subtitleMode==='all'?'on':''}" aria-pressed="${s.subtitleMode==='all'?'true':'false'}" id="sub-all">Keep all (copy)</button>
+          </div>
+        </div>
+        ${forcedMkv ? `<div class="s-field full"><span class="s-label" style="color:var(--text-4)">ℹ Output will be .mkv — needed to carry multiple audio tracks and/or subtitles</span></div>` : ''}
       </div>`;
     card.querySelector('#m-crf')?.addEventListener('click',    () => { s.mode='crf'; renderSettings(); });
     card.querySelector('#m-br')?.addEventListener('click',     () => { s.mode='bitrate'; renderSettings(); });
@@ -146,10 +297,31 @@ export function mountVideo(root: HTMLElement) {
     card.querySelector('#crf-range')?.addEventListener('input', e => { s.crfQuality=+(e.target as HTMLInputElement).value; const c=Math.round(18+(1-s.crfQuality/100)*17); card.querySelector('#crf-lbl')!.innerHTML=`${s.crfQuality}% <em>CRF ${c}</em>`; });
     card.querySelector('#br-input')?.addEventListener('change', e => { s.bitrate=+(e.target as HTMLInputElement).value||2000; });
     card.querySelector('#ts-input')?.addEventListener('change', e => { s.targetSizeMB=+(e.target as HTMLInputElement).value||0; });
-    card.querySelector('#codec-sel')?.addEventListener('change', e => { s.codec=(e.target as HTMLSelectElement).value as VideoCodec; });
+    card.querySelector('#codec-sel')?.addEventListener('change', e => { s.codec=(e.target as HTMLSelectElement).value as VideoCodec; renderSettings(); });
     card.querySelector('#preset-sel')?.addEventListener('change', e => { s.preset=(e.target as HTMLSelectElement).value as typeof s.preset; });
     card.querySelector('#maxw-sel')?.addEventListener('change',  e => { s.maxWidth=+(e.target as HTMLSelectElement).value; });
     card.querySelector('#fps-sel')?.addEventListener('change',   e => { s.fps=+(e.target as HTMLSelectElement).value; });
+    card.querySelector('#bit-8')?.addEventListener('click',  () => { s.tenBit=false; renderSettings(); });
+    card.querySelector('#bit-10')?.addEventListener('click', () => { s.tenBit=true;  renderSettings(); });
+    card.querySelector('#tp-off')?.addEventListener('click', () => { s.twoPass=false; renderSettings(); });
+    card.querySelector('#tp-on')?.addEventListener('click',  () => { s.twoPass=true;  renderSettings(); });
+    card.querySelector('#proxy-off')?.addEventListener('click', () => { s.proxy=false; renderSettings(); });
+    card.querySelector('#proxy-on')?.addEventListener('click',  () => { s.proxy=true;  renderSettings(); });
+    card.querySelector('#proxy-quick')?.addEventListener('click', () => applyProxyPreset());
+    card.querySelector('#at-first')?.addEventListener('click', () => { s.audioTrackMode='first'; renderSettings(); });
+    card.querySelector('#at-all')?.addEventListener('click',   () => { s.audioTrackMode='all';   renderSettings(); });
+    card.querySelector('#ap-off')?.addEventListener('click', () => { s.audioPassthrough=false; renderSettings(); });
+    card.querySelector('#ap-on')?.addEventListener('click',  () => { s.audioPassthrough=true;  renderSettings(); });
+    card.querySelector('#dm-off')?.addEventListener('click', () => { s.audioDownmix=false; renderSettings(); });
+    card.querySelector('#dm-on')?.addEventListener('click',  () => { s.audioDownmix=true;  renderSettings(); });
+    card.querySelector('#sub-none')?.addEventListener('click', () => { s.subtitleMode='none'; renderSettings(); });
+    card.querySelector('#sub-all')?.addEventListener('click',  () => { s.subtitleMode='all';  renderSettings(); });
+    card.querySelector('#edit-save')?.addEventListener('click',   () => saveEditedEntry());
+    card.querySelector('#edit-cancel')?.addEventListener('click', () => cancelEdit());
+  }
+
+  function escHtml(str: string) {
+    return str.replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]!));
   }
 
   function render() {

@@ -19,6 +19,9 @@ export function mountPdf(root: HTMLElement) {
     const o: CompressOptions = { pdfCompressionLevel: s.level };
     const kb = resolveTargetKB();
     if (kb > 0) o.targetSizeKB = kb;
+    if (s.stripMeta === 'on')  o.stripMetadata = true;
+    if (s.stripMeta === 'off') o.stripMetadata = false;
+    // 'auto' → leave stripMetadata undefined so the preset's own default applies
     return o;
   }
 
@@ -117,6 +120,18 @@ export function mountPdf(root: HTMLElement) {
             <div id="ts-detail" style="font-size:.72rem;color:var(--text-4);margin-top:.3rem"></div>
           </div>
         </div>
+
+        <!-- Metadata row -->
+        <div class="s-row" style="margin-top:.9rem">
+          <div class="s-field full">
+            <span class="s-label">Metadata <em>title, author, producer, creator tags — independent of compression level</em></span>
+            <div class="seg" role="group" aria-label="PDF metadata handling">
+              <button class="${s.stripMeta==='auto'?'on':''}" aria-pressed="${s.stripMeta==='auto'?'true':'false'}" id="md-auto">Auto <span style="opacity:.65">(preset default)</span></button>
+              <button class="${s.stripMeta==='on'?'on':''}"   aria-pressed="${s.stripMeta==='on'?'true':'false'}"   id="md-on">Strip</button>
+              <button class="${s.stripMeta==='off'?'on':''}"  aria-pressed="${s.stripMeta==='off'?'true':'false'}"  id="md-off">Keep</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div id="dz-mount"></div>
@@ -147,6 +162,17 @@ export function mountPdf(root: HTMLElement) {
   root.querySelector('#ts-kb')!.addEventListener('click', () => {
     s.targetUnit = 'KB'; renderUnitToggle(); updateTsDetail();
   });
+  root.querySelector('#md-auto')!.addEventListener('click', () => { s.stripMeta = 'auto'; renderMetaToggle(); });
+  root.querySelector('#md-on')!.addEventListener('click',   () => { s.stripMeta = 'on';   renderMetaToggle(); });
+  root.querySelector('#md-off')!.addEventListener('click',  () => { s.stripMeta = 'off';  renderMetaToggle(); });
+
+  function renderMetaToggle() {
+    (['auto','on','off'] as const).forEach(v => {
+      const btn = root.querySelector(`#md-${v}`) as HTMLButtonElement;
+      btn.classList.toggle('on', s.stripMeta === v);
+      btn.setAttribute('aria-pressed', String(s.stripMeta === v));
+    });
+  }
 
   function renderUnitToggle() {
     const mb = root.querySelector('#ts-mb') as HTMLButtonElement;

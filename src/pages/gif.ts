@@ -51,7 +51,15 @@ export function mountGif(root: HTMLElement) {
     a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
   }
 
-  function compressAll() { s.files.forEach(f => { if (f.status === 'idle' || f.status === 'error') compressEntry(f); }); }
+  // BUG FIX: previously fired every entry's compressEntry() from inside
+  // .forEach() without awaiting — since GIF jobs share the same FFmpeg.wasm
+  // singleton and fixed temp filenames (input.gif/...), concurrent calls
+  // raced on the same virtual files. Process the queue one file at a time.
+  async function compressAll() {
+    for (const f of s.files) {
+      if (f.status === 'idle' || f.status === 'error') await compressEntry(f);
+    }
+  }
   function downloadAll()  { s.files.filter(f => f.status === 'done').forEach(downloadEntry); }
   function clearAll()     { s.files = []; render(); }
   const cbs = { onCompress: compressEntry, onDownload: downloadEntry, onRemove: (id: string) => { s.files = s.files.filter(f => f.id !== id); render(); } };
