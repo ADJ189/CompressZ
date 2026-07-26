@@ -2,6 +2,111 @@
 
 All notable changes to CompressZ are documented in this file.
 
+## [Unreleased] — Batch Queue, Multi-track Audio, Subtitle Passthrough, 2-pass
+
+### Fixed — Batch "Compress All" raced on the shared FFmpeg.wasm instance
+
+- `compressAll()`/`processAll()` on the Video, Audio, GIF, and Convert pages
+  fired every queued file's compression via `.forEach()` without awaiting
+  any of them. All four share one FFmpeg.wasm singleton and write to fixed
+  in-memory filenames (`vin.*`/`vout.*`, `input{ext}`/`output.{fmt}`, etc.),
+  so "concurrent" jobs were actually racing on the same virtual files —
+  one file's input or output could get overwritten mid-encode by another
+  queued file. Each page now processes its queue strictly one file at a
+  time. FFmpeg.wasm was never actually encoding two files in parallel
+  anyway, so this is a correctness fix with no real throughput cost.
+
+### Changed — Video queue now supports true per-file settings
+
+- Previously `compressEntry()` re-read the global settings panel at the
+  moment "Compress" was clicked, silently discarding whatever a file's
+  `options` snapshot held — every queued file always used whatever the
+  panel currently showed, regardless of what it looked like when the file
+  was added. Fixed: each file now compresses with its own settings.
+- Added a ✎ edit button on each queued video file (new optional `onEdit`
+  callback on the shared file card component) that loads that file's own
+  settings back into the panel for editing, with a "Save to this file" /
+  "Cancel" banner so it's clear the edit only affects that one item.
+
+### Added — Multi-track audio (video page)
+
+- "Default track only" (previous behavior, unchanged default) or "Keep all
+  tracks", each either transcoded or passed through untouched, with an
+  optional stereo downmix for transcoded tracks. Implemented via ffmpeg's
+  `-map 0:a?` / `-map 0:a:0?` stream wildcards rather than a manual
+  per-track picker with probed indices — simpler and less fragile, at the
+  cost of not being able to include track 3 but exclude track 2 from a
+  file with several tracks.
+
+### Added — Subtitle track passthrough (video page)
+
+- "Keep all (copy)" mode passthrough-copies every subtitle stream via
+  `-map 0:s? -c:s copy`. No burn-in rendering — that needs libass compiled
+  into the FFmpeg.wasm core, which the default CDN-loaded core doesn't
+  reliably include, so it isn't implemented rather than shipping something
+  unverified.
+- Multi-track audio and/or subtitles now force the output container to
+  `.mkv` regardless of the selected video codec, since MP4/WebM can't
+  reliably carry arbitrary passthrough audio/subtitle codecs the way
+  Matroska can. Shown in the UI when it applies.
+
+### Added — 2-pass encoding (video page, bitrate/target-size modes)
+
+- Optional second pass for more accurate bitrate targeting, using
+  `-pass 1 -f null` followed by `-pass 2` with a per-job `-passlogfile`
+  prefix. Not offered in CRF mode, which has no bitrate target for a first
+  pass to gather stats against.
+
+## [Unreleased] — Video Container Fix, 10-bit/Proxy/Passthrough, PDF Metadata Control
+
+### Fixed — VP8/VP9 video output was muxed into a hardcoded `.mp4`
+
+- `compressVideo.ts` wrote every codec's output to `vout.mp4` regardless of
+  which codec was selected. VP8 isn't a legal codec inside the MP4/ISO-BMFF
+  muxer at all — ffmpeg rejects it, which silently sent VP8 jobs down the
+  MediaRecorder fallback path instead of FFmpeg.wasm — and VP9 + Opus inside
+  MP4 plays inconsistently outside Chrome. VP8/VP9 now mux into `.webm`
+  (their native container); H.264/H.265/AV1 stay in `.mp4`. The result's
+  MIME type, filename extension, and `+faststart` flag now follow the
+  actual container instead of assuming MP4.
+
+### Added — 10-bit encoding toggle (H.265 / AV1)
+
+- Exposed for H.265 and AV1 only — the default ffmpeg.wasm core's libx264
+  is an 8-bit-only build, so H.264 was left out rather than offering a
+  toggle that silently no-ops.
+
+### Added — Audio passthrough (stream copy, no re-encode)
+
+- New "Passthrough" mode on the Audio compressor and as an option when
+  re-encoding video, using `-c:a copy` to carry the original audio codec
+  through untouched — for lossless/surround tracks (TrueHD, DTS, PCM, etc.)
+  that a transcode would otherwise degrade or fail on. Falls back to an
+  `.mka` (Matroska audio) container when the source extension can't hold
+  the copied codec.
+
+### Added — Edit proxy mode for video
+
+- All-intra encoding (`-g 1 -bf 0`, every frame a keyframe, no B-frames) so
+  NLEs like DaVinci Resolve can seek/scrub without decoding a GOP. A
+  one-click quick-preset applies H.264 · 960px · 24fps · ultrafast on top
+  of it. Not intended as a delivery format — trades file size for editing
+  responsiveness.
+
+### Changed — PDF metadata stripping is now independent of compression level
+
+- Previously, stripping title/author/producer/creator tags was hardcoded to
+  the "Extreme" preset only. Added an explicit Auto / Strip / Keep control
+  so metadata can be stripped at "Low" or "Recommended" quality too, or
+  kept at "Extreme" if the person wants that instead. "Auto" preserves the
+  original per-preset default.
+
+### Note — Image metadata
+
+- No code change needed: the image compressor already strips EXIF/GPS data
+  as a side effect of re-encoding through canvas. Added a one-line note in
+  the UI so this is visible rather than silent.
+
 ## [Unreleased] — OCR Layout Rework & Docs Cleanup
 
 ### Fixed — Sidebar section labels clipped on some browsers
