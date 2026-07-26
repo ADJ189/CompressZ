@@ -33,18 +33,20 @@ export const imageStore: ImageState = {
 
 // ── Audio ─────────────────────────────────────────────────────
 export interface AudioState {
-  files:      FileEntry[];
-  fmt:        AudioFormat;
-  bitrate:    number;
-  sampleRate: number;
-  stripMeta:  boolean;
+  files:       FileEntry[];
+  fmt:         AudioFormat;
+  bitrate:     number;
+  sampleRate:  number;
+  stripMeta:   boolean;
+  passthrough: boolean;
 }
 export const audioStore: AudioState = {
-  files:      [],
-  fmt:        'mp3',
-  bitrate:    192,
-  sampleRate: 0,
-  stripMeta:  true,
+  files:       [],
+  fmt:         'mp3',
+  bitrate:     192,
+  sampleRate:  0,
+  stripMeta:   true,
+  passthrough: false,
 };
 
 // ── Video ─────────────────────────────────────────────────────
@@ -58,6 +60,14 @@ export interface VideoState {
   preset:       'ultrafast' | 'fast' | 'medium' | 'slow';
   maxWidth:     number;
   fps:          number;
+  tenBit:       boolean;
+  proxy:        boolean;
+  audioPassthrough: boolean;
+  twoPass:      boolean;
+  audioTrackMode: 'first' | 'all';
+  audioDownmix:   boolean;
+  subtitleMode:   'none' | 'all';
+  editingId:      string | null; // id of a queued file whose settings are being edited, or null
 }
 export const videoStore: VideoState = {
   files:        [],
@@ -69,6 +79,14 @@ export const videoStore: VideoState = {
   preset:       'fast',
   maxWidth:     0,
   fps:          0,
+  tenBit:       false,
+  proxy:        false,
+  audioPassthrough: false,
+  twoPass:      false,
+  audioTrackMode: 'first',
+  audioDownmix:   false,
+  subtitleMode:   'none',
+  editingId:      null,
 };
 
 // ── GIF ───────────────────────────────────────────────────────
@@ -93,10 +111,12 @@ export interface PdfState {
   level:       PdfLevel;
   targetUnit:  'MB' | 'KB';
   targetInput: string;
+  stripMeta:   'auto' | 'on' | 'off'; // 'auto' defers to the preset's own default
 }
 export const pdfStore: PdfState = {
   files:       [],
   level:       'recommended',
   targetUnit:  'MB',
   targetInput: '',
+  stripMeta:   'auto',
 };

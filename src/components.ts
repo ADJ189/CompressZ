@@ -61,6 +61,7 @@ export interface FileCardCallbacks {
   onCompress: (e: FileEntry) => void;
   onDownload: (e: FileEntry) => void;
   onRemove:   (id: string) => void;
+  onEdit?:    (e: FileEntry) => void; // optional: per-file settings editing (used by the video queue)
 }
 
 const TYPE_ICON: Record<string, string> = {
@@ -106,6 +107,7 @@ export function renderFileCard(entry: FileEntry, cbs: FileCardCallbacks): HTMLEl
   let actHtml = '';
   if (entry.status === 'idle' || entry.status === 'error') {
     actHtml += `<button class="fc-btn primary" data-action="compress">${entry.status === 'error' ? 'Retry' : 'Compress'}</button>`;
+    if (cbs.onEdit) actHtml += `<button class="fc-btn icon" data-action="edit" aria-label="Edit settings for this file" title="Edit settings for this file">✎</button>`;
   } else if (entry.status === 'compressing') {
     actHtml += `<span class="fc-pct">${entry.progress}%</span>`;
   } else if (entry.status === 'done') {
@@ -129,6 +131,7 @@ export function renderFileCard(entry: FileEntry, cbs: FileCardCallbacks): HTMLEl
   el.querySelector('[data-action="compress"]')?.addEventListener('click', () => cbs.onCompress(entry));
   el.querySelector('[data-action="download"]')?.addEventListener('click', () => cbs.onDownload(entry));
   el.querySelector('[data-action="remove"]')?.addEventListener('click',   () => cbs.onRemove(entry.id));
+  el.querySelector('[data-action="edit"]')?.addEventListener('click',     () => cbs.onEdit?.(entry));
 
   return el;
 }

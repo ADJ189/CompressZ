@@ -581,6 +581,23 @@ img, svg { display: block; }
   box-shadow: 0 1px 4px rgba(0,0,0,.1), 0 0 0 .5px var(--border);
 }
 
+.link-btn {
+  display: inline-block; background: none; border: none; padding: 0;
+  font-size: .78rem; font-weight: 600; color: var(--accent);
+  cursor: pointer; text-align: left;
+}
+.link-btn:hover { text-decoration: underline; }
+
+.edit-banner {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: .8rem; flex-wrap: wrap;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 8px; padding: .6rem .8rem; margin-bottom: .8rem;
+  font-size: .82rem;
+}
+.edit-banner-actions { display: flex; gap: .5rem; flex-shrink: 0; }
+
 .fmt-pills { display: flex; flex-wrap: wrap; gap: .3rem; }
 .pill {
   padding: .27rem .6rem; border-radius: var(--r-xs);
