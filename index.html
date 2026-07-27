@@ -47,6 +47,15 @@
 <!-- ── Sidebar overlay (mobile) ───────────────────────────── -->
 <div id="sidebar-overlay" class="sidebar-overlay"></div>
 
+<!-- ── Theme toggle — floating top-right, independent of sidebar
+     and mobile topbar so it stays reachable and out of the way
+     of both. ──────────────────────────────────────────────── -->
+<button id="theme-btn" class="theme-fab" type="button" aria-label="Toggle color theme">
+  <span id="theme-icon" class="theme-fab-icon">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  </span>
+</button>
+
 <!-- ── App shell ──────────────────────────────────────────── -->
 <div id="app-shell">
 
@@ -120,24 +129,33 @@
 
       <div class="sb-section-label">Info</div>
 
-      <a class="sb-item" data-nav="about" data-tooltip="About">
+      <button class="sb-item sb-more-toggle" id="sb-more-toggle" type="button" aria-expanded="false" aria-controls="sb-more-group" data-tooltip="More">
         <div class="sb-icon">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
         </div>
-        <span class="sb-label">About</span>
-      </a>
-      <a class="sb-item" data-nav="docs" data-tooltip="Docs">
-        <div class="sb-icon">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-        </div>
-        <span class="sb-label">Docs</span>
-      </a>
-      <a class="sb-item" data-nav="privacy" data-tooltip="Privacy">
-        <div class="sb-icon">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        </div>
-        <span class="sb-label">Privacy</span>
-      </a>
+        <span class="sb-label">More</span>
+        <svg class="sb-more-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="sb-more-group" id="sb-more-group">
+        <a class="sb-item" data-nav="about" data-tooltip="About">
+          <div class="sb-icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          </div>
+          <span class="sb-label">About</span>
+        </a>
+        <a class="sb-item" data-nav="docs" data-tooltip="Docs">
+          <div class="sb-icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          </div>
+          <span class="sb-label">Docs</span>
+        </a>
+        <a class="sb-item" data-nav="privacy" data-tooltip="Privacy">
+          <div class="sb-icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <span class="sb-label">Privacy</span>
+        </a>
+      </div>
 
     </nav>
 
@@ -149,12 +167,6 @@
         </div>
         <span class="sb-label">GitHub</span>
       </a>
-      <div class="sb-theme-btn" id="theme-btn">
-        <div class="sb-theme-icon" id="theme-icon">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-        </div>
-        <span class="sb-theme-label" id="theme-label">Dark mode</span>
-      </div>
     </div>
 
   </aside>

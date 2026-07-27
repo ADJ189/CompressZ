@@ -2,6 +2,58 @@
 
 All notable changes to CompressZ are documented in this file.
 
+## [Unreleased] — Sidebar Overflow Fix, More Group, Floating Theme Toggle, Font System
+
+### Fixed — Sidebar content could overflow below the visible viewport on mobile
+
+- `#app-shell`, `.sidebar`, and `.main-panel` used a plain `100vh`, which on
+  mobile browsers doesn't account for the address bar/toolbar chrome that
+  shrinks the actually-visible area — the sidebar's own height could exceed
+  what was on screen even though `.sb-nav` already had `overflow-y: auto`.
+  Added `100dvh` (with the `100vh` line kept as a fallback for browsers that
+  don't support it) so the sidebar's real height always matches the visible
+  viewport.
+- Fixed a bug the new "More" toggle would otherwise have hit immediately:
+  the existing "close mobile sidebar on nav" click listener matched any
+  `.sb-item` click, which would have collapsed the drawer the instant you
+  tapped "More" — before you could ever see the expanded group. Excluded
+  from that listener now.
+
+### Changed — About / Docs / Privacy collapsed into a "More" group
+
+- These three were always-visible sidebar rows under an "Info" label,
+  adding a fixed amount of height regardless of whether you use them.
+  Replaced with a single "More" disclosure toggle (⋯) that expands to show
+  them; state persists in `localStorage` and auto-expands when you're
+  actually on one of those three pages.
+
+### Changed — Light/dark toggle moved out of the sidebar
+
+- Was a full-width row in `.sb-bottom`. Moved to a floating button fixed to
+  the top-right of the viewport, independent of the sidebar and the mobile
+  topbar — repositioned via media query on mobile to sit left of the
+  hamburger button instead of overlapping it.
+
+### Added — Font system (IBM Plex Mono / Noto Sans Mono / Space Grotesk / Redaction)
+
+- `--mono` (IBM Plex Mono) — About/Docs/Privacy body copy, tech-card text,
+  badges/chips, on top of its existing use for file-size and progress
+  labels.
+- `--mono-btn` (Noto Sans Mono) — primary action and download buttons only.
+- `--feature` (Space Grotesk) — compression-ratio numbers, as a distinct
+  accent for the one number users actually came to see.
+- `--display` (Redaction, intended) — logo text, page titles, home hero
+  heading. Redaction itself isn't on Google Fonts or any CDN worth
+  hotlinking in shipped code (the only sources are third-party "free font"
+  mirror sites), so the `@font-face` is included **commented out**, ready
+  to activate by dropping licensed `.woff2` files at `/fonts/` and
+  uncommenting — no other change needed. Until then `--display` resolves to
+  Courier Prime (a real, Google-Fonts-hosted typewriter face) so nothing
+  404s or shows a missing-font gap in the meantime.
+- Base UI font (Inter) left as-is — a wholesale swap wasn't asked for and
+  would need visual QA across every page this couldn't verify in a
+  browser-less environment.
+
 ## [Unreleased] — Batch Queue, Multi-track Audio, Subtitle Passthrough, 2-pass
 
 ### Fixed — Batch "Compress All" raced on the shared FFmpeg.wasm instance
