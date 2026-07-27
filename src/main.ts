@@ -21,6 +21,7 @@ function applyTheme(t: string) {
   if (themeIcon) themeIcon.innerHTML = t === 'dark' ? SUN : MOON;
   const lbl = document.getElementById('theme-label');
   if (lbl) lbl.textContent = t === 'dark' ? 'Light mode' : 'Dark mode';
+  document.getElementById('theme-btn')?.setAttribute('aria-label', t === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
 }
 document.getElementById('theme-btn')!.addEventListener('click', () =>
   applyTheme(html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'));
@@ -61,11 +62,36 @@ function closeMobSidebar() {
 mobMenuBtn?.addEventListener('click', openMobSidebar);
 overlay?.addEventListener('click', closeMobSidebar);
 
-// Close mob sidebar on nav
+// Close mob sidebar on nav — but not when the click was the "More"
+// disclosure toggle, which doesn't navigate anywhere; closing the drawer
+// on that click would collapse it before you ever see the expanded group.
 document.addEventListener('click', e => {
   const item = (e.target as Element).closest('.sb-item');
-  if (item && window.innerWidth <= 768) closeMobSidebar();
+  if (item && item.id !== 'sb-more-toggle' && window.innerWidth <= 768) closeMobSidebar();
 });
+
+// ── Sidebar "More" group (About / Docs / Privacy) ───────────────
+// These used to be three always-visible sidebar rows under an "Info"
+// label — on short viewports that pushed the theme toggle below the
+// fold. Collapsed into a disclosure group so the sidebar's default
+// height is shorter; it auto-expands when you're actually on one of
+// these pages so the active item is never hidden.
+const moreToggle = document.getElementById('sb-more-toggle');
+const moreGroup  = document.getElementById('sb-more-group');
+const MORE_ROUTES = ['about', 'docs', 'privacy'];
+let moreOpen = localStorage.getItem('sb-more-open') === '1';
+
+function applyMoreOpen() {
+  moreGroup?.classList.toggle('open', moreOpen);
+  moreToggle?.setAttribute('aria-expanded', String(moreOpen));
+}
+function setMoreOpen(v: boolean) {
+  moreOpen = v;
+  localStorage.setItem('sb-more-open', v ? '1' : '0');
+  applyMoreOpen();
+}
+moreToggle?.addEventListener('click', () => setMoreOpen(!moreOpen));
+applyMoreOpen();
 
 // ── Nav active state ──────────────────────────────────────────
 function setActiveNav(route: string) {
@@ -74,6 +100,7 @@ function setActiveNav(route: string) {
     const active = route === r || (r !== '' && route.startsWith(r + '/'));
     el.classList.toggle('active', active);
   });
+  if (MORE_ROUTES.includes(route)) setMoreOpen(true);
 }
 
 // ── Page view with animation ──────────────────────────────────

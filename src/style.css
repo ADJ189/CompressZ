@@ -3,7 +3,28 @@
    Dark-first, glass morphism, spring animations
 ═══════════════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..900;1,14..32,300..900&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..900;1,14..32,300..900&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+Mono:wght@500;700&family=Space+Grotesk:wght@500;600;700&family=Courier+Prime:wght@400;700&display=swap');
+
+/* "Redaction" (OFL / LGPL-2.1, MCKL) is used for headings/branding, matching
+   cobalt.tools' font stack. It isn't distributed via Google Fonts or any CDN
+   trustworthy enough to hotlink in production — the only sources found are
+   third-party "free font" mirror sites, not something to ship a live request
+   against. Left commented out on purpose: uncomment once you've sourced the
+   files yourself and dropped them at these paths, nothing else needs to
+   change. Until then, `var(--display)` resolves to Courier Prime (a real,
+   Google-Fonts-hosted typewriter face, same spirit as Redaction) so nothing
+   404s and nothing looks broken in the meantime.
+@font-face {
+  font-family: 'Redaction';
+  src: url('/fonts/Redaction50-Regular.woff2') format('woff2');
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Redaction';
+  src: url('/fonts/Redaction50-Bold.woff2') format('woff2');
+  font-weight: 700; font-style: normal; font-display: swap;
+}
+*/
 
 /* ── Tokens ───────────────────────────────────────────────── */
 :root {
@@ -43,7 +64,10 @@
   --shadow-acc:   0 6px 24px rgba(91,95,199,.25);
   --r-xs: 6px; --r-sm: 8px; --r: 12px; --r-lg: 16px; --r-xl: 20px; --r-2xl: 28px;
   --sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --mono: 'JetBrains Mono', 'Fira Mono', monospace;
+  --mono: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, 'Fira Mono', monospace;
+  --mono-btn: 'Noto Sans Mono', var(--mono);
+  --display: 'Redaction', 'Courier Prime', var(--mono);
+  --feature: 'Space Grotesk', var(--sans);
   --ease: cubic-bezier(0.25,0.1,0.25,1);
   --spring: cubic-bezier(0.34,1.56,0.64,1);
   --t: .16s var(--ease);
@@ -152,6 +176,10 @@ img, svg { display: block; }
 ════════════════════════════════════════════════════════════ */
 #app-shell {
   display: flex; height: 100vh; overflow: hidden;
+  height: 100dvh; /* mobile browsers resize their chrome and never actually
+    give you 100vh of visible space — 100dvh tracks the real visible area so
+    the sidebar's bottom items (and the "More" group) don't get pushed below
+    the fold. Falls back to the 100vh above on browsers that don't support dvh. */
   position: relative;
 }
 
@@ -168,7 +196,7 @@ img, svg { display: block; }
 }
 .topbar-logo {
   display: flex; align-items: center; gap: .45rem;
-  font-weight: 800; font-size: .95rem; letter-spacing: -.03em;
+  font-family: var(--display); font-weight: 700; font-size: .95rem; letter-spacing: -.01em;
   background: linear-gradient(135deg, var(--text) 40%, var(--accent-2));
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
   flex: 1;
@@ -187,6 +215,7 @@ img, svg { display: block; }
   width: var(--sidebar-w);
   flex-shrink: 0;
   height: 100vh;
+  height: 100dvh; /* see #app-shell */
   background: var(--surface);
   border-right: 1px solid var(--border);
   display: flex; flex-direction: column;
@@ -217,7 +246,7 @@ img, svg { display: block; }
 }
 .sb-logo-icon svg { width: 32px; height: 32px; }
 .sb-logo-text {
-  font-weight: 800; font-size: .95rem; letter-spacing: -.03em; line-height: 1.4;
+  font-family: var(--display); font-weight: 700; font-size: .95rem; letter-spacing: -.01em; line-height: 1.4;
   white-space: nowrap; overflow: hidden;
   background: linear-gradient(135deg, var(--text) 30%, var(--accent-2));
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
@@ -317,28 +346,40 @@ img, svg { display: block; }
   display: flex; flex-direction: column; gap: .15rem;
   flex-shrink: 0;
 }
-.sb-theme-btn {
-  display: flex; align-items: center; gap: .65rem;
-  padding: .5rem .7rem; border-radius: var(--r);
-  color: var(--text-3); transition: var(--t2); cursor: pointer;
-  white-space: nowrap; min-height: 38px;
+
+/* "More" disclosure group (About / Docs / Privacy) */
+.sb-more-toggle {
+  width: 100%; background: none; border: none; font: inherit;
+  color: var(--text-3); text-align: left;
 }
-.sb-theme-btn:hover { background: var(--bg2); color: var(--text); }
-.sb-theme-icon {
-  width: 32px; height: 32px; border-radius: var(--r-sm); flex-shrink: 0;
+.sb-more-chevron { transition: transform var(--t2); flex-shrink: 0; color: var(--text-4); }
+.sb-more-toggle[aria-expanded="true"] .sb-more-chevron { transform: rotate(180deg); }
+.sidebar.collapsed .sb-more-chevron { display: none; }
+.sb-more-group {
+  max-height: 0; overflow: hidden;
+  display: flex; flex-direction: column; gap: .15rem;
+  transition: max-height var(--t2);
+}
+.sb-more-group.open { max-height: 220px; }
+
+/* Theme toggle — floating, top-right, outside the sidebar entirely */
+.theme-fab {
+  position: fixed; top: .85rem; right: 1.1rem; z-index: 450;
+  width: 38px; height: 38px; border-radius: 999px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  background: var(--bg2); border: 1px solid var(--border);
+  background: var(--glass);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  color: var(--text-3); box-shadow: var(--shadow-sm);
+  transition: var(--t2);
 }
-.sb-theme-label {
-  font-size: .85rem; font-weight: 500;
-  transition: opacity var(--t2), max-width var(--t2);
-  max-width: 160px; overflow: hidden;
-}
-.sidebar.collapsed .sb-theme-label { opacity: 0; max-width: 0; }
+.theme-fab:hover { color: var(--text); border-color: var(--border-mid); transform: translateY(-1px); box-shadow: var(--shadow-md); }
 
 /* ── Main panel ───────────────────────────────────────────── */
 .main-panel {
   flex: 1; min-width: 0; height: 100vh;
+  height: 100dvh; /* see #app-shell */
   overflow-y: auto; overflow-x: hidden;
   position: relative;
 }
@@ -372,8 +413,8 @@ img, svg { display: block; }
   display: inline-flex; align-items: center; gap: .55rem;
   padding: .3rem .85rem .3rem .45rem;
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: 100px; font-size: .74rem; font-weight: 600;
-  color: var(--text-3); letter-spacing: .02em;
+  border-radius: 100px; font-family: var(--mono); font-size: .72rem; font-weight: 500;
+  color: var(--text-3); letter-spacing: .01em;
   margin-bottom: 1.5rem; box-shadow: var(--shadow-xs);
   animation: fadeUp .5s var(--ease) .05s both;
 }
@@ -383,8 +424,9 @@ img, svg { display: block; }
   color: #fff; font-size: .67rem; font-weight: 700;
 }
 .home-title {
+  font-family: var(--display);
   font-size: clamp(2.4rem, 5vw, 3.8rem);
-  font-weight: 900; letter-spacing: -.05em; line-height: 1.05;
+  font-weight: 700; letter-spacing: -.02em; line-height: 1.05;
   margin-bottom: 1.25rem;
   animation: fadeUp .5s var(--ease) .1s both;
 }
@@ -410,7 +452,7 @@ img, svg { display: block; }
 }
 .trust-chip {
   display: flex; align-items: center; gap: .45rem;
-  font-size: .8rem; color: var(--text-3);
+  font-family: var(--mono); font-size: .78rem; color: var(--text-3);
 }
 .trust-chip svg { color: var(--emerald); flex-shrink: 0; }
 
@@ -515,7 +557,7 @@ img, svg { display: block; }
 
 .page-header { margin-bottom: 1.5rem; }
 .header-top  { display: flex; align-items: center; gap: .75rem; margin-bottom: .4rem; }
-.page-title  { font-size: 1.6rem; font-weight: 800; letter-spacing: -.04em; }
+.page-title  { font-family: var(--display); font-size: 1.6rem; font-weight: 700; letter-spacing: -.01em; }
 .page-sub    { font-size: .875rem; color: var(--text-3); margin-top: .3rem; line-height: 1.65; }
 
 .badge {
@@ -782,7 +824,7 @@ input[type="range"].slider::-webkit-slider-thumb:hover {
 }
 .fc-meta .sep    { color: var(--text-5); }
 .fc-meta .comp   { color: var(--text-2); font-weight: 500; }
-.fc-meta .ratio  { color: var(--green); font-weight: 700; }
+.fc-meta .ratio  { color: var(--green); font-weight: 700; font-family: var(--feature); }
 .fc-meta .bigger { color: var(--rose); font-weight: 700; }
 .fc-meta .dim    { color: var(--text-4); }
 .fc-meta .eng    { color: var(--text-4); font-size: .66rem; }
@@ -802,9 +844,9 @@ input[type="range"].slider::-webkit-slider-thumb:hover {
   transition: var(--t); cursor: pointer;
 }
 .fc-btn:hover         { border-color: var(--border-mid); color: var(--text); }
-.fc-btn.primary       { background: var(--accent); border-color: var(--accent); color: #fff; }
+.fc-btn.primary       { background: var(--accent); border-color: var(--accent); color: #fff; font-family: var(--mono-btn); }
 .fc-btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
-.fc-btn.dl            { background: var(--green-soft); border-color: var(--green-border); color: var(--green); }
+.fc-btn.dl            { background: var(--green-soft); border-color: var(--green-border); color: var(--green); font-family: var(--mono-btn); }
 .fc-btn.dl:hover      { background: rgba(34,197,94,.18); }
 .fc-btn.icon          { border-radius: 50%; padding: .3rem; width: 28px; height: 28px;
   display: inline-flex; align-items: center; justify-content: center; }
@@ -815,7 +857,7 @@ input[type="range"].slider::-webkit-slider-thumb:hover {
 ════════════════════════════════════════════════════════════ */
 .content-page { max-width: 720px; margin: 0 auto; padding: 2.5rem 2rem 5rem; }
 .content-page h1 {
-  font-size: 1.65rem; font-weight: 800; letter-spacing: -.04em; margin-bottom: .45rem;
+  font-family: var(--display); font-size: 1.65rem; font-weight: 700; letter-spacing: -.01em; margin-bottom: .45rem;
 }
 .content-page .page-sub { margin-bottom: 1.5rem; }
 .content-page h2 {
@@ -823,8 +865,8 @@ input[type="range"].slider::-webkit-slider-thumb:hover {
   padding-top: 1.4rem; border-top: 1px solid var(--border);
   color: var(--text-2);
 }
-.content-page p  { font-size: .88rem; color: var(--text-3); line-height: 1.82; margin-bottom: .9rem; }
-.content-page ul { font-size: .88rem; color: var(--text-3); line-height: 1.82; padding-left: 1.4rem; margin-bottom: .9rem; }
+.content-page p  { font-family: var(--mono); font-size: .82rem; color: var(--text-3); line-height: 1.82; margin-bottom: .9rem; }
+.content-page ul { font-family: var(--mono); font-size: .82rem; color: var(--text-3); line-height: 1.82; padding-left: 1.4rem; margin-bottom: .9rem; }
 .content-page ul li { margin-bottom: .38rem; }
 .content-page code {
   font-family: var(--mono); font-size: .8rem;
@@ -834,7 +876,7 @@ input[type="range"].slider::-webkit-slider-thumb:hover {
 .tech-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(170px,1fr)); gap: .9rem; margin: .9rem 0; }
 .tech-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: .9rem; }
 .tech-card h3 { font-size: .84rem; font-weight: 700; margin-bottom: .28rem; }
-.tech-card p  { font-size: .76rem; color: var(--text-3); margin: 0; line-height: 1.65; }
+.tech-card p  { font-family: var(--mono); font-size: .72rem; color: var(--text-3); margin: 0; line-height: 1.65; }
 
 /* Privacy policy callout boxes */
 .pp-box {
@@ -850,7 +892,7 @@ input[type="range"].slider::-webkit-slider-thumb:hover {
   padding: .6rem 1.35rem;
   background: linear-gradient(135deg, var(--accent), var(--violet));
   color: #fff; border-radius: var(--r);
-  font-size: .9rem; font-weight: 600; cursor: pointer;
+  font-family: var(--mono-btn); font-size: .87rem; font-weight: 600; cursor: pointer;
   transition: var(--t2); box-shadow: var(--shadow-acc);
 }
 .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 35px rgba(91,95,199,.38); }
@@ -911,6 +953,7 @@ input[type="range"].slider::-webkit-slider-thumb:hover {
   :root { --sidebar-w: 260px; }
 
   .topbar { display: flex; }
+  .theme-fab { top: 7px; right: 3.9rem; width: 36px; height: 36px; }
   .sidebar {
     position: fixed; left: 0; top: 0; bottom: 0; z-index: 400;
     transform: translateX(-100%);
