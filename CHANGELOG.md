@@ -2,7 +2,7 @@
 
 All notable changes to CompressZ are documented in this file.
 
-## [Unreleased] — Sidebar Overflow Fix, More Group, Floating Theme Toggle, Font System
+## [0.8] — Sidebar Overflow Fix, More Group, Floating Theme Toggle, Font System
 
 ### Fixed — Sidebar content could overflow below the visible viewport on mobile
 
@@ -54,7 +54,7 @@ All notable changes to CompressZ are documented in this file.
   would need visual QA across every page this couldn't verify in a
   browser-less environment.
 
-## [Unreleased] — Batch Queue, Multi-track Audio, Subtitle Passthrough, 2-pass
+## [0.7] — Batch Queue, Multi-track Audio, Subtitle Passthrough, 2-pass
 
 ### Fixed — Batch "Compress All" raced on the shared FFmpeg.wasm instance
 
@@ -109,7 +109,7 @@ All notable changes to CompressZ are documented in this file.
   prefix. Not offered in CRF mode, which has no bitrate target for a first
   pass to gather stats against.
 
-## [Unreleased] — Video Container Fix, 10-bit/Proxy/Passthrough, PDF Metadata Control
+## [0.6] — Video Container Fix, 10-bit/Proxy/Passthrough, PDF Metadata Control
 
 ### Fixed — VP8/VP9 video output was muxed into a hardcoded `.mp4`
 
@@ -159,7 +159,7 @@ All notable changes to CompressZ are documented in this file.
   as a side effect of re-encoding through canvas. Added a one-line note in
   the UI so this is visible rather than silent.
 
-## [Unreleased] — OCR Layout Rework & Docs Cleanup
+## [0.5] — OCR Layout Rework & Docs Cleanup
 
 ### Fixed — Sidebar section labels clipped on some browsers
 
@@ -209,7 +209,7 @@ All notable changes to CompressZ are documented in this file.
 - README: added a Credits & Acknowledgments section, linked `PRIVACY.md`,
   and added both new files to the architecture tree.
 
-## [Unreleased] — OCR Symbols & Dedicated Convert Page
+## [0.1] to [0.4] — OCR Symbols & Dedicated Convert Page
 
 ### Added — OCR: Math & Greek symbol recognition
 
