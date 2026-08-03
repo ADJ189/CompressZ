@@ -3,7 +3,17 @@
    Dark-first, glass morphism, spring animations
 ═══════════════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..900;1,14..32,300..900&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+Mono:wght@500;700&family=Space+Grotesk:wght@500;600;700&family=Courier+Prime:wght@400;700&display=swap');
+/* Google Fonts are now loaded from index.html via <link rel="preconnect"> +
+   <link rel="stylesheet">, not @import. @import inside CSS is render-blocking
+   in series (browser must fetch+parse this file, hit the @import, THEN start
+   the font request) whereas a <link> in <head> is discovered by the preload
+   scanner immediately and fetched in parallel with everything else — a real
+   first-paint win, not just a stylistic change.
+
+   Font count was also trimmed from 5 families to 4: Noto Sans Mono (used on
+   two buttons only) was folded into IBM Plex Mono, which the page already
+   loads for body copy — one less family and one less round trip, no visual
+   loss on those buttons. */
 
 /* "Redaction" (OFL / LGPL-2.1, MCKL) is used for headings/branding, matching
    cobalt.tools' font stack. It isn't distributed via Google Fonts or any CDN
@@ -65,9 +75,11 @@
   --r-xs: 6px; --r-sm: 8px; --r: 12px; --r-lg: 16px; --r-xl: 20px; --r-2xl: 28px;
   --sans: 'Inter', system-ui, -apple-system, sans-serif;
   --mono: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, 'Fira Mono', monospace;
-  --mono-btn: 'Noto Sans Mono', var(--mono);
+  --mono-btn: var(--mono); /* was 'Noto Sans Mono' — folded in, see note above */
   --display: 'Redaction', 'Courier Prime', var(--mono);
   --feature: 'Space Grotesk', var(--sans);
+  --brand: var(--sans); /* wordmark next to the globe icon (splash/topbar/sidebar) —
+    kept on the original Inter treatment rather than --display; see .sb-logo-text */
   --ease: cubic-bezier(0.25,0.1,0.25,1);
   --spring: cubic-bezier(0.34,1.56,0.64,1);
   --t: .16s var(--ease);
@@ -196,7 +208,7 @@ img, svg { display: block; }
 }
 .topbar-logo {
   display: flex; align-items: center; gap: .45rem;
-  font-family: var(--display); font-weight: 700; font-size: .95rem; letter-spacing: -.01em;
+  font-family: var(--brand); font-weight: 800; font-size: 1rem; letter-spacing: -.02em;
   background: linear-gradient(135deg, var(--text) 40%, var(--accent-2));
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
   flex: 1;
@@ -246,7 +258,7 @@ img, svg { display: block; }
 }
 .sb-logo-icon svg { width: 32px; height: 32px; }
 .sb-logo-text {
-  font-family: var(--display); font-weight: 700; font-size: .95rem; letter-spacing: -.01em; line-height: 1.4;
+  font-family: var(--brand); font-weight: 800; font-size: 1.05rem; letter-spacing: -.02em; line-height: 1.4;
   white-space: nowrap; overflow: hidden;
   background: linear-gradient(135deg, var(--text) 30%, var(--accent-2));
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
