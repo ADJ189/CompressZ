@@ -4,10 +4,7 @@
  * in compressPdf.ts and pages/ocr.ts, so there's nothing new to audit.
  */
 import { zipToBlob, zipSupported } from './zip';
-
-const PDFJS_VERSION = '4.4.168';
-const PDFJS_BASE     = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}`;
-const PDFLIB_ESM      = 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm';
+import { PDFJS_BASE, PDFLIB_ESM } from './pdfLibs';
 
 export interface PdfToImagesResult {
   blob: Blob;          // single image, or a .zip if multiple pages

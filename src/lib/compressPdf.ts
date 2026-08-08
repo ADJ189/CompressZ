@@ -1,8 +1,5 @@
 import type { CompressOptions, CompressResult, PdfLevel } from './types';
-
-const PDFJS_VERSION = '4.4.168';
-const PDFJS_BASE    = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}`;
-const PDFLIB_ESM    = 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm';
+import { PDFJS_BASE, PDFLIB_ESM } from './pdfLibs';
 
 interface Preset {
   targetDpi:   number;

@@ -19,10 +19,10 @@
  * the UI, not hidden.
  */
 import { readZip, zipSupported } from './zip';
+import { PDFLIB_ESM } from './pdfLibs';
 
 const MAMMOTH_ESM = 'https://cdn.jsdelivr.net/npm/mammoth@1.9.1/mammoth.browser.min.js';
 const H2C_ESM      = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/+esm';
-const PDFLIB_ESM   = 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm';
 
 // ── mammoth loader (UMD script, exposes window.mammoth) ────────
 let mammothLoading: Promise<any> | null = null;
