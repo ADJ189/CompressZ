@@ -15,10 +15,9 @@ import { uid, formatBytes } from '../lib/types';
 import { createDropZone }   from '../components';
 import { toast }            from '../toast';
 
+import { PDFJS_BASE, PDFLIB_ESM } from '../lib/pdfLibs';
+
 // ── CDN ───────────────────────────────────────────────────────
-const PDFJS_VER  = '4.4.168';
-const PDFJS_BASE = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VER}`;
-const PDFLIB_ESM = 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm';
 const TESS_UMD   = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
 const TESS_CORE  = 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.0/tesseract-core-simd-lstm.wasm.js';
 const TESS_LANGS = 'https://tessdata.projectnaptha.com/4.0.0';
