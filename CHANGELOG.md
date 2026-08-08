@@ -2,6 +2,51 @@
 
 All notable changes to CompressZ are documented in this file.
 
+## [0.9] — Merge PDF, Splash Animation Ported from CompressF, Code Dedup
+
+### Added — Merge PDF tool
+
+- New `compress/merge-pdf` page: drop two or more PDFs, reorder them with
+  ↑/↓ controls, then merge into a single file in that exact order.
+  `src/lib/mergePdf.ts` uses pdf-lib's `PDFDocument.copyPages()` to clone
+  each page's content stream and resources directly — no rasterisation, so
+  text stays selectable and vectors stay sharp, same principle as the
+  structural strategy already used in `compressPdf.ts`.
+- Loads PDFs with `ignoreEncryption: true` (same permissive load used
+  elsewhere) so owner-password-restricted PDFs still merge; a PDF that
+  genuinely needs a password to open is reported by name rather than
+  silently failing the whole batch.
+- Added to the sidebar (under Compress, next to PDF), the home page tools
+  grid, and documented in the Docs page's options reference.
+
+### Changed — Splash animation and wordmark font ported from CompressF
+
+- The startup splash's wave-chevron icon used to just appear; each wave now
+  draws itself in via `stroke-dasharray`/`stroke-dashoffset`, matching the
+  animation CompressF's splash uses. Icon and wordmark now pop in on their
+  own independent spring timings (was one shared container rise), and the
+  whole splash fades out starting at .8s over .4s, also matching CompressF.
+- Removed the progress-bar fill under the wordmark — CompressF's splash
+  doesn't have one, and the ported choreography doesn't call for it.
+- The splash wordmark now renders in Plus Jakarta Sans (added to the
+  Google Fonts request in `index.html`, splash-only) — the face CompressF's
+  splash used. No other typography changed; see the `[0.8]` entry below for
+  why a wholesale font swap is out of scope here.
+
+### Changed — Deduplicated repeated markup and constants
+
+- The wordmark icon SVG (rounded square + 3 chevrons) was inlined in full
+  three times (splash, mobile topbar, sidebar). Defined once as an SVG
+  `<symbol>` in `index.html` and referenced via `<use>` in the topbar and
+  sidebar; the splash keeps its own inline copy since its waves are
+  individually animated and `<use>` shadow trees can't be targeted by
+  external CSS animations.
+- The `pdfjs-dist`/`pdf-lib` CDN version pins and URLs were declared
+  independently in four places (`compressPdf.ts`, `convertPdf.ts`,
+  `convertOffice.ts`, `pages/ocr.ts` — one of them under a differently
+  spelled constant name). Consolidated into `src/lib/pdfLibs.ts`, imported
+  by all four plus the new `mergePdf.ts`.
+
 ## [0.8] — Sidebar Overflow Fix, More Group, Floating Theme Toggle, Font System
 
 ### Fixed — Sidebar content could overflow below the visible viewport on mobile

@@ -10,34 +10,54 @@
   <link rel="apple-touch-icon" href="/favicon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..900;1,14..32,300..900&family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&family=Courier+Prime:wght@400;700&display=swap" />
+  <!-- Plus Jakarta Sans added for the startup splash wordmark only — ported
+       over along with the splash animation itself from CompressF, whose
+       splash used this face. Every other font stays as documented in
+       CHANGELOG.md; a wholesale swap wasn't requested and would need its
+       own visual QA pass. -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..900;1,14..32,300..900&family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&family=Courier+Prime:wght@400;700&family=Plus+Jakarta+Sans:wght@700;800&display=swap" />
   <script type="module" src="/src/main.ts"></script>
 </head>
 <body>
 
+<!-- ── Icon sprite ────────────────────────────────────────────
+     The wordmark icon (rounded square + 3 chevron waves) used to be
+     inlined in full three times (splash, mobile topbar, sidebar) — same
+     ~500 bytes of markup repeated per copy. Defined once here and
+     referenced via <use> everywhere it's static. The splash instance
+     keeps its own full inline copy below, since its waves are individually
+     animated (stroke-dasharray draw-in) and <use> shadow trees can't be
+     reached by external CSS selectors/animations. ─────────────────────── -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="icon-logo" viewBox="0 0 32 32">
+    <rect width="32" height="32" rx="9" fill="#3b5bdb"/>
+    <path d="M8 13.5L12.5 9L17 13.5L21.5 9" stroke="white" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="M8 18.5L12.5 14L17 18.5L21.5 14" stroke="white" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" opacity="0.55" fill="none"/>
+    <path d="M8 23L12.5 18.5L17 23L21.5 18.5" stroke="white" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" opacity="0.22" fill="none"/>
+  </symbol>
+</svg>
+
 <!-- ── Splash ─────────────────────────────────────────────── -->
+<!-- Animation ported from CompressF: each wave chevron draws itself in
+     (stroke-dasharray/dashoffset) instead of just appearing, the icon and
+     wordmark pop in on independent spring timings, and the whole splash
+     fades out starting at .8s over .4s — see #splash / .sp-* in style.css. -->
 <div id="splash">
   <div class="sp-inner">
-    <div class="sp-logo"><svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <div class="sp-logo"><svg width="64" height="64" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
           <rect width="32" height="32" rx="9" fill="#3b5bdb"/>
-          <path d="M8 13.5L12.5 9L17 13.5L21.5 9" stroke="white" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M8 18.5L12.5 14L17 18.5L21.5 14" stroke="white" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" opacity="0.55"/>
-          <path d="M8 23L12.5 18.5L17 23L21.5 18.5" stroke="white" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" opacity="0.22"/>
+          <path class="sp-wave sp-wave1" d="M8 13.5L12.5 9L17 13.5L21.5 9" stroke="white" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+          <path class="sp-wave sp-wave2" d="M8 18.5L12.5 14L17 18.5L21.5 14" stroke="white" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" opacity="0.55"/>
+          <path class="sp-wave sp-wave3" d="M8 23L12.5 18.5L17 23L21.5 18.5" stroke="white" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" opacity="0.22"/>
         </svg></div>
     <div class="sp-name">CompressZ</div>
-    <div class="sp-bar"><div class="sp-fill"></div></div>
   </div>
 </div>
 
 <!-- ── Mobile topbar ──────────────────────────────────────── -->
 <div class="topbar">
   <div class="topbar-logo">
-    <div class="logo-icon"><svg width="20" height="20" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect width="32" height="32" rx="9" fill="#3b5bdb"/>
-          <path d="M8 13.5L12.5 9L17 13.5L21.5 9" stroke="white" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M8 18.5L12.5 14L17 18.5L21.5 14" stroke="white" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" opacity="0.55"/>
-          <path d="M8 23L12.5 18.5L17 23L21.5 18.5" stroke="white" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" opacity="0.22"/>
-        </svg></div>
+    <div class="logo-icon"><svg width="20" height="20" viewBox="0 0 32 32"><use href="#icon-logo"/></svg></div>
     <span>CompressZ</span>
   </div>
   <button class="mob-menu-btn" id="mob-menu-btn" aria-label="Menu">
@@ -68,12 +88,7 @@
     <!-- Logo + collapse -->
     <div class="sb-top">
       <a class="sb-logo" data-nav="">
-        <div class="sb-logo-icon"><svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect width="32" height="32" rx="9" fill="#3b5bdb"/>
-          <path d="M8 13.5L12.5 9L17 13.5L21.5 9" stroke="white" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M8 18.5L12.5 14L17 18.5L21.5 14" stroke="white" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" opacity="0.55"/>
-          <path d="M8 23L12.5 18.5L17 23L21.5 18.5" stroke="white" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" opacity="0.22"/>
-        </svg></div>
+        <div class="sb-logo-icon"><svg width="32" height="32" viewBox="0 0 32 32"><use href="#icon-logo"/></svg></div>
         <span class="sb-logo-text">CompressZ</span>
       </a>
       <button class="sb-collapse-btn" id="sb-collapse" aria-label="Collapse sidebar">
@@ -104,6 +119,10 @@
       <a class="sb-item" data-nav="compress/pdf" data-tooltip="PDF">
         <div class="sb-icon">📄</div>
         <span class="sb-label">PDF</span>
+      </a>
+      <a class="sb-item" data-nav="compress/merge-pdf" data-tooltip="Merge PDF">
+        <div class="sb-icon">🧷</div>
+        <span class="sb-label">Merge PDF</span>
       </a>
       <a class="sb-item" data-nav="compress/video" data-tooltip="Video">
         <div class="sb-icon">🎬</div>
@@ -245,6 +264,12 @@
       <div class="htc-desc">Structural image resampling — text and vectors untouched. Compress to exact MB/KB target.</div>
       <div class="htc-tags"><span class="htc-tag">Structural</span><span class="htc-tag">pdf-lib</span><span class="htc-tag">Target size</span></div>
     </div>
+    <div class="htc" data-t="merge" data-nav="compress/merge-pdf">
+      <div class="htc-head"><div class="htc-icon">🧷</div><svg class="htc-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 17L17 7M7 7h10v10"/></svg></div>
+      <div class="htc-name">Merge PDF</div>
+      <div class="htc-desc">Combine multiple PDFs into one, in any order — pages copied directly, nothing rasterised.</div>
+      <div class="htc-tags"><span class="htc-tag">pdf-lib</span><span class="htc-tag">Reorderable</span></div>
+    </div>
     <div class="htc" data-t="video" data-nav="compress/video">
       <div class="htc-head"><div class="htc-icon">🎬</div><svg class="htc-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 17L17 7M7 7h10v10"/></svg></div>
       <div class="htc-name">Video</div>
@@ -382,6 +407,13 @@
     <li><code>quality</code> — Controls palette size: 16–256 colours.</li>
     <li><code>maxWidth</code> — Lanczos resize before palette generation.</li>
     <li><code>fps</code> — Framerate decimation.</li>
+  </ul>
+
+  <h2>Merge PDF options</h2>
+  <ul>
+    <li>Add two or more PDFs, then reorder with the ↑/↓ controls — the merged file follows that exact order.</li>
+    <li>Pages are copied with <code>PDFDocument.copyPages()</code> (pdf-lib) — content streams and resources are cloned directly, so text stays selectable and vectors stay sharp at any zoom. No page is re-rendered as an image.</li>
+    <li>PDFs with owner-password restrictions (no open password) load via <code>ignoreEncryption</code>; a PDF that truly needs a password to open is reported by name and the rest of the merge still completes.</li>
   </ul>
 
   <h2>PDF OCR options</h2>
