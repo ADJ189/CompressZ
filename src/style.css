@@ -147,18 +147,27 @@ img, svg { display: block; }
 ::selection { background: var(--accent-glow); color: var(--accent-2); }
 
 /* ════════════════════════════════════════════════════════════
-   SPLASH
+   SPLASH — animation ported from CompressF: each wave chevron draws
+   itself in via stroke-dasharray/dashoffset (was a static appear here
+   before), the icon and wordmark pop in on their own independent spring
+   timings rather than one shared container rise, and the whole splash
+   auto-fades starting at .8s over .4s — matching CompressF's choreography
+   exactly rather than approximating it. The old progress-bar fill is gone,
+   since CompressF's splash doesn't have one. The wordmark now uses Plus
+   Jakarta Sans, the font CompressF's splash used, imported in index.html.
 ════════════════════════════════════════════════════════════ */
 #splash {
   position: fixed; inset: 0; z-index: 9999;
   background: var(--bg);
   display: flex; align-items: center; justify-content: center;
-  transition: opacity .5s var(--ease) .95s, visibility .5s var(--ease) .95s;
+  animation: spSplashFade .4s var(--ease) .8s forwards;
+  pointer-events: none;
 }
-#splash.done { opacity: 0; visibility: hidden; pointer-events: none; }
+#splash.done { opacity: 0; visibility: hidden; }
+@keyframes spSplashFade { to { opacity: 0; visibility: hidden; } }
+
 .sp-inner {
-  display: flex; flex-direction: column; align-items: center; gap: 1.25rem;
-  animation: spRise .55s var(--spring) both;
+  display: flex; flex-direction: column; align-items: center; gap: 1.1rem;
 }
 .sp-logo {
   width: 64px; height: 64px; border-radius: 18px;
@@ -167,21 +176,20 @@ img, svg { display: block; }
   box-shadow: var(--shadow-acc);
   animation: spPop .5s var(--spring) .05s both;
 }
-.sp-logo svg { width: 64px; height: 64px; }
+.sp-logo svg { width: 64px; height: 64px; filter: drop-shadow(0 4px 16px var(--accent-glow)); }
+.sp-wave { stroke-dasharray: 40; stroke-dashoffset: 40; animation: spDrawWave .4s ease forwards; }
+.sp-wave2 { animation-delay: .12s; }
+.sp-wave3 { animation-delay: .22s; }
+@keyframes spDrawWave { to { stroke-dashoffset: 0; } }
+
 .sp-name {
-  font-size: 1.6rem; font-weight: 800; letter-spacing: -.04em;
+  font-family: 'Plus Jakarta Sans', var(--sans);
+  font-size: 1.7rem; font-weight: 800; letter-spacing: -.03em;
   background: linear-gradient(135deg, var(--text) 40%, var(--accent-2));
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  animation: spPop .5s var(--spring) .1s both;
 }
-.sp-bar { width: 100px; height: 2px; background: var(--border); border-radius: 1px; overflow: hidden; }
-.sp-fill {
-  height: 100%; width: 0; border-radius: 1px;
-  background: linear-gradient(90deg, var(--accent), var(--violet));
-  animation: spFill .9s var(--ease) .15s forwards;
-}
-@keyframes spRise  { from { opacity:0; transform:translateY(14px);} to { opacity:1; transform:none;} }
-@keyframes spPop   { from { transform:scale(.7); opacity:0; } to { transform:scale(1); opacity:1; } }
-@keyframes spFill  { to { width: 100%; } }
+@keyframes spPop { from { transform:scale(.7) translateY(8px); opacity:0; } to { transform:none; opacity:1; } }
 
 /* ════════════════════════════════════════════════════════════
    LAYOUT — App Shell
@@ -579,6 +587,7 @@ img, svg { display: block; }
 }
 .badge.img   { background:rgba(14,165,233,.1); color:var(--sky); }
 .badge.pdf   { background:rgba(244,63,94,.1);  color:var(--rose); }
+.badge.merge { background:rgba(244,63,94,.1);  color:var(--rose); } /* same family as pdf — it's a PDF tool */
 .badge.video { background:rgba(245,158,11,.1); color:var(--amber); }
 .badge.audio { background:rgba(139,92,246,.1); color:var(--violet); }
 .badge.gif   { background:rgba(16,185,129,.1); color:var(--emerald); }

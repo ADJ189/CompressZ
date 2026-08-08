@@ -7,6 +7,7 @@ import { mountAudio }  from './pages/audio';
 import { mountGif }    from './pages/gif';
 import { mountOcr }    from './pages/ocr';
 import { mountConvert } from './pages/convert';
+import { mountMergePdf } from './pages/mergePdf';
 
 // ── Theme ─────────────────────────────────────────────────────
 const html      = document.documentElement;
@@ -31,7 +32,11 @@ const saved = localStorage.getItem('theme') ||
 applyTheme(saved);
 
 // ── Splash ────────────────────────────────────────────────────
-setTimeout(() => document.getElementById('splash')!.classList.add('done'), 1150);
+// CSS drives the fade itself (auto-plays, .8s delay + .4s duration — see
+// #splash in style.css); this just removes the element from the a11y tree
+// and click path once that fade has finished, rather than leaving an
+// invisible-but-present overlay behind.
+setTimeout(() => document.getElementById('splash')!.classList.add('done'), 1200);
 
 // ── Sidebar collapse ──────────────────────────────────────────
 const sidebar = document.getElementById('sidebar')!;
@@ -134,6 +139,7 @@ on('compress/video',  () => { setActiveNav('compress/video');  mountPage(mountVi
 on('compress/audio',  () => { setActiveNav('compress/audio');  mountPage(mountAudio); });
 on('compress/gif',    () => { setActiveNav('compress/gif');    mountPage(mountGif); });
 on('compress/ocr',    () => { setActiveNav('compress/ocr');    mountPage(mountOcr); });
+on('compress/merge-pdf', () => { setActiveNav('compress/merge-pdf'); mountPage(mountMergePdf); });
 on('convert',         () => { setActiveNav('convert');         mountPage(mountConvert); });
 on('about',           () => { setActiveNav('about');           showStatic('tpl-about'); });
 on('docs',            () => { setActiveNav('docs');            showStatic('tpl-docs'); });

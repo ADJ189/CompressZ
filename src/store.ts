@@ -120,3 +120,16 @@ export const pdfStore: PdfState = {
   targetInput: '',
   stripMeta:   'auto',
 };
+
+// ── Merge PDF ─────────────────────────────────────────────────
+// Order-sensitive, many-files → one-file operation — same shape as the
+// img2pdf "combine" flow in convert.ts, so it holds a plain File[] (the
+// merge order) rather than the FileEntry[] queue the other tools use.
+export interface MergeState {
+  files: File[];
+  busy:  boolean;
+}
+export const mergeStore: MergeState = {
+  files: [],
+  busy:  false,
+};
