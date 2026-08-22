@@ -16,6 +16,7 @@ import { createDropZone }   from '../components';
 import { toast }            from '../toast';
 
 import { PDFJS_BASE, PDFLIB_ESM } from '../lib/pdfLibs';
+import { get2D } from '../lib/gpu';
 
 // ── CDN ───────────────────────────────────────────────────────
 const TESS_UMD   = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
@@ -221,14 +222,14 @@ async function renderPages(
     try {
       if (typeof OffscreenCanvas !== 'undefined') {
         const osc = new OffscreenCanvas(w, h);
-        const ctx = osc.getContext('2d', { alpha:false, colorSpace:'srgb' }) as any;
+        const ctx = get2D(osc, 'ocr', { alpha:false, colorSpace:'srgb' });
         ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h);
         await page.render({ canvasContext:ctx, viewport:vp, intent:'print' }).promise;
         blob = await osc.convertToBlob({ type:'image/png' });
       } else {
         const c = document.createElement('canvas');
         c.width=w; c.height=h;
-        const ctx = c.getContext('2d',{alpha:false})!;
+        const ctx = get2D(c, 'ocr', {alpha:false});
         ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h);
         await page.render({ canvasContext:ctx, viewport:vp, intent:'print' }).promise;
         blob = await new Promise<Blob>((r,j)=>c.toBlob(b=>b?r(b):j(new Error('toBlob null')),'image/png'));

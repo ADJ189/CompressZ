@@ -218,7 +218,7 @@ export function mountConvert(root: HTMLElement): void {
     if (combineFiles.length < 1) { toast('Add at least one image first', 'error'); return; }
     combineBusy = true; render();
     try {
-      const blob = await imagesToPdf(combineFiles, () => render());
+      const blob = await imagesToPdf(combineFiles, {}, () => render());
       dlBlob(blob, 'combined.pdf');
       toast(`Combined ${combineFiles.length} images into one PDF`, '');
     } catch (e: any) {
