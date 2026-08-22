@@ -1,10 +1,16 @@
 /**
- * convertPdf.ts — PDF → Images and Images → PDF, for the Convert page.
+ * convertPdf.ts — PDF → Images, for the Convert page. Images → PDF used to
+ * be implemented here too; it now lives in imagesToPdf.ts (shared with the
+ * dedicated Images → PDF tool) and is re-exported below so existing
+ * imports from this file keep working.
  * Reuses the exact pdfjs-dist / pdf-lib CDN loading pattern already used
  * in compressPdf.ts and pages/ocr.ts, so there's nothing new to audit.
  */
 import { zipToBlob, zipSupported } from './zip';
-import { PDFJS_BASE, PDFLIB_ESM } from './pdfLibs';
+import { PDFJS_BASE } from './pdfLibs';
+import { get2D } from './gpu';
+
+export { imagesToPdf } from './imagesToPdf';
 
 export interface PdfToImagesResult {
   blob: Blob;          // single image, or a .zip if multiple pages
@@ -43,7 +49,7 @@ export async function pdfToImages(
 
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
-    const ctx = c.getContext('2d', { alpha: format === 'png' })!;
+    const ctx = get2D(c, 'pdf', { alpha: format === 'png' });
     if (format === 'jpeg') { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); }
     await page.render({ canvasContext: ctx, viewport: vp, intent: 'print' }).promise;
 
@@ -65,37 +71,4 @@ export async function pdfToImages(
     throw new Error('Multi-page PDF → image needs one file per page, which requires ZIP support (CompressionStream) — please use a current version of Chrome, Firefox, Safari, or Edge.');
   }
   return { blob: await zipToBlob(pages), isZip: true, pageCount: pages.length };
-}
-
-export async function imagesToPdf(
-  files: File[],
-  onProgress?: (pct: number) => void,
-): Promise<Blob> {
-  const { PDFDocument } = await import(/* @vite-ignore */ PDFLIB_ESM) as any;
-  const pdfDoc = await PDFDocument.create();
-
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    const bitmap = await createImageBitmap(file);
-    const c = document.createElement('canvas');
-    c.width = bitmap.width; c.height = bitmap.height;
-    const ctx = c.getContext('2d')!;
-    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
-    ctx.drawImage(bitmap, 0, 0);
-    bitmap.close();
-
-    const jpegBytes = await new Promise<ArrayBuffer>((res, rej) =>
-      c.toBlob(b => b ? b.arrayBuffer().then(res) : rej(new Error('toBlob returned null')), 'image/jpeg', 0.92));
-    c.width = 0; c.height = 0;
-
-    const img  = await pdfDoc.embedJpg(new Uint8Array(jpegBytes));
-    const page = pdfDoc.addPage([img.width, img.height]);
-    page.drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
-
-    onProgress?.(Math.round(((i + 1) / files.length) * 95));
-  }
-
-  const bytes = await pdfDoc.save();
-  onProgress?.(100);
-  return new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' });
 }

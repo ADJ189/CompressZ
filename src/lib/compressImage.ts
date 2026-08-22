@@ -1,4 +1,5 @@
 import type { CompressOptions, CompressResult, ImageFormat } from './types';
+import { makeCanvas, get2D, resizeViaWebGL } from './gpu';
 
 // AVIF *encoding* support varies a lot more than decoding support (notably
 // Safari can display AVIF but can't encode it via canvas, and older Firefox
@@ -40,16 +41,27 @@ export async function compressImage(
   onProgress?.(18);
 
   let { width: w, height: h } = bitmap;
-  if (w > maxW || h > maxH) {
+  const needsResize = w > maxW || h > maxH;
+  if (needsResize) {
     const r = Math.min(maxW / w, maxH / h);
     w = Math.round(w * r);
     h = Math.round(h * r);
   }
 
-  const canvas = makeCanvas(w, h);
-  const ctx    = getCtx(canvas);
-  if (format === 'image/jpeg') { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h); }
-  ctx.drawImage(bitmap, 0, 0, w, h);
+  // GPU path: when we're actually downscaling, run the resize as a WebGL2
+  // texture draw (hardware bilinear filtering) instead of Canvas2D's
+  // CPU-bound drawImage() scaler. Falls back to plain Canvas2D — silently,
+  // same visual result — when WebGL2 is unavailable, the Images GPU
+  // toggle is off in Settings, or the GPU draw throws for any reason.
+  let canvas = needsResize
+    ? resizeViaWebGL(bitmap, w, h, 'images', format === 'image/jpeg' ? '#ffffff' : undefined)
+    : null;
+  if (!canvas) {
+    canvas = makeCanvas(w, h);
+    const ctx = get2D(canvas, 'images');
+    if (format === 'image/jpeg') { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h); }
+    ctx.drawImage(bitmap, 0, 0, w, h);
+  }
   bitmap.close();
   onProgress?.(32);
 
@@ -95,17 +107,6 @@ async function binarySearch(
     if (hi - lo < 0.004) break;
   }
   return best ?? await encode(canvas, format, lo);
-}
-
-function makeCanvas(w: number, h: number): HTMLCanvasElement | OffscreenCanvas {
-  if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(w, h);
-  const c = document.createElement('canvas'); c.width = w; c.height = h; return c;
-}
-
-function getCtx(c: HTMLCanvasElement | OffscreenCanvas) {
-  const ctx = c.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
-  if (!ctx) throw new Error('Canvas 2D unavailable');
-  return ctx;
 }
 
 function encode(c: HTMLCanvasElement | OffscreenCanvas, fmt: string, q: number): Promise<Blob> {

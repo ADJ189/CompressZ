@@ -1,5 +1,6 @@
 import type { CompressOptions, CompressResult, PdfLevel } from './types';
 import { PDFJS_BASE, PDFLIB_ESM } from './pdfLibs';
+import { get2D } from './gpu';
 
 interface Preset {
   targetDpi:   number;
@@ -203,7 +204,7 @@ async function decodeXObjectToBlob(xObj: any, w: number, h: number): Promise<Blo
   if (rawBytes.length < w * h * channels) throw new Error('stream too short for stated dimensions');
 
   const osc     = new OffscreenCanvas(w, h);
-  const ctx     = osc.getContext('2d') as OffscreenCanvasRenderingContext2D;
+  const ctx     = get2D(osc, 'pdf') as OffscreenCanvasRenderingContext2D;
   const imgData = ctx.createImageData(w, h);
   const d       = imgData.data;
 
@@ -226,7 +227,7 @@ async function decodeXObjectToBlob(xObj: any, w: number, h: number): Promise<Blo
 async function reencodeToJpeg(blob: Blob, w: number, h: number, quality: number): Promise<Uint8Array> {
   const bitmap = await createImageBitmap(blob);
   const osc    = new OffscreenCanvas(w, h);
-  const ctx    = osc.getContext('2d') as OffscreenCanvasRenderingContext2D;
+  const ctx    = get2D(osc, 'pdf') as OffscreenCanvasRenderingContext2D;
   ctx.fillStyle = '#ffffff'; // flatten transparency before JPEG
   ctx.fillRect(0, 0, w, h);
   ctx.drawImage(bitmap, 0, 0, w, h);
@@ -277,7 +278,7 @@ async function canvasRender(
 
     if (hasOSC) {
       const osc = new OffscreenCanvas(w, h);
-      const ctx = osc.getContext('2d', { alpha: false, colorSpace: 'srgb' }) as any;
+      const ctx = get2D(osc, 'pdf', { alpha: false, colorSpace: 'srgb' });
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, w, h);
       await page.render({ canvasContext: ctx, viewport: vp, intent: 'print' }).promise;
@@ -290,7 +291,7 @@ async function canvasRender(
     } else {
       const canvas  = document.createElement('canvas');
       canvas.width  = w; canvas.height = h;
-      const ctx     = canvas.getContext('2d', { alpha: false })!;
+      const ctx     = get2D(canvas, 'pdf', { alpha: false });
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, w, h);
       await page.render({ canvasContext: ctx, viewport: vp, intent: 'print' }).promise;

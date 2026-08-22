@@ -1,5 +1,6 @@
 import type { CompressOptions, CompressResult } from './types';
 import { getFFmpeg, ffFetch, ffHasMT, setProgressHandler } from './ffmpeg';
+import { get2D } from './gpu';
 
 export async function compressVideo(
   file: File,
@@ -212,7 +213,13 @@ async function videoViaMediaRecorder(
   const h      = opts.maxWidth ? Math.round(oh * (w / ow))   : oh;
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
-  const ctx    = canvas.getContext('2d')!;
+  // This fallback path draws one frame to canvas per `ontimeupdate` tick —
+  // a real per-frame hot loop, unlike the single-shot canvases elsewhere —
+  // so the GPU compositing hint (Settings → GPU Acceleration → Video)
+  // matters here specifically. Primary encoding stays on FFmpeg.wasm above;
+  // this MediaRecorder path only runs if that fails, and FFmpeg itself has
+  // no browser-exposed GPU encode path — see gpu.ts's file header.
+  const ctx    = get2D(canvas, 'video');
 
   // FIX 2: merge canvas video stream with audio track from the video element
   const videoStream = canvas.captureStream(opts.fps ?? 30);
