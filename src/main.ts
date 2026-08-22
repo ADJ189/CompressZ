@@ -142,7 +142,9 @@ on('compress/audio',  () => { setActiveNav('compress/audio');  mountPage(() => i
 on('compress/gif',    () => { setActiveNav('compress/gif');    mountPage(() => import('./pages/gif').then(m => m.mountGif)); });
 on('compress/ocr',    () => { setActiveNav('compress/ocr');    mountPage(() => import('./pages/ocr').then(m => m.mountOcr)); });
 on('compress/merge-pdf', () => { setActiveNav('compress/merge-pdf'); mountPage(() => import('./pages/mergePdf').then(m => m.mountMergePdf)); });
+on('compress/images-to-pdf', () => { setActiveNav('compress/images-to-pdf'); mountPage(() => import('./pages/imagesToPdf').then(m => m.mountImagesToPdf)); });
 on('convert',         () => { setActiveNav('convert');         mountPage(() => import('./pages/convert').then(m => m.mountConvert)); });
+on('settings',        () => { setActiveNav('settings');        mountPage(() => import('./pages/settings').then(m => m.mountSettings)); });
 on('about',           () => { setActiveNav('about');           showStatic('tpl-about'); });
 on('docs',            () => { setActiveNav('docs');            showStatic('tpl-docs'); });
 on('privacy',         () => { setActiveNav('privacy');         showStatic('tpl-privacy'); });

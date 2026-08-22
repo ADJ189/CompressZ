@@ -12,6 +12,15 @@
  */
 
 import type { FileEntry, ImageFormat, AudioFormat, VideoCodec, PdfLevel } from './lib/types';
+import { getSettings } from './lib/settings';
+
+// Each tool's starting values come from Settings → Engine Defaults instead
+// of being hardcoded here, so editing a default on the Settings page
+// actually changes what a fresh visit to that tool starts with. Read once
+// at module load — store.ts is a session-wide singleton like the rest of
+// this file, so a mid-session settings change intentionally doesn't yank
+// the value out from under whatever the user has already configured.
+const engineDefaults = getSettings().engines;
 
 // ── Images ────────────────────────────────────────────────────
 export interface ImageState {
@@ -25,10 +34,10 @@ export interface ImageState {
 export const imageStore: ImageState = {
   files:        [],
   mode:         'quality',
-  quality:      82,
+  quality:      engineDefaults.images.quality,
   targetSizeKB: 200,
-  format:       'image/webp',
-  maxDim:       0,
+  format:       engineDefaults.images.format,
+  maxDim:       engineDefaults.images.maxDim,
 };
 
 // ── Audio ─────────────────────────────────────────────────────
@@ -42,8 +51,8 @@ export interface AudioState {
 }
 export const audioStore: AudioState = {
   files:       [],
-  fmt:         'mp3',
-  bitrate:     192,
+  fmt:         engineDefaults.audio.format,
+  bitrate:     engineDefaults.audio.bitrate,
   sampleRate:  0,
   stripMeta:   true,
   passthrough: false,
@@ -72,11 +81,11 @@ export interface VideoState {
 export const videoStore: VideoState = {
   files:        [],
   mode:         'crf',
-  crfQuality:   75,
+  crfQuality:   engineDefaults.video.crfQuality,
   bitrate:      2000,
   targetSizeMB: 0,
-  codec:        'h264',
-  preset:       'fast',
+  codec:        engineDefaults.video.codec,
+  preset:       engineDefaults.video.preset,
   maxWidth:     0,
   fps:          0,
   tenBit:       false,
@@ -99,7 +108,7 @@ export interface GifState {
 }
 export const gifStore: GifState = {
   files:      [],
-  quality:    82,
+  quality:    engineDefaults.gif.quality,
   gifToVideo: false,
   maxWidth:   0,
   fps:        0,
@@ -115,7 +124,7 @@ export interface PdfState {
 }
 export const pdfStore: PdfState = {
   files:       [],
-  level:       'recommended',
+  level:       engineDefaults.pdf.level,
   targetUnit:  'MB',
   targetInput: '',
   stripMeta:   'auto',
@@ -132,4 +141,21 @@ export interface MergeState {
 export const mergeStore: MergeState = {
   files: [],
   busy:  false,
+};
+
+// ── Images → PDF ──────────────────────────────────────────────
+// Same order-sensitive, many-files → one-file shape as MergeState, plus
+// the couple of page-layout options this tool exposes that merge-pdf
+// doesn't need.
+export interface ImagesToPdfState {
+  files:    File[];
+  busy:     boolean;
+  pageSize: 'auto' | 'a4' | 'letter';
+  quality:  number; // JPEG quality used when embedding each image, 1-99
+}
+export const imagesToPdfStore: ImagesToPdfState = {
+  files:    [],
+  busy:     false,
+  pageSize: 'auto',
+  quality:  92,
 };
