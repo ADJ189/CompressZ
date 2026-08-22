@@ -1,13 +1,5 @@
 import './style.css';
 import { on, init, navigate } from './router';
-import { mountImages } from './pages/images';
-import { mountPdf }    from './pages/pdf';
-import { mountVideo }  from './pages/video';
-import { mountAudio }  from './pages/audio';
-import { mountGif }    from './pages/gif';
-import { mountOcr }    from './pages/ocr';
-import { mountConvert } from './pages/convert';
-import { mountMergePdf } from './pages/mergePdf';
 
 // ── Theme ─────────────────────────────────────────────────────
 const html      = document.documentElement;
@@ -111,7 +103,17 @@ function setActiveNav(route: string) {
 // ── Page view with animation ──────────────────────────────────
 const pageView = document.getElementById('page-view')!;
 
-function mountPage(fn: (root: HTMLElement) => void) {
+type PageMount = (root: HTMLElement) => void;
+
+// Guards against a slow chunk load finishing after the user has already
+// navigated elsewhere (would otherwise render a stale page over the new one).
+let pageToken = 0;
+
+async function mountPage(load: () => Promise<PageMount>) {
+  const token = ++pageToken;
+  pageView.innerHTML = '<div class="page-loading" aria-hidden="true"></div>';
+  const fn = await load();
+  if (token !== pageToken) return;
   pageView.innerHTML = '';
   const wrapper = document.createElement('div');
   wrapper.className = 'page-enter';
@@ -133,14 +135,14 @@ function showStatic(id: string) {
 
 // ── Routes ────────────────────────────────────────────────────
 on('',                () => { setActiveNav('');         showStatic('tpl-home'); });
-on('compress/images', () => { setActiveNav('compress/images'); mountPage(mountImages); });
-on('compress/pdf',    () => { setActiveNav('compress/pdf');    mountPage(mountPdf); });
-on('compress/video',  () => { setActiveNav('compress/video');  mountPage(mountVideo); });
-on('compress/audio',  () => { setActiveNav('compress/audio');  mountPage(mountAudio); });
-on('compress/gif',    () => { setActiveNav('compress/gif');    mountPage(mountGif); });
-on('compress/ocr',    () => { setActiveNav('compress/ocr');    mountPage(mountOcr); });
-on('compress/merge-pdf', () => { setActiveNav('compress/merge-pdf'); mountPage(mountMergePdf); });
-on('convert',         () => { setActiveNav('convert');         mountPage(mountConvert); });
+on('compress/images', () => { setActiveNav('compress/images'); mountPage(() => import('./pages/images').then(m => m.mountImages)); });
+on('compress/pdf',    () => { setActiveNav('compress/pdf');    mountPage(() => import('./pages/pdf').then(m => m.mountPdf)); });
+on('compress/video',  () => { setActiveNav('compress/video');  mountPage(() => import('./pages/video').then(m => m.mountVideo)); });
+on('compress/audio',  () => { setActiveNav('compress/audio');  mountPage(() => import('./pages/audio').then(m => m.mountAudio)); });
+on('compress/gif',    () => { setActiveNav('compress/gif');    mountPage(() => import('./pages/gif').then(m => m.mountGif)); });
+on('compress/ocr',    () => { setActiveNav('compress/ocr');    mountPage(() => import('./pages/ocr').then(m => m.mountOcr)); });
+on('compress/merge-pdf', () => { setActiveNav('compress/merge-pdf'); mountPage(() => import('./pages/mergePdf').then(m => m.mountMergePdf)); });
+on('convert',         () => { setActiveNav('convert');         mountPage(() => import('./pages/convert').then(m => m.mountConvert)); });
 on('about',           () => { setActiveNav('about');           showStatic('tpl-about'); });
 on('docs',            () => { setActiveNav('docs');            showStatic('tpl-docs'); });
 on('privacy',         () => { setActiveNav('privacy');         showStatic('tpl-privacy'); });

@@ -416,6 +416,12 @@ img, svg { display: block; }
   from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+/* Brief placeholder shown while a lazy-loaded page chunk fetches. On a warm
+   cache this never becomes visible long enough to notice; it only matters
+   on the first visit to a given tool. */
+.page-loading {
+  min-height: 240px;
+}
 
 /* ════════════════════════════════════════════════════════════
    HOME / LANDING
