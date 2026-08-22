@@ -124,6 +124,10 @@
         <div class="sb-icon">🧷</div>
         <span class="sb-label">Merge PDF</span>
       </a>
+      <a class="sb-item" data-nav="compress/images-to-pdf" data-tooltip="Images to PDF">
+        <div class="sb-icon">🧩</div>
+        <span class="sb-label">Images → PDF</span>
+      </a>
       <a class="sb-item" data-nav="compress/video" data-tooltip="Video">
         <div class="sb-icon">🎬</div>
         <span class="sb-label">Video</span>
@@ -183,6 +187,12 @@
 
     <!-- Bottom actions -->
     <div class="sb-bottom">
+      <a class="sb-item" data-nav="settings" data-tooltip="Settings">
+        <div class="sb-icon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </div>
+        <span class="sb-label">Settings</span>
+      </a>
       <a class="sb-item" href="https://github.com/ADJ189/compressz" target="_blank" rel="noopener" data-tooltip="GitHub">
         <div class="sb-icon">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12"/></svg>
@@ -270,10 +280,16 @@
       <div class="htc-desc">Combine multiple PDFs into one, in any order — pages copied directly, nothing rasterised.</div>
       <div class="htc-tags"><span class="htc-tag">pdf-lib</span><span class="htc-tag">Reorderable</span></div>
     </div>
+    <div class="htc" data-t="images-to-pdf" data-nav="compress/images-to-pdf">
+      <div class="htc-head"><div class="htc-icon">🧩</div><svg class="htc-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 17L17 7M7 7h10v10"/></svg></div>
+      <div class="htc-name">Images → PDF</div>
+      <div class="htc-desc">Combine photos or screenshots into one PDF, one page each, reorderable — GPU-accelerated resize.</div>
+      <div class="htc-tags"><span class="htc-tag">pdf-lib</span><span class="htc-tag">Reorderable</span><span class="htc-tag">GPU</span></div>
+    </div>
     <div class="htc" data-t="video" data-nav="compress/video">
       <div class="htc-head"><div class="htc-icon">🎬</div><svg class="htc-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 17L17 7M7 7h10v10"/></svg></div>
       <div class="htc-name">Video</div>
-      <div class="htc-desc">FFmpeg.wasm → WebCodecs GPU → MediaRecorder. Three-tier fallback chain.</div>
+      <div class="htc-desc">FFmpeg.wasm encoding with a GPU-composited MediaRecorder fallback. Configurable in Settings.</div>
       <div class="htc-tags"><span class="htc-tag">H.264</span><span class="htc-tag">H.265</span><span class="htc-tag">VP9</span><span class="htc-tag">AV1</span></div>
     </div>
     <div class="htc" data-t="audio" data-nav="compress/audio">
@@ -414,6 +430,23 @@
     <li>Add two or more PDFs, then reorder with the ↑/↓ controls — the merged file follows that exact order.</li>
     <li>Pages are copied with <code>PDFDocument.copyPages()</code> (pdf-lib) — content streams and resources are cloned directly, so text stays selectable and vectors stay sharp at any zoom. No page is re-rendered as an image.</li>
     <li>PDFs with owner-password restrictions (no open password) load via <code>ignoreEncryption</code>; a PDF that truly needs a password to open is reported by name and the rest of the merge still completes.</li>
+  </ul>
+
+  <h2>Images → PDF options</h2>
+  <ul>
+    <li>Add two or more images, reorder with ↑/↓, then combine — each image becomes one page in that order.</li>
+    <li><code>pageSize</code> — <code>Auto</code> (each page matches its own image's pixel size, default), <code>A4</code>, or <code>Letter</code> (image scaled to fit and centred).</li>
+    <li><code>quality</code> — JPEG quality used when embedding each image, 10–99%. Default 92%.</li>
+    <li>Shares its resize/encode path with the Image compressor, including GPU-accelerated downscaling — see GPU Acceleration below.</li>
+  </ul>
+
+  <h2>GPU Acceleration &amp; Settings</h2>
+  <ul>
+    <li>The Settings page (sidebar, next to GitHub) has a per-engine GPU toggle and default values for every engine — defaults apply the next time you open that tool, and everything is stored only in this browser's <code>localStorage</code>.</li>
+    <li><strong>Images / Images → PDF:</strong> when downscaling, resize runs as a WebGL2 texture draw (hardware bilinear filtering) instead of Canvas2D's <code>drawImage()</code> scaler, with a silent fallback if WebGL2 isn't available.</li>
+    <li><strong>PDF / OCR:</strong> page-rasterisation canvases use the <code>desynchronized</code> context hint, letting the browser hand the canvas straight to the compositor.</li>
+    <li><strong>Video:</strong> applies only to the MediaRecorder fallback canvas (per-frame draw loop). Primary encoding is FFmpeg.wasm, which runs in WebAssembly — there's no browser API that hands a WASM module a hardware encoder, so this toggle doesn't change the primary encode path.</li>
+    <li><strong>Audio / GIF:</strong> both are pure FFmpeg.wasm pipelines with no canvas step — their toggle is shown for a consistent layout but is a documented no-op.</li>
   </ul>
 
   <h2>PDF OCR options</h2>

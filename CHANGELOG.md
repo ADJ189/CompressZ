@@ -2,6 +2,54 @@
 
 All notable changes to CompressZ are documented in this file.
 
+## [Unreleased] — Images → PDF, GPU Acceleration, Settings Page, Code Dedup
+
+### Added — Images → PDF tool
+
+- New `compress/images-to-pdf` page: drop two or more images, reorder them
+  with ↑/↓ controls, pick a page size (Auto/A4/Letter) and JPEG quality,
+  then combine into a single PDF, one image per page, in that order.
+  `src/lib/imagesToPdf.ts` is the shared implementation — the Convert
+  page's existing PDF ⇄ Images "combine" flow now delegates to it too,
+  removing a second copy of the same logic.
+- Added to the sidebar (next to Merge PDF) and the home page tools grid.
+
+### Added — GPU acceleration
+
+- `src/lib/gpu.ts`: WebGL2/OffscreenCanvas capability detection, a shared
+  `makeCanvas`/`get2D` (applies the `desynchronized` canvas hint when a
+  per-engine toggle is on) and a real WebGL2 texture-draw `resizeViaWebGL()`
+  used for hardware-filtered image downscaling, with a silent Canvas2D
+  fallback if WebGL2 is unavailable or the draw throws.
+- Wired into the Images engine (real resize acceleration), PDF/OCR page
+  rasterisation, and the Video engine's MediaRecorder fallback canvas.
+  FFmpeg.wasm itself (Video's primary path, plus all of Audio and GIF) is
+  CPU/WASM-only — browsers don't expose a GPU encode path to WebAssembly —
+  so those toggles are shown in Settings for a consistent layout but are
+  honest about doing nothing where nothing applies.
+
+### Added — Settings page
+
+- New `compress` sidebar-adjacent `settings` page (Apple/iOS "grouped
+  list" style, reusing the existing `.settings-card` component) with a
+  GPU Acceleration toggle per engine and default-value controls for every
+  engine (Images, PDF, Video, Audio, GIF, OCR). `src/lib/settings.ts`
+  persists all of it to localStorage (Safari-private-mode-safe, same
+  pattern as the rest of the app) and every tool's store now seeds its
+  initial state from these defaults instead of hardcoded numbers.
+- Added to the sidebar bottom actions, next to the GitHub link.
+
+### Changed — Code dedup
+
+- `compressImage.ts`, `compressPdf.ts`, `convertPdf.ts`, and `ocr.ts` each
+  had their own local canvas-creation helper; all now use the shared ones
+  in `gpu.ts`.
+- Fixed a stale home-page tile description claiming a three-tier
+  "FFmpeg.wasm → WebCodecs GPU → MediaRecorder" video pipeline — the
+  WebCodecs tier was removed in an earlier pass (see the note in
+  `compressVideo.ts`) but the copy wasn't updated; it now describes the
+  actual two-tier chain.
+
 ## [0.9] — Merge PDF, Splash Animation Ported from CompressF, Code Dedup
 
 ### Added — Merge PDF tool
