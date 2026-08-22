@@ -19,5 +19,10 @@
     "eslint": "^10.0.0",
     "typescript-eslint": "^8.5.0",
     "@lhci/cli": "^0.15.1"
+  },
+  "overrides": {
+    "tmp": "^0.2.7",
+    "uuid": "^14.0.2",
+    "@puppeteer/browsers": "^3.2.1"
   }
 }
