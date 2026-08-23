@@ -10,19 +10,20 @@
   <link rel="apple-touch-icon" href="/favicon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <!-- Plus Jakarta Sans added for the startup splash wordmark only — ported
-       over along with the splash animation itself from CompressF, whose
-       splash used this face. Every other font stays as documented in
-       CHANGELOG.md; a wholesale swap wasn't requested and would need its
-       own visual QA pass. -->
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..900;1,14..32,300..900&family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&family=Courier+Prime:wght@400;700&family=Plus+Jakarta+Sans:wght@700;800&display=swap" />
+  <!-- Headers/branding and mono text now use CompressF's exact font pair —
+       Plus Jakarta Sans + DM Mono, same weight ranges CompressF loads — see
+       --display/--brand/--mono in style.css. Inter stays as the general UI
+       body font (unchanged) and Space Grotesk stays on the compression-ratio
+       stat only. IBM Plex Mono and Courier Prime were dropped: nothing
+       references them anymore, so keeping them would just be dead weight. -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..900;1,14..32,300..900&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=DM+Mono:wght@300;400;500&family=Space+Grotesk:wght@500;600;700&display=swap" />
   <script type="module" src="/src/main.ts"></script>
 </head>
 <body>
 
 <!-- ── Icon sprite ────────────────────────────────────────────
      The wordmark icon (rounded square + 3 chevron waves) used to be
-     inlined in full three times (splash, mobile topbar, sidebar) — same
+     inlined in full three times (splash, topbar, sidebar) — same
      ~500 bytes of markup repeated per copy. Defined once here and
      referenced via <use> everywhere it's static. The splash instance
      keeps its own full inline copy below, since its waves are individually
@@ -54,155 +55,103 @@
   </div>
 </div>
 
-<!-- ── Mobile topbar ──────────────────────────────────────── -->
-<div class="topbar">
-  <div class="topbar-logo">
-    <div class="logo-icon"><svg width="20" height="20" viewBox="0 0 32 32"><use href="#icon-logo"/></svg></div>
-    <span>CompressZ</span>
+<!-- ── App header — logo, theme toggle, settings, GitHub. Fixed,
+     always visible at every viewport width. The tab strip below it
+     replaced the old vertical sidebar so wide/short viewports (and
+     mobile) get more usable width back. ─────────────────────────── -->
+<header class="app-header">
+  <a class="app-logo" data-nav="">
+    <div class="app-logo-icon"><svg width="26" height="26" viewBox="0 0 32 32"><use href="#icon-logo"/></svg></div>
+    <span class="app-logo-text">CompressZ</span>
+  </a>
+  <div class="app-header-actions">
+    <button id="theme-btn" class="hdr-btn" type="button" aria-label="Toggle color theme">
+      <span id="theme-icon" class="hdr-btn-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </span>
+    </button>
+    <button id="settings-btn" class="hdr-btn" type="button" aria-label="Open settings" aria-haspopup="dialog">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+    <a class="hdr-btn" href="https://github.com/ADJ189/compressz" target="_blank" rel="noopener" aria-label="GitHub repository">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12"/></svg>
+    </a>
   </div>
-  <button class="mob-menu-btn" id="mob-menu-btn" aria-label="Menu">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-      <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
-    </svg>
-  </button>
+</header>
+
+<!-- ── Horizontal tab bar — replaces the old vertical sidebar.
+     One scrollable row; a sliding thumb (JS-driven, see main.ts)
+     tracks the active tab with the fluid easing curve. "More"
+     is a small dropdown for About/Docs/Privacy so the row doesn't
+     grow past what fits in low-height/narrow viewports. ──────── -->
+<nav class="tabbar" id="tabbar">
+  <div class="tabbar-scroll" id="tabbar-scroll">
+    <span class="tabbar-thumb" id="tabbar-thumb" aria-hidden="true"></span>
+
+    <a class="tab-item" data-nav="" data-tab>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span>Home</span>
+    </a>
+    <a class="tab-item" data-nav="compress/images" data-tab>
+      <span class="tab-emoji">🖼️</span><span>Images</span>
+    </a>
+    <a class="tab-item" data-nav="compress/pdf" data-tab>
+      <span class="tab-emoji">📄</span><span>PDF</span>
+    </a>
+    <a class="tab-item" data-nav="compress/merge-pdf" data-tab>
+      <span class="tab-emoji">🧷</span><span>Merge PDF</span>
+    </a>
+    <a class="tab-item" data-nav="compress/images-to-pdf" data-tab>
+      <span class="tab-emoji">🧩</span><span>Images → PDF</span>
+    </a>
+    <a class="tab-item" data-nav="compress/video" data-tab>
+      <span class="tab-emoji">🎬</span><span>Video</span>
+    </a>
+    <a class="tab-item" data-nav="compress/audio" data-tab>
+      <span class="tab-emoji">🎵</span><span>Audio</span>
+    </a>
+    <a class="tab-item" data-nav="compress/gif" data-tab>
+      <span class="tab-emoji">🎞️</span><span>GIF</span>
+    </a>
+    <a class="tab-item" data-nav="compress/ocr" data-tab>
+      <span class="tab-emoji">🔍</span><span>PDF OCR</span>
+    </a>
+    <a class="tab-item" data-nav="convert" data-tab>
+      <span class="tab-emoji">🔁</span><span>Convert</span>
+      <span class="tab-badge">New</span>
+    </a>
+
+    <div class="tab-more" id="tab-more">
+      <button class="tab-item tab-more-btn" id="tab-more-btn" type="button" aria-haspopup="menu" aria-expanded="false">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+        <span>More</span>
+        <svg class="tab-more-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="tab-more-menu" id="tab-more-menu" role="menu">
+        <a class="tab-more-item" data-nav="about" data-tab role="menuitem">About</a>
+        <a class="tab-more-item" data-nav="docs" data-tab role="menuitem">Docs</a>
+        <a class="tab-more-item" data-nav="privacy" data-tab role="menuitem">Privacy</a>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- ── Settings dialog — content mounted by pages/settings.ts's
+     existing mountSettings(), unchanged; it just renders into
+     #settings-dialog-body instead of a full page now. ───────── -->
+<div id="settings-dialog-overlay" class="dialog-overlay" hidden></div>
+<div id="settings-dialog" class="dialog" role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title" hidden>
+  <div class="dialog-head">
+    <h2 id="settings-dialog-title">Settings</h2>
+    <button class="dialog-close" id="settings-dialog-close" type="button" aria-label="Close settings">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="dialog-body" id="settings-dialog-body"></div>
 </div>
-
-<!-- ── Sidebar overlay (mobile) ───────────────────────────── -->
-<div id="sidebar-overlay" class="sidebar-overlay"></div>
-
-<!-- ── Theme toggle — floating top-right, independent of sidebar
-     and mobile topbar so it stays reachable and out of the way
-     of both. ──────────────────────────────────────────────── -->
-<button id="theme-btn" class="theme-fab" type="button" aria-label="Toggle color theme">
-  <span id="theme-icon" class="theme-fab-icon">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-  </span>
-</button>
 
 <!-- ── App shell ──────────────────────────────────────────── -->
 <div id="app-shell">
-
-  <!-- SIDEBAR -->
-  <aside id="sidebar" class="sidebar">
-
-    <!-- Logo + collapse -->
-    <div class="sb-top">
-      <a class="sb-logo" data-nav="">
-        <div class="sb-logo-icon"><svg width="32" height="32" viewBox="0 0 32 32"><use href="#icon-logo"/></svg></div>
-        <span class="sb-logo-text">CompressZ</span>
-      </a>
-      <button class="sb-collapse-btn" id="sb-collapse" aria-label="Collapse sidebar">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="15 18 9 12 15 6"/>
-        </svg>
-      </button>
-    </div>
-
-    <!-- Navigation -->
-    <nav class="sb-nav">
-
-      <div class="sb-section-label">Overview</div>
-
-      <a class="sb-item" data-nav="" data-tooltip="Home">
-        <div class="sb-icon">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-        </div>
-        <span class="sb-label">Home</span>
-      </a>
-
-      <div class="sb-section-label">Compress</div>
-
-      <a class="sb-item" data-nav="compress/images" data-tooltip="Images">
-        <div class="sb-icon">🖼️</div>
-        <span class="sb-label">Images</span>
-      </a>
-      <a class="sb-item" data-nav="compress/pdf" data-tooltip="PDF">
-        <div class="sb-icon">📄</div>
-        <span class="sb-label">PDF</span>
-      </a>
-      <a class="sb-item" data-nav="compress/merge-pdf" data-tooltip="Merge PDF">
-        <div class="sb-icon">🧷</div>
-        <span class="sb-label">Merge PDF</span>
-      </a>
-      <a class="sb-item" data-nav="compress/images-to-pdf" data-tooltip="Images to PDF">
-        <div class="sb-icon">🧩</div>
-        <span class="sb-label">Images → PDF</span>
-      </a>
-      <a class="sb-item" data-nav="compress/video" data-tooltip="Video">
-        <div class="sb-icon">🎬</div>
-        <span class="sb-label">Video</span>
-      </a>
-      <a class="sb-item" data-nav="compress/audio" data-tooltip="Audio">
-        <div class="sb-icon">🎵</div>
-        <span class="sb-label">Audio</span>
-      </a>
-      <a class="sb-item" data-nav="compress/gif" data-tooltip="GIF">
-        <div class="sb-icon">🎞️</div>
-        <span class="sb-label">GIF</span>
-      </a>
-
-      <div class="sb-section-label">Tools</div>
-
-      <a class="sb-item" data-nav="compress/ocr" data-tooltip="PDF OCR">
-        <div class="sb-icon">🔍</div>
-        <span class="sb-label">PDF OCR</span>
-      </a>
-      <a class="sb-item" data-nav="convert" data-tooltip="Convert">
-        <div class="sb-icon">🔁</div>
-        <span class="sb-label">Convert</span>
-        <span class="sb-badge">New</span>
-      </a>
-
-      <div class="sb-section-label">Info</div>
-
-      <button class="sb-item sb-more-toggle" id="sb-more-toggle" type="button" aria-expanded="false" aria-controls="sb-more-group" data-tooltip="More">
-        <div class="sb-icon">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
-        </div>
-        <span class="sb-label">More</span>
-        <svg class="sb-more-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-      </button>
-      <div class="sb-more-group" id="sb-more-group">
-        <a class="sb-item" data-nav="about" data-tooltip="About">
-          <div class="sb-icon">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-          </div>
-          <span class="sb-label">About</span>
-        </a>
-        <a class="sb-item" data-nav="docs" data-tooltip="Docs">
-          <div class="sb-icon">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-          </div>
-          <span class="sb-label">Docs</span>
-        </a>
-        <a class="sb-item" data-nav="privacy" data-tooltip="Privacy">
-          <div class="sb-icon">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          </div>
-          <span class="sb-label">Privacy</span>
-        </a>
-      </div>
-
-    </nav>
-
-    <!-- Bottom actions -->
-    <div class="sb-bottom">
-      <a class="sb-item" data-nav="settings" data-tooltip="Settings">
-        <div class="sb-icon">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        </div>
-        <span class="sb-label">Settings</span>
-      </a>
-      <a class="sb-item" href="https://github.com/ADJ189/compressz" target="_blank" rel="noopener" data-tooltip="GitHub">
-        <div class="sb-icon">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12"/></svg>
-        </div>
-        <span class="sb-label">GitHub</span>
-      </a>
-    </div>
-
-  </aside>
-
   <!-- MAIN PANEL -->
   <div class="main-panel">
     <div id="page-view"></div>
@@ -442,7 +391,7 @@
 
   <h2>GPU Acceleration &amp; Settings</h2>
   <ul>
-    <li>The Settings page (sidebar, next to GitHub) has a per-engine GPU toggle and default values for every engine — defaults apply the next time you open that tool, and everything is stored only in this browser's <code>localStorage</code>.</li>
+    <li>Settings (gear icon, top-right header) opens as a dialog with a per-engine GPU toggle and default values for every engine — defaults apply the next time you open that tool, and everything is stored only in this browser's <code>localStorage</code>.</li>
     <li><strong>Images / Images → PDF:</strong> when downscaling, resize runs as a WebGL2 texture draw (hardware bilinear filtering) instead of Canvas2D's <code>drawImage()</code> scaler, with a silent fallback if WebGL2 isn't available.</li>
     <li><strong>PDF / OCR:</strong> page-rasterisation canvases use the <code>desynchronized</code> context hint, letting the browser hand the canvas straight to the compositor.</li>
     <li><strong>Video:</strong> applies only to the MediaRecorder fallback canvas (per-frame draw loop). Primary encoding is FFmpeg.wasm, which runs in WebAssembly — there's no browser API that hands a WASM module a hardware encoder, so this toggle doesn't change the primary encode path.</li>
@@ -529,7 +478,6 @@
   <p>CompressZ stores two items in your browser's <code>localStorage</code>:</p>
   <ul>
     <li><code>theme</code> — your light/dark mode preference.</li>
-    <li><code>sb-collapsed</code> — whether the sidebar is collapsed.</li>
   </ul>
   <p>These values never leave your device. No file metadata, file names, or any other information is stored in localStorage.</p>
 
@@ -549,3 +497,7 @@
 
 </body>
 </html>
+
+<!--
+  🄰🄳🄹 · built with ♥ — ADJ
+-->
