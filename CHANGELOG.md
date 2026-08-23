@@ -2,7 +2,7 @@
 
 All notable changes to CompressZ are documented in this file.
 
-## [Unreleased] — Images → PDF, GPU Acceleration, Settings Page, Code Dedup
+## [1.0] — Images → PDF, GPU Acceleration, Settings Page, Code Dedup
 
 ### Added — Images → PDF tool
 
