@@ -1,40 +1,20 @@
 /* ═══════════════════════════════════════════════════════════
-   CompressZ — Vertical Tab Layout Design System
-   Dark-first, glass morphism, spring animations
+   CompressZ — Horizontal Tab Layout Design System
+   Dark-first, glass morphism, fluid spring animations
 ═══════════════════════════════════════════════════════════ */
 
-/* Google Fonts are now loaded from index.html via <link rel="preconnect"> +
+/* Google Fonts are loaded from index.html via <link rel="preconnect"> +
    <link rel="stylesheet">, not @import. @import inside CSS is render-blocking
    in series (browser must fetch+parse this file, hit the @import, THEN start
    the font request) whereas a <link> in <head> is discovered by the preload
    scanner immediately and fetched in parallel with everything else — a real
    first-paint win, not just a stylistic change.
 
-   Font count was also trimmed from 5 families to 4: Noto Sans Mono (used on
-   two buttons only) was folded into IBM Plex Mono, which the page already
-   loads for body copy — one less family and one less round trip, no visual
-   loss on those buttons. */
-
-/* "Redaction" (OFL / LGPL-2.1, MCKL) is used for headings/branding, matching
-   cobalt.tools' font stack. It isn't distributed via Google Fonts or any CDN
-   trustworthy enough to hotlink in production — the only sources found are
-   third-party "free font" mirror sites, not something to ship a live request
-   against. Left commented out on purpose: uncomment once you've sourced the
-   files yourself and dropped them at these paths, nothing else needs to
-   change. Until then, `var(--display)` resolves to Courier Prime (a real,
-   Google-Fonts-hosted typewriter face, same spirit as Redaction) so nothing
-   404s and nothing looks broken in the meantime.
-@font-face {
-  font-family: 'Redaction';
-  src: url('/fonts/Redaction50-Regular.woff2') format('woff2');
-  font-weight: 400; font-style: normal; font-display: swap;
-}
-@font-face {
-  font-family: 'Redaction';
-  src: url('/fonts/Redaction50-Bold.woff2') format('woff2');
-  font-weight: 700; font-style: normal; font-display: swap;
-}
-*/
+   Headers/branding (--display, --brand) and mono text (--mono, --mono-btn)
+   now use the exact font pair CompressF loads — Plus Jakarta Sans and DM
+   Mono. That replaced the old Redaction/Courier Prime/IBM Plex Mono stack,
+   so those font-face/@import entries were removed outright rather than left
+   dead in the sheet — one less family loaded, smaller CSS. */
 
 /* ── Tokens ───────────────────────────────────────────────── */
 :root {
@@ -74,20 +54,30 @@
   --shadow-acc:   0 6px 24px rgba(91,95,199,.25);
   --r-xs: 6px; --r-sm: 8px; --r: 12px; --r-lg: 16px; --r-xl: 20px; --r-2xl: 28px;
   --sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --mono: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, 'Fira Mono', monospace;
-  --mono-btn: var(--mono); /* was 'Noto Sans Mono' — folded in, see note above */
-  --display: 'Redaction', 'Courier Prime', var(--mono);
+  /* Headers/branding and mono text now match CompressF's exact pair. */
+  --mono: 'DM Mono', 'JetBrains Mono', ui-monospace, 'Fira Mono', monospace;
+  --mono-btn: var(--mono);
+  --display: 'Plus Jakarta Sans', var(--sans);
   --feature: 'Space Grotesk', var(--sans);
-  --brand: var(--sans); /* wordmark next to the globe icon (splash/topbar/sidebar) —
-    kept on the original Inter treatment rather than --display; see .sb-logo-text */
-  --ease: cubic-bezier(0.25,0.1,0.25,1);
+  --brand: 'Plus Jakarta Sans', var(--sans); /* wordmark next to the icon
+    (splash/header/tabbar) — same face as page titles now, ported straight
+    from CompressF rather than the old Inter treatment */
+  /* Fluid animation engine — a single "expo-out" deceleration curve
+     (cubic-bezier(0.22,1,0.36,1)) replaces the older, flatter --ease
+     everywhere it's already referenced (page transitions, cards, hovers,
+     dropdowns), so this one token swap is what gives every existing
+     animation its new, smoother feel. --spring stays for the few genuinely
+     bouncy pops (splash icon, tab badge). --ease-fluid is the same curve
+     under a clearer name for new components (dialog, tabbar thumb). */
+  --ease: cubic-bezier(0.22,1,0.36,1);
+  --ease-fluid: var(--ease);
   --spring: cubic-bezier(0.34,1.56,0.64,1);
   --t: .16s var(--ease);
   --t2: .26s var(--ease);
-  /* Sidebar */
-  --sidebar-w: 240px;
-  --sidebar-collapsed: 64px;
-  --topbar-h: 52px;
+  --t3: .38s var(--ease-fluid);
+  /* Header + horizontal tab bar */
+  --header-h: 52px;
+  --tabbar-h: 46px;
 }
 [data-theme="dark"] {
   --bg:           #0c0c0f;
@@ -193,213 +183,180 @@ img, svg { display: block; }
 
 /* ════════════════════════════════════════════════════════════
    LAYOUT — App Shell
+   Header + horizontal tab bar replace the old vertical sidebar.
+   Vertical nav ate a fixed ~240px column on every screen whether
+   there was height to spare or not; a horizontal strip only costs
+   its own height (46px) and scrolls sideways, so it's the better
+   trade specifically on short/low-space viewports. ─────────────
 ════════════════════════════════════════════════════════════ */
 #app-shell {
-  display: flex; height: 100vh; overflow: hidden;
-  height: 100dvh; /* mobile browsers resize their chrome and never actually
-    give you 100vh of visible space — 100dvh tracks the real visible area so
-    the sidebar's bottom items (and the "More" group) don't get pushed below
-    the fold. Falls back to the 100vh above on browsers that don't support dvh. */
+  margin-top: calc(var(--header-h) + var(--tabbar-h)); /* header + tabbar are
+    both position: fixed, so the shell needs the matching offset */
+  height: calc(100vh - var(--header-h) - var(--tabbar-h));
+  height: calc(100dvh - var(--header-h) - var(--tabbar-h)); /* mobile
+    browsers resize their chrome and never actually give you 100vh of
+    visible space — 100dvh tracks the real visible area. Falls back to
+    the 100vh line above on browsers that don't support dvh. */
+  overflow: hidden;
   position: relative;
 }
 
-/* ── Topbar (mobile only, <768px) ─────────────────────────── */
-.topbar {
-  display: none;
+/* ── Header — logo + theme/settings/GitHub, every viewport ──── */
+.app-header {
   position: fixed; top: 0; left: 0; right: 0; z-index: 300;
-  height: var(--topbar-h);
+  height: var(--header-h);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 1rem;
   background: var(--glass);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   border-bottom: 1px solid var(--glass-border);
-  align-items: center; padding: 0 1rem; gap: .75rem;
 }
-.topbar-logo {
-  display: flex; align-items: center; gap: .45rem;
-  font-family: var(--brand); font-weight: 800; font-size: 1rem; letter-spacing: -.02em;
-  background: linear-gradient(135deg, var(--text) 40%, var(--accent-2));
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-  flex: 1;
-}
-.topbar-logo .logo-icon { width: 28px; height: 28px; border-radius: 8px; overflow: hidden; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-.topbar-logo .logo-icon svg { width: 28px; height: 28px; }
-.mob-menu-btn {
-  width: 36px; height: 36px; border-radius: var(--r-sm);
-  background: var(--bg2); border: 1px solid var(--border);
-  display: flex; align-items: center; justify-content: center;
-  color: var(--text-3); flex-shrink: 0;
-}
-
-/* ── Sidebar ──────────────────────────────────────────────── */
-.sidebar {
-  width: var(--sidebar-w);
-  flex-shrink: 0;
-  height: 100vh;
-  height: 100dvh; /* see #app-shell */
-  background: var(--surface);
-  border-right: 1px solid var(--border);
-  display: flex; flex-direction: column;
-  overflow: hidden;
-  transition: width var(--t2), transform var(--t2);
-  position: relative; z-index: 200;
-  box-shadow: var(--shadow-sm);
-}
-.sidebar.collapsed { width: var(--sidebar-collapsed); }
-
-/* Sidebar top */
-.sb-top {
-  padding: 1.1rem 1rem .75rem;
-  border-bottom: 1px solid var(--border);
-  display: flex; align-items: center; justify-content: space-between;
-  flex-shrink: 0;
-  min-height: 60px;
-}
-.sb-logo {
+.app-logo {
   display: flex; align-items: center; gap: .55rem;
-  overflow: hidden; transition: opacity var(--t2);
   text-decoration: none;
 }
-.sb-logo-icon {
-  width: 32px; height: 32px; border-radius: 9px; flex-shrink: 0;
+.app-logo-icon {
+  width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
   overflow: hidden; box-shadow: var(--shadow-acc);
 }
-.sb-logo-icon svg { width: 32px; height: 32px; }
-.sb-logo-text {
-  font-family: var(--brand); font-weight: 800; font-size: 1.05rem; letter-spacing: -.02em; line-height: 1.4;
-  white-space: nowrap; overflow: hidden;
+.app-logo-icon svg { width: 26px; height: 26px; }
+.app-logo-text {
+  font-family: var(--brand); font-weight: 800; font-size: 1.05rem; letter-spacing: -.02em;
   background: linear-gradient(135deg, var(--text) 30%, var(--accent-2));
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-  transition: opacity var(--t2), max-width var(--t2);
-  max-width: 140px;
+  white-space: nowrap;
 }
-.sidebar.collapsed .sb-logo-text { opacity: 0; max-width: 0; }
-
-.sb-collapse-btn {
-  width: 28px; height: 28px; border-radius: var(--r-sm);
-  background: var(--bg2); border: 1px solid var(--border);
+.app-header-actions { display: flex; align-items: center; gap: .5rem; }
+.hdr-btn {
+  width: 34px; height: 34px; border-radius: 999px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  color: var(--text-4); flex-shrink: 0;
-  transition: var(--t), transform var(--t2);
+  background: var(--bg2); border: 1px solid var(--border);
+  color: var(--text-3); transition: var(--t2);
 }
-.sb-collapse-btn:hover { color: var(--text); border-color: var(--border-mid); }
-.sidebar.collapsed .sb-collapse-btn { transform: rotate(180deg); }
+.hdr-btn:hover { color: var(--text); border-color: var(--border-mid); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
 
-/* Sidebar nav */
-.sb-nav {
-  flex: 1; overflow-y: auto; overflow-x: hidden;
-  padding: .5rem;
-  display: flex; flex-direction: column; gap: .15rem;
+/* ── Horizontal tab bar ───────────────────────────────────── */
+.tabbar {
+  position: fixed; top: var(--header-h); left: 0; right: 0; z-index: 290;
+  height: var(--tabbar-h);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow-xs);
 }
-.sb-section-label {
-  font-size: .64rem; font-weight: 700; letter-spacing: .1em; line-height: 1.6;
-  text-transform: uppercase; color: var(--text-4);
-  padding: .65rem .65rem .3rem;
-  white-space: nowrap; overflow: hidden;
-  transition: opacity var(--t2);
+.tabbar-scroll {
+  position: relative;
+  height: 100%;
+  display: flex; align-items: center; gap: .25rem;
+  padding: 0 .6rem;
+  overflow-x: auto; overflow-y: hidden;
+  scrollbar-width: none;
 }
-.sidebar.collapsed .sb-section-label { opacity: 0; }
+.tabbar-scroll::-webkit-scrollbar { display: none; }
 
-.sb-item {
-  display: flex; align-items: center; gap: .65rem;
-  padding: .6rem .7rem; border-radius: var(--r);
-  cursor: pointer; transition: var(--t2);
-  position: relative; overflow: hidden;
-  white-space: nowrap; min-height: 40px;
-  text-decoration: none; color: var(--text-3);
-}
-.sb-item:hover { background: var(--bg2); color: var(--text); }
-.sb-item.active {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.sb-item.active::before {
-  content: '';
-  position: absolute; left: 0; top: 25%; bottom: 25%;
-  width: 3px; border-radius: 0 2px 2px 0;
+/* Sliding active-tab indicator — positioned via JS (getBoundingClientRect),
+   animated with the fluid easing curve so it glides between tabs instead
+   of jumping. */
+.tabbar-thumb {
+  position: absolute; left: 0; bottom: 4px; height: 3px; width: 0;
+  border-radius: 3px;
   background: var(--accent);
+  transition: transform var(--t3), width var(--t3);
+  pointer-events: none;
 }
-.sb-icon {
-  width: 32px; height: 32px; border-radius: var(--r-sm); flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-size: .95rem;
-  background: var(--bg2); border: 1px solid var(--border);
-  transition: var(--t2);
+
+.tab-item {
+  display: flex; align-items: center; gap: .4rem; flex-shrink: 0;
+  padding: 0 .7rem; height: 32px; border-radius: var(--r);
+  font-size: .82rem; font-weight: 500; white-space: nowrap;
+  color: var(--text-3); text-decoration: none;
+  transition: var(--t2); position: relative;
 }
-.sb-item.active .sb-icon { background: var(--accent-soft); border-color: rgba(91,95,199,.2); }
-[data-theme="dark"] .sb-item.active .sb-icon { background: rgba(99,102,241,.12); }
-.sb-label {
-  font-size: .85rem; font-weight: 500; flex: 1; min-width: 0;
-  overflow: hidden; text-overflow: ellipsis;
-  transition: opacity var(--t2), max-width var(--t2);
-  max-width: 160px;
-}
-.sidebar.collapsed .sb-label { opacity: 0; max-width: 0; }
-.sb-badge {
-  padding: .12rem .42rem; border-radius: 100px;
-  font-size: .62rem; font-weight: 700; flex-shrink: 0;
+.tab-item:hover { background: var(--bg2); color: var(--text); }
+.tab-item.active { color: var(--accent); }
+.tab-emoji { font-size: .92rem; line-height: 1; }
+.tab-badge {
+  padding: .1rem .38rem; border-radius: 100px;
+  font-size: .6rem; font-weight: 700;
   background: linear-gradient(135deg, var(--accent), var(--violet));
   color: #fff; letter-spacing: .02em;
-  transition: opacity var(--t2);
-}
-.sidebar.collapsed .sb-badge { opacity: 0; }
-
-/* Tooltip on collapsed sidebar */
-.sb-item[data-tooltip] { position: relative; }
-.sidebar.collapsed .sb-item[data-tooltip]:hover::after {
-  content: attr(data-tooltip);
-  position: absolute; left: calc(100% + 8px); top: 50%;
-  transform: translateY(-50%);
-  background: var(--text); color: var(--bg);
-  padding: .35rem .7rem; border-radius: var(--r-sm);
-  font-size: .78rem; font-weight: 600; white-space: nowrap;
-  pointer-events: none; z-index: 500;
-  box-shadow: var(--shadow-md);
-  animation: tooltipIn .15s var(--ease) both;
-}
-@keyframes tooltipIn { from { opacity:0; transform:translateY(-50%) translateX(-4px); } to { opacity:1; transform:translateY(-50%) translateX(0); } }
-
-/* Sidebar bottom */
-.sb-bottom {
-  padding: .5rem;
-  border-top: 1px solid var(--border);
-  display: flex; flex-direction: column; gap: .15rem;
-  flex-shrink: 0;
 }
 
-/* "More" disclosure group (About / Docs / Privacy) */
-.sb-more-toggle {
-  width: 100%; background: none; border: none; font: inherit;
-  color: var(--text-3); text-align: left;
+/* "More" dropdown (About / Docs / Privacy) */
+.tab-more { position: relative; flex-shrink: 0; }
+.tab-more-btn { background: none; border: none; font: inherit; cursor: pointer; }
+.tab-more-chevron { transition: transform var(--t2); color: var(--text-4); }
+.tab-more-btn[aria-expanded="true"] .tab-more-chevron { transform: rotate(180deg); }
+.tab-more-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 310;
+  min-width: 140px; padding: .35rem;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg); box-shadow: var(--shadow-lg);
+  display: flex; flex-direction: column; gap: .1rem;
+  transform-origin: top right;
+  opacity: 0; transform: scale(.94) translateY(-4px);
+  pointer-events: none;
+  transition: opacity var(--t3), transform var(--t3);
 }
-.sb-more-chevron { transition: transform var(--t2); flex-shrink: 0; color: var(--text-4); }
-.sb-more-toggle[aria-expanded="true"] .sb-more-chevron { transform: rotate(180deg); }
-.sidebar.collapsed .sb-more-chevron { display: none; }
-.sb-more-group {
-  max-height: 0; overflow: hidden;
-  display: flex; flex-direction: column; gap: .15rem;
-  transition: max-height var(--t2);
+.tab-more-menu.open { opacity: 1; transform: none; pointer-events: auto; }
+.tab-more-item {
+  display: block; padding: .5rem .65rem; border-radius: var(--r-sm);
+  font-size: .84rem; font-weight: 500; color: var(--text-2);
+  text-decoration: none; transition: var(--t);
 }
-.sb-more-group.open { max-height: 220px; }
+.tab-more-item:hover { background: var(--bg2); color: var(--text); }
+.tab-more-item.active { color: var(--accent); background: var(--accent-soft); }
 
-/* Theme toggle — floating, top-right, outside the sidebar entirely */
-.theme-fab {
-  position: fixed; top: .85rem; right: 1.1rem; z-index: 450;
-  width: 38px; height: 38px; border-radius: 999px; flex-shrink: 0;
+/* ── Dialog (Settings) ───────────────────────────────────────
+   Fluid scale+fade open, matching the pattern used by Session
+   Clock / Monochrome's modal surfaces: backdrop blurs in first,
+   panel scales up from 96% with the expo-out ease so it never
+   feels like it "pops" — it settles. */
+.dialog-overlay {
+  position: fixed; inset: 0; z-index: 500;
+  background: rgba(15,15,20,.42);
+  backdrop-filter: blur(3px);
+  opacity: 0; transition: opacity var(--t3);
+}
+.dialog-overlay.open { opacity: 1; }
+.dialog {
+  position: fixed; z-index: 510;
+  top: 50%; left: 50%;
+  width: min(560px, calc(100vw - 2rem));
+  max-height: min(680px, calc(100dvh - 3rem));
+  display: flex; flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-xl);
+  transform: translate(-50%, -50%) scale(.96);
+  opacity: 0;
+  transition: opacity var(--t3), transform var(--t3);
+  overflow: hidden;
+}
+.dialog.open { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.dialog-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1rem 1.1rem; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.dialog-head h2 { font-family: var(--display); font-size: 1.1rem; font-weight: 700; letter-spacing: -.01em; }
+.dialog-close {
+  width: 30px; height: 30px; border-radius: 999px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  background: var(--glass);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid var(--glass-border);
-  color: var(--text-3); box-shadow: var(--shadow-sm);
-  transition: var(--t2);
+  background: var(--bg2); border: 1px solid var(--border);
+  color: var(--text-3); transition: var(--t2);
 }
-.theme-fab:hover { color: var(--text); border-color: var(--border-mid); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.dialog-close:hover { color: var(--text); border-color: var(--border-mid); }
+.dialog-body { padding: 1.1rem; overflow-y: auto; }
+.dialog-body .back-link { display: none; } /* settings.ts renders a "← Home"
+  link meant for full-page use; hidden here since the dialog's own close
+  button covers that job. */
+.dialog-body .tool-wrap { padding: 0; }
 
 /* ── Main panel ───────────────────────────────────────────── */
 .main-panel {
-  flex: 1; min-width: 0; height: 100vh;
-  height: 100dvh; /* see #app-shell */
+  height: 100%;
   overflow-y: auto; overflow-x: hidden;
   position: relative;
 }
@@ -977,30 +934,12 @@ input[type="range"].slider::-webkit-slider-thumb:hover {
    MOBILE
 ════════════════════════════════════════════════════════════ */
 @media (max-width: 768px) {
-  :root { --sidebar-w: 260px; }
+  .app-logo-text { display: none; } /* icon only — keeps the header from
+    crowding the theme/settings/GitHub buttons on narrow screens */
+  .tab-item span:not(.tab-emoji):not(.tab-badge) { display: none; }
+  .tab-item { padding: 0 .55rem; }
+  .tab-more-btn span:last-of-type { display: none; }
 
-  .topbar { display: flex; }
-  .theme-fab { top: 7px; right: 3.9rem; width: 36px; height: 36px; }
-  .sidebar {
-    position: fixed; left: 0; top: 0; bottom: 0; z-index: 400;
-    transform: translateX(-100%);
-    box-shadow: var(--shadow-xl);
-    height: 100dvh;
-  }
-  .sidebar.mob-open {
-    transform: translateX(0);
-  }
-  .sidebar-overlay {
-    display: none; position: fixed; inset: 0; z-index: 390;
-    background: rgba(0,0,0,.45);
-    backdrop-filter: blur(2px);
-    animation: overlayIn .2s ease both;
-  }
-  .sidebar-overlay.visible { display: block; }
-  @keyframes overlayIn { from { opacity:0; } to { opacity:1; } }
-
-  .main-panel { padding-top: var(--topbar-h); }
-  .sb-collapse-btn { display: none; }
   .home-wrap  { padding: 1.75rem 1.25rem 4rem; }
   .tool-wrap  { padding: 1.75rem 1.25rem 4rem; }
   .home-title { font-size: 2.2rem; }
@@ -1014,10 +953,6 @@ input[type="range"].slider::-webkit-slider-thumb:hover {
   .em-grid         { grid-template-columns: 80px 1fr 1fr; }
   .ocr-layout      { grid-template-columns: 1fr; }
   .ocr-layout .ocr-side { position: static; }
-}
-@media (min-width: 769px) {
-  .sidebar-overlay { display: none !important; }
-  .sidebar { transform: none !important; }
 }
 
 /* ════════════════════════════════════════════════════════════

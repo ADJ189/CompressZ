@@ -30,75 +30,104 @@ applyTheme(saved);
 // invisible-but-present overlay behind.
 setTimeout(() => document.getElementById('splash')!.classList.add('done'), 1200);
 
-// ── Sidebar collapse ──────────────────────────────────────────
-const sidebar = document.getElementById('sidebar')!;
-const colBtn  = document.getElementById('sb-collapse')!;
-let collapsed = localStorage.getItem('sb-collapsed') === '1';
+// ── Horizontal tab bar ───────────────────────────────────────
+// Replaces the old vertical sidebar (collapse toggle + mobile drawer).
+// A single scrollable row; the active tab gets scrolled into view and
+// a thumb glides under it using the fluid easing curve (--ease-fluid).
+const tabbarScroll = document.getElementById('tabbar-scroll')!;
+const tabbarThumb  = document.getElementById('tabbar-thumb')!;
 
-function applyCollapse() {
-  sidebar.classList.toggle('collapsed', collapsed);
-  localStorage.setItem('sb-collapsed', collapsed ? '1' : '0');
+function moveThumbTo(el: HTMLElement | null) {
+  if (!el) { tabbarThumb.style.width = '0'; return; }
+  const scrollRect = tabbarScroll.getBoundingClientRect();
+  const elRect = el.getBoundingClientRect();
+  const left = elRect.left - scrollRect.left + tabbarScroll.scrollLeft;
+  tabbarThumb.style.transform = `translateX(${left}px)`;
+  tabbarThumb.style.width = `${elRect.width}px`;
 }
-colBtn?.addEventListener('click', () => { collapsed = !collapsed; applyCollapse(); });
-applyCollapse();
 
-// ── Mobile sidebar ────────────────────────────────────────────
-const overlay  = document.getElementById('sidebar-overlay')!;
-const mobMenuBtn = document.getElementById('mob-menu-btn')!;
+// Recompute on resize — tab widths / positions shift with viewport width.
+let activeTabEl: HTMLElement | null = null;
+window.addEventListener('resize', () => moveThumbTo(activeTabEl));
+// Tab-label widths depend on the webfont metrics; reposition once it's
+// actually loaded so the thumb isn't measured against a fallback font.
+document.fonts?.ready.then(() => moveThumbTo(activeTabEl));
 
-function openMobSidebar() {
-  sidebar.classList.add('mob-open');
-  overlay.classList.add('visible');
-  document.body.style.overflow = 'hidden';
-}
-function closeMobSidebar() {
-  sidebar.classList.remove('mob-open');
-  overlay.classList.remove('visible');
-  document.body.style.overflow = '';
-}
-mobMenuBtn?.addEventListener('click', openMobSidebar);
-overlay?.addEventListener('click', closeMobSidebar);
-
-// Close mob sidebar on nav — but not when the click was the "More"
-// disclosure toggle, which doesn't navigate anywhere; closing the drawer
-// on that click would collapse it before you ever see the expanded group.
-document.addEventListener('click', e => {
-  const item = (e.target as Element).closest('.sb-item');
-  if (item && item.id !== 'sb-more-toggle' && window.innerWidth <= 768) closeMobSidebar();
-});
-
-// ── Sidebar "More" group (About / Docs / Privacy) ───────────────
-// These used to be three always-visible sidebar rows under an "Info"
-// label — on short viewports that pushed the theme toggle below the
-// fold. Collapsed into a disclosure group so the sidebar's default
-// height is shorter; it auto-expands when you're actually on one of
-// these pages so the active item is never hidden.
-const moreToggle = document.getElementById('sb-more-toggle');
-const moreGroup  = document.getElementById('sb-more-group');
+// ── "More" dropdown (About / Docs / Privacy) ────────────────────
+const moreBtn  = document.getElementById('tab-more-btn')!;
+const moreMenu = document.getElementById('tab-more-menu')!;
 const MORE_ROUTES = ['about', 'docs', 'privacy'];
-let moreOpen = localStorage.getItem('sb-more-open') === '1';
+let moreOpen = false;
 
-function applyMoreOpen() {
-  moreGroup?.classList.toggle('open', moreOpen);
-  moreToggle?.setAttribute('aria-expanded', String(moreOpen));
-}
 function setMoreOpen(v: boolean) {
   moreOpen = v;
-  localStorage.setItem('sb-more-open', v ? '1' : '0');
-  applyMoreOpen();
+  moreMenu.classList.toggle('open', v);
+  moreBtn.setAttribute('aria-expanded', String(v));
 }
-moreToggle?.addEventListener('click', () => setMoreOpen(!moreOpen));
-applyMoreOpen();
+moreBtn.addEventListener('click', e => { e.stopPropagation(); setMoreOpen(!moreOpen); });
+document.addEventListener('click', e => {
+  if (moreOpen && !(e.target as Element).closest('#tab-more')) setMoreOpen(false);
+});
 
 // ── Nav active state ──────────────────────────────────────────
 function setActiveNav(route: string) {
-  document.querySelectorAll('.sb-item').forEach(el => {
-    const r = (el as HTMLElement).dataset.nav ?? '';
-    const active = route === r || (r !== '' && route.startsWith(r + '/'));
-    el.classList.toggle('active', active);
-  });
-  if (MORE_ROUTES.includes(route)) setMoreOpen(true);
+  let active: HTMLElement | null = null;
+  const tabs = document.querySelectorAll<HTMLElement>('[data-tab]');
+  for (const el of Array.from(tabs)) {
+    const r = el.dataset.nav ?? '';
+    const isActive = route === r || (r !== '' && route.startsWith(r + '/'));
+    el.classList.toggle('active', isActive);
+    if (isActive) active = el;
+  }
+  activeTabEl = active;
+  moveThumbTo(active);
+  if (active !== null && (active as HTMLElement).closest('#tabbar-scroll')) {
+    (active as HTMLElement).scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+  }
+  if (MORE_ROUTES.includes(route)) setMoreOpen(false); // dropdown item picked → close it
 }
+
+// ── Settings dialog ──────────────────────────────────────────
+// Reuses pages/settings.ts's mountSettings() unchanged — it just renders
+// into the dialog body instead of a routed page. Content is mounted once
+// on first open and left in place (same pattern the old settings ROUTE
+// used: state lives in localStorage via lib/settings.ts, not the DOM).
+const settingsBtn     = document.getElementById('settings-btn')!;
+const settingsOverlay = document.getElementById('settings-dialog-overlay')!;
+const settingsDialog  = document.getElementById('settings-dialog')!;
+const settingsClose   = document.getElementById('settings-dialog-close')!;
+const settingsBody    = document.getElementById('settings-dialog-body')!;
+let settingsMounted = false;
+
+async function openSettings() {
+  if (!settingsMounted) {
+    settingsMounted = true;
+    const { mountSettings } = await import('./pages/settings');
+    mountSettings(settingsBody);
+  }
+  settingsOverlay.hidden = false;
+  settingsDialog.hidden = false;
+  // rAF so the "hidden" removal paints before the open class kicks the
+  // opacity/transform transition — otherwise the browser coalesces both
+  // and it just snaps open with no animation.
+  requestAnimationFrame(() => {
+    settingsOverlay.classList.add('open');
+    settingsDialog.classList.add('open');
+  });
+  document.body.style.overflow = 'hidden';
+}
+function closeSettings() {
+  settingsOverlay.classList.remove('open');
+  settingsDialog.classList.remove('open');
+  document.body.style.overflow = '';
+  setTimeout(() => { settingsOverlay.hidden = true; settingsDialog.hidden = true; }, 380);
+}
+settingsBtn.addEventListener('click', openSettings);
+settingsClose.addEventListener('click', closeSettings);
+settingsOverlay.addEventListener('click', closeSettings);
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !settingsDialog.hidden) closeSettings();
+});
 
 // ── Page view with animation ──────────────────────────────────
 const pageView = document.getElementById('page-view')!;
@@ -144,7 +173,9 @@ on('compress/ocr',    () => { setActiveNav('compress/ocr');    mountPage(() => i
 on('compress/merge-pdf', () => { setActiveNav('compress/merge-pdf'); mountPage(() => import('./pages/mergePdf').then(m => m.mountMergePdf)); });
 on('compress/images-to-pdf', () => { setActiveNav('compress/images-to-pdf'); mountPage(() => import('./pages/imagesToPdf').then(m => m.mountImagesToPdf)); });
 on('convert',         () => { setActiveNav('convert');         mountPage(() => import('./pages/convert').then(m => m.mountConvert)); });
-on('settings',        () => { setActiveNav('settings');        mountPage(() => import('./pages/settings').then(m => m.mountSettings)); });
+on('settings',        () => { navigate(''); openSettings(); }); // old deep link →
+  // Settings is a dialog now, not a page (see openSettings() above); send
+  // #settings visitors to Home with the dialog open instead of an orphaned route.
 on('about',           () => { setActiveNav('about');           showStatic('tpl-about'); });
 on('docs',            () => { setActiveNav('docs');            showStatic('tpl-docs'); });
 on('privacy',         () => { setActiveNav('privacy');         showStatic('tpl-privacy'); });
@@ -167,3 +198,7 @@ window.addEventListener('beforeunload', e => {
     e.returnValue = 'Compression in progress — leaving will discard your work.';
   }
 });
+
+// ─────────────────────────────────────────────
+//  🄰🄳🄹 · built with ♥ — ADJ
+// ─────────────────────────────────────────────
