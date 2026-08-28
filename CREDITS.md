@@ -47,6 +47,19 @@ FFmpeg's own are triggered by using it as a dynamically-loaded library.
 | **mammoth.js** | Converts `.docx` to HTML for the Word → PDF/TXT/HTML tool | BSD 2-Clause | https://github.com/mwilliamson/mammoth.js |
 | **html2canvas** | Rasterizes the converted HTML to produce the DOCX → PDF output | MIT | https://github.com/niklasvh/html2canvas |
 
+## Local AI
+
+| Project | What it does here | License | Link |
+|---|---|---|---|
+| **🤗 Transformers.js** | Runs the on-device image-classification model (Settings → AI Engine) entirely in-browser via WASM/WebGPU — no upload | Apache 2.0 | https://github.com/huggingface/transformers.js |
+| **MobileNetV2 / ViT-Base (Xenova ONNX conversions)** | The two selectable model tiers (`Efficient`/`Powerful`) that back Smart Analyze/Sort | Apache 2.0 | https://huggingface.co/Xenova |
+
+## Animation
+
+| Project | What it does here | License | Link |
+|---|---|---|---|
+| **anime.js** | Entrance/reveal animations for the Settings page's new sections and Smart Analyze's re-sorted file cards | MIT | https://github.com/juliangarnier/anime |
+
 ## Build tooling
 
 | Project | What it does here | License | Link |

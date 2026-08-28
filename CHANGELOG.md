@@ -2,6 +2,94 @@
 
 All notable changes to CompressZ are documented in this file.
 
+## [1.1] — Device-Aware Performance, Local AI Engine, Settings Overhaul
+
+### Added — Forked from CompressF
+
+- CompressZ is a fork of [CompressF](https://github.com/ADJ189/CompressF).
+  README now says so up front, and notes that CompressF is still maintained
+  as its own project (a leaner, format-focused sister site) rather than a
+  predecessor CompressZ replaced.
+
+### Added — Platform detection engine (`src/lib/platform.ts`)
+
+- New module that feature-detects (never UA-sniffs alone) OS family, device
+  class (mobile/tablet/desktop), browser rendering engine, CPU core count,
+  device memory (where the browser reports it), GPU/WebGL2/WebGPU
+  availability and renderer string, cross-origin isolation (gates
+  multi-threaded WASM), effective network type, and `prefers-reduced-motion`.
+- Derives a `PerformanceTier` (`efficient` / `balanced` / `powerful`) from
+  those signals and a `recommend()` function that turns the tier into
+  concrete engine choices: GPU toggle defaults, video encode preset, FFmpeg
+  threading eligibility, batch concurrency, and which AI model tier to use.
+  Everything runs locally and synchronously — no network calls.
+
+### Added — Settings: Performance Mode & Device info
+
+- New "This Device" section: a read-only snapshot of everything
+  `platform.ts` detected, plus the resolved performance tier as a pill.
+- New "Performance Mode" section: `Auto` (follows the device recommendation)
+  or a manual `Efficient` / `Balanced` / `Powerful` override. `Auto` seeds
+  GPU-acceleration defaults and the video preset on a device's first visit
+  only — it never overwrites a toggle you've already hand-picked.
+- `lib/settings.ts` moved to a versioned `cz-settings-v2` storage key; a
+  returning user's existing `cz-settings-v1` GPU/engine choices are carried
+  over automatically (same shape, no reset), with the new `performanceMode`
+  and `ai` fields seeded from device detection on that first v1→v2 read.
+
+### Added — Local AI engine (`src/lib/aiEngine.ts`) + Smart Analyze/Sort
+
+- Real on-device image understanding via `@huggingface/transformers`
+  (dynamically imported — zero cost until a "Smart" action is actually
+  used, same lazy-load pattern as FFmpeg.wasm/PaddleOCR): an image-
+  classification model tags what's actually in each image, entirely in the
+  browser (WASM, or WebGPU where available). No image or file is ever
+  uploaded — consistent with the rest of the app's privacy stance.
+- Two model tiers, picked by Settings → AI Engine → Model tier (`Auto`
+  follows Performance Mode): `efficient` (`Xenova/mobilenet_v2_1.0_224`,
+  ~14MB) and `powerful` (`Xenova/vit-base-patch16-224`, ~90MB). Weights are
+  cached by the browser after first download.
+- A second, model-free heuristic (`guessContentType()`) samples a
+  downscaled canvas for edge density and palette size to guess "photo" vs.
+  "graphic/screenshot/document" and suggest a format + quality for that
+  content type.
+- **Images page**: new "✨ Smart Analyze & Sort (AI)" action — tags every
+  queued file, groups similar ones together (replacing upload order), and
+  — if "Auto-apply suggested settings" is on in Settings — rewrites each
+  untouched file's format/quality to the content-type suggestion. Tags
+  render as a chip on the file card (`components.ts`).
+- **Images → PDF page**: new "✨ Smart Sort (AI)" action — same tagging and
+  grouping, without touching per-file compression options (this tool has
+  none) — reorders the page sequence before combining.
+- New Settings → "AI Engine — Local" section: master enable toggle
+  (disabled outright if `WebAssembly` isn't available), model tier
+  selector, and the auto-apply toggle.
+
+### Added — anime.js for the new UI (`src/lib/motion.ts`)
+
+- Added `animejs` as a dependency, wrapped in a small dynamically-imported
+  helper (`revealStagger`, `popIn`, `pulse`, `progressTo`) used for the new
+  Settings sections' entrance and the Smart Analyze/Sort file-card
+  reordering. Respects `prefers-reduced-motion` (applies the end state
+  instantly, no animation, rather than skipping the state change). This is
+  additive — the app's existing CSS-transition system (`--t2`/`--t3`/
+  `--ease-fluid`) is untouched everywhere else.
+
+### Changed — Small-screen refinements
+
+- Added a `≤420px` breakpoint tightening padding, title sizes, the OCR
+  engine-matrix grid, and dialog width for narrow phones, on top of the
+  existing `≤768px`/`≤960px` breakpoints.
+
+### Audit — Feature regression check
+
+- Cross-checked every engine page (Video: 10-bit, edit-proxy, 2-pass,
+  multi-track audio, subtitle passthrough, per-file editing; PDF: tri-state
+  metadata control; OCR: dual engine + Math/Greek symbol mode; Audio:
+  passthrough; GIF; Merge PDF; Convert: video/audio/image/PDF⇄images/
+  DOCX/PPTX) against this changelog's history. Everything documented as
+  shipped is present and wired up — no regressions found.
+
 ## [1.0] — Images → PDF, GPU Acceleration, Settings Page, Code Dedup
 
 ### Added — Images → PDF tool

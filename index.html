@@ -214,8 +214,8 @@
     <div class="htc" data-t="images" data-nav="compress/images">
       <div class="htc-head"><div class="htc-icon">🖼️</div><svg class="htc-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 17L17 7M7 7h10v10"/></svg></div>
       <div class="htc-name">Images</div>
-      <div class="htc-desc">GPU-accelerated encoding via OffscreenCanvas. Binary search to hit exact target sizes.</div>
-      <div class="htc-tags"><span class="htc-tag">JPEG</span><span class="htc-tag">PNG</span><span class="htc-tag">WebP</span><span class="htc-tag">AVIF</span><span class="htc-tag">HEIC</span></div>
+      <div class="htc-desc">GPU-accelerated encoding via OffscreenCanvas. Binary search to hit exact target sizes. Optional local AI tagging &amp; smart sort.</div>
+      <div class="htc-tags"><span class="htc-tag">JPEG</span><span class="htc-tag">PNG</span><span class="htc-tag">WebP</span><span class="htc-tag">AVIF</span><span class="htc-tag">HEIC</span><span class="htc-tag">✨ AI</span></div>
     </div>
     <div class="htc" data-t="pdf" data-nav="compress/pdf">
       <div class="htc-head"><div class="htc-icon">📄</div><svg class="htc-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 17L17 7M7 7h10v10"/></svg></div>
@@ -232,8 +232,8 @@
     <div class="htc" data-t="images-to-pdf" data-nav="compress/images-to-pdf">
       <div class="htc-head"><div class="htc-icon">🧩</div><svg class="htc-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 17L17 7M7 7h10v10"/></svg></div>
       <div class="htc-name">Images → PDF</div>
-      <div class="htc-desc">Combine photos or screenshots into one PDF, one page each, reorderable — GPU-accelerated resize.</div>
-      <div class="htc-tags"><span class="htc-tag">pdf-lib</span><span class="htc-tag">Reorderable</span><span class="htc-tag">GPU</span></div>
+      <div class="htc-desc">Combine photos or screenshots into one PDF, one page each, reorderable — GPU-accelerated resize, optional local AI smart sort.</div>
+      <div class="htc-tags"><span class="htc-tag">pdf-lib</span><span class="htc-tag">Reorderable</span><span class="htc-tag">GPU</span><span class="htc-tag">✨ AI</span></div>
     </div>
     <div class="htc" data-t="video" data-nav="compress/video">
       <div class="htc-head"><div class="htc-icon">🎬</div><svg class="htc-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 17L17 7M7 7h10v10"/></svg></div>
@@ -306,6 +306,9 @@
   <h2>How it works</h2>
   <p>CompressZ runs entirely in your browser using WebAssembly, the Canvas API, WebCodecs, and two neural OCR engines. Every byte of your files stays on your device throughout the entire process.</p>
 
+  <h2>CompressZ &amp; CompressF</h2>
+  <p>CompressZ is a fork of <a href="https://github.com/ADJ189/CompressF" target="_blank" rel="noopener" style="color:var(--accent)">CompressF</a>, ADJ's earlier browser-native compression tool. CompressF is still maintained on its own — a leaner, format-focused sister site — while CompressZ has grown into the broader multi-engine workspace you're using now (Convert, OCR, GPU acceleration, device-aware Performance Mode, and the local AI engine below).</p>
+
   <h2>Technology stack</h2>
   <div class="tech-grid">
     <div class="tech-card"><h3>🦀 FFmpeg.wasm</h3><p>Compiled C FFmpeg to WebAssembly. Handles video, audio, and GIF compression with full codec support. Multithreaded via SharedArrayBuffer.</p></div>
@@ -314,6 +317,8 @@
     <div class="tech-card"><h3>🎬 WebCodecs</h3><p>W3C API for hardware-accelerated video encode/decode. GPU tier-2 fallback when FFmpeg.wasm is unavailable.</p></div>
     <div class="tech-card"><h3>🔤 Tesseract.js 5</h3><p>LSTM neural OCR compiled to SIMD-accelerated WASM. 100+ languages, ~10 MB, runs offline after first load.</p></div>
     <div class="tech-card"><h3>🧠 PaddleOCR PP-OCRv3</h3><p>Baidu's three-stage pipeline via WebGL (~25 MB). Best for tables, CJK, multi-column layouts and complex scans.</p></div>
+    <div class="tech-card"><h3>✨ Transformers.js</h3><p>Runs a real image-classification model locally (WASM/WebGPU) for Smart Analyze/Sort on the Images pages — Settings → AI Engine. Nothing is uploaded.</p></div>
+    <div class="tech-card"><h3>🧭 Platform detection</h3><p>Feature-detects CPU cores, memory, and GPU to recommend a Performance Mode (Efficient/Balanced/Powerful) — see Settings → This Device.</p></div>
   </div>
 
   <h2>PDF compression strategies</h2>
@@ -324,7 +329,7 @@
   <p>Three-tier fallback: (1) FFmpeg.wasm with multithreading when SharedArrayBuffer is available, (2) WebCodecs GPU-accelerated H.264 on Chrome/Safari, (3) MediaRecorder canvas capture as universal fallback.</p>
 
   <h2>Credits &amp; acknowledgments</h2>
-  <p>CompressZ is built on the work of several open-source projects, none of which are affiliated with or endorse CompressZ: <strong>PDF.js</strong> and <strong>pdf-lib</strong> (PDF rendering/generation), <strong>FFmpeg.wasm</strong> (video/audio/GIF), <strong>Tesseract.js</strong> and the underlying <strong>Tesseract OCR</strong> engine (100+ language OCR), <strong>PaddleOCR / PP-OCRv3</strong> via <strong>Paddle.js</strong> (primary OCR engine), and <strong>mammoth.js</strong> with <strong>html2canvas</strong> (Word document conversion). Full attribution and license details for every dependency are in <a href="https://github.com/ADJ189/compressz/blob/main/CREDITS.md" target="_blank" rel="noopener" style="color:var(--accent)">CREDITS.md</a> on GitHub.</p>
+  <p>CompressZ is built on the work of several open-source projects, none of which are affiliated with or endorse CompressZ: <strong>PDF.js</strong> and <strong>pdf-lib</strong> (PDF rendering/generation), <strong>FFmpeg.wasm</strong> (video/audio/GIF), <strong>Tesseract.js</strong> and the underlying <strong>Tesseract OCR</strong> engine (100+ language OCR), <strong>PaddleOCR / PP-OCRv3</strong> via <strong>Paddle.js</strong> (primary OCR engine), <strong>mammoth.js</strong> with <strong>html2canvas</strong> (Word document conversion), <strong>🤗 Transformers.js</strong> with Xenova's ONNX model conversions (local AI engine), and <strong>anime.js</strong> (interface animation). Full attribution and license details for every dependency are in <a href="https://github.com/ADJ189/compressz/blob/main/CREDITS.md" target="_blank" rel="noopener" style="color:var(--accent)">CREDITS.md</a> on GitHub.</p>
 </div>
 </template>
 
@@ -409,7 +414,7 @@
   <p style="font-size:.82rem;color:var(--text-3)">The OCR page is laid out in two columns on wider screens: drop your files and watch the queue on the left, pick an engine and tune settings on the right (settings stay in view while the file list scrolls). Below ~960px width it stacks into a single column, drop zone first.</p>
 
   <h2>Credits</h2>
-  <p>CompressZ's compression and OCR engines are built on PDF.js, pdf-lib, FFmpeg.wasm, Tesseract.js, PaddleOCR/Paddle.js, mammoth.js, and html2canvas — see <a href="https://github.com/ADJ189/compressz/blob/main/CREDITS.md" target="_blank" rel="noopener" style="color:var(--accent)">CREDITS.md</a> for full license attribution.</p>
+  <p>CompressZ's compression and OCR engines are built on PDF.js, pdf-lib, FFmpeg.wasm, Tesseract.js, PaddleOCR/Paddle.js, mammoth.js, html2canvas, 🤗 Transformers.js, and anime.js — see <a href="https://github.com/ADJ189/compressz/blob/main/CREDITS.md" target="_blank" rel="noopener" style="color:var(--accent)">CREDITS.md</a> for full license attribution. CompressZ is a fork of <a href="https://github.com/ADJ189/CompressF" target="_blank" rel="noopener" style="color:var(--accent)">CompressF</a>, also still maintained as a sister site.</p>
 
   <h2>Deployment</h2>
   <ul>
@@ -468,6 +473,7 @@
     <li><strong>PDF.js</strong> — loaded from <code>cdn.jsdelivr.net</code> (PDF rendering).</li>
     <li><strong>pdf-lib</strong> — loaded from <code>cdn.jsdelivr.net</code> (PDF generation).</li>
     <li><strong>Tesseract.js</strong> — loaded from <code>cdn.jsdelivr.net</code> and <code>tessdata.projectnaptha.com</code> (OCR engine and trained language data).</li>
+    <li><strong>🤗 Transformers.js</strong> — bundled at build time; model weights are downloaded from Hugging Face's CDN the first time you use Settings → AI Engine, then cached by your browser. Images are classified on-device — nothing is uploaded to Hugging Face or anywhere else.</li>
     <li><strong>PaddleOCR</strong> — loaded from <code>cdn.jsdelivr.net</code> and <code>paddlejs.bj.bcebos.com</code> (OCR model weights).</li>
     <li><strong>mammoth.js</strong> and <strong>html2canvas</strong> — loaded from <code>cdn.jsdelivr.net</code> (Word document conversion).</li>
   </ul>

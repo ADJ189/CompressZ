@@ -12,6 +12,10 @@
     "lint:fix": "eslint . --fix",
     "lighthouse": "lhci autorun"
   },
+  "dependencies": {
+    "@huggingface/transformers": "^3.7.5",
+    "animejs": "^4.5.0"
+  },
   "devDependencies": {
     "typescript": "^5.5.3",
     "vite": "^8.2.1",

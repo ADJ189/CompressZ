@@ -20,6 +20,12 @@ Nothing ever leaves your device.
 
 CompressZ compresses images, PDFs, video, audio, and GIFs; converts between video, audio, image, PDF, DOCX, and PPTX formats; and runs OCR on scanned PDFs — entirely inside your browser using WebAssembly, Canvas API, WebCodecs, and two neural OCR engines. No backend. No uploads. No tracking.
 
+CompressZ is forked from [CompressF](https://github.com/ADJ189/CompressF), ADJ's earlier browser-native
+compression tool. CompressF is still maintained as its own project and works fine on its own — think of it as
+CompressZ's sister site rather than a predecessor: CompressF stays leaner and format-focused, while CompressZ
+has grown into the broader multi-engine workspace (Convert, OCR, GPU acceleration, device-aware Performance
+Mode, and the local AI engine below). Pick whichever fits what you're doing.
+
 ---
 
 ## Tools
@@ -34,6 +40,27 @@ CompressZ compresses images, PDFs, video, audio, and GIFs; converts between vide
 | **SVG** | SVG | Pure TypeScript, zero dependencies |
 | **PDF OCR** | Scanned PDF → searchable PDF + TXT | PaddleOCR-VL 1.5 (primary) + Tesseract.js 5, optional Greek/math symbols |
 | **Convert** | Video ⇄ video · Audio ⇄ audio · Image ⇄ image · PDF ⇄ Images · DOCX → PDF/TXT/HTML · PPTX → PDF/TXT | FFmpeg.wasm, pdf-lib, mammoth.js, html2canvas, zero-dep ZIP |
+| **Images → PDF** | Images → single PDF, one page each | pdf-lib, with an optional local AI sort pass |
+
+---
+
+## Device-Aware Performance & Local AI
+
+Settings now includes three sections beyond the per-engine defaults:
+
+- **This Device** — a read-only snapshot of what your browser exposes locally (OS, CPU cores, memory,
+  GPU/WebGL2/WebGPU, cross-origin isolation, network type) and the performance tier CompressZ derived from it.
+  Nothing here is sent anywhere; it's computed by `src/lib/platform.ts` on load.
+- **Performance Mode** — `Auto` (follows the device's tier) or a manual `Efficient` / `Balanced` / `Powerful`
+  override, controlling GPU-acceleration defaults, the video encode preset, and batch concurrency.
+- **AI Engine — Local** — an on/off switch for **Smart Analyze / Smart Sort** on the Images and Images → PDF
+  pages. When enabled, a small image-classification model (`Xenova/mobilenet_v2_1.0_224` on `Efficient`,
+  `Xenova/vit-base-patch16-224` on `Powerful`, both via [`@huggingface/transformers`](https://github.com/huggingface/transformers.js))
+  runs entirely in your browser — WASM, or WebGPU where available — to tag what's in each image and group
+  similar ones together. A second, model-free heuristic looks at edge density and palette size to guess
+  "photo" vs. "graphic/document" and can optionally auto-apply a matching format/quality. No image or file
+  ever leaves your device; model weights are cached by the browser after the first download, the same way
+  PaddleOCR and Tesseract already work.
 
 ---
 
@@ -234,9 +261,14 @@ by the [Code of Conduct](CODE_OF_CONDUCT.md).
 ## Credits & Acknowledgments
 
 CompressZ is built on PDF.js, pdf-lib, FFmpeg.wasm, Tesseract.js,
-PaddleOCR/Paddle.js, mammoth.js, html2canvas, Vite, and TypeScript —
-see [CREDITS.md](CREDITS.md) for the full list with licenses and links.
-None of those projects are affiliated with or endorse CompressZ.
+PaddleOCR/Paddle.js, mammoth.js, html2canvas, Hugging Face `transformers.js`,
+anime.js, Vite, and TypeScript — see [CREDITS.md](CREDITS.md) for the full
+list with licenses and links. None of those projects are affiliated with
+or endorse CompressZ.
+
+CompressZ is a fork of [CompressF](https://github.com/ADJ189/CompressF) —
+also maintained, and worth a look if you want a leaner, format-focused
+sister tool instead of CompressZ's broader engine set.
 
 ---
 
