@@ -96,6 +96,9 @@ export function renderFileCard(entry: FileEntry, cbs: FileCardCallbacks): HTMLEl
   if (entry.status === 'error') {
     metaHtml += `<span class="err-msg">⚠ ${esc(entry.error?.slice(0, 70) ?? 'Error')}</span>`;
   }
+  if (entry.aiLabel) {
+    metaHtml += `<span class="fc-ai-tag" title="Detected locally by the on-device AI engine">✨ ${esc(entry.aiLabel)}</span>`;
+  }
 
   // progress
   const progressHtml = entry.status === 'compressing' ? `

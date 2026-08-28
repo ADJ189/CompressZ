@@ -1163,3 +1163,68 @@ input[type="range"].slider::-webkit-slider-thumb:hover {
 .settings-reset-row {
   display: flex; justify-content: flex-end; margin-top: .4rem;
 }
+
+/* ════════════════════════════════════════════════════════════
+   DEVICE INFO CARD, PERFORMANCE TIER PILL, AI TAG CHIP
+   Added for the platform-detection engine and local AI features
+   (lib/platform.ts, lib/aiEngine.ts) — reuse the existing
+   .settings-card / .s-field grouped-list look rather than a new pattern.
+════════════════════════════════════════════════════════════ */
+.device-info-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.device-info-row .s-label { flex-shrink: 0; }
+.device-info-val {
+  font-family: var(--mono); font-size: .74rem; color: var(--text-3);
+  text-align: right; word-break: break-word;
+}
+.tier-pill {
+  display: inline-flex; align-items: center; padding: .15rem .6rem;
+  border-radius: 100px; font-weight: 700; font-size: .7rem; letter-spacing: .02em;
+  text-transform: uppercase; font-family: var(--sans);
+}
+.tier-pill.tier-efficient { background: var(--accent-soft); color: var(--accent); }
+.tier-pill.tier-balanced  { background: rgba(14,165,233,.12); color: var(--sky); }
+.tier-pill.tier-powerful  { background: var(--green-soft, rgba(34,197,94,.1)); color: var(--emerald); }
+
+/* AI tag chip on a file card (see components.ts renderFileCard) */
+.fc-ai-tag {
+  display: inline-flex; align-items: center; gap: .25rem;
+  padding: .1rem .5rem; border-radius: 100px; font-size: .68rem; font-weight: 600;
+  background: var(--violet-soft); color: var(--violet); white-space: nowrap;
+}
+
+/* "Smart" AI action buttons on the Images / Images→PDF batch bars */
+.btn-ai {
+  display: inline-flex; align-items: center; gap: .35rem;
+  background: linear-gradient(135deg, var(--violet), var(--accent));
+  color: #fff; border: none;
+}
+.btn-ai:disabled { opacity: .55; cursor: not-allowed; }
+.ai-progress-row {
+  display: flex; align-items: center; gap: .6rem; font-size: .74rem; color: var(--text-3);
+  padding: .5rem .2rem;
+}
+.ai-progress-track {
+  flex: 1; height: 5px; border-radius: 100px; background: var(--bg3); overflow: hidden;
+}
+.ai-progress-fill {
+  height: 100%; width: 0%; border-radius: 100px;
+  background: linear-gradient(90deg, var(--violet), var(--accent));
+}
+
+/* ════════════════════════════════════════════════════════════
+   SMALL-PHONE REFINEMENTS (≤420px)
+   The 768px breakpoint above covers general mobile; this tightens
+   spacing further for narrow phones (iPhone SE class and similar)
+   so grouped cards, sliders, and the tab bar don't feel cramped.
+════════════════════════════════════════════════════════════ */
+@media (max-width: 420px) {
+  .home-wrap, .tool-wrap { padding: 1.25rem 1rem 4rem; }
+  .home-title  { font-size: 1.85rem; }
+  .page-title  { font-size: 1.35rem; }
+  .s-field-icon { width: 26px; height: 26px; font-size: .82rem; }
+  .device-info-row { flex-direction: column; align-items: flex-start; gap: .2rem; }
+  .device-info-val { text-align: left; }
+  .em-grid { grid-template-columns: 64px 1fr 1fr; }
+  .dialog { width: calc(100vw - 1.2rem); }
+  .btn-ai, .btn-sm { font-size: .72rem; padding: .5rem .7rem; }
+}
