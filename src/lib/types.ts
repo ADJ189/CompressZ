@@ -57,6 +57,7 @@ export interface FileEntry {
   result?: CompressResult;
   error?: string;
   options: CompressOptions;
+  aiLabel?: string; // set by the local AI engine's "Smart Analyze" (see lib/aiEngine.ts) — undefined until run
 }
 
 // ── Helpers ───────────────────────────────────────────────────
