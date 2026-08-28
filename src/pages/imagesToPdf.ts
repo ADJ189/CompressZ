@@ -4,6 +4,8 @@ import { createDropZone } from '../components';
 import { toast } from '../toast';
 import { imagesToPdfStore } from '../store';
 import { registerBusyCheck } from '../main';
+import { getSettings, resolvedAiModelTier } from '../lib/settings';
+import { aiSupported } from '../lib/aiEngine';
 
 const PAGE_SIZES: { id: 'auto' | 'a4' | 'letter'; label: string; sub: string }[] = [
   { id: 'auto',   label: 'Auto',   sub: "Each page matches its image's own size" },
@@ -18,6 +20,58 @@ const LETTER_PT = { w: 612,    h: 792   };
 export function mountImagesToPdf(root: HTMLElement) {
   const s = imagesToPdfStore;
   let progress = 0;
+  let aiBusy = false;
+  let aiNote = '';
+  const aiLabels = new Map<File, string>(); // per-session tag cache, keyed by File — cleared implicitly when files are removed
+
+  async function runSmartSort() {
+    if (s.files.length < 2 || aiBusy) return;
+    const settings = getSettings();
+    if (!settings.ai.enabled) { toast('Enable Local AI features in Settings first', 'error'); return; }
+    if (!aiSupported()) { toast('This browser can\u2019t run the local AI engine', 'error'); return; }
+
+    aiBusy = true; aiNote = 'Starting…'; render();
+    try {
+      const { smartAnalyze, sortBySmartAnalysis } = await import('../lib/aiEngine');
+      const tier = resolvedAiModelTier(settings);
+      const analysis = await smartAnalyze(s.files, tier, (done, total, note) => {
+        aiNote = `${note} (${done}/${total})`; renderAiBar();
+      });
+      analysis.forEach(a => { if (a.tag) aiLabels.set(a.file, a.tag.label); });
+      s.files = sortBySmartAnalysis(s.files, analysis);
+      const tagged = analysis.filter(a => a.tag).length;
+      toast(`Sorted ${analysis.length} image${analysis.length !== 1 ? 's' : ''} by content · ${tagged} tagged`, 'success');
+    } catch (e: any) {
+      toast(e?.message ?? 'Smart Sort failed', 'error');
+    }
+    aiBusy = false; render();
+    const { revealStagger } = await import('../lib/motion').catch(() => ({ revealStagger: undefined as any }));
+    if (revealStagger) revealStagger(listEl.querySelectorAll('.file-card'));
+  }
+
+  function renderAiBar() {
+    let bar = root.querySelector<HTMLElement>('#itp-ai-bar');
+    if (!bar) return;
+    bar.innerHTML = '';
+    if (s.files.length < 2) return;
+    const row = document.createElement('div');
+    row.className = 'batch-bar';
+    row.style.display = 'flex';
+    const btn = document.createElement('button');
+    btn.className = 'btn-sm btn-ai';
+    btn.textContent = aiBusy ? 'Sorting…' : '✨ Smart Sort (AI)';
+    btn.disabled = aiBusy || s.busy;
+    btn.title = 'Groups visually/semantically similar images together, locally, before you combine them';
+    btn.addEventListener('click', runSmartSort);
+    row.appendChild(btn);
+    bar.appendChild(row);
+    if (aiBusy) {
+      const prog = document.createElement('div');
+      prog.className = 'ai-progress-row';
+      prog.innerHTML = `<span>${aiNote}</span><span class="ai-progress-track"><span class="ai-progress-fill"></span></span>`;
+      bar.appendChild(prog);
+    }
+  }
 
   function addFiles(fs: File[]) {
     const valid = fs.filter(f => f.type.startsWith('image/') || /\.(jpg|jpeg|png|webp|avif|bmp|tiff|tif|heic|heif)$/i.test(f.name));
@@ -42,6 +96,7 @@ export function mountImagesToPdf(root: HTMLElement) {
 
   function clearAll() {
     s.files = [];
+    aiLabels.clear();
     render();
   }
 
@@ -90,6 +145,7 @@ export function mountImagesToPdf(root: HTMLElement) {
       <div class="settings-card" id="itp-settings"></div>
 
       <div id="dz-mount"></div>
+      <div id="itp-ai-bar"></div>
       <div class="batch-bar" id="itp-bar" style="display:none"></div>
       <div class="file-list" id="itp-list"></div>
     </div>
@@ -171,7 +227,7 @@ export function mountImagesToPdf(root: HTMLElement) {
         <div class="fc-ico">🖼️</div>
         <div class="fc-info">
           <div class="fc-name" title="${esc(f.name)}">${i + 1}. ${esc(f.name)}</div>
-          <div class="fc-meta"><span>${formatBytes(f.size)}</span></div>
+          <div class="fc-meta"><span>${formatBytes(f.size)}</span>${aiLabels.has(f) ? `<span class="fc-ai-tag" title="Detected locally by the on-device AI engine">✨ ${esc(aiLabels.get(f)!)}</span>` : ''}</div>
         </div>
         <div class="fc-actions">
           <button class="fc-btn icon" data-up aria-label="Move up" ${i === 0 || s.busy ? 'disabled' : ''}>↑</button>
@@ -192,9 +248,10 @@ export function mountImagesToPdf(root: HTMLElement) {
   }
 
   function render() {
-    registerBusyCheck(() => s.busy);
+    registerBusyCheck(() => s.busy || aiBusy);
     (dzWrap as any).setHasFiles(s.files.length > 0);
     renderSettings();
+    renderAiBar();
     renderBar();
     renderList();
   }

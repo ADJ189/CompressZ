@@ -5,10 +5,53 @@ import { compressImage, getBestFormat } from '../lib/compressImage';
 import { createDropZone, renderFileCard, patchFileCard, renderBatchBar } from '../components';
 import { toast } from '../toast';
 import { imageStore } from '../store';
+import { getSettings, resolvedAiModelTier } from '../lib/settings';
+import { aiSupported } from '../lib/aiEngine';
 
 export function mountImages(root: HTMLElement) {
   // ── State — lives in imageStore so it survives navigation ───
   const s = imageStore; // shorthand alias
+
+  // ── AI (Smart Analyze) — local, on-device (see lib/aiEngine.ts) ─
+  let aiBusy = false;
+  let aiNote = '';
+
+  async function runSmartAnalyze() {
+    if (!s.files.length || aiBusy) return;
+    const settings = getSettings();
+    if (!settings.ai.enabled) { toast('Enable Local AI features in Settings first', 'error'); return; }
+    if (!aiSupported()) { toast('This browser can\u2019t run the local AI engine', 'error'); return; }
+
+    aiBusy = true; aiNote = 'Starting…'; render();
+    try {
+      const { smartAnalyze } = await import('../lib/aiEngine');
+      const tier = resolvedAiModelTier(settings);
+      const files = s.files.map(f => f.file);
+      const analysis = await smartAnalyze(files, tier, (done, total, note) => {
+        aiNote = `${note} (${done}/${total})`; renderAiBar();
+      });
+
+      const byFile = new Map(analysis.map(a => [a.file, a]));
+      s.files.forEach(entry => {
+        const a = byFile.get(entry.file);
+        if (!a) return;
+        entry.aiLabel = a.tag?.label;
+        if (settings.ai.autoApplySuggestions && (entry.status === 'idle' || entry.status === 'error')) {
+          entry.options = { ...entry.options, format: a.content.suggestedFormat, quality: a.content.suggestedQuality / 100 };
+        }
+      });
+      // Group visually/semantically similar images together instead of leaving upload order.
+      s.files = s.files.slice().sort((x, y) => (x.aiLabel ?? x.file.name).localeCompare(y.aiLabel ?? y.file.name));
+
+      const tagged = analysis.filter(a => a.tag).length;
+      toast(`Analyzed ${analysis.length} image${analysis.length !== 1 ? 's' : ''} · ${tagged} tagged and sorted${settings.ai.autoApplySuggestions ? ' · settings applied' : ''}`, 'success');
+    } catch (e: any) {
+      toast(e?.message ?? 'Smart Analyze failed', 'error');
+    }
+    aiBusy = false; render();
+    const { revealStagger } = await import('../lib/motion').catch(() => ({ revealStagger: undefined as any }));
+    if (revealStagger) revealStagger(listEl.querySelectorAll('.file-card'));
+  }
 
   const effectiveFmt = () => getBestFormat(s.format);
   const fmtMismatch  = () => effectiveFmt() !== s.format;
@@ -86,6 +129,7 @@ export function mountImages(root: HTMLElement) {
 
       <div class="settings-card" id="settings-card"></div>
       <div id="dz-mount"></div>
+      <div id="ai-bar"></div>
       <div class="batch-bar" id="batch-bar" style="display:none"></div>
       <div class="file-list" id="file-list"></div>
     </div>
@@ -94,6 +138,29 @@ export function mountImages(root: HTMLElement) {
   warnEl  = root.querySelector('#fmt-warn')!;
   batchEl = root.querySelector('#batch-bar')!;
   listEl  = root.querySelector('#file-list')!;
+  const aiBarEl = root.querySelector<HTMLElement>('#ai-bar')!;
+
+  function renderAiBar() {
+    aiBarEl.innerHTML = '';
+    if (!s.files.length) return;
+    const row = document.createElement('div');
+    row.className = 'batch-bar';
+    row.style.display = 'flex';
+    const btn = document.createElement('button');
+    btn.className = 'btn-sm btn-ai';
+    btn.textContent = aiBusy ? 'Analyzing…' : '✨ Smart Analyze & Sort (AI)';
+    btn.disabled = aiBusy;
+    btn.title = 'Tags each image locally, groups similar ones together, and (if enabled in Settings) suggests format/quality per image';
+    btn.addEventListener('click', runSmartAnalyze);
+    row.appendChild(btn);
+    aiBarEl.appendChild(row);
+    if (aiBusy) {
+      const prog = document.createElement('div');
+      prog.className = 'ai-progress-row';
+      prog.innerHTML = `<span>${aiNote}</span><span class="ai-progress-track"><span class="ai-progress-fill"></span></span>`;
+      aiBarEl.appendChild(prog);
+    }
+  }
 
   dzWrap = createDropZone({
     accept:   'image/*,.heic,.heif',
@@ -172,8 +239,9 @@ export function mountImages(root: HTMLElement) {
   }
 
   function render() {
-    registerBusyCheck(() => s.files.some(f => f.status === 'compressing'));
+    registerBusyCheck(() => s.files.some(f => f.status === 'compressing') || aiBusy);
     (dzWrap as any).setHasFiles(s.files.length > 0);
+    renderAiBar();
     renderBatchBar(batchEl, s.files, compressAll, downloadAll, clearAll);
     listEl.innerHTML = '';
     s.files.forEach(f => listEl.appendChild(renderFileCard(f, cbs)));

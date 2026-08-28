@@ -1,6 +1,8 @@
-import { getSettings, updateSettings, resetSettings, GPU_CAPABLE } from '../lib/settings';
+import { getSettings, updateSettings, resetSettings, GPU_CAPABLE, resolvedPerformanceTier, resolvedAiModelTier } from '../lib/settings';
 import type { AppSettings, GpuSettings } from '../lib/settings';
 import { gpuAvailable, hasWebGL2 } from '../lib/gpu';
+import { detectPlatform, recommend, tierLabel } from '../lib/platform';
+import { aiSupported, unloadModels } from '../lib/aiEngine';
 import type { ImageFormat, VideoCodec, AudioFormat, PdfLevel } from '../lib/types';
 import { toast } from '../toast';
 
@@ -31,8 +33,8 @@ export function mountSettings(root: HTMLElement) {
           <h1 class="page-title">Settings</h1>
         </div>
         <p class="page-sub">
-          GPU acceleration and the starting defaults for every compression engine. Everything here is stored
-          only in this browser and applies the next time you open a tool.
+          Device-aware performance, the local AI engine, GPU acceleration, and the starting defaults for every
+          compression engine. Everything here is stored only in this browser and applies the next time you open a tool.
         </p>
         <div id="gpu-cap-badge"></div>
       </div>
@@ -50,6 +52,9 @@ export function mountSettings(root: HTMLElement) {
   function render() {
     const st = getSettings();
     groupsEl.innerHTML = '';
+    groupsEl.appendChild(deviceGroup());
+    groupsEl.appendChild(performanceGroup(st));
+    groupsEl.appendChild(aiGroup(st));
     groupsEl.appendChild(gpuGroup(st));
     groupsEl.appendChild(imagesGroup(st));
     groupsEl.appendChild(pdfGroup(st));
@@ -58,6 +63,140 @@ export function mountSettings(root: HTMLElement) {
     groupsEl.appendChild(gifGroup(st));
     groupsEl.appendChild(ocrGroup(st));
     groupsEl.appendChild(resetRow());
+
+    import('../lib/motion').then(({ revealStagger }) => {
+      revealStagger(groupsEl.querySelectorAll(':scope > div'));
+    }).catch(() => { /* motion is a progressive enhancement — settings still work without it */ });
+  }
+
+  // ── Device (read-only info) ────────────────────────────────────
+  function deviceGroup(): HTMLElement {
+    const info = detectPlatform();
+    const wrap = document.createElement('div');
+    const title = document.createElement('div');
+    title.className = 'settings-group-title';
+    title.textContent = 'This Device';
+    wrap.appendChild(title);
+    const hint = document.createElement('div');
+    hint.className = 'settings-group-hint';
+    hint.textContent = 'Detected locally from what your browser exposes — nothing here is sent anywhere. Used to pick sensible defaults below.';
+    wrap.appendChild(hint);
+
+    const card = document.createElement('div');
+    card.className = 'settings-card device-info-card';
+    const rows: [string, string][] = [
+      ['Platform', `${info.os} · ${info.deviceClass[0].toUpperCase()}${info.deviceClass.slice(1)}`],
+      ['Browser engine', info.engine],
+      ['CPU cores', info.cores ? String(info.cores) : 'Unknown'],
+      ['Memory', info.memoryGB ? `~${info.memoryGB} GB` : 'Not reported by this browser'],
+      ['GPU', info.webgl2 ? (info.gpuRenderer ?? 'WebGL2 available') : 'No WebGL2 detected'],
+      ['WebGPU', info.webgpu ? 'Available' : 'Not available'],
+      ['Multi-threaded WASM', info.crossOriginIsolated ? 'Available (cross-origin isolated)' : 'Unavailable'],
+      ['Network', info.connection ? info.connection.toUpperCase() + (info.saveData ? ' · Data Saver on' : '') : 'Unknown'],
+    ];
+    card.innerHTML = rows.map(([k, v]) => `
+      <div class="s-field full device-info-row">
+        <span class="s-label">${k}</span>
+        <span class="device-info-val">${escHtml(v)}</span>
+      </div>`).join('') + `
+      <div class="s-field full device-info-row">
+        <span class="s-label">Performance tier</span>
+        <span class="device-info-val"><span class="tier-pill tier-${info.tier}">${tierLabel(info.tier)}</span></span>
+      </div>`;
+    wrap.appendChild(card);
+    return wrap;
+  }
+
+  // ── Performance Mode ────────────────────────────────────────────
+  function performanceGroup(st: AppSettings): HTMLElement {
+    const rec = recommend(detectPlatform());
+    const resolved = resolvedPerformanceTier(st);
+    const modes: { id: AppSettings['performanceMode']; label: string }[] = [
+      { id: 'auto', label: `Auto (${tierLabel(resolved)})` },
+      { id: 'efficient', label: 'Efficient' },
+      { id: 'balanced', label: 'Balanced' },
+      { id: 'powerful', label: 'Powerful' },
+    ];
+    const field = segRow('Mode', modes.map(m => ({ id: m.id, label: m.label })), st.performanceMode,
+      id => { updateSettings(s => { s.performanceMode = id as AppSettings['performanceMode']; }); render(); });
+
+    const noteField = document.createElement('div');
+    noteField.className = 's-field full';
+    noteField.innerHTML = `<span class="s-field-sub">${escHtml(rec.reason)} Affects GPU-acceleration defaults, the video encode preset, batch concurrency, and which AI model tier "Auto" picks below.</span>`;
+
+    return groupWrap('Performance Mode', 'Controls how aggressively engines use this device\u2019s CPU/GPU. Changing this doesn\u2019t retroactively touch settings you\u2019ve already customised by hand.', [field, noteField]);
+  }
+
+  // ── AI Engine (local) ────────────────────────────────────────────
+  function aiGroup(st: AppSettings): HTMLElement {
+    const supported = aiSupported();
+    const resolvedTier = resolvedAiModelTier(st);
+    const fields: HTMLElement[] = [];
+
+    const enableField = document.createElement('div');
+    enableField.className = 's-field full';
+    enableField.innerHTML = `
+      <div class="s-field-row">
+        <div class="s-field-icon">✨</div>
+        <div class="s-field-text" style="flex:1">
+          <span class="s-field-title">Local AI features</span>
+          <span class="s-field-sub">Smart Analyze / Smart Sort on the Images and Images → PDF pages. Runs a small on-device model entirely in this browser — no image or file ever leaves your device.</span>
+        </div>
+        <button type="button" class="ios-switch${st.ai.enabled ? ' on' : ''}" role="switch" aria-checked="${st.ai.enabled}" aria-label="Local AI features" ${supported ? '' : 'disabled'}></button>
+      </div>`;
+    enableField.querySelector('.ios-switch')?.addEventListener('click', () => {
+      if (!supported) return;
+      updateSettings(s => { s.ai.enabled = !s.ai.enabled; });
+      unloadModels();
+      render();
+    });
+    fields.push(enableField);
+
+    if (!supported) {
+      const warn = document.createElement('div');
+      warn.className = 's-field full';
+      warn.innerHTML = `<span class="s-field-sub">WebAssembly isn\u2019t available in this browser — the local AI engine can\u2019t run here.</span>`;
+      fields.push(warn);
+    } else if (st.ai.enabled) {
+      fields.push(segRow('Model tier', [
+        { id: 'auto', label: `Auto (${resolvedTier === 'powerful' ? 'Powerful' : 'Efficient'})` },
+        { id: 'efficient', label: 'Efficient · ~14MB' },
+        { id: 'powerful', label: 'Powerful · ~90MB' },
+      ], st.ai.modelTier, id => {
+        updateSettings(s => { s.ai.modelTier = id as AppSettings['ai']['modelTier']; });
+        unloadModels();
+        render();
+      }));
+
+      const applyField = document.createElement('div');
+      applyField.className = 's-field full';
+      const on = st.ai.autoApplySuggestions;
+      applyField.innerHTML = `
+        <div class="s-field-row">
+          <div class="s-field-icon">⚙️</div>
+          <div class="s-field-text" style="flex:1">
+            <span class="s-field-title">Auto-apply suggested settings</span>
+            <span class="s-field-sub">When on, Smart Analyze also rewrites each image's format/quality based on whether it looks like a photo or a graphic/document, not just tagging and sorting.</span>
+          </div>
+          <button type="button" class="ios-switch${on ? ' on' : ''}" role="switch" aria-checked="${on}" aria-label="Auto-apply suggested settings"></button>
+        </div>`;
+      applyField.querySelector('.ios-switch')?.addEventListener('click', () => {
+        updateSettings(s => { s.ai.autoApplySuggestions = !s.ai.autoApplySuggestions; });
+        render();
+      });
+      fields.push(applyField);
+
+      const modelNote = document.createElement('div');
+      modelNote.className = 's-field full';
+      modelNote.innerHTML = `<span class="s-field-sub">Model weights download once and are cached by the browser for next time, the same way PaddleOCR and Tesseract already work.</span>`;
+      fields.push(modelNote);
+    }
+
+    return groupWrap('AI Engine — Local', '', fields);
+  }
+
+  function escHtml(str: string): string {
+    return str.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
   }
 
   // ── GPU Acceleration ──────────────────────────────────────────
