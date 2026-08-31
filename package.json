@@ -13,7 +13,7 @@
     "lighthouse": "lhci autorun"
   },
   "dependencies": {
-    "@huggingface/transformers": "^3.7.5",
+    "@huggingface/transformers": "^4.2.0",
     "animejs": "^4.5.0"
   },
   "devDependencies": {
