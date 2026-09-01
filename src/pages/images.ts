@@ -7,6 +7,7 @@ import { toast } from '../toast';
 import { imageStore } from '../store';
 import { getSettings, resolvedAiModelTier } from '../lib/settings';
 import { aiSupported } from '../lib/aiEngine';
+import { runBatch } from '../lib/batch';
 
 export function mountImages(root: HTMLElement) {
   // ── State — lives in imageStore so it survives navigation ───
@@ -102,7 +103,13 @@ export function mountImages(root: HTMLElement) {
     a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
   }
 
-  function compressAll() { s.files.forEach(f => { if (f.status === 'idle' || f.status === 'error') compressEntry(f); }); }
+  // Canvas-based (no shared singleton to serialize on), so this can run
+  // several files at once — capped to what platform.ts recommends for the
+  // current device instead of firing every file at once unbounded.
+  function compressAll() {
+    const pending = s.files.filter(f => f.status === 'idle' || f.status === 'error');
+    runBatch(pending, compressEntry);
+  }
   function downloadAll()  { s.files.filter(f => f.status === 'done').forEach(downloadEntry); }
   function clearAll()     { s.files = []; render(); }
 
@@ -245,6 +252,9 @@ export function mountImages(root: HTMLElement) {
     renderBatchBar(batchEl, s.files, compressAll, downloadAll, clearAll);
     listEl.innerHTML = '';
     s.files.forEach(f => listEl.appendChild(renderFileCard(f, cbs)));
+    import('../lib/motion').then(({ revealStagger }) => {
+      revealStagger(listEl.querySelectorAll('.file-card'));
+    }).catch(() => { /* motion is a progressive enhancement — cards still render without it */ });
   }
 
   renderSettings();

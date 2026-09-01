@@ -4,6 +4,7 @@ import { compressPdf } from '../lib/compressPdf';
 import { createDropZone, renderFileCard, patchFileCard, renderBatchBar } from '../components';
 import { toast } from '../toast';
 import { pdfStore } from '../store';
+import { runBatch } from '../lib/batch';
 
 export function mountPdf(root: HTMLElement) {
   // ── State — persisted in pdfStore across navigations ────────
@@ -62,7 +63,13 @@ export function mountPdf(root: HTMLElement) {
     a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
   }
 
-  function compressAll() { s.files.forEach(f => { if (f.status === 'idle' || f.status === 'error') compressEntry(f); }); }
+  // Canvas/pdf-lib based (no shared singleton to serialize on), so this can
+  // run several files at once — capped to what platform.ts recommends for
+  // the current device instead of firing every file at once unbounded.
+  function compressAll() {
+    const pending = s.files.filter(f => f.status === 'idle' || f.status === 'error');
+    runBatch(pending, compressEntry);
+  }
   function downloadAll()  { s.files.filter(f => f.status === 'done').forEach(downloadEntry); }
   function clearAll()     { s.files = []; render(); }
   const cbs = {
@@ -224,6 +231,9 @@ export function mountPdf(root: HTMLElement) {
     renderBatchBar(batchEl, s.files, compressAll, downloadAll, clearAll);
     listEl.innerHTML = '';
     s.files.forEach(f => listEl.appendChild(renderFileCard(f, cbs)));
+    import('../lib/motion').then(({ revealStagger }) => {
+      revealStagger(listEl.querySelectorAll('.file-card'));
+    }).catch(() => { /* motion is a progressive enhancement — cards still render without it */ });
   }
 
   render();
