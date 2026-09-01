@@ -916,13 +916,13 @@ input[type="range"].slider::-webkit-slider-thumb:hover {
   padding: .6rem 1rem; background: var(--text); color: var(--bg);
   border-radius: var(--r); font-size: .8rem; font-weight: 500;
   box-shadow: var(--shadow-xl);
-  animation: toastIn .22s var(--ease) both;
-  transition: opacity .28s ease, transform .28s ease;
   pointer-events: none;
 }
 .toast-item.success { background: var(--green); color: #fff; }
 .toast-item.error   { background: var(--rose);  color: #fff; }
-@keyframes toastIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+/* Entrance/exit are driven by anime.js (lib/motion.ts toastIn/toastOut) so
+   they can spring/overshoot and be awaited before removal; the old CSS
+   @keyframes + transition entrance is gone to avoid double-animating. */
 
 /* ── Animations ───────────────────────────────────────────── */
 @keyframes fadeUp {
