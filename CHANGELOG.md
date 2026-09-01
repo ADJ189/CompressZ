@@ -2,6 +2,57 @@
 
 All notable changes to CompressZ are documented in this file.
 
+## [Unreleased]
+
+### Fixed — Cloudflare Pages build failure
+
+- `package-lock.json` had drifted out of sync with `package.json` (a stale
+  `proxy-agent@6.5.0` subtree where the `@puppeteer/browsers` override now
+  resolves to `proxy-agent@8.x`), so `npm ci` failed on Cloudflare Pages
+  with `Missing: proxy-agent@8.0.2 from lock file` before the build could
+  even start. Regenerated the lockfile; `npm ci` now completes cleanly.
+
+### Fixed — Dependabot security alerts
+
+- **adm-zip** (transitive, via `onnxruntime-node` — never reaches the
+  browser bundle, only flagged in the lockfile): pinned to `^0.6.0` via
+  `package.json` overrides, fixing the crafted-ZIP 4GB memory-allocation
+  advisory. `npm audit` confirmed `<0.6.0` is the actual vulnerable range
+  (not `<0.5.18` as the advisory title implies).
+- **sharp** (transitive, via `@huggingface/transformers`'s Node-side image
+  path — also never reaches the browser bundle): pinned to `^0.35.3` via
+  overrides, resolving to `0.35.4`, which bundles a libvips release fixing
+  CVE-2026-33327, CVE-2026-33328, CVE-2026-35590, and CVE-2026-35591.
+- `npm audit --omit=dev` now reports 0 vulnerabilities.
+
+### Fixed — Hardware-aware batch concurrency wasn't actually wired up
+
+- `platform.ts` already computed a per-device `batchConcurrency`
+  recommendation (1/2/3 depending on CPU cores, memory, and GPU), but the
+  Images and PDF pages' "Compress All" ignored it entirely — firing every
+  queued file's compression at once via an unbounded `.forEach()`. On a
+  low-power device that meant dozens of concurrent `canvas`/`toBlob()` jobs
+  competing for the same CPU/GPU the recommendation had already flagged as
+  weak.
+- Added `src/lib/batch.ts`: a small concurrency-limited task runner that
+  defaults to `platform.recommend().batchConcurrency`. Wired it into
+  `images.ts` and `pdf.ts`'s `compressAll()`.
+- Video/Audio/GIF/Convert are intentionally left sequential — they share
+  one FFmpeg.wasm singleton, so concurrent jobs there would just queue on
+  the same WASM module rather than actually parallelize.
+
+### Added — More anime.js coverage
+
+- Toasts now pop in/out via a real spring animation (`lib/motion.ts`
+  `toastIn`/`toastOut`) instead of a plain CSS `@keyframes` entrance with no
+  matching exit animation; removal is now awaited so it never gets yanked
+  mid-fade.
+- Images and PDF file-card lists now reveal with the same staggered
+  fade+rise already used for Smart Analyze results and the Settings page,
+  applied only on actual list changes (add/clear/reorder) — not on every
+  per-file progress tick, which still goes through the lighter
+  `patchFileCard` path.
+
 ## [1.1] — Device-Aware Performance, Local AI Engine, Settings Overhaul
 
 ### Added — Forked from CompressF
