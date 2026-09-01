@@ -58,3 +58,26 @@ export function progressTo(el: Element, pct: number) {
   if (reduced()) { (el as HTMLElement).style.width = `${pct}%`; return; }
   animate(el, { width: `${pct}%`, duration: 260, ease: 'outCubic' });
 }
+
+/** Pop a toast in with a slight overshoot — replaces the plain CSS @keyframes entrance. */
+export function toastIn(el: Element) {
+  if (reduced()) { (el as HTMLElement).style.opacity = '1'; return; }
+  animate(el, {
+    opacity: [0, 1],
+    translateY: [10, 0],
+    scale: [0.94, 1],
+    duration: 320,
+    ease: 'outBack(1.4)',
+  });
+}
+
+/** Fade+drop a toast out — resolves once the animation finishes so the caller can safely remove the element. */
+export function toastOut(el: Element): Promise<void> {
+  if (reduced()) { (el as HTMLElement).style.opacity = '0'; return Promise.resolve(); }
+  return animate(el, {
+    opacity: [1, 0],
+    translateY: [0, 8],
+    duration: 260,
+    ease: 'inQuad',
+  }).then(() => {});
+}
