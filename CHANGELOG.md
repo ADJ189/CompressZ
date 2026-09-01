@@ -2,7 +2,7 @@
 
 All notable changes to CompressZ are documented in this file.
 
-## [Unreleased]
+## [1.11]
 
 ### Fixed — Cloudflare Pages build failure
 
