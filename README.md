@@ -20,11 +20,8 @@ Nothing ever leaves your device.
 
 CompressZ compresses images, PDFs, video, audio, and GIFs; converts between video, audio, image, PDF, DOCX, and PPTX formats; and runs OCR on scanned PDFs — entirely inside your browser using WebAssembly, Canvas API, WebCodecs, and two neural OCR engines. No backend. No uploads. No tracking.
 
-CompressZ is forked from [CompressF](https://github.com/ADJ189/CompressF), ADJ's earlier browser-native
-compression tool. CompressF is still maintained as its own project and works fine on its own — think of it as
-CompressZ's sister site rather than a predecessor: CompressF stays leaner and format-focused, while CompressZ
-has grown into the broader multi-engine workspace (Convert, OCR, GPU acceleration, device-aware Performance
-Mode, and the local AI engine below). Pick whichever fits what you're doing.
+CompressZ is forked from [CompressF](https://github.com/ADJ189/CompressF). 
+CompressF is still maintained as its own project .
 
 ---
 
