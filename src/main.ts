@@ -53,14 +53,27 @@ window.addEventListener('resize', () => moveThumbTo(activeTabEl));
 // actually loaded so the thumb isn't measured against a fallback font.
 document.fonts?.ready.then(() => moveThumbTo(activeTabEl));
 
-// ── "More" dropdown (About / Docs / Privacy) ────────────────────
+// ── "More" dropdown (Privacy — About/Docs are now full tabs) ────
 const moreBtn  = document.getElementById('tab-more-btn')!;
-const moreMenu = document.getElementById('tab-more-menu')!;
-const MORE_ROUTES = ['about', 'docs', 'privacy'];
+const moreMenu = document.getElementById('tab-more-menu')! as HTMLElement;
+const MORE_ROUTES = ['privacy'];
 let moreOpen = false;
+
+// The menu is position:fixed (see style.css for why — .tabbar-scroll's
+// overflow-y:hidden was clipping it to invisible when it was
+// position:absolute inside that scrolling row). Fixed positioning means
+// WE now own placing it, computed from the button's real on-screen
+// position so it still lines up under "More" at any scroll offset or
+// viewport width.
+function positionMoreMenu() {
+  const r = moreBtn.getBoundingClientRect();
+  moreMenu.style.top = `${r.bottom + 6}px`;
+  moreMenu.style.right = `${window.innerWidth - r.right}px`;
+}
 
 function setMoreOpen(v: boolean) {
   moreOpen = v;
+  if (v) positionMoreMenu();
   moreMenu.classList.toggle('open', v);
   moreBtn.setAttribute('aria-expanded', String(v));
 }
@@ -68,6 +81,10 @@ moreBtn.addEventListener('click', e => { e.stopPropagation(); setMoreOpen(!moreO
 document.addEventListener('click', e => {
   if (moreOpen && !(e.target as Element).closest('#tab-more')) setMoreOpen(false);
 });
+document.addEventListener('keydown', e => {
+  if (moreOpen && e.key === 'Escape') { setMoreOpen(false); moreBtn.focus(); }
+});
+window.addEventListener('resize', () => { if (moreOpen) positionMoreMenu(); });
 
 // ── Nav active state ──────────────────────────────────────────
 function setActiveNav(route: string) {

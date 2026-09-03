@@ -214,7 +214,7 @@ img, svg { display: block; }
 }
 .app-logo {
   display: flex; align-items: center; gap: .55rem;
-  text-decoration: none;
+  text-decoration: none; cursor: pointer;
 }
 .app-logo-icon {
   width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0;
@@ -261,9 +261,18 @@ img, svg { display: block; }
 .tabbar-thumb {
   position: absolute; left: 0; bottom: 4px; height: 3px; width: 0;
   border-radius: 3px;
-  background: var(--accent);
+  background: linear-gradient(90deg, var(--accent), var(--violet), var(--accent));
+  background-size: 200% 100%;
+  box-shadow: 0 0 8px 1px var(--accent-glow);
   transition: transform var(--t3), width var(--t3);
+  animation: thumbGlow 2.4s ease-in-out infinite;
   pointer-events: none;
+}
+/* "Lighting" — a slow gradient sweep + breathing glow under the active
+   tab, so the indicator reads as lit rather than a flat static bar. */
+@keyframes thumbGlow {
+  0%, 100% { background-position: 0% 50%; box-shadow: 0 0 8px 1px var(--accent-glow); }
+  50%      { background-position: 100% 50%; box-shadow: 0 0 14px 3px var(--accent-glow); }
 }
 
 .tab-item {
@@ -271,11 +280,41 @@ img, svg { display: block; }
   padding: 0 .7rem; height: 32px; border-radius: var(--r);
   font-size: .82rem; font-weight: 500; white-space: nowrap;
   color: var(--text-3); text-decoration: none;
-  transition: var(--t2); position: relative;
+  transition: background var(--t2), color var(--t2), transform .12s var(--ease-fluid);
+  position: relative;
+  /* These are <a> tags carrying a real href now (see index.html) so the
+     browser treats them as genuine links — keyboard-focusable, "open in
+     new tab" works, and the cursor correctly shows a pointer. Explicit
+     cursor:pointer is kept anyway as a safety net for any future item
+     added without an href. Previously these had no href at all, which is
+     why the tab bar's mouse cursor never changed to a pointer and the
+     items weren't reachable by keyboard. */
+  cursor: pointer;
 }
 .tab-item:hover { background: var(--bg2); color: var(--text); }
+.tab-item:active { transform: scale(.94); }
+.tab-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .tab-item.active { color: var(--accent); }
 .tab-emoji { font-size: .92rem; line-height: 1; }
+/* Light-sweep on hover — a soft diagonal streak glides across the tab,
+   clipped to its own rounded box (overflow:hidden), so hovering along the
+   row reads as a little pulse of light rather than a flat color swap. */
+.tab-item { overflow: hidden; }
+.tab-item::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(115deg, transparent 40%, var(--accent-glow) 50%, transparent 60%);
+  background-size: 250% 100%; background-position: 150% 0;
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--t2);
+}
+.tab-item:hover::before {
+  opacity: 1;
+  animation: tabSweep .7s var(--ease-fluid);
+}
+@keyframes tabSweep {
+  from { background-position: 150% 0; }
+  to   { background-position: -50% 0; }
+}
 .tab-badge {
   padding: .1rem .38rem; border-radius: 100px;
   font-size: .6rem; font-weight: 700;
@@ -283,13 +322,26 @@ img, svg { display: block; }
   color: #fff; letter-spacing: .02em;
 }
 
-/* "More" dropdown (About / Docs / Privacy) */
+/* "More" dropdown (Privacy only now — About/Docs were promoted to
+   always-visible tabs like CompressF's flat nav, see index.html) */
 .tab-more { position: relative; flex-shrink: 0; }
 .tab-more-btn { background: none; border: none; font: inherit; cursor: pointer; }
 .tab-more-chevron { transition: transform var(--t2); color: var(--text-4); }
 .tab-more-btn[aria-expanded="true"] .tab-more-chevron { transform: rotate(180deg); }
+/* position: fixed, not absolute — its coordinates are set by JS
+   (main.ts positionMoreMenu(), using the button's getBoundingClientRect())
+   whenever it opens or the window resizes. It USED to be position:absolute
+   anchored to this <div>, which sits inside .tabbar-scroll — but that
+   element has overflow-y:hidden (needed so the row's horizontal drag-scroll
+   doesn't also scroll vertically), which silently clipped the dropdown to
+   zero visible height every time it opened. That's the "More tab doesn't
+   work" bug: the menu wasn't broken, it was invisible and un-hittable,
+   clipped by its own scrolling ancestor. Fixed positioning escapes that
+   ancestor's clipping box entirely, the same way the settings dialog
+   already does. The top/right values below are just an unopened-state
+   fallback; JS overwrites them the instant the menu opens. */
 .tab-more-menu {
-  position: absolute; top: calc(100% + 6px); right: 0; z-index: 310;
+  position: fixed; top: 90px; right: 12px; z-index: 310;
   min-width: 140px; padding: .35rem;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--r-lg); box-shadow: var(--shadow-lg);
@@ -303,9 +355,11 @@ img, svg { display: block; }
 .tab-more-item {
   display: block; padding: .5rem .65rem; border-radius: var(--r-sm);
   font-size: .84rem; font-weight: 500; color: var(--text-2);
-  text-decoration: none; transition: var(--t);
+  text-decoration: none; transition: background var(--t), color var(--t), transform .12s var(--ease-fluid);
+  cursor: pointer;
 }
 .tab-more-item:hover { background: var(--bg2); color: var(--text); }
+.tab-more-item:active { transform: scale(.96); }
 .tab-more-item.active { color: var(--accent); background: var(--accent-soft); }
 
 /* ── Dialog (Settings) ───────────────────────────────────────
@@ -455,7 +509,7 @@ img, svg { display: block; }
 }
 .htc {
   background: var(--surface); padding: 1.5rem;
-  cursor: pointer; transition: var(--t2); position: relative; overflow: hidden;
+  cursor: pointer; transition: var(--t2), transform .12s var(--ease-fluid); position: relative; overflow: hidden;
 }
 .htc::after {
   content: ''; position: absolute; inset: 0;
@@ -465,6 +519,7 @@ img, svg { display: block; }
 .htc:hover { background: var(--bg); }
 .htc:hover::after { opacity: 1; }
 .htc:hover .htc-arrow { transform: translate(3px,-3px); opacity: 1; }
+.htc:active { transform: scale(.98); }
 .htc-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: .85rem; }
 .htc-icon {
   width: 40px; height: 40px; border-radius: var(--r);
@@ -877,26 +932,29 @@ input[type="range"].slider::-webkit-slider-thumb:hover {
   background: linear-gradient(135deg, var(--accent), var(--violet));
   color: #fff; border-radius: var(--r);
   font-family: var(--mono-btn); font-size: .87rem; font-weight: 600; cursor: pointer;
-  transition: var(--t2); box-shadow: var(--shadow-acc);
+  transition: var(--t2), transform .12s var(--ease-fluid); box-shadow: var(--shadow-acc);
 }
 .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 35px rgba(91,95,199,.38); }
+.btn-primary:active { transform: scale(.96); }
 .btn-ghost {
   display: inline-flex; align-items: center; gap: .45rem;
   padding: .6rem 1.35rem;
   background: var(--surface); color: var(--text-2);
   border: 1.5px solid var(--border-mid);
   border-radius: var(--r); font-size: .9rem; font-weight: 600;
-  cursor: pointer; transition: var(--t2);
+  cursor: pointer; transition: var(--t2), transform .12s var(--ease-fluid);
 }
 .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+.btn-ghost:active { transform: scale(.96); }
 .btn-white {
   display: inline-flex; align-items: center; gap: .45rem;
   padding: .6rem 1.35rem;
   background: #fff; color: var(--accent);
   border-radius: var(--r); font-size: .9rem; font-weight: 700;
-  cursor: pointer; transition: var(--t2); box-shadow: 0 4px 14px rgba(0,0,0,.12);
+  cursor: pointer; transition: var(--t2), transform .12s var(--ease-fluid); box-shadow: 0 4px 14px rgba(0,0,0,.12);
 }
 .btn-white:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+.btn-white:active { transform: scale(.96); }
 .btn-white-ghost {
   display: inline-flex; align-items: center; gap: .45rem;
   padding: .6rem 1.35rem;
@@ -975,7 +1033,15 @@ input[type="range"].slider::-webkit-slider-thumb:hover {
   min-width: 0;
   position: sticky;
   top: 1.25rem;
-  max-height: calc(100vh - 2.5rem);
+  /* Stale from before the horizontal-tab redesign: this used to be
+     calc(100vh - 2.5rem), sized against the whole viewport. Since the
+     fixed header (--header-h) + tab bar (--tabbar-h) now eat 98px off
+     the top before .main-panel's own scroll area even starts, that old
+     value was ~98px taller than the space actually visible inside the
+     scroll container the sticky panel lives in — so on shorter viewports
+     the bottom of the engine picker could render below the fold with no
+     way to scroll it into view. Subtracting both bars fixes it. */
+  max-height: calc(100dvh - var(--header-h) - var(--tabbar-h) - 2.5rem);
   overflow-y: auto;
   scrollbar-width: thin;
 }
