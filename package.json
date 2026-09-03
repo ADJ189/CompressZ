@@ -1,7 +1,7 @@
 {
   "name": "compressz",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.12.0-b1",
   "type": "module",
   "scripts": {
     "dev": "vite dev",

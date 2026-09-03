@@ -2,7 +2,54 @@
 
 All notable changes to CompressZ are documented in this file.
 
-## [1.11]
+**Versioning:** `1.MM.P` (major.minor.patch). Unreleased/in-progress builds
+carry an `-a`/`-b` prerelease suffix (`-a` = early/alpha, `-b` = beta,
+close to ready) with a trailing counter, e.g. `1.12.0-b1`, `1.12.0-b2`.
+The suffix is dropped on the release that ships it (`1.12.0`). Current
+released version: **1.11.0**.
+
+## [1.12.0-b1] — Unreleased
+
+### Fixed — Horizontal tab bar regressions from the sidebar→tab-bar redesign
+
+- **"More" dropdown was unusable**: `#tab-more-menu` was `position: absolute`
+  nested inside `.tabbar-scroll`, which has `overflow-y: hidden` (needed so
+  the row's horizontal drag-scroll doesn't also scroll vertically). That
+  silently clipped the dropdown to zero visible height every time it
+  opened — it wasn't broken, it was invisible and un-clickable, clipped by
+  its own scrolling ancestor. Menu is now `position: fixed`, positioned by
+  JS (`positionMoreMenu()` in `main.ts`, via `getBoundingClientRect()`) so
+  it escapes that ancestor's clip box entirely.
+- **Tab items didn't look or act clickable**: every `<a data-nav>` in the
+  tab bar (and the header logo) had no `href` attribute, so browsers gave
+  them the default non-interactive cursor instead of a pointer, and they
+  weren't keyboard-focusable or middle-click/"open in new tab"-able. All
+  of them now carry a real `href` alongside `data-nav`; the router still
+  intercepts the click for client-side navigation.
+- **OCR page's side panel could render off-screen**: `.ocr-side`'s
+  `max-height: calc(100vh - 2.5rem)` was sized against the whole viewport,
+  left over from before the redesign. The fixed header + tab bar now eat
+  `var(--header-h) + var(--tabbar-h)` (98px) off the top before the
+  scrollable content area even starts, so on shorter viewports the bottom
+  of the engine picker could sit below the fold. Now subtracts both.
+
+### Changed — About/Docs promoted out of "More"
+
+- Ported CompressF's flat nav structure: About and Docs are now
+  always-visible tabs in the main row instead of hidden behind the (now
+  also just-fixed) "More" menu, matching how CompressF surfaces them
+  directly. "More" now holds Privacy only. (Content itself wasn't ported
+  from CompressF — CompressZ's About/Docs already cover its own broader
+  feature set in more depth; this was about visibility, not text.)
+
+### Added — Lighting animation + snappier press feedback on the tab bar
+
+- The active-tab indicator now has a slow animated gradient sweep and a
+  breathing glow (`thumbGlow`) instead of a flat static bar.
+- Hovering a tab plays a quick diagonal light-sweep across it (`tabSweep`).
+- Added a fast (120ms), smooth scale-down `:active` press state to tab
+  items, the "More" menu items, `.htc` home tool cards, and the
+  `.btn-primary`/`.btn-ghost`/`.btn-white` buttons.
 
 ### Fixed — Cloudflare Pages build failure
 
@@ -53,7 +100,7 @@ All notable changes to CompressZ are documented in this file.
   per-file progress tick, which still goes through the lighter
   `patchFileCard` path.
 
-## [1.1] — Device-Aware Performance, Local AI Engine, Settings Overhaul
+## [1.11.0] — Device-Aware Performance, Local AI Engine, Settings Overhaul
 
 ### Added — Forked from CompressF
 

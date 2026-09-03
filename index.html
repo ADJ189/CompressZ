@@ -60,7 +60,7 @@
      replaced the old vertical sidebar so wide/short viewports (and
      mobile) get more usable width back. ─────────────────────────── -->
 <header class="app-header">
-  <a class="app-logo" data-nav="">
+  <a class="app-logo" href="/" data-nav="">
     <div class="app-logo-icon"><svg width="26" height="26" viewBox="0 0 32 32"><use href="#icon-logo"/></svg></div>
     <span class="app-logo-text">CompressZ</span>
   </a>
@@ -81,44 +81,59 @@
 
 <!-- ── Horizontal tab bar — replaces the old vertical sidebar.
      One scrollable row; a sliding thumb (JS-driven, see main.ts)
-     tracks the active tab with the fluid easing curve. "More"
-     is a small dropdown for About/Docs/Privacy so the row doesn't
-     grow past what fits in low-height/narrow viewports. ──────── -->
+     tracks the active tab with the fluid easing curve. Every item
+     below is a REAL link now (real href, not just data-nav) — this
+     fixes the "mouse doesn't recognize it as a button" bug: an <a>
+     with no href gets the browser's default (non-pointer) cursor and
+     isn't keyboard-focusable, which is exactly what these looked like
+     before. The router's click handler still intercepts these clicks
+     and does a client-side navigation (see router.ts) — the href is
+     just what makes the browser treat them as real, focusable links
+     in the meantime (middle-click / "open in new tab" / cursor now
+     work as expected). About and Docs are promoted into the main row
+     here (ported from CompressF's flat nav, which shows them directly
+     instead of behind a menu); "More" now only holds Privacy. ──────── -->
 <nav class="tabbar" id="tabbar">
   <div class="tabbar-scroll" id="tabbar-scroll">
     <span class="tabbar-thumb" id="tabbar-thumb" aria-hidden="true"></span>
 
-    <a class="tab-item" data-nav="" data-tab>
+    <a class="tab-item" href="/" data-nav="" data-tab>
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
       <span>Home</span>
     </a>
-    <a class="tab-item" data-nav="compress/images" data-tab>
+    <a class="tab-item" href="/compress/images" data-nav="compress/images" data-tab>
       <span class="tab-emoji">🖼️</span><span>Images</span>
     </a>
-    <a class="tab-item" data-nav="compress/pdf" data-tab>
+    <a class="tab-item" href="/compress/pdf" data-nav="compress/pdf" data-tab>
       <span class="tab-emoji">📄</span><span>PDF</span>
     </a>
-    <a class="tab-item" data-nav="compress/merge-pdf" data-tab>
+    <a class="tab-item" href="/compress/merge-pdf" data-nav="compress/merge-pdf" data-tab>
       <span class="tab-emoji">🧷</span><span>Merge PDF</span>
     </a>
-    <a class="tab-item" data-nav="compress/images-to-pdf" data-tab>
+    <a class="tab-item" href="/compress/images-to-pdf" data-nav="compress/images-to-pdf" data-tab>
       <span class="tab-emoji">🧩</span><span>Images → PDF</span>
     </a>
-    <a class="tab-item" data-nav="compress/video" data-tab>
+    <a class="tab-item" href="/compress/video" data-nav="compress/video" data-tab>
       <span class="tab-emoji">🎬</span><span>Video</span>
     </a>
-    <a class="tab-item" data-nav="compress/audio" data-tab>
+    <a class="tab-item" href="/compress/audio" data-nav="compress/audio" data-tab>
       <span class="tab-emoji">🎵</span><span>Audio</span>
     </a>
-    <a class="tab-item" data-nav="compress/gif" data-tab>
+    <a class="tab-item" href="/compress/gif" data-nav="compress/gif" data-tab>
       <span class="tab-emoji">🎞️</span><span>GIF</span>
     </a>
-    <a class="tab-item" data-nav="compress/ocr" data-tab>
+    <a class="tab-item" href="/compress/ocr" data-nav="compress/ocr" data-tab>
       <span class="tab-emoji">🔍</span><span>PDF OCR</span>
     </a>
-    <a class="tab-item" data-nav="convert" data-tab>
+    <a class="tab-item" href="/convert" data-nav="convert" data-tab>
       <span class="tab-emoji">🔁</span><span>Convert</span>
       <span class="tab-badge">New</span>
+    </a>
+    <a class="tab-item" href="/about" data-nav="about" data-tab>
+      <span class="tab-emoji">ℹ️</span><span>About</span>
+    </a>
+    <a class="tab-item" href="/docs" data-nav="docs" data-tab>
+      <span class="tab-emoji">📖</span><span>Docs</span>
     </a>
 
     <div class="tab-more" id="tab-more">
@@ -128,11 +143,10 @@
         <svg class="tab-more-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       <div class="tab-more-menu" id="tab-more-menu" role="menu">
-        <a class="tab-more-item" data-nav="about" data-tab role="menuitem">About</a>
-        <a class="tab-more-item" data-nav="docs" data-tab role="menuitem">Docs</a>
-        <a class="tab-more-item" data-nav="privacy" data-tab role="menuitem">Privacy</a>
+        <a class="tab-more-item" href="/privacy" data-nav="privacy" data-tab role="menuitem">Privacy</a>
       </div>
     </div>
+
   </div>
 </nav>
 
