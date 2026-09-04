@@ -5,10 +5,11 @@ All notable changes to CompressZ are documented in this file.
 **Versioning:** `1.MM.P` (major.minor.patch). Unreleased/in-progress builds
 carry an `-a`/`-b` prerelease suffix (`-a` = early/alpha, `-b` = beta,
 close to ready) with a trailing counter, e.g. `1.12.0-b1`, `1.12.0-b2`.
-The suffix is dropped on the release that ships it (`1.12.0`). Current
-released version: **1.11.0**.
+The suffix is dropped on the release that ships it (`1.12.0`).
 
-### Fixed — Accessibility (Lighthouse CI was failing at 0.86, needed ≥0.90)
+
+
+### [1.12.5] Fixed — Accessibility (Lighthouse CI was failing at 0.86, needed ≥0.90)
 
 All three failures only showed up at the mobile viewport Lighthouse CI
 tests by default (≤768px), where the tab bar switches to icon-only:
@@ -39,7 +40,7 @@ to start listening" warning even though it didn't end up blocking that
 particular run, which is exactly the kind of intermittent failure a
 slower/colder CI runner would hit for real.
 
-## [1.12.0-b1] — Unreleased
+## [1.12.0] 
 
 ### Fixed — Horizontal tab bar regressions from the sidebar→tab-bar redesign
 
