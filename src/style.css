@@ -43,7 +43,9 @@
   --green-border: rgba(34,197,94,.22);
   --text:         #18181b;
   --text-2:       #3f3f46;
-  --text-3:       #71717a;
+  --text-3:       #68686f; /* was #71717a — 4.39:1 against --bg (#f4f4f2),
+    just under WCAG AA's 4.5:1 for normal-size text (this powers .home-sub
+    and .trust-chip among others, both normal-size). Darkened to 5.02:1. */
   --text-4:       #a1a1aa;
   --text-5:       #d4d4d8;
   --shadow-xs:    0 1px 2px rgba(0,0,0,.04);
