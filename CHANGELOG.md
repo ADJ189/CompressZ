@@ -8,6 +8,37 @@ close to ready) with a trailing counter, e.g. `1.12.0-b1`, `1.12.0-b2`.
 The suffix is dropped on the release that ships it (`1.12.0`). Current
 released version: **1.11.0**.
 
+### Fixed — Accessibility (Lighthouse CI was failing at 0.86, needed ≥0.90)
+
+All three failures only showed up at the mobile viewport Lighthouse CI
+tests by default (≤768px), where the tab bar switches to icon-only:
+
+- **`button-name`**: the "More" button's only text ("More") is hidden by
+  `.tab-more-btn span:last-of-type { display: none }` below 768px,
+  leaving two bare icon `<svg>`s with no accessible name. Added a static
+  `aria-label="More"`.
+- **`link-name`**: same story for the header logo (`.app-logo-text`
+  hidden below 768px, icon-only) and the Home tab (its icon is a bare
+  inline `<svg>` with no `.tab-emoji` fallback, and its text span is
+  hidden by the same breakpoint rule that hides every other tab's label).
+  Added an explicit `aria-label` to every tab item and to the logo link,
+  matching its visible text — this also stops relying on an emoji
+  character alone as the accessible name for the other tabs, which is
+  inconsistent across screen readers.
+- **`color-contrast`**: `.home-sub` and `.trust-chip` both use
+  `--text-3`, which was `#71717a` against the light theme's `--bg`
+  (`#f4f4f2`) — 4.39:1, just under the 4.5:1 WCAG AA minimum for
+  normal-size text. Darkened to `#68686f` (5.02:1). Dark theme's
+  `--text-3` (`#a1a1aa`) was already comfortably compliant (7.6:1).
+
+Verified locally with `npx lighthouse` against the production build —
+accessibility score is now 1.00 with zero failing audits (mobile and
+desktop). Also bumped `lighthouserc.json`'s `startServerReadyTimeout`
+from 20s to 60s — the CI log showed a "Timed out waiting for the server
+to start listening" warning even though it didn't end up blocking that
+particular run, which is exactly the kind of intermittent failure a
+slower/colder CI runner would hit for real.
+
 ## [1.12.0-b1] — Unreleased
 
 ### Fixed — Horizontal tab bar regressions from the sidebar→tab-bar redesign
