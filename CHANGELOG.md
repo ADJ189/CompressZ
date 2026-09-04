@@ -9,7 +9,7 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 
 
 
-### [1.12.5] Fixed — Accessibility (Lighthouse CI was failing at 0.86, needed ≥0.90)
+### [1.12.5] - Fixed — Accessibility (Lighthouse CI was failing at 0.86, needed ≥0.90)
 
 All three failures only showed up at the mobile viewport Lighthouse CI
 tests by default (≤768px), where the tab bar switches to icon-only:
