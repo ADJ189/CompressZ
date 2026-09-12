@@ -22,10 +22,13 @@ let _ctx: WebGL2RenderingContext | null | undefined; // undefined = not yet atte
 export function getSharedWebGL2Context(): WebGL2RenderingContext | null {
   if (_ctx !== undefined) return _ctx;
   try {
-    const canvas = typeof OffscreenCanvas !== 'undefined'
-      ? new OffscreenCanvas(1, 1)
-      : document.createElement('canvas');
-    _ctx = ((canvas as any).getContext('webgl2') as WebGL2RenderingContext | null) ?? null;
+    const canvas =
+      typeof OffscreenCanvas !== "undefined"
+        ? new OffscreenCanvas(1, 1)
+        : document.createElement("canvas");
+    _ctx =
+      ((canvas as any).getContext("webgl2") as WebGL2RenderingContext | null) ??
+      null;
   } catch {
     _ctx = null;
   }
