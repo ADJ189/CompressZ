@@ -209,23 +209,6 @@ npm run preview    # serve dist/ locally
 npm run typecheck  # TypeScript check
 ```
 
----
-
-## Cloudflare Pages Deployment
-
-**Dashboard settings** (no other config needed — `wrangler.json` is intentionally absent):
-
-| Setting | Value |
-|---------|-------|
-| Framework preset | Vite |
-| Build command | `npm run build` |
-| Build output directory | `dist` |
-| Environment variable | `NODE_VERSION` = `20` |
-
-The `public/_headers` file sets COOP/COEP automatically, enabling SharedArrayBuffer for multithreaded FFmpeg.
-
----
-
 ## Browser Compatibility
 
 | Feature | Chrome | Firefox | Safari | Edge |
