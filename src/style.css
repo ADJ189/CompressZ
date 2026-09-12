@@ -674,6 +674,13 @@ img, svg { display: block; }
 .edit-banner {
   display: flex; align-items: center; justify-content: space-between;
   gap: .8rem; flex-wrap: wrap;
+  /* Plain-color fallback for browsers without color-mix() support
+     (Safari <16.4, Firefox <113) — an invalid color-mix() value makes the
+     whole declaration a no-op, not a graceful degrade, so without this the
+     banner would render with no background/border at all. The color-mix()
+     line below overrides it wherever it's supported. */
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
   border-radius: 8px; padding: .6rem .8rem; margin-bottom: .8rem;
@@ -797,6 +804,7 @@ input[type="range"].slider::-webkit-slider-thumb:hover {
 }
 .dz.drag-active {
   border-color: var(--accent);
+  background: var(--accent-soft); /* color-mix() fallback, see .edit-banner note above */
   background: color-mix(in srgb, var(--accent-soft) 80%, transparent);
   box-shadow: 0 0 0 3px var(--accent-glow), var(--shadow-md);
   transform: scale(1.005);
@@ -853,7 +861,7 @@ input[type="range"].slider::-webkit-slider-thumb:hover {
 }
 .file-card:hover { box-shadow: var(--shadow-sm); }
 @keyframes cardIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
-.file-card.is-done        { border-color: var(--green-border); background: color-mix(in srgb, var(--green-soft) 40%, var(--surface)); }
+.file-card.is-done        { border-color: var(--green-border); background: var(--green-soft); background: color-mix(in srgb, var(--green-soft) 40%, var(--surface)); }
 .file-card.is-error       { border-color: rgba(244,63,94,.22); }
 .file-card.is-compressing { border-color: rgba(91,95,199,.18); }
 .fc-ico  { font-size: 1.3rem; flex-shrink: 0; }
