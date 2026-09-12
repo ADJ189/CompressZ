@@ -28,18 +28,9 @@
  * no-op; see settings.ts's GPU_CAPABLE list.
  */
 import { getSettings, type GpuSettings } from './settings';
+import { hasWebGL2 } from './webgl';
 
-let _webgl2: boolean | null = null;
-export function hasWebGL2(): boolean {
-  if (_webgl2 !== null) return _webgl2;
-  try {
-    const c = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas');
-    _webgl2 = !!((c as any).getContext('webgl2'));
-  } catch {
-    _webgl2 = false;
-  }
-  return _webgl2;
-}
+export { hasWebGL2 };
 
 export function hasOffscreenCanvas(): boolean {
   return typeof OffscreenCanvas !== 'undefined';
