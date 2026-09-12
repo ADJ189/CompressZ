@@ -1,7 +1,7 @@
 {
   "name": "compressz",
   "private": true,
-  "version": "1.12.0-b1",
+  "version": "1.12.6",
   "type": "module",
   "scripts": {
     "dev": "vite dev",
@@ -28,7 +28,7 @@
     "tmp": "^0.2.7",
     "uuid": "^14.0.2",
     "@puppeteer/browsers": "^3.2.1",
-    "adm-zip": "^0.6.0",
+    "adm-zip": "^0.6.1",
     "sharp": "^0.35.3"
   }
 }
