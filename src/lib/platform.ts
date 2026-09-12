@@ -15,6 +15,8 @@
  * (cached in module scope) — no network calls, nothing sent anywhere.
  */
 
+import { getSharedWebGL2Context } from './webgl';
+
 export type DeviceClass = 'mobile' | 'tablet' | 'desktop';
 export type OSFamily = 'iOS' | 'Android' | 'Windows' | 'macOS' | 'Linux' | 'ChromeOS' | 'Unknown';
 export type BrowserEngine = 'Blink' | 'WebKit' | 'Gecko' | 'Unknown';
@@ -66,17 +68,36 @@ function detectEngine(ua: string): BrowserEngine {
 }
 
 function detectDeviceClass(os: OSFamily, ua: string): DeviceClass {
+  // Chromium's User-Agent Client Hints report `mobile` as a real boolean
+  // flag rather than a UA-string keyword, so it survives both "Request
+  // Desktop Site" (which strips the `Mobile` token from the UA string but
+  // leaves this flag alone) and Chrome's ongoing UA-string reduction. Only
+  // trust it when present; Safari/Firefox don't implement it, so they fall
+  // through to the UA-text heuristic below same as always.
+  const uaData = (navigator as any).userAgentData;
+  if (uaData && typeof uaData.mobile === 'boolean') {
+    if (uaData.mobile) return 'mobile';
+    // uaData.mobile === false still needs the tablet/desktop split below —
+    // client hints don't distinguish those — so fall through rather than
+    // returning 'desktop' outright (would misclassify an Android tablet
+    // or a phone in desktop-site mode as 'desktop').
+  }
   const isTablet = /iPad/.test(ua) || (os === 'Android' && !/Mobile/.test(ua));
   if (isTablet) return 'tablet';
-  const isMobile = os === 'iOS' || (os === 'Android' && /Mobile/.test(ua));
+  const isMobile = (uaData?.mobile ?? (os === 'iOS' || (os === 'Android' && /Mobile/.test(ua))));
   if (isMobile) return 'mobile';
   return 'desktop';
 }
 
 function detectGpuRenderer(): { renderer: string | null; webgl2: boolean } {
   try {
-    const canvas = document.createElement('canvas');
-    const gl = (canvas.getContext('webgl2') as WebGL2RenderingContext | null);
+    // Reuse the single cached WebGL2 context gpu.ts already creates for
+    // its own feature check, instead of spinning up a second throwaway
+    // context here — Safari in particular caps the number of live WebGL
+    // contexts a page may hold (historically as low as 8–16), and every
+    // context this module and gpu.ts each created independently at
+    // startup counted against that budget for no benefit.
+    const gl = getSharedWebGL2Context();
     if (!gl) return { renderer: null, webgl2: false };
     const ext = gl.getExtension('WEBGL_debug_renderer_info');
     const renderer = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : null;
@@ -92,7 +113,17 @@ function computeTier(p: Omit<PlatformInfo, 'tier'>): PerformanceTier {
   // request lands 'efficient' rather than being over-trusted.
   let score = 0;
   if (p.cores >= 8) score += 2; else if (p.cores >= 4) score += 1;
-  if (p.memoryGB === null) score += 1; // unknown (often desktop Safari/Firefox) — don't penalise
+  if (p.memoryGB === null) {
+    // deviceMemory is Chromium-only, so "unknown" mostly means desktop
+    // Safari/Firefox — genuinely fine to not penalise. But it *also* means
+    // mobile Safari/Firefox (iOS lacks this API on every engine, since
+    // WebKit backs all iOS browsers), and those phones are a different
+    // population from a desktop machine — treating an unknown-memory
+    // phone the same as an unknown-memory desktop was inflating iPhones
+    // into 'balanced'/'powerful' tiers they can't actually sustain for
+    // the heavier GPU/video presets those tiers turn on.
+    score += p.deviceClass === 'desktop' ? 1 : 0;
+  }
   else if (p.memoryGB >= 8) score += 2; else if (p.memoryGB >= 4) score += 1;
   if (p.webgl2) score += 1;
   if (p.webgpu) score += 1;
