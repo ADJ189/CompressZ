@@ -578,7 +578,21 @@ export function mountOcr(root: HTMLElement): void {
   }
   function downloadPdf(e:OcrEntry){ if(e.result) dlBlob(e.result.pdf, e.file.name.replace(/\.pdf$/i,'')+'_searchable.pdf'); }
   function downloadTxt(e:OcrEntry){ if(e.result?.text) dlBlob(new Blob([e.result.text],{type:'text/plain'}), e.file.name.replace(/\.pdf$/i,'')+'_ocr.txt'); }
-  function processAll() { files.forEach(f=>{ if(f.status==='idle'||f.status==='error') processEntry(f); }); }
+  // BUG FIX (v1.12.7): this used to fire every queued file's processEntry()
+  // from inside .forEach() without awaiting — the same "fire every job at
+  // once" bug already fixed on Convert/Video/Audio/GIF's queues, but missed
+  // here. OCR is the heaviest engine in the app (PDF rendering + a full
+  // PaddleOCR-VL or Tesseract.js worker per file), so running a whole batch
+  // concurrently is what "engine gets overwhelmed and breaks" was actually
+  // describing: N pdf.js render passes and N OCR worker/model instances all
+  // competing for the same WASM heap and GPU/CPU budget at once, rather than
+  // a single ffmpeg-style file-corruption race. Process the queue one file
+  // at a time instead.
+  async function processAll() {
+    for (const f of files) {
+      if (f.status === 'idle' || f.status === 'error') await processEntry(f);
+    }
+  }
   function downloadAll() { files.filter(f=>f.status==='done').forEach(downloadPdf); }
   function clearAll()    { files=[]; render(); }
 

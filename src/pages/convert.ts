@@ -108,6 +108,13 @@ export function mountConvert(root: HTMLElement): void {
   // normal per-file card list, since it's a many-files → one-file operation.
   let combineFiles: File[] = [];
   let combineBusy = false;
+  // BUG FIX (v1.12.7): imagesToPdf() already reports real per-image percentage
+  // via its onProgress callback (see lib/imagesToPdf.ts), and the standalone
+  // Images→PDF tool page displays it — but this call site was discarding the
+  // number and just re-rendering, so combining a batch showed a static
+  // "Combining…" label with no visible progress the whole time. Track it the
+  // same way that page does.
+  let combineProgress = 0;
 
   function setCategory(c: Category) {
     category = c;
@@ -216,9 +223,9 @@ export function mountConvert(root: HTMLElement): void {
 
   async function combineToPdf() {
     if (combineFiles.length < 1) { toast('Add at least one image first', 'error'); return; }
-    combineBusy = true; render();
+    combineBusy = true; combineProgress = 0; render();
     try {
-      const blob = await imagesToPdf(combineFiles, {}, () => render());
+      const blob = await imagesToPdf(combineFiles, {}, p => { combineProgress = p; render(); });
       dlBlob(blob, 'combined.pdf');
       toast(`Combined ${combineFiles.length} images into one PDF`, '');
     } catch (e: any) {
@@ -341,12 +348,13 @@ export function mountConvert(root: HTMLElement): void {
     combineArea.style.display = 'block';
     combineArea.innerHTML = `
       <div class="batch-bar" style="display:flex">
-        <span class="batch-info">${combineFiles.length} image${combineFiles.length !== 1 ? 's' : ''} selected</span>
+        <span class="batch-info">${combineBusy ? `Combining… ${combineProgress}%` : `${combineFiles.length} image${combineFiles.length !== 1 ? 's' : ''} selected`}</span>
         <button class="btn-sm btn-run" id="combine-btn" ${combineFiles.length < 1 || combineBusy ? 'disabled' : ''}>
           ${combineBusy ? 'Combining…' : 'Combine into PDF'}
         </button>
-        <button class="btn-sm btn-clr" id="combine-clear" ${combineFiles.length < 1 ? 'disabled' : ''}>Clear</button>
+        <button class="btn-sm btn-clr" id="combine-clear" ${combineFiles.length < 1 || combineBusy ? 'disabled' : ''}>Clear</button>
       </div>
+      ${combineBusy ? `<div class="fc-progress"><div class="fc-progress-fill" style="width:${combineProgress}%"></div></div>` : ''}
       <div class="file-list">
         ${combineFiles.map((f, i) => `
           <div class="file-card">
@@ -356,9 +364,9 @@ export function mountConvert(root: HTMLElement): void {
               <div class="fc-meta"><span>${formatBytes(f.size)}</span></div>
             </div>
             <div class="fc-actions">
-              <button class="fc-btn icon" data-up="${i}" aria-label="Move up" ${i === 0 ? 'disabled' : ''}>↑</button>
-              <button class="fc-btn icon" data-down="${i}" aria-label="Move down" ${i === combineFiles.length - 1 ? 'disabled' : ''}>↓</button>
-              <button class="fc-btn icon" data-rm="${i}" aria-label="Remove">✕</button>
+              <button class="fc-btn icon" data-up="${i}" aria-label="Move up" ${i === 0 || combineBusy ? 'disabled' : ''}>↑</button>
+              <button class="fc-btn icon" data-down="${i}" aria-label="Move down" ${i === combineFiles.length - 1 || combineBusy ? 'disabled' : ''}>↓</button>
+              <button class="fc-btn icon" data-rm="${i}" aria-label="Remove" ${combineBusy ? 'disabled' : ''}>✕</button>
             </div>
           </div>`).join('')}
       </div>`;
