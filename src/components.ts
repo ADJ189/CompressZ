@@ -1,5 +1,6 @@
 import { formatBytes } from './lib/types';
 import type { FileEntry } from './lib/types';
+import { mountThumbnail } from './lib/thumb';
 
 // ── DropZone ──────────────────────────────────────────────────
 export function createDropZone(opts: {
@@ -135,6 +136,8 @@ export function renderFileCard(entry: FileEntry, cbs: FileCardCallbacks): HTMLEl
   el.querySelector('[data-action="download"]')?.addEventListener('click', () => cbs.onDownload(entry));
   el.querySelector('[data-action="remove"]')?.addEventListener('click',   () => cbs.onRemove(entry.id));
   el.querySelector('[data-action="edit"]')?.addEventListener('click',     () => cbs.onEdit?.(entry));
+
+  mountThumbnail(el.querySelector('.fc-ico')!, entry.file, icon);
 
   return el;
 }

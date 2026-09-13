@@ -232,12 +232,33 @@ img, svg { display: block; }
 }
 .app-header-actions { display: flex; align-items: center; gap: .5rem; }
 .hdr-btn {
-  width: 34px; height: 34px; border-radius: 999px; flex-shrink: 0;
+  width: 38px; height: 38px; border-radius: 999px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
   background: var(--bg2); border: 1px solid var(--border);
   color: var(--text-3); transition: var(--t2);
 }
 .hdr-btn:hover { color: var(--text); border-color: var(--border-mid); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.hdr-btn svg { width: 17px; height: 17px; }
+/* Settings is the one header button that opens a whole page of controls
+   (not a one-tap toggle like theme, not an external link like GitHub) —
+   sized and coloured up a step so it reads as the more substantial,
+   easier-to-hit target it needs to be, instead of blending into the row. */
+#settings-btn {
+  width: 42px; height: 42px;
+  background: rgba(91,95,199,.12);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg2));
+  border-color: rgba(91,95,199,.3);
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  color: var(--accent);
+}
+#settings-btn svg { width: 19px; height: 19px; }
+#settings-btn:hover {
+  color: var(--accent);
+  background: rgba(91,95,199,.2);
+  background: color-mix(in srgb, var(--accent) 20%, var(--bg2));
+  border-color: rgba(91,95,199,.45);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
 
 /* ── Horizontal tab bar ───────────────────────────────────── */
 .tabbar {
@@ -428,6 +449,29 @@ img, svg { display: block; }
   link meant for full-page use; hidden here since the dialog's own close
   button covers that job. */
 .dialog-body .tool-wrap { padding: 0; }
+
+/* ── Tools dialog — categorized grid, big tap targets ───────── */
+.tools-dialog { width: min(640px, calc(100vw - 2rem)); }
+.tools-cat-label {
+  font-family: var(--feature); font-size: .72rem; font-weight: 700;
+  letter-spacing: .04em; text-transform: uppercase; color: var(--text-4);
+  margin: 1.1rem 0 .5rem;
+}
+.tools-cat-label:first-child { margin-top: 0; }
+.tools-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .55rem; }
+.tgc {
+  display: flex; align-items: center; gap: .7rem;
+  padding: .7rem .8rem; border-radius: var(--r-lg);
+  background: var(--bg2); border: 1px solid var(--border);
+  text-decoration: none; color: inherit; cursor: pointer;
+  transition: var(--t2);
+}
+.tgc:hover { border-color: var(--accent); background: var(--surface); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.tgc-icon { font-size: 1.5rem; flex-shrink: 0; }
+.tgc-text { display: flex; flex-direction: column; min-width: 0; }
+.tgc-name { font-size: .88rem; font-weight: 700; }
+.tgc-desc { font-size: .72rem; color: var(--text-4); font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 480px) { .tools-grid { grid-template-columns: 1fr; } }
 
 /* ── Main panel ───────────────────────────────────────────── */
 .main-panel {
@@ -883,7 +927,14 @@ input[type="range"].slider::-webkit-slider-thumb:hover {
 .file-card.is-done        { border-color: var(--green-border); background: var(--green-soft); background: color-mix(in srgb, var(--green-soft) 40%, var(--surface)); }
 .file-card.is-error       { border-color: rgba(244,63,94,.22); }
 .file-card.is-compressing { border-color: rgba(91,95,199,.18); }
-.fc-ico  { font-size: 1.3rem; flex-shrink: 0; }
+.fc-ico  {
+  font-size: 1.3rem; flex-shrink: 0;
+  width: 2.4rem; height: 2.4rem; border-radius: var(--r-md);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden; background: var(--surface-2, #f2f2f5);
+  background: color-mix(in srgb, var(--text-5) 8%, transparent);
+}
+.fc-thumb-img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .fc-info { flex: 1; min-width: 0; }
 .fc-name { font-size: .85rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fc-meta {

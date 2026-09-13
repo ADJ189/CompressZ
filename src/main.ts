@@ -146,6 +146,41 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && !settingsDialog.hidden) closeSettings();
 });
 
+// ── Tools dialog ────────────────────────────────────────────
+// Pure static markup (see index.html) — no mounting step needed, just
+// show/hide like the Settings dialog, plus auto-close the moment a tool
+// link inside it is actually clicked (the router's own delegated
+// listener handles the navigation itself).
+const toolsBtn     = document.getElementById('tools-btn')!;
+const toolsOverlay = document.getElementById('tools-dialog-overlay')!;
+const toolsDialog  = document.getElementById('tools-dialog')!;
+const toolsClose   = document.getElementById('tools-dialog-close')!;
+
+function openTools() {
+  toolsOverlay.hidden = false;
+  toolsDialog.hidden = false;
+  requestAnimationFrame(() => {
+    toolsOverlay.classList.add('open');
+    toolsDialog.classList.add('open');
+  });
+  document.body.style.overflow = 'hidden';
+}
+function closeTools() {
+  toolsOverlay.classList.remove('open');
+  toolsDialog.classList.remove('open');
+  document.body.style.overflow = '';
+  setTimeout(() => { toolsOverlay.hidden = true; toolsDialog.hidden = true; }, 380);
+}
+toolsBtn.addEventListener('click', openTools);
+toolsClose.addEventListener('click', closeTools);
+toolsOverlay.addEventListener('click', closeTools);
+toolsDialog.addEventListener('click', e => {
+  if ((e.target as Element).closest('[data-nav]')) closeTools();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !toolsDialog.hidden) closeTools();
+});
+
 // ── Page view with animation ──────────────────────────────────
 const pageView = document.getElementById('page-view')!;
 
