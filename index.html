@@ -65,6 +65,9 @@
     <span class="app-logo-text">CompressZ</span>
   </a>
   <div class="app-header-actions">
+    <button id="tools-btn" class="hdr-btn" type="button" aria-label="Browse all tools" aria-haspopup="dialog" title="All tools — jump straight to one instead of scrolling the tab bar">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+    </button>
     <button id="theme-btn" class="hdr-btn" type="button" aria-label="Toggle color theme">
       <span id="theme-icon" class="hdr-btn-icon">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -173,6 +176,43 @@
     </button>
   </div>
   <div class="dialog-body" id="settings-dialog-body"></div>
+</div>
+
+<!-- ── Tools dialog — a single tap gets you to any tool, grouped by
+     category, instead of scrolling the horizontal tab bar to find it.
+     Static markup (unlike Settings, nothing here needs JS state) — every
+     entry is just a real link with data-nav, same as the tab bar/home
+     grid, so router.ts's existing delegated click handler picks it up
+     with no extra wiring. main.ts only needs to open/close the dialog
+     and close it automatically when a tool is picked. ───────── -->
+<div id="tools-dialog-overlay" class="dialog-overlay" hidden></div>
+<div id="tools-dialog" class="dialog tools-dialog" role="dialog" aria-modal="true" aria-labelledby="tools-dialog-title" hidden>
+  <div class="dialog-head">
+    <h2 id="tools-dialog-title">All tools</h2>
+    <button class="dialog-close" id="tools-dialog-close" type="button" aria-label="Close tools menu">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="dialog-body">
+    <div class="tools-cat-label">Compress</div>
+    <div class="tools-grid">
+      <a class="tgc" href="/compress/images" data-nav="compress/images"><span class="tgc-icon">🖼️</span><span class="tgc-text"><span class="tgc-name">Images</span><span class="tgc-desc">JPEG · PNG · WebP · AVIF · HEIC</span></span></a>
+      <a class="tgc" href="/compress/pdf" data-nav="compress/pdf"><span class="tgc-icon">📄</span><span class="tgc-text"><span class="tgc-name">PDF</span><span class="tgc-desc">Structural, target size</span></span></a>
+      <a class="tgc" href="/compress/video" data-nav="compress/video"><span class="tgc-icon">🎬</span><span class="tgc-text"><span class="tgc-name">Video</span><span class="tgc-desc">H.264 · H.265 · VP9 · AV1</span></span></a>
+      <a class="tgc" href="/compress/audio" data-nav="compress/audio"><span class="tgc-icon">🎵</span><span class="tgc-text"><span class="tgc-name">Audio</span><span class="tgc-desc">MP3 · AAC · Opus · FLAC · WAV</span></span></a>
+      <a class="tgc" href="/compress/gif" data-nav="compress/gif"><span class="tgc-icon">🎞️</span><span class="tgc-text"><span class="tgc-name">GIF</span><span class="tgc-desc">Two-pass palette · WebM</span></span></a>
+    </div>
+    <div class="tools-cat-label">Combine</div>
+    <div class="tools-grid">
+      <a class="tgc" href="/compress/merge-pdf" data-nav="compress/merge-pdf"><span class="tgc-icon">🧷</span><span class="tgc-text"><span class="tgc-name">Merge PDF</span><span class="tgc-desc">Reorderable, preview thumbnails</span></span></a>
+      <a class="tgc" href="/compress/images-to-pdf" data-nav="compress/images-to-pdf"><span class="tgc-icon">🧩</span><span class="tgc-text"><span class="tgc-name">Images → PDF</span><span class="tgc-desc">Reorderable, preview thumbnails</span></span></a>
+    </div>
+    <div class="tools-cat-label">Recognize & Convert</div>
+    <div class="tools-grid">
+      <a class="tgc" href="/compress/ocr" data-nav="compress/ocr"><span class="tgc-icon">🔍</span><span class="tgc-text"><span class="tgc-name">PDF OCR</span><span class="tgc-desc">Tesseract · PaddleOCR</span></span></a>
+      <a class="tgc" href="/convert" data-nav="convert"><span class="tgc-icon">🔁</span><span class="tgc-text"><span class="tgc-name">Convert</span><span class="tgc-desc">Video · DOCX · PPTX · PDF</span></span></a>
+    </div>
+  </div>
 </div>
 
 <!-- ── App shell ──────────────────────────────────────────── -->

@@ -8,6 +8,65 @@ close to ready) with a trailing counter, e.g. `1.12.0-b1`, `1.12.0-b2`.
 The suffix is dropped on the release that ships it (`1.12.0`).
 
 
+### [1.13.0-a1] - HEIC decode fix, thumbnail previews, all-tools picker, manual resource limits
+
+**HEIC/HEIF photos silently failing outside Safari (the actual bug, root-caused):**
+every image entry point called `createImageBitmap(file)` directly and just
+threw on failure. Only Safari/WebKit (macOS + iOS, including Chrome/Firefox
+*on* iOS since Apple mandates WebKit there) can decode HEIC through that
+path — Chrome, Firefox and Edge on Android, Windows, Linux and ChromeOS all
+fail on a real iPhone-shot `.heic`, which is the single most common photo
+format people drag in. Added `src/lib/imageDecode.ts`: tries native decode
+first everywhere (free, unaffected for every other format and for HEIC
+itself on WebKit), and only when that fails on a file that looks like
+HEIC/HEIF does it lazy-load a WASM decoder (`heic2any`, CDN, load-on-first-
+use like the app's existing FFmpeg/pdf.js loaders) as a fallback, with
+per-file caching so the same HEIC is never decoded twice. Wired into Images/
+Convert (`compressImage.ts`), Images → PDF (`imagesToPdf.ts`), and Smart
+Sort/tagging (`aiEngine.ts`).
+
+**Preview thumbnails for manual reordering:** added `src/lib/thumb.ts` — small
+(≤96px), cached, concurrency-limited thumbnail generation for images (via the
+new HEIC-aware decoder) and PDFs (first-page render via pdf.js). Wired into
+the two reorderable queues, Images → PDF and Merge PDF, so you can actually
+see what you're reordering instead of a generic icon, and into the shared
+`renderFileCard` component (Images/PDF/Video/Audio/GIF pages) for the same
+benefit there. Thumbnail object URLs are explicitly revoked when a file is
+removed from any of these queues, so removing/re-adding files repeatedly in
+one session doesn't accumulate blob URLs.
+
+**De-duped three copies of pdf.js's loader/worker setup** (`compressPdf.ts`,
+`convertPdf.ts`, `pages/ocr.ts` each independently re-imported and
+re-configured `GlobalWorkerOptions.workerSrc`) into a single cached
+`getPdfJs()`/`openPdfDocument()` in `pdfLibs.ts` — the module is now fetched
+once per session no matter how many PDF tools run, and it's what the new
+PDF thumbnail generator uses too.
+
+**"All tools" picker — one tap instead of scrolling the tab bar:** added a
+new header button (left of theme/settings) that opens a categorized grid of
+every tool (Compress / Combine / Recognize & Convert), each a large tappable
+card with icon, name and one-line description. Reuses the same
+`data-nav`-driven routing as the tab bar and home grid, so no new routing
+logic was needed — it just closes itself the moment a tool is picked.
+
+**Manual RAM/CPU resource limits (Settings → Performance — Resource Limits):**
+new segmented controls for how many files a batch processes at once (Images/
+PDF "Compress all") and the max image dimension processed, both defaulting
+to **Auto** — which now actually scales the dimension cap to the detected
+device tier (efficient → 6000px, balanced → 10000px, powerful → unlimited)
+rather than being a no-op. Raising either speeds up large batches/preserves
+more detail but increases CPU/GPU load and peak RAM (can slow the device,
+spin up the fan, or in extreme cases crash the tab on very large batches at
+"Unlimited"); lowering either trades some speed/detail for a lighter
+footprint. Explanatory copy in Settings spells out both directions plainly.
+
+**Settings button made more prominent:** the header's gear icon is now
+visibly larger (42px vs. the other 38px header buttons) and accent-tinted,
+since it's the one header button that opens a whole page of controls rather
+than a one-tap toggle or external link — it was previously identical in
+size/treatment to the theme toggle and GitHub link and easy to miss.
+
+
 ### [1.12.7] - Fixed — buttons silently unclickable app-wide, OCR batch overload, missing combine progress
 
 **"Most buttons aren't clickable" (root cause, confirmed with a headless-
