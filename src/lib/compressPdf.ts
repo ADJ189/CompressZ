@@ -1,5 +1,5 @@
 import type { CompressOptions, CompressResult, PdfLevel } from './types';
-import { PDFJS_BASE, PDFLIB_ESM } from './pdfLibs';
+import { PDFLIB_ESM, openPdfDocument } from './pdfLibs';
 import { get2D } from './gpu';
 
 interface Preset {
@@ -249,19 +249,8 @@ async function canvasRender(
   onProgress?:  (pct: number) => void,
 ): Promise<CompressResult> {
 
-  const pdfjsLib = await import(/* @vite-ignore */ `${PDFJS_BASE}/build/pdf.mjs`) as any;
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `${PDFJS_BASE}/build/pdf.worker.mjs`;
   onProgress?.(14);
-
-  const srcDoc = await pdfjsLib.getDocument({
-    data:                new Uint8Array(arrayBuffer),
-    cMapUrl:             `${PDFJS_BASE}/cmaps/`,
-    cMapPacked:          true,
-    standardFontDataUrl: `${PDFJS_BASE}/standard_fonts/`,
-    useSystemFonts:      true,
-    useWorkerFetch:      false,
-    isEvalSupported:     false,
-  }).promise;
+  const srcDoc = await openPdfDocument(new Uint8Array(arrayBuffer));
   onProgress?.(18);
 
   const newPdf = await PDFDocument.create();

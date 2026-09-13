@@ -36,11 +36,27 @@ export interface AiSettings {
   autoApplySuggestions: boolean; // let Smart Analyze also rewrite each file's format/quality, not just tag+sort
 }
 
+/**
+ * Manual overrides for how much CPU/RAM the app is allowed to use at once.
+ * 'auto' (the default for both) means "trust lib/platform.ts's device
+ * detection" — the same hardware-aware behaviour the app already had.
+ * Setting either to a fixed number opts out of that detection for people
+ * who know their situation better than a heuristic can (a phone that's
+ * about to throttle, a shared/low-power machine, a tab they want to keep
+ * light while doing other work) — see the explanatory copy in the
+ * Settings page for the concrete trade-offs of each direction.
+ */
+export interface ResourceLimits {
+  concurrency: number | 'auto'; // how many files runBatch() processes at once (Images/PDF batches)
+  maxImageDim: number | 'auto'; // hard cap, in px on the longer edge, applied before any per-tool resize setting
+}
+
 export interface AppSettings {
   gpu:     GpuSettings;
   engines: EngineDefaults;
   performanceMode: PerformanceTier | 'auto'; // 'auto' = follow lib/platform.ts's device-based recommendation
   ai:      AiSettings;
+  resourceLimits: ResourceLimits;
 }
 
 // Engines whose GPU toggle actually changes engine behaviour today (see
@@ -63,6 +79,7 @@ function defaults(): AppSettings {
     },
     performanceMode: 'auto',
     ai: { enabled: true, modelTier: 'auto', autoApplySuggestions: false },
+    resourceLimits: { concurrency: 'auto', maxImageDim: 'auto' },
   };
 }
 
@@ -101,6 +118,29 @@ export function resolvedAiModelTier(s: AppSettings = getSettings()): AiModelTier
   try { return recommend(detectPlatform()).aiModelTier; } catch { return 'efficient'; }
 }
 
+/** How many files a batch should process at once — the manual override
+ * when set, otherwise the device-recommended value (same default as
+ * before this setting existed). */
+export function resolvedConcurrency(s: AppSettings = getSettings()): number {
+  if (s.resourceLimits.concurrency !== 'auto') return s.resourceLimits.concurrency;
+  try { return recommend(detectPlatform()).batchConcurrency; } catch { return 1; }
+}
+
+/** Longer-edge pixel cap applied before any per-tool resize setting —
+ * 0 means "no extra cap" (still subject to each tool's own maxWidth/
+ * maxHeight, just not this additional guardrail). 'auto' scales the cap
+ * to the detected performance tier, same spirit as every other 'auto'
+ * value in this file: efficient devices get a firmer ceiling so a single
+ * huge photo can't blow past what the device can comfortably hold in
+ * memory, powerful devices go uncapped. */
+export function resolvedMaxImageDim(s: AppSettings = getSettings()): number {
+  if (s.resourceLimits.maxImageDim !== 'auto') return s.resourceLimits.maxImageDim;
+  try {
+    const tier = resolvedPerformanceTier(s);
+    return tier === 'efficient' ? 6000 : tier === 'balanced' ? 10000 : 0;
+  } catch { return 0; }
+}
+
 // Safari private mode (and storage-disabled browsers generally) throw on
 // localStorage access rather than just failing quietly — wrap both sides
 // so a settings read/write never takes the app down with it.
@@ -135,6 +175,7 @@ function merge(base: AppSettings, saved: any): AppSettings {
     },
     performanceMode: saved.performanceMode ?? base.performanceMode,
     ai: { ...base.ai, ...(saved.ai ?? {}) },
+    resourceLimits: { ...base.resourceLimits, ...(saved.resourceLimits ?? {}) },
   };
 }
 

@@ -7,7 +7,7 @@
  * in compressPdf.ts and pages/ocr.ts, so there's nothing new to audit.
  */
 import { zipToBlob, zipSupported } from './zip';
-import { PDFJS_BASE } from './pdfLibs';
+import { openPdfDocument } from './pdfLibs';
 import { get2D } from './gpu';
 
 export { imagesToPdf } from './imagesToPdf';
@@ -24,16 +24,8 @@ export async function pdfToImages(
   dpi: number,
   onProgress?: (pct: number) => void,
 ): Promise<PdfToImagesResult> {
-  const lib = await import(/* @vite-ignore */ `${PDFJS_BASE}/build/pdf.mjs`) as any;
-  lib.GlobalWorkerOptions.workerSrc = `${PDFJS_BASE}/build/pdf.worker.mjs`;
-
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const doc = await lib.getDocument({
-    data: bytes.slice(0),
-    cMapUrl: `${PDFJS_BASE}/cmaps/`, cMapPacked: true,
-    standardFontDataUrl: `${PDFJS_BASE}/standard_fonts/`,
-    useSystemFonts: true, useWorkerFetch: false, isEvalSupported: false,
-  }).promise;
+  const doc = await openPdfDocument(bytes);
 
   const scale = dpi / 72;
   const total = doc.numPages;

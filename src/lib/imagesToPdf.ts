@@ -13,6 +13,8 @@
  */
 import { PDFLIB_ESM } from './pdfLibs';
 import { makeCanvas, get2D, resizeViaWebGL } from './gpu';
+import { decodeImageBitmap } from './imageDecode';
+import { resolvedMaxImageDim } from './settings';
 
 export interface ImagesToPdfOptions {
   quality?:  number;                     // JPEG quality, 0.01-0.99 — default 0.92
@@ -27,7 +29,12 @@ export async function imagesToPdf(
 ): Promise<Blob> {
   if (!files.length) throw new Error('Add at least one image');
   const quality = Math.max(0.01, Math.min(0.99, options.quality ?? 0.92));
-  const maxDim  = options.maxDim ?? 0;
+  // Same global resource-limit clamp as compressImage.ts — whichever is
+  // smaller of the tool's own maxDim (default: no cap) and the manual
+  // Settings → Performance cap (default: 'auto', also no extra cap) wins.
+  const resourceCap = resolvedMaxImageDim();
+  const requested = options.maxDim ?? 0;
+  const maxDim = resourceCap > 0 ? (requested > 0 ? Math.min(requested, resourceCap) : resourceCap) : requested;
 
   const { PDFDocument } = await import(/* @vite-ignore */ PDFLIB_ESM) as any;
   const pdfDoc = await PDFDocument.create();
@@ -35,9 +42,7 @@ export async function imagesToPdf(
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
 
-    let bitmap: ImageBitmap;
-    try { bitmap = await createImageBitmap(file); }
-    catch { throw new Error(`"${file.name}" isn't a readable image.`); }
+    const bitmap = await decodeImageBitmap(file);
 
     let w = bitmap.width, h = bitmap.height;
     if (maxDim > 0 && (w > maxDim || h > maxDim)) {

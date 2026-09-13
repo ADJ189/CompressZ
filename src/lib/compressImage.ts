@@ -1,5 +1,7 @@
 import type { CompressOptions, CompressResult, ImageFormat } from './types';
 import { makeCanvas, get2D, resizeViaWebGL } from './gpu';
+import { decodeImageBitmap } from './imageDecode';
+import { resolvedMaxImageDim } from './settings';
 
 // AVIF *encoding* support varies a lot more than decoding support (notably
 // Safari can display AVIF but can't encode it via canvas, and older Firefox
@@ -32,12 +34,17 @@ export async function compressImage(
 ): Promise<CompressResult> {
   onProgress?.(5);
   const format = getBestFormat((options.format ?? 'image/webp') as ImageFormat);
-  const maxW   = options.maxWidth  ?? 16384;
-  const maxH   = options.maxHeight ?? 16384;
+  // The per-tool maxWidth/maxHeight (from the Images page's own settings)
+  // is clamped further by the global Settings → Performance → "Max image
+  // dimension" resource limit, if the person has set one — this is the one
+  // guardrail that applies no matter what a specific tool's own settings
+  // say, so a manual RAM cap actually holds even if someone left an
+  // individual tool set to "no limit".
+  const resourceCap = resolvedMaxImageDim();
+  const maxW = Math.min(options.maxWidth  ?? 16384, resourceCap || 16384);
+  const maxH = Math.min(options.maxHeight ?? 16384, resourceCap || 16384);
 
-  let bitmap: ImageBitmap;
-  try { bitmap = await createImageBitmap(file); }
-  catch { bitmap = await loadViaImg(file); }
+  const bitmap = await decodeImageBitmap(file);
   onProgress?.(18);
 
   let { width: w, height: h } = bitmap;
@@ -114,17 +121,4 @@ function encode(c: HTMLCanvasElement | OffscreenCanvas, fmt: string, q: number):
   return new Promise((res, rej) =>
     (c as HTMLCanvasElement).toBlob(b => b ? res(b) : rej(new Error('toBlob null')), fmt, q),
   );
-}
-
-function loadViaImg(file: File): Promise<ImageBitmap> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = async () => {
-      URL.revokeObjectURL(url);
-      try { resolve(await createImageBitmap(img)); } catch (e) { reject(e); }
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image load failed')); };
-    img.src = url;
-  });
 }

@@ -29,6 +29,8 @@
  * recommendation from lib/platform.ts, but can be overridden.
  */
 
+import { decodeImageBitmap } from './imageDecode';
+
 export type AiModelTier = 'efficient' | 'powerful';
 
 const MODEL_IDS: Record<AiModelTier, string> = {
@@ -126,7 +128,7 @@ function cleanLabel(raw: string): string {
 
 export async function guessContentType(file: File): Promise<ContentGuess> {
   try {
-    const bmp = await createImageBitmap(file);
+    const bmp = await decodeImageBitmap(file);
     const size = 64; // downsample hard — this only needs a rough texture signal, not detail
     const canvas = document.createElement('canvas');
     canvas.width = size; canvas.height = size;
