@@ -9,6 +9,7 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 
 
 ### [1.13.0-a1] - HEIC decode fix, thumbnail previews, all-tools picker, manual resource limits
+-----------------------------------------------------------------------------------------------
 
 **HEIC/HEIF photos silently failing outside Safari (the actual bug, root-caused):**
 every image entry point called `createImageBitmap(file)` directly and just
@@ -68,6 +69,7 @@ size/treatment to the theme toggle and GitHub link and easy to miss.
 
 
 ### [1.12.7] - Fixed — buttons silently unclickable app-wide, OCR batch overload, missing combine progress
+-----------------------------------------------------------------------------------------------------------
 
 **"Most buttons aren't clickable" (root cause, confirmed with a headless-
 browser click-target audit across every route):** the Settings dialog
@@ -119,6 +121,7 @@ the new progress bar actually updates mid-operation.
 
 
 ### [1.12.6] - Fixed — Cloudflare build, adm-zip advisory, platform-detection audit
+-----------------------------------------------------------------------------------------
 
 **Cloudflare Pages build failure:** `npm ci` was refusing to install because
 `package-lock.json` had drifted out of sync with `package.json` (missing
@@ -159,6 +162,7 @@ gracefully, silently dropping the background/border entirely. Added a
 plain solid-color declaration ahead of each `color-mix()` line.
 
 ### [1.12.5] - Fixed — Accessibility (Lighthouse CI was failing at 0.86, needed ≥0.90)
+---------------------------------------------------------------------------------------
 
 All three failures only showed up at the mobile viewport Lighthouse CI
 tests by default (≤768px), where the tab bar switches to icon-only:
