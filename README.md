@@ -233,8 +233,7 @@ CompressZ has no backend. Files never leave your browser. See [PRIVACY.md](PRIVA
 ## Contributing
 
 Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for the
-dev setup, project conventions, and PR checklist. Participation is governed
-by the [Code of Conduct](CODE_OF_CONDUCT.md).
+dev setup, project conventions, and PR checklist. 
 
 ---
 
