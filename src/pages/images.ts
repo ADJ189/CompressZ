@@ -5,9 +5,10 @@ import { compressImage, getBestFormat } from '../lib/compressImage';
 import { createDropZone, renderFileCard, patchFileCard, renderBatchBar } from '../components';
 import { toast } from '../toast';
 import { imageStore } from '../store';
-import { getSettings, resolvedAiModelTier } from '../lib/settings';
+import { getSettings, resolvedAiModelTier, resolvedConcurrency } from '../lib/settings';
 import { aiSupported } from '../lib/aiEngine';
 import { runBatch } from '../lib/batch';
+import { revokeFileThumbnail } from '../lib/thumb';
 
 export function mountImages(root: HTMLElement) {
   // ── State — lives in imageStore so it survives navigation ───
@@ -108,12 +109,16 @@ export function mountImages(root: HTMLElement) {
   // current device instead of firing every file at once unbounded.
   function compressAll() {
     const pending = s.files.filter(f => f.status === 'idle' || f.status === 'error');
-    runBatch(pending, compressEntry);
+    runBatch(pending, compressEntry, resolvedConcurrency());
   }
   function downloadAll()  { s.files.filter(f => f.status === 'done').forEach(downloadEntry); }
   function clearAll()     { s.files = []; render(); }
 
-  const cbs = { onCompress: compressEntry, onDownload: downloadEntry, onRemove: (id: string) => { s.files = s.files.filter(f => f.id !== id); render(); } };
+  const cbs = { onCompress: compressEntry, onDownload: downloadEntry, onRemove: (id: string) => {
+    const removed = s.files.find(f => f.id === id);
+    if (removed) revokeFileThumbnail(removed.file);
+    s.files = s.files.filter(f => f.id !== id); render();
+  } };
 
   // ── DOM ─────────────────────────────────────────────────────
   let batchEl!: HTMLElement;

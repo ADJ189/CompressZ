@@ -1,4 +1,4 @@
-import { getSettings, updateSettings, resetSettings, GPU_CAPABLE, resolvedPerformanceTier, resolvedAiModelTier } from '../lib/settings';
+import { getSettings, updateSettings, resetSettings, GPU_CAPABLE, resolvedPerformanceTier, resolvedAiModelTier, resolvedMaxImageDim } from '../lib/settings';
 import type { AppSettings, GpuSettings } from '../lib/settings';
 import { gpuAvailable, hasWebGL2 } from '../lib/gpu';
 import { detectPlatform, recommend, tierLabel } from '../lib/platform';
@@ -54,6 +54,7 @@ export function mountSettings(root: HTMLElement) {
     groupsEl.innerHTML = '';
     groupsEl.appendChild(deviceGroup());
     groupsEl.appendChild(performanceGroup(st));
+    groupsEl.appendChild(resourceGroup(st));
     groupsEl.appendChild(aiGroup(st));
     groupsEl.appendChild(gpuGroup(st));
     groupsEl.appendChild(imagesGroup(st));
@@ -125,6 +126,54 @@ export function mountSettings(root: HTMLElement) {
     noteField.innerHTML = `<span class="s-field-sub">${escHtml(rec.reason)} Affects GPU-acceleration defaults, the video encode preset, batch concurrency, and which AI model tier "Auto" picks below.</span>`;
 
     return groupWrap('Performance Mode', 'Controls how aggressively engines use this device\u2019s CPU/GPU. Changing this doesn\u2019t retroactively touch settings you\u2019ve already customised by hand.', [field, noteField]);
+  }
+
+  // ── Resource Limits (manual RAM/CPU override) ────────────────────
+  function resourceGroup(st: AppSettings): HTMLElement {
+    const rl = st.resourceLimits;
+    const autoConcurrency = recommend(detectPlatform()).batchConcurrency;
+    const autoDim = resolvedMaxImageDim({ ...st, resourceLimits: { ...rl, maxImageDim: 'auto' } });
+
+    const concField = segRow('Files processed at once (batches)', [
+      { id: 'auto', label: `Auto (${autoConcurrency})` },
+      { id: '1', label: '1' },
+      { id: '2', label: '2' },
+      { id: '3', label: '3' },
+      { id: '4', label: '4' },
+    ], rl.concurrency === 'auto' ? 'auto' : String(rl.concurrency), id => {
+      updateSettings(s => { s.resourceLimits.concurrency = id === 'auto' ? 'auto' : +id; });
+      render();
+    });
+
+    const dimField = segRow('Max image dimension processed', [
+      { id: 'auto', label: `Auto (${autoDim ? autoDim + 'px' : 'unlimited'})` },
+      { id: '2000', label: '2000px' },
+      { id: '4000', label: '4000px' },
+      { id: '8000', label: '8000px' },
+      { id: '0', label: 'Unlimited' },
+    ], rl.maxImageDim === 'auto' ? 'auto' : String(rl.maxImageDim), id => {
+      updateSettings(s => { s.resourceLimits.maxImageDim = id === 'auto' ? 'auto' : +id; });
+      render();
+    });
+
+    const note = document.createElement('div');
+    note.className = 's-field full';
+    note.innerHTML = `<span class="s-field-sub">
+      <strong>Raising these</strong> speeds up large batches and preserves more detail on huge photos, but pushes more
+      work onto the CPU/GPU and holds more decoded image data in RAM at once \u2014 on a phone, a low-power laptop, or a
+      tab you're keeping open alongside other heavy work, that can slow the whole device down, make the fan spin up,
+      or in extreme cases (a very large batch of very large images at "Unlimited") crash the browser tab entirely.<br>
+      <strong>Lowering these</strong> trades some speed and, at small dimension caps, some image detail for a
+      noticeably lighter footprint \u2014 useful on older or budget devices, or when you just want CompressZ to stay out
+      of the way of everything else running. <strong>Auto</strong> (the default) reads your device's cores/memory
+      once per session and picks a balance automatically \u2014 that's what "best performance by default" means here,
+      and it's a safe choice for almost everyone.<br>
+      Applies to the Images and PDF compressors' "Compress all" batches, and to image processing generally (including
+      Images \u2192 PDF). Video/Audio/GIF always process one file at a time regardless of this setting, since they
+      share a single FFmpeg.wasm engine.
+    </span>`;
+
+    return groupWrap('Performance \u2014 Resource Limits', 'Manual overrides for how much CPU/RAM CompressZ is allowed to use at once. Leave on Auto unless you have a specific reason not to.', [concField, dimField, note]);
   }
 
   // ── AI Engine (local) ────────────────────────────────────────────

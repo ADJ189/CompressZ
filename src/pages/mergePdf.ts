@@ -1,6 +1,7 @@
 import { formatBytes } from '../lib/types';
 import { mergePdfs } from '../lib/mergePdf';
 import { createDropZone } from '../components';
+import { mountThumbnail, revokeFileThumbnail } from '../lib/thumb';
 import { toast } from '../toast';
 import { mergeStore } from '../store';
 import { registerBusyCheck } from '../main';
@@ -17,6 +18,7 @@ export function mountMergePdf(root: HTMLElement) {
   }
 
   function removeAt(i: number) {
+    revokeFileThumbnail(s.files[i]);
     s.files = s.files.filter((_, idx) => idx !== i);
     render();
   }
@@ -31,6 +33,7 @@ export function mountMergePdf(root: HTMLElement) {
   }
 
   function clearAll() {
+    s.files.forEach(revokeFileThumbnail);
     s.files = [];
     render();
   }
@@ -136,6 +139,7 @@ export function mountMergePdf(root: HTMLElement) {
       el.querySelector('[data-up]')?.addEventListener('click', () => moveAt(i, -1));
       el.querySelector('[data-down]')?.addEventListener('click', () => moveAt(i, 1));
       el.querySelector('[data-rm]')?.addEventListener('click', () => removeAt(i));
+      mountThumbnail(el.querySelector('.fc-ico')!, f, '📄');
       listEl.appendChild(el);
     });
   }

@@ -1,6 +1,7 @@
 import { formatBytes } from '../lib/types';
 import { imagesToPdf } from '../lib/imagesToPdf';
 import { createDropZone } from '../components';
+import { mountThumbnail, revokeFileThumbnail } from '../lib/thumb';
 import { toast } from '../toast';
 import { imagesToPdfStore } from '../store';
 import { registerBusyCheck } from '../main';
@@ -81,6 +82,7 @@ export function mountImagesToPdf(root: HTMLElement) {
   }
 
   function removeAt(i: number) {
+    revokeFileThumbnail(s.files[i]);
     s.files = s.files.filter((_, idx) => idx !== i);
     render();
   }
@@ -95,6 +97,7 @@ export function mountImagesToPdf(root: HTMLElement) {
   }
 
   function clearAll() {
+    s.files.forEach(revokeFileThumbnail);
     s.files = [];
     aiLabels.clear();
     render();
@@ -239,8 +242,8 @@ export function mountImagesToPdf(root: HTMLElement) {
       el.querySelector('[data-up]')?.addEventListener('click', () => moveAt(i, -1));
       el.querySelector('[data-down]')?.addEventListener('click', () => moveAt(i, 1));
       el.querySelector('[data-rm]')?.addEventListener('click', () => removeAt(i));
-      listEl.appendChild(el);
-    });
+      mountThumbnail(el.querySelector('.fc-ico')!, f, '🖼️');
+      listEl.appendChild(el);    });
   }
 
   function esc(str: string) {

@@ -5,6 +5,8 @@ import { createDropZone, renderFileCard, patchFileCard, renderBatchBar } from '.
 import { toast } from '../toast';
 import { pdfStore } from '../store';
 import { runBatch } from '../lib/batch';
+import { resolvedConcurrency } from '../lib/settings';
+import { revokeFileThumbnail } from '../lib/thumb';
 
 export function mountPdf(root: HTMLElement) {
   // ── State — persisted in pdfStore across navigations ────────
@@ -68,14 +70,18 @@ export function mountPdf(root: HTMLElement) {
   // the current device instead of firing every file at once unbounded.
   function compressAll() {
     const pending = s.files.filter(f => f.status === 'idle' || f.status === 'error');
-    runBatch(pending, compressEntry);
+    runBatch(pending, compressEntry, resolvedConcurrency());
   }
   function downloadAll()  { s.files.filter(f => f.status === 'done').forEach(downloadEntry); }
   function clearAll()     { s.files = []; render(); }
   const cbs = {
     onCompress: compressEntry,
     onDownload: downloadEntry,
-    onRemove:   (id: string) => { s.files = s.files.filter(f => f.id !== id); render(); },
+    onRemove:   (id: string) => {
+      const removed = s.files.find(f => f.id === id);
+      if (removed) revokeFileThumbnail(removed.file);
+      s.files = s.files.filter(f => f.id !== id); render();
+    },
   };
 
   let batchEl!: HTMLElement;

@@ -15,7 +15,7 @@ import { uid, formatBytes } from '../lib/types';
 import { createDropZone }   from '../components';
 import { toast }            from '../toast';
 
-import { PDFJS_BASE, PDFLIB_ESM } from '../lib/pdfLibs';
+import { PDFLIB_ESM, openPdfDocument } from '../lib/pdfLibs';
 import { get2D } from '../lib/gpu';
 
 // ── CDN ───────────────────────────────────────────────────────
@@ -199,14 +199,7 @@ async function renderPages(
   dpi: number,
   onProgress?: (pct:number, label:string) => void,
 ): Promise<RenderedPage[]> {
-  const lib = await import(/* @vite-ignore */ `${PDFJS_BASE}/build/pdf.mjs`) as any;
-  lib.GlobalWorkerOptions.workerSrc = `${PDFJS_BASE}/build/pdf.worker.mjs`;
-  const doc = await lib.getDocument({
-    data: pdfBytes.slice(0),
-    cMapUrl:`${PDFJS_BASE}/cmaps/`, cMapPacked:true,
-    standardFontDataUrl:`${PDFJS_BASE}/standard_fonts/`,
-    useSystemFonts:true, useWorkerFetch:false, isEvalSupported:false,
-  }).promise;
+  const doc = await openPdfDocument(pdfBytes);
 
   const scale = dpi/72;
   const total = doc.numPages;
