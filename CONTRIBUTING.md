@@ -5,8 +5,7 @@ everything runs in the browser, nothing is uploaded — and contributions are
 expected to keep it that way. This guide covers how to get set up, the
 project's conventions, and how to submit changes.
 
-By participating in this project you agree to abide by the
-[Code of Conduct](CODE_OF_CONDUCT.md).
+
 
 ---
 
