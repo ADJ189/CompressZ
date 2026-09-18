@@ -2,7 +2,7 @@
 
 _Last updated: July 2026_
 
-This is the same privacy policy shown at [/privacy]([https://compressly26.pages.dev/privacy])
+This is the same privacy policy shown at [/privacy](https://compressly26.pages.dev/privacy)
 inside the app. It's mirrored here so it's readable directly from the
 repo without running the site.
 
