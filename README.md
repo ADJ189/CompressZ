@@ -20,24 +20,24 @@ Nothing ever leaves your device.
 
 CompressZ compresses images, PDFs, video, audio, and GIFs; converts between video, audio, image, PDF, DOCX, and PPTX formats; and runs OCR on scanned PDFs — entirely inside your browser using WebAssembly, Canvas API, WebCodecs, and two neural OCR engines. No backend. No uploads. No tracking.
 
-CompressZ is forked from [CompressF](https://github.com/ADJ189/CompressF).
+CompressZ is forked from [CompressF](https://github.com/ADJ189/CompressF). 
 CompressF is still maintained as its own project .
 
 ---
 
 ## Tools
 
-| Tool             | Formats                                                                                             | Engine                                                                   |
-| ---------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| **Images**       | JPEG · PNG · WebP · AVIF · HEIC · BMP                                                               | OffscreenCanvas (GPU)                                                    |
-| **PDF Compress** | PDF                                                                                                 | PDF.js + pdf-lib (structural image resampling)                           |
-| **Video**        | MP4 · WebM · MOV · AVI · MKV                                                                        | FFmpeg.wasm → WebCodecs → MediaRecorder                                  |
-| **Audio**        | MP3 · AAC · OGG · Opus · FLAC · WAV                                                                 | FFmpeg.wasm                                                              |
-| **GIF**          | GIF → GIF or WebM VP9                                                                               | FFmpeg.wasm (two-pass palettegen)                                        |
-| **SVG**          | SVG                                                                                                 | Pure TypeScript, zero dependencies                                       |
-| **PDF OCR**      | Scanned PDF → searchable PDF + TXT                                                                  | PaddleOCR-VL 1.5 (primary) + Tesseract.js 5, optional Greek/math symbols |
-| **Convert**      | Video ⇄ video · Audio ⇄ audio · Image ⇄ image · PDF ⇄ Images · DOCX → PDF/TXT/HTML · PPTX → PDF/TXT | FFmpeg.wasm, pdf-lib, mammoth.js, html2canvas, zero-dep ZIP              |
-| **Images → PDF** | Images → single PDF, one page each                                                                  | pdf-lib, with an optional local AI sort pass                             |
+| Tool | Formats | Engine |
+|------|---------|--------|
+| **Images** | JPEG · PNG · WebP · AVIF · HEIC · BMP | OffscreenCanvas (GPU) |
+| **PDF Compress** | PDF | PDF.js + pdf-lib (structural image resampling) |
+| **Video** | MP4 · WebM · MOV · AVI · MKV | FFmpeg.wasm → WebCodecs → MediaRecorder |
+| **Audio** | MP3 · AAC · OGG · Opus · FLAC · WAV | FFmpeg.wasm |
+| **GIF** | GIF → GIF or WebM VP9 | FFmpeg.wasm (two-pass palettegen) |
+| **SVG** | SVG | Pure TypeScript, zero dependencies |
+| **PDF OCR** | Scanned PDF → searchable PDF + TXT | PaddleOCR-VL 1.5 (primary) + Tesseract.js 5, optional Greek/math symbols |
+| **Convert** | Video ⇄ video · Audio ⇄ audio · Image ⇄ image · PDF ⇄ Images · DOCX → PDF/TXT/HTML · PPTX → PDF/TXT | FFmpeg.wasm, pdf-lib, mammoth.js, html2canvas, zero-dep ZIP |
+| **Images → PDF** | Images → single PDF, one page each | pdf-lib, with an optional local AI sort pass |
 
 ---
 
@@ -65,25 +65,25 @@ Settings now includes three sections beyond the per-engine defaults:
 
 ### PaddleOCR-VL 1.5 — Primary Engine ⭐
 
-| Attribute   | Detail                                                                                                                           |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Technology  | PP-OCRv3 detection + direction classification + CRNN recognition via WebGL/ONNX                                                  |
-| Model size  | ~25 MB (cached after first use)                                                                                                  |
-| Best for    | **Handwriting** (print and cursive), tables, forms, multi-column layouts, rotated text, CJK scripts, low-quality and noisy scans |
-| Strengths   | Document structure understanding, complex layout handling, Chinese/Japanese/Korean, robust to image quality                      |
-| Limitations | Heavier first load, requires WebGL, slower on large batches                                                                      |
-| Rating      | Handwriting ●●●●● · Tables ●●●●● · Print ●●●●● · Low quality ●●●●● · Speed ●●●○○                                                 |
+| Attribute | Detail |
+|-----------|--------|
+| Technology | PP-OCRv3 detection + direction classification + CRNN recognition via WebGL/ONNX |
+| Model size | ~25 MB (cached after first use) |
+| Best for | **Handwriting** (print and cursive), tables, forms, multi-column layouts, rotated text, CJK scripts, low-quality and noisy scans |
+| Strengths | Document structure understanding, complex layout handling, Chinese/Japanese/Korean, robust to image quality |
+| Limitations | Heavier first load, requires WebGL, slower on large batches |
+| Rating | Handwriting ●●●●● · Tables ●●●●● · Print ●●●●● · Low quality ●●●●● · Speed ●●●○○ |
 
 ### Tesseract.js 5 — Secondary Engine
 
-| Attribute   | Detail                                                                                                                        |
-| ----------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Technology  | LSTM neural model compiled to SIMD-accelerated WebAssembly                                                                    |
-| Model size  | ~10 MB per language (cached after first use)                                                                                  |
-| Best for    | Clean typeset documents, batch processing, rare languages                                                                     |
-| Strengths   | 100+ languages (Arabic, Hebrew, Thai, Vietnamese and more), fast on clean high-DPI scans, predictable accuracy, fully offline |
-| Limitations | Poor on handwriting, struggles with complex layouts, needs high DPI                                                           |
-| Rating      | Handwriting ●●○○○ · Tables ●●●○○ · Print ●●●●● · Low quality ●●○○○ · Speed ●●●●●                                              |
+| Attribute | Detail |
+|-----------|--------|
+| Technology | LSTM neural model compiled to SIMD-accelerated WebAssembly |
+| Model size | ~10 MB per language (cached after first use) |
+| Best for | Clean typeset documents, batch processing, rare languages |
+| Strengths | 100+ languages (Arabic, Hebrew, Thai, Vietnamese and more), fast on clean high-DPI scans, predictable accuracy, fully offline |
+| Limitations | Poor on handwriting, struggles with complex layouts, needs high DPI |
+| Rating | Handwriting ●●○○○ · Tables ●●●○○ · Print ●●●●● · Low quality ●●○○○ · Speed ●●●●● |
 
 An optional **Math & Greek symbols** toggle loads Tesseract's `grc` (Greek)
 and `equ` (equation layout) traineddata alongside the selected language —
@@ -96,33 +96,33 @@ Auto selects PaddleOCR-VL 1.5 by default. Language/script is auto-detected from 
 
 ### When to use which
 
-| Document type              | Recommended engine                 |
-| -------------------------- | ---------------------------------- |
-| Handwritten notes, letters | PaddleOCR-VL 1.5                   |
-| Printed books, reports     | Either (Tesseract slightly faster) |
-| Tables, invoices, forms    | PaddleOCR-VL 1.5                   |
-| CJK documents              | PaddleOCR-VL 1.5                   |
-| Arabic / Hebrew / RTL      | Tesseract.js (dedicated models)    |
-| Rare languages             | Tesseract.js (100+ lang coverage)  |
-| Low-quality / noisy scans  | PaddleOCR-VL 1.5                   |
-| Batch processing (speed)   | Tesseract.js                       |
+| Document type | Recommended engine |
+|--------------|-------------------|
+| Handwritten notes, letters | PaddleOCR-VL 1.5 |
+| Printed books, reports | Either (Tesseract slightly faster) |
+| Tables, invoices, forms | PaddleOCR-VL 1.5 |
+| CJK documents | PaddleOCR-VL 1.5 |
+| Arabic / Hebrew / RTL | Tesseract.js (dedicated models) |
+| Rare languages | Tesseract.js (100+ lang coverage) |
+| Low-quality / noisy scans | PaddleOCR-VL 1.5 |
+| Batch processing (speed) | Tesseract.js |
 
 ---
 
 ## Convert
 
 A dedicated format-conversion tool, separate from the compressors above —
-these change the _format_, not primarily the size:
+these change the *format*, not primarily the size:
 
-| Direction                    | Formats                                         | Notes                                  |
-| ---------------------------- | ----------------------------------------------- | -------------------------------------- |
-| Video → Video                | MP4 · WebM · MOV · MKV · AVI · GIF              | FFmpeg.wasm, near-lossless (CRF 18)    |
-| Audio → Audio                | MP3 · AAC · OGG · Opus · FLAC · WAV             | FFmpeg.wasm                            |
-| Image → Image                | JPEG · PNG · WebP · AVIF                        | Canvas, quality 0.95                   |
-| PDF → Images                 | PNG · JPEG (one per page, zipped if multi-page) | pdf.js                                 |
-| Images → PDF                 | Any number of images → one PDF                  | pdf-lib, reorderable before combining  |
-| Word (.docx) → PDF/TXT/HTML  | —                                               | mammoth.js + html2canvas + pdf-lib     |
-| PowerPoint (.pptx) → PDF/TXT | —                                               | Text extracted directly from slide XML |
+| Direction | Formats | Notes |
+|-----------|---------|-------|
+| Video → Video | MP4 · WebM · MOV · MKV · AVI · GIF | FFmpeg.wasm, near-lossless (CRF 18) |
+| Audio → Audio | MP3 · AAC · OGG · Opus · FLAC · WAV | FFmpeg.wasm |
+| Image → Image | JPEG · PNG · WebP · AVIF | Canvas, quality 0.95 |
+| PDF → Images | PNG · JPEG (one per page, zipped if multi-page) | pdf.js |
+| Images → PDF | Any number of images → one PDF | pdf-lib, reorderable before combining |
+| Word (.docx) → PDF/TXT/HTML | — | mammoth.js + html2canvas + pdf-lib |
+| PowerPoint (.pptx) → PDF/TXT | — | Text extracted directly from slide XML |
 
 **Honesty about limits, on purpose:** DOCX→PDF is an image-based PDF (text
 isn't selectable — use the TXT output if you need that), and PPTX
@@ -144,11 +144,11 @@ Walks the PDF XObject resource dictionary, finds embedded images, downscales to 
 **Strategy B — Canvas render** (Extreme preset + fallback for encrypted PDFs)  
 PDF.js renders each page to OffscreenCanvas with `colorSpace: 'srgb'` and `intent: 'print'`, embedded via pdf-lib.
 
-| Preset      | DPI | JPEG quality | Strategy   |
-| ----------- | --- | ------------ | ---------- |
-| Low         | 220 | 0.85         | Structural |
-| Recommended | 150 | 0.72         | Structural |
-| Extreme     | 96  | 0.45         | Canvas     |
+| Preset | DPI | JPEG quality | Strategy |
+|--------|-----|-------------|----------|
+| Low | 220 | 0.85 | Structural |
+| Recommended | 150 | 0.72 | Structural |
+| Extreme | 96 | 0.45 | Canvas |
 
 **Target size mode** — enter a specific MB or KB value; CompressZ binary-searches JPEG quality over 10 iterations to hit it.
 
@@ -211,16 +211,16 @@ npm run typecheck  # TypeScript check
 
 ## Browser Compatibility
 
-| Feature                       | Chrome | Firefox | Safari | Edge |
-| ----------------------------- | ------ | ------- | ------ | ---- |
-| Image (JPEG/WebP)             | 80+    | 80+     | 14+    | 80+  |
-| Image (AVIF)                  | 85+    | 93+     | 16.1+  | 85+  |
-| PDF compress                  | 80+    | 80+     | 14+    | 80+  |
-| FFmpeg.wasm                   | 91+    | 91+     | 15.2+  | 91+  |
-| FFmpeg MT (SharedArrayBuffer) | 91+    | 91+     | 15.4+  | 91+  |
-| WebCodecs GPU video           | 94+    | —       | 16.4+  | 94+  |
-| PaddleOCR (WebGL)             | 91+    | 91+     | 15.2+  | 91+  |
-| Tesseract.js (WASM)           | 91+    | 91+     | 15.2+  | 91+  |
+| Feature | Chrome | Firefox | Safari | Edge |
+|---------|--------|---------|--------|------|
+| Image (JPEG/WebP) | 80+ | 80+ | 14+ | 80+ |
+| Image (AVIF) | 85+ | 93+ | 16.1+ | 85+ |
+| PDF compress | 80+ | 80+ | 14+ | 80+ |
+| FFmpeg.wasm | 91+ | 91+ | 15.2+ | 91+ |
+| FFmpeg MT (SharedArrayBuffer) | 91+ | 91+ | 15.4+ | 91+ |
+| WebCodecs GPU video | 94+ | — | 16.4+ | 94+ |
+| PaddleOCR (WebGL) | 91+ | 91+ | 15.2+ | 91+ |
+| Tesseract.js (WASM) | 91+ | 91+ | 15.2+ | 91+ |
 
 ---
 
@@ -233,7 +233,8 @@ CompressZ has no backend. Files never leave your browser. See [PRIVACY.md](PRIVA
 ## Contributing
 
 Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for the
-dev setup, project conventions, and PR checklist.
+dev setup, project conventions, and PR checklist. Participation is governed
+by the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ---
 
