@@ -152,10 +152,16 @@ export interface ImagesToPdfState {
   busy:     boolean;
   pageSize: 'auto' | 'a4' | 'letter';
   quality:  number; // JPEG quality used when embedding each image, 1-99
+  maxDim:   number; // cap the longer edge before embedding — 0 = no cap
 }
 export const imagesToPdfStore: ImagesToPdfState = {
   files:    [],
   busy:     false,
   pageSize: 'auto',
-  quality:  92,
+  // Was hardcoded to 92 regardless of the Image Compressor's configured
+  // default quality/max-dimension (Settings → Images), unlike every other
+  // tool's store here, which all seed from `engineDefaults` — meaning a
+  // quality/maxDim set in Settings silently didn't apply to Images → PDF.
+  quality:  engineDefaults.images.quality,
+  maxDim:   engineDefaults.images.maxDim,
 };
