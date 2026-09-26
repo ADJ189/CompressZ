@@ -201,7 +201,16 @@ function resolvePptxSlideOrder(
       if (entries.has(normalized)) ordered.push(normalized);
     }
 
-    return ordered.length ? ordered : null;
+    // Only trust this resolved order if EVERY <p:sldId> entry resolved to
+    // an actual slide part. A partial match (e.g. one relationship id
+    // missing from the .rels file, or pointing at a target that isn't in
+    // the archive) used to be returned as-is, which silently dropped that
+    // slide from the output entirely even though its XML is present in the
+    // zip. Falling back to the filename-sorted list in that case is worse
+    // ordering in rare edge cases, but it never loses a slide — and if
+    // there were no <p:sldId> entries at all, fall back too.
+    if (!sldIds.length || ordered.length !== sldIds.length) return null;
+    return ordered;
   } catch {
     return null;
   }

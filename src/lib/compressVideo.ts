@@ -21,6 +21,27 @@ export async function compressVideo(
   return videoViaMediaRecorder(file, options, onProgress);
 }
 
+// Counts audio streams in a file already written into ffmpeg's virtual FS,
+// by running `-i <file>` with no output. ffmpeg has nothing to encode in
+// that case, so it prints the input's stream list to its log and exits
+// with a non-zero status — we only want the log lines, so the rejection
+// from `exec` is expected and swallowed. Uses the same single-listener
+// swap pattern as setProgressHandler so a probe never leaks a stale 'log'
+// listener onto the shared ffmpeg singleton.
+async function probeAudioTrackCount(ff: any, inN: string): Promise<number> {
+  const lines: string[] = [];
+  const onLog = ({ message }: { message: string }) => {
+    lines.push(message);
+  };
+  ff.on("log", onLog);
+  try {
+    await ff.exec(["-i", inN]).catch(() => {});
+  } finally {
+    ff.off("log", onLog);
+  }
+  return lines.filter((l) => /Stream #\d+:\d+.*:\s*Audio:/.test(l)).length;
+}
+
 // ── FFmpeg.wasm ───────────────────────────────────────────────
 async function videoViaFFmpeg(
   file: File,
@@ -91,15 +112,26 @@ async function videoViaFFmpeg(
     // The total target-size bitrate has to be shared between video and
     // audio — audio is muxed in on top of -b:v, so budgeting the *entire*
     // total for video alone reliably overshoots the requested file size.
-    // Reserve the audio track's bitrate (and a small container-overhead
+    // Reserve the encoded audio's bitrate (and a small container-overhead
     // margin) out of the total before deriving the video bitrate. When the
     // audio is a passthrough copy we can't know its bitrate up front, so we
     // just apply the overhead margin and leave the size target best-effort.
-    const audioBitrateK = opts.audioPassthrough
+    // A silent source reserves nothing — there's no audio to mux in, so
+    // budgeting for it would just under-use the video bitrate for no
+    // reason. In "Keep all tracks" mode, -b:a applies per encoded stream,
+    // so the *same* per-track rate is muxed in once for every track —
+    // reserve for all of them, not just one. Only probe the source when we
+    // actually need the count (passthrough doesn't need it either, since
+    // its reservation is always 0).
+    const perTrackAudioK = codec === "vp8" || codec === "vp9" ? 96 : 128;
+    const audioTrackCount = opts.audioPassthrough
       ? 0
-      : codec === "vp8" || codec === "vp9"
-        ? 96
-        : 128;
+      : await probeAudioTrackCount(ff, inN);
+    const audioBitrateK =
+      opts.audioPassthrough || audioTrackCount === 0
+        ? 0
+        : perTrackAudioK *
+          (audioTrackMode === "all" ? audioTrackCount : 1);
     const overheadK = Math.round(totalBitrateK * 0.02); // ~2% container/muxing overhead
     targetBitrateK = Math.max(32, totalBitrateK - audioBitrateK - overheadK);
   } else if (opts.videoBitrate) {
