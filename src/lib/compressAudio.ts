@@ -1,17 +1,22 @@
-import type { CompressOptions, CompressResult, AudioFormat } from './types';
-import { getFFmpeg, ffFetch, setProgressHandler } from './ffmpeg';
+import type { CompressOptions, CompressResult, AudioFormat } from "./types";
+import { getFFmpeg, ffFetch, setProgressHandler } from "./ffmpeg";
 
 const DEFAULT_BITRATE: Record<AudioFormat, number> = {
-  mp3: 192, aac: 160, ogg: 128, opus: 96, flac: 0, wav: 0,
+  mp3: 192,
+  aac: 160,
+  ogg: 128,
+  opus: 96,
+  flac: 0,
+  wav: 0,
 };
 
 const MIME_TYPE: Record<AudioFormat, string> = {
-  mp3:  'audio/mpeg',
-  aac:  'audio/mp4',
-  ogg:  'audio/ogg',
-  opus: 'audio/ogg; codecs=opus',
-  flac: 'audio/flac',
-  wav:  'audio/wav',
+  mp3: "audio/mpeg",
+  aac: "audio/mp4",
+  ogg: "audio/ogg",
+  opus: "audio/ogg; codecs=opus",
+  flac: "audio/flac",
+  wav: "audio/wav",
 };
 
 export async function compressAudio(
@@ -20,11 +25,12 @@ export async function compressAudio(
   onProgress?: (pct: number) => void,
 ): Promise<CompressResult> {
   onProgress?.(2);
-  const ff = await getFFmpeg() as any;
+  const ff = (await getFFmpeg()) as any;
   onProgress?.(6);
 
   setProgressHandler(ff, ({ progress }) =>
-    onProgress?.(6 + Math.round(progress * 88)));
+    onProgress?.(6 + Math.round(progress * 88)),
+  );
 
   // Passthrough: remux only, no re-encode. This is the only way to carry a
   // lossless/surround track (TrueHD, DTS, DTS-HD, PCM multichannel, etc.)
@@ -35,27 +41,49 @@ export async function compressAudio(
     return passthroughAudio(file, ff, options.stripMetadata, onProgress);
   }
 
-  const fmt  = (options.audioFormat ?? 'mp3') as AudioFormat;
-  const br   = options.audioBitrate ?? DEFAULT_BITRATE[fmt];
-  const ext  = file.name.match(/\.[^.]+$/)?.[0] ?? '.audio';
-  const outN = `output.${fmt === 'aac' ? 'm4a' : fmt}`;
+  const fmt = (options.audioFormat ?? "mp3") as AudioFormat;
+  const br = options.audioBitrate ?? DEFAULT_BITRATE[fmt];
+  const ext = file.name.match(/\.[^.]+$/)?.[0] ?? ".audio";
+  const outN = `output.${fmt === "aac" ? "m4a" : fmt}`;
 
   await ff.writeFile(`input${ext}`, await ffFetch(file));
 
-  const args: string[] = ['-i', `input${ext}`];
+  const args: string[] = ["-i", `input${ext}`];
 
   switch (fmt) {
-    case 'mp3':  args.push('-c:a', 'libmp3lame', '-b:a', `${br}k`); break;
-    case 'aac':  args.push('-c:a', 'aac', '-b:a', `${br}k`, '-movflags', '+faststart'); break;
-    case 'ogg':  args.push('-c:a', 'libvorbis', '-b:a', `${br}k`); break;
-    case 'opus': args.push('-c:a', 'libopus', '-b:a', `${br}k`, '-vbr', 'on', '-compression_level', '10'); break;
-    case 'flac': args.push('-c:a', 'flac', '-compression_level', '8'); break;
-    case 'wav':  args.push('-c:a', 'pcm_s16le'); break;
+    case "mp3":
+      args.push("-c:a", "libmp3lame", "-b:a", `${br}k`);
+      break;
+    case "aac":
+      args.push("-c:a", "aac", "-b:a", `${br}k`, "-movflags", "+faststart");
+      break;
+    case "ogg":
+      args.push("-c:a", "libvorbis", "-b:a", `${br}k`);
+      break;
+    case "opus":
+      args.push(
+        "-c:a",
+        "libopus",
+        "-b:a",
+        `${br}k`,
+        "-vbr",
+        "on",
+        "-compression_level",
+        "10",
+      );
+      break;
+    case "flac":
+      args.push("-c:a", "flac", "-compression_level", "8");
+      break;
+    case "wav":
+      args.push("-c:a", "pcm_s16le");
+      break;
   }
 
-  if (options.audioSampleRate) args.push('-ar', String(options.audioSampleRate));
-  if (options.stripMetadata)   args.push('-map_metadata', '-1');
-  args.push('-vn', '-y', outN);
+  if (options.audioSampleRate)
+    args.push("-ar", String(options.audioSampleRate));
+  if (options.stripMetadata) args.push("-map_metadata", "-1");
+  args.push("-vn", "-y", outN);
 
   await ff.exec(args);
 
@@ -68,10 +96,10 @@ export async function compressAudio(
 
   return {
     blob,
-    originalSize:     file.size,
-    compressedSize:   blob.size,
+    originalSize: file.size,
+    compressedSize: blob.size,
     compressionRatio: file.size / blob.size,
-    format:           `${fmt.toUpperCase()} · FFmpeg.wasm`,
+    format: `${fmt.toUpperCase()} · FFmpeg.wasm`,
   };
 }
 
@@ -82,7 +110,7 @@ async function passthroughAudio(
   stripMetadata: boolean | undefined,
   onProgress?: (pct: number) => void,
 ): Promise<CompressResult> {
-  const ext  = file.name.match(/\.[^.]+$/)?.[0] ?? '.audio';
+  const ext = file.name.match(/\.[^.]+$/)?.[0] ?? ".audio";
   // Keep the source container — the codec is untouched, so re-wrapping into
   // an unrelated container (e.g. forcing TrueHD into an .mp3 shell) would
   // just produce a file nothing can open. MKV is the one container that
@@ -90,14 +118,14 @@ async function passthroughAudio(
   // that can't hold the source codec (still lets video containers through
   // for the "extract audio from a video file" use case).
   const containerSafe = /\.(mkv|mka|m4a|mp4|mov|wav|flac|ogg|opus)$/i.test(ext);
-  const outExt = containerSafe ? ext : '.mka';
-  const outN   = `output${outExt}`;
+  const outExt = containerSafe ? ext : ".mka";
+  const outN = `output${outExt}`;
 
   await ff.writeFile(`input${ext}`, await ffFetch(file));
 
-  const args: string[] = ['-i', `input${ext}`, '-map', '0:a', '-c:a', 'copy'];
-  if (stripMetadata) args.push('-map_metadata', '-1');
-  args.push('-vn', '-y', outN);
+  const args: string[] = ["-i", `input${ext}`, "-map", "0:a", "-c:a", "copy"];
+  if (stripMetadata) args.push("-map_metadata", "-1");
+  args.push("-vn", "-y", outN);
 
   await ff.exec(args);
 
@@ -110,25 +138,25 @@ async function passthroughAudio(
   // stays in its native container whenever containerSafe is true, so the
   // MIME type needs to track outExt rather than being hardcoded.
   const PASSTHROUGH_MIME: Record<string, string> = {
-    '.mka':  'audio/x-matroska',
-    '.mkv':  'video/x-matroska',
-    '.m4a':  'audio/mp4',
-    '.mp4':  'video/mp4',
-    '.mov':  'video/quicktime',
-    '.wav':  'audio/wav',
-    '.flac': 'audio/flac',
-    '.ogg':  'audio/ogg',
-    '.opus': 'audio/ogg; codecs=opus',
+    ".mka": "audio/x-matroska",
+    ".mkv": "video/x-matroska",
+    ".m4a": "audio/mp4",
+    ".mp4": "video/mp4",
+    ".mov": "video/quicktime",
+    ".wav": "audio/wav",
+    ".flac": "audio/flac",
+    ".ogg": "audio/ogg",
+    ".opus": "audio/ogg; codecs=opus",
   };
-  const mime = PASSTHROUGH_MIME[outExt.toLowerCase()] ?? 'audio/x-matroska';
+  const mime = PASSTHROUGH_MIME[outExt.toLowerCase()] ?? "audio/x-matroska";
   const blob = new Blob([data], { type: mime });
   onProgress?.(100);
 
   return {
     blob,
-    originalSize:     file.size,
-    compressedSize:   blob.size,
+    originalSize: file.size,
+    compressedSize: blob.size,
     compressionRatio: file.size / blob.size,
-    format:           `Passthrough (${ext.slice(1).toUpperCase()} · stream copy, no re-encode)`,
+    format: `Passthrough (${ext.slice(1).toUpperCase()} · stream copy, no re-encode)`,
   };
 }

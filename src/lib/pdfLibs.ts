@@ -10,18 +10,19 @@
  * these instead of redeclaring them.
  */
 
-export const PDFJS_VERSION = '4.4.168';
-export const PDFJS_BASE    = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}`;
-export const PDFLIB_ESM    = 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm';
+export const PDFJS_VERSION = "4.4.168";
+export const PDFJS_BASE = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}`;
+export const PDFLIB_ESM = "https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm";
 // fontkit is what pdf-lib needs to embed arbitrary (non-Standard-14) fonts —
 // required for embedding a Unicode font so non-Latin OCR text layers don't
 // get mangled by Helvetica's WinAnsi-only glyph coverage.
-export const FONTKIT_ESM   = 'https://cdn.jsdelivr.net/npm/@pdf-lib/fontkit@1.1.1/+esm';
+export const FONTKIT_ESM =
+  "https://cdn.jsdelivr.net/npm/@pdf-lib/fontkit@1.1.1/+esm";
 // Noto Sans covers Latin/Cyrillic/Greek/Vietnamese in one file; it does not
 // cover Arabic, Hindi/Devanagari, Bengali, or CJK — those scripts fall back
 // to Helvetica (best-effort) unless/until per-script fonts are added here.
 export const NOTO_SANS_UNICODE_FONT =
-  'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notosans/NotoSans%5Bwdth%2Cwght%5D.ttf';
+  "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notosans/NotoSans%5Bwdth%2Cwght%5D.ttf";
 
 // pdf.js module + worker setup used to be re-imported and re-configured
 // (GlobalWorkerOptions.workerSrc) independently in compressPdf.ts,
@@ -33,7 +34,9 @@ export const NOTO_SANS_UNICODE_FONT =
 let _pdfjsLib: any = null;
 export async function getPdfJs(): Promise<any> {
   if (_pdfjsLib) return _pdfjsLib;
-  const lib = await import(/* @vite-ignore */ `${PDFJS_BASE}/build/pdf.mjs`) as any;
+  const lib = (await import(
+    /* @vite-ignore */ `${PDFJS_BASE}/build/pdf.mjs`
+  )) as any;
   lib.GlobalWorkerOptions.workerSrc = `${PDFJS_BASE}/build/pdf.worker.mjs`;
   _pdfjsLib = lib;
   return lib;
@@ -46,12 +49,12 @@ export async function getPdfJs(): Promise<any> {
 export async function openPdfDocument(bytes: Uint8Array): Promise<any> {
   const lib = await getPdfJs();
   return lib.getDocument({
-    data:                bytes.slice(0),
-    cMapUrl:             `${PDFJS_BASE}/cmaps/`,
-    cMapPacked:          true,
+    data: bytes.slice(0),
+    cMapUrl: `${PDFJS_BASE}/cmaps/`,
+    cMapPacked: true,
     standardFontDataUrl: `${PDFJS_BASE}/standard_fonts/`,
-    useSystemFonts:      true,
-    useWorkerFetch:      false,
-    isEvalSupported:     false,
+    useSystemFonts: true,
+    useWorkerFetch: false,
+    isEvalSupported: false,
   }).promise;
 }

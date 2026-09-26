@@ -1,17 +1,17 @@
 // FFmpeg.wasm singleton — loaded once per session, reused for all compressions.
 // Uses multithreaded core when SharedArrayBuffer is available (requires COOP/COEP headers).
 
-const FFMPEG_PKG  = 'https://esm.sh/@ffmpeg/ffmpeg@0.12.10';
-const FFMPEG_UTIL = 'https://esm.sh/@ffmpeg/util@0.12.2';
-const CORE_MT     = 'https://esm.sh/@ffmpeg/core-mt@0.12.6/dist/esm';
-const CORE_ST     = 'https://esm.sh/@ffmpeg/core@0.12.6/dist/esm';
+const FFMPEG_PKG = "https://esm.sh/@ffmpeg/ffmpeg@0.12.10";
+const FFMPEG_UTIL = "https://esm.sh/@ffmpeg/util@0.12.2";
+const CORE_MT = "https://esm.sh/@ffmpeg/core-mt@0.12.6/dist/esm";
+const CORE_ST = "https://esm.sh/@ffmpeg/core@0.12.6/dist/esm";
 
 let _instance: unknown = null;
-let _loading:  Promise<unknown> | null = null;
+let _loading: Promise<unknown> | null = null;
 
 export async function getFFmpeg(): Promise<unknown> {
   if (_instance) return _instance;
-  if (_loading)  return _loading;
+  if (_loading) return _loading;
 
   _loading = (async () => {
     try {
@@ -20,14 +20,24 @@ export async function getFFmpeg(): Promise<unknown> {
         import(/* @vite-ignore */ FFMPEG_UTIL),
       ]);
 
-      const ff   = new FFmpeg();
+      const ff = new FFmpeg();
       const hasMT = hasMultiThreadSupport();
-      const base  = hasMT ? CORE_MT : CORE_ST;
+      const base = hasMT ? CORE_MT : CORE_ST;
 
       await ff.load({
-        coreURL: await toBlobURL(`${base}/ffmpeg-core.js`,   'text/javascript'),
-        wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, 'application/wasm'),
-        ...(hasMT ? { workerURL: await toBlobURL(`${base}/ffmpeg-core.worker.js`, 'text/javascript') } : {}),
+        coreURL: await toBlobURL(`${base}/ffmpeg-core.js`, "text/javascript"),
+        wasmURL: await toBlobURL(
+          `${base}/ffmpeg-core.wasm`,
+          "application/wasm",
+        ),
+        ...(hasMT
+          ? {
+              workerURL: await toBlobURL(
+                `${base}/ffmpeg-core.worker.js`,
+                "text/javascript",
+              ),
+            }
+          : {}),
       });
 
       _instance = ff;
@@ -55,8 +65,11 @@ export async function ffFetch(file: File | string): Promise<Uint8Array> {
 // silently misbehave. `crossOriginIsolated` is the actual signal that those
 // headers are in effect; require both.
 function hasMultiThreadSupport(): boolean {
-  return typeof SharedArrayBuffer !== 'undefined' &&
-    typeof crossOriginIsolated !== 'undefined' && crossOriginIsolated === true;
+  return (
+    typeof SharedArrayBuffer !== "undefined" &&
+    typeof crossOriginIsolated !== "undefined" &&
+    crossOriginIsolated === true
+  );
 }
 
 export function ffHasMT(): boolean {
@@ -72,8 +85,11 @@ export function ffHasMT(): boolean {
 // without bound. setProgressHandler swaps out the single active listener.
 let _lastProgressHandler: ((e: { progress: number }) => void) | null = null;
 
-export function setProgressHandler(ff: any, handler: (e: { progress: number }) => void) {
-  if (_lastProgressHandler) ff.off('progress', _lastProgressHandler);
+export function setProgressHandler(
+  ff: any,
+  handler: (e: { progress: number }) => void,
+) {
+  if (_lastProgressHandler) ff.off("progress", _lastProgressHandler);
   _lastProgressHandler = handler;
-  ff.on('progress', handler);
+  ff.on("progress", handler);
 }

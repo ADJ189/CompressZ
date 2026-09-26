@@ -6,21 +6,21 @@
  * Reuses the exact pdfjs-dist / pdf-lib CDN loading pattern already used
  * in compressPdf.ts and pages/ocr.ts, so there's nothing new to audit.
  */
-import { zipToBlob, zipSupported } from './zip';
-import { openPdfDocument } from './pdfLibs';
-import { get2D } from './gpu';
+import { zipToBlob, zipSupported } from "./zip";
+import { openPdfDocument } from "./pdfLibs";
+import { get2D } from "./gpu";
 
-export { imagesToPdf } from './imagesToPdf';
+export { imagesToPdf } from "./imagesToPdf";
 
 export interface PdfToImagesResult {
-  blob: Blob;          // single image, or a .zip if multiple pages
+  blob: Blob; // single image, or a .zip if multiple pages
   isZip: boolean;
   pageCount: number;
 }
 
 export async function pdfToImages(
   file: File,
-  format: 'png' | 'jpeg',
+  format: "png" | "jpeg",
   dpi: number,
   onProgress?: (pct: number) => void,
 ): Promise<PdfToImagesResult> {
@@ -30,26 +30,41 @@ export async function pdfToImages(
   const scale = dpi / 72;
   const total = doc.numPages;
   const pages: { name: string; data: Uint8Array }[] = [];
-  const ext = format === 'jpeg' ? 'jpg' : 'png';
-  const mime = format === 'jpeg' ? 'image/jpeg' : 'image/png';
-  const base = file.name.replace(/\.pdf$/i, '');
+  const ext = format === "jpeg" ? "jpg" : "png";
+  const mime = format === "jpeg" ? "image/jpeg" : "image/png";
+  const base = file.name.replace(/\.pdf$/i, "");
 
   for (let i = 1; i <= total; i++) {
     const page = await doc.getPage(i);
-    const vp   = page.getViewport({ scale });
-    const w = Math.floor(vp.width), h = Math.floor(vp.height);
+    const vp = page.getViewport({ scale });
+    const w = Math.floor(vp.width),
+      h = Math.floor(vp.height);
 
-    const c = document.createElement('canvas');
-    c.width = w; c.height = h;
-    const ctx = get2D(c, 'pdf', { alpha: format === 'png' });
-    if (format === 'jpeg') { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); }
-    await page.render({ canvasContext: ctx, viewport: vp, intent: 'print' }).promise;
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    const ctx = get2D(c, "pdf", { alpha: format === "png" });
+    if (format === "jpeg") {
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, w, h);
+    }
+    await page.render({ canvasContext: ctx, viewport: vp, intent: "print" })
+      .promise;
 
     const blob = await new Promise<Blob>((res, rej) =>
-      c.toBlob(b => b ? res(b) : rej(new Error('toBlob returned null')), mime, format === 'jpeg' ? 0.92 : undefined));
-    pages.push({ name: `${base}_page${String(i).padStart(2, '0')}.${ext}`, data: new Uint8Array(await blob.arrayBuffer()) });
+      c.toBlob(
+        (b) => (b ? res(b) : rej(new Error("toBlob returned null"))),
+        mime,
+        format === "jpeg" ? 0.92 : undefined,
+      ),
+    );
+    pages.push({
+      name: `${base}_page${String(i).padStart(2, "0")}.${ext}`,
+      data: new Uint8Array(await blob.arrayBuffer()),
+    });
 
-    c.width = 0; c.height = 0;
+    c.width = 0;
+    c.height = 0;
     page.cleanup();
     onProgress?.(Math.round((i / total) * 95));
   }
@@ -61,10 +76,16 @@ export async function pdfToImages(
     // ArrayBufferLike/SharedArrayBuffer) backing — Blob's type requires
     // that, and this also guarantees the exact byte range regardless of
     // how `data` was constructed upstream.
-    return { blob: new Blob([new Uint8Array(pages[0].data)], { type: mime }), isZip: false, pageCount: 1 };
+    return {
+      blob: new Blob([new Uint8Array(pages[0].data)], { type: mime }),
+      isZip: false,
+      pageCount: 1,
+    };
   }
   if (!zipSupported()) {
-    throw new Error('Multi-page PDF → image needs one file per page, which requires ZIP support (CompressionStream) — please use a current version of Chrome, Firefox, Safari, or Edge.');
+    throw new Error(
+      "Multi-page PDF → image needs one file per page, which requires ZIP support (CompressionStream) — please use a current version of Chrome, Firefox, Safari, or Edge.",
+    );
   }
   return { blob: await zipToBlob(pages), isZip: true, pageCount: pages.length };
 }
