@@ -29,13 +29,18 @@
  * recommendation from lib/platform.ts, but can be overridden.
  */
 
-import { decodeImageBitmap } from './imageDecode';
+import { decodeImageBitmap } from "./imageDecode";
+// The exact onnxruntime-web version bundled with @huggingface/transformers —
+// injected at build time (see vite.config.ts) by reading the installed
+// package directly, since onnxruntime-web's package.json isn't exposed
+// through its "exports" map and so can't be imported as a module here.
+declare const __ORT_VERSION__: string;
 
-export type AiModelTier = 'efficient' | 'powerful';
+export type AiModelTier = "efficient" | "powerful";
 
 const MODEL_IDS: Record<AiModelTier, string> = {
-  efficient: 'Xenova/mobilenet_v2_1.0_224',
-  powerful:  'Xenova/vit-base-patch16-224',
+  efficient: "Xenova/mobilenet_v2_1.0_224",
+  powerful: "Xenova/vit-base-patch16-224",
 };
 
 export interface AiTag {
@@ -44,8 +49,8 @@ export interface AiTag {
 }
 
 export interface ContentGuess {
-  contentType: 'photo' | 'graphic';
-  suggestedFormat: 'image/webp' | 'image/png';
+  contentType: "photo" | "graphic";
+  suggestedFormat: "image/webp" | "image/png";
   suggestedQuality: number;
   reason: string;
 }
@@ -59,35 +64,58 @@ export interface SmartAnalysis {
 // ── Capability check ─────────────────────────────────────────
 
 export function aiSupported(): boolean {
-  return typeof WebAssembly !== 'undefined';
+  return typeof WebAssembly !== "undefined";
 }
 
 // ── Model loading (lazy, cached per tier) ────────────────────
 
-type Classifier = (input: any, opts?: any) => Promise<{ label: string; score: number }[]>;
+type Classifier = (
+  input: any,
+  opts?: any,
+) => Promise<{ label: string; score: number }[]>;
 const pipelines = new Map<AiModelTier, Promise<Classifier>>();
 
-async function getClassifier(tier: AiModelTier, onProgress?: (pct: number, note: string) => void): Promise<Classifier> {
+async function getClassifier(
+  tier: AiModelTier,
+  onProgress?: (pct: number, note: string) => void,
+): Promise<Classifier> {
   let p = pipelines.get(tier);
   if (p) return p;
 
   p = (async () => {
-    const { pipeline, env } = await import('@huggingface/transformers');
+    const { pipeline, env } = await import("@huggingface/transformers");
     // Keep everything local: don't let transformers.js probe for a local
     // model server, and cache fetched model weights in the browser (IndexedDB)
     // so it's only downloaded once, same trade-off as PaddleOCR/Tesseract.
     env.allowLocalModels = false;
     env.useBrowserCache = true;
 
-    onProgress?.(0, 'Downloading model…');
-    const clf = await pipeline('image-classification', MODEL_IDS[tier], {
+    // onnxruntime-web's WASM binaries (the actual inference runtime, not the
+    // model weights) are ~15-30MB each. The threaded+SIMD+asyncify build in
+    // particular is a *build-time* asset Vite bundles locally by default
+    // (via a `new URL(...)` reference inside onnxruntime-web's loader) —
+    // and at ~26MB it exceeds Cloudflare Pages' 25MiB per-file limit,
+    // failing deployment outright. Pointing wasmPaths at the exact
+    // published onnxruntime-web version on a CDN makes the runtime fetch
+    // these binaries remotely instead, so the (still Vite-bundled, but now
+    // unused) local copy can be stripped from the build output — see
+    // scripts/strip-oversized-assets.mjs, run as part of `npm run build`.
+    if (env.backends.onnx?.wasm) {
+      env.backends.onnx.wasm.wasmPaths = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${__ORT_VERSION__}/dist/`;
+    }
+
+    onProgress?.(0, "Downloading model…");
+    const clf = await pipeline("image-classification", MODEL_IDS[tier], {
       progress_callback: (e: any) => {
-        if (e?.status === 'progress' && typeof e.progress === 'number') {
-          onProgress?.(Math.round(e.progress), `Downloading ${e.file ?? 'model'}…`);
+        if (e?.status === "progress" && typeof e.progress === "number") {
+          onProgress?.(
+            Math.round(e.progress),
+            `Downloading ${e.file ?? "model"}…`,
+          );
         }
       },
     });
-    onProgress?.(100, 'Ready');
+    onProgress?.(100, "Ready");
     return ((input: any, opts?: any) => clf(input, opts)) as Classifier;
   })();
 
@@ -102,7 +130,11 @@ export function unloadModels() {
 
 // ── Classification ────────────────────────────────────────────
 
-export async function classifyImage(file: File, tier: AiModelTier, onProgress?: (pct: number, note: string) => void): Promise<AiTag | null> {
+export async function classifyImage(
+  file: File,
+  tier: AiModelTier,
+  onProgress?: (pct: number, note: string) => void,
+): Promise<AiTag | null> {
   try {
     const clf = await getClassifier(tier, onProgress);
     const url = URL.createObjectURL(file);
@@ -120,8 +152,8 @@ export async function classifyImage(file: File, tier: AiModelTier, onProgress?: 
 
 function cleanLabel(raw: string): string {
   // ImageNet-style labels are often comma-separated synonyms ("tabby cat, tabby") — keep the first, title-case it.
-  const first = raw.split(',')[0].trim();
-  return first.replace(/\b\w/g, c => c.toUpperCase());
+  const first = raw.split(",")[0].trim();
+  return first.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 // ── Content-type heuristic (no model — pure canvas analysis) ──
@@ -130,9 +162,10 @@ export async function guessContentType(file: File): Promise<ContentGuess> {
   try {
     const bmp = await decodeImageBitmap(file);
     const size = 64; // downsample hard — this only needs a rough texture signal, not detail
-    const canvas = document.createElement('canvas');
-    canvas.width = size; canvas.height = size;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
     ctx.drawImage(bmp, 0, 0, size, size);
     bmp.close?.();
     const { data } = ctx.getImageData(0, 0, size, size);
@@ -142,16 +175,22 @@ export async function guessContentType(file: File): Promise<ContentGuess> {
     // regions (low average gradient); photos have continuous tonal variation
     // (higher average gradient). Also count distinct quantized colours —
     // graphics/screenshots tend to use far fewer than photos.
-    let gradSum = 0, gradCount = 0;
+    let gradSum = 0,
+      gradCount = 0;
     const colors = new Set<number>();
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
         const i = (y * size + x) * 4;
-        const r = data[i], g = data[i + 1], b = data[i + 2];
-        colors.add((r >> 4) << 8 | (g >> 4) << 4 | (b >> 4)); // 4-bit-per-channel bucket
+        const r = data[i],
+          g = data[i + 1],
+          b = data[i + 2];
+        colors.add(((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4)); // 4-bit-per-channel bucket
         if (x < size - 1) {
           const j = i + 4;
-          gradSum += Math.abs(r - data[j]) + Math.abs(g - data[j + 1]) + Math.abs(b - data[j + 2]);
+          gradSum +=
+            Math.abs(r - data[j]) +
+            Math.abs(g - data[j + 1]) +
+            Math.abs(b - data[j + 2]);
           gradCount++;
         }
       }
@@ -161,12 +200,28 @@ export async function guessContentType(file: File): Promise<ContentGuess> {
 
     const isGraphic = avgGrad < 10 || uniqueColors < 40;
     return isGraphic
-      ? { contentType: 'graphic', suggestedFormat: 'image/png', suggestedQuality: 95,
-          reason: 'Flat colour regions and a small palette — looks like a screenshot, illustration, or document, so lossless-leaning PNG tends to hold up better than a lossy re-encode.' }
-      : { contentType: 'photo', suggestedFormat: 'image/webp', suggestedQuality: 80,
-          reason: 'Continuous tonal variation typical of a photo — WebP at moderate quality usually gives the best size-for-quality trade-off.' };
+      ? {
+          contentType: "graphic",
+          suggestedFormat: "image/png",
+          suggestedQuality: 95,
+          reason:
+            "Flat colour regions and a small palette — looks like a screenshot, illustration, or document, so lossless-leaning PNG tends to hold up better than a lossy re-encode.",
+        }
+      : {
+          contentType: "photo",
+          suggestedFormat: "image/webp",
+          suggestedQuality: 80,
+          reason:
+            "Continuous tonal variation typical of a photo — WebP at moderate quality usually gives the best size-for-quality trade-off.",
+        };
   } catch {
-    return { contentType: 'photo', suggestedFormat: 'image/webp', suggestedQuality: 82, reason: 'Could not analyse the image — using the general-purpose default.' };
+    return {
+      contentType: "photo",
+      suggestedFormat: "image/webp",
+      suggestedQuality: 82,
+      reason:
+        "Could not analyse the image — using the general-purpose default.",
+    };
   }
 }
 
@@ -182,17 +237,32 @@ export async function smartAnalyze(
     const file = files[i];
     onProgress?.(i, files.length, `Analysing ${file.name}…`);
     const [tag, content] = await Promise.all([
-      classifyImage(file, tier, (pct, note) => onProgress?.(i, files.length, pct < 100 ? note : `Analysing ${file.name}…`)),
+      classifyImage(file, tier, (pct, note) =>
+        onProgress?.(
+          i,
+          files.length,
+          pct < 100 ? note : `Analysing ${file.name}…`,
+        ),
+      ),
       guessContentType(file),
     ]);
     out.push({ file, tag, content });
   }
-  onProgress?.(files.length, files.length, 'Done');
+  onProgress?.(files.length, files.length, "Done");
   return out;
 }
 
 /** Stable sort of a file list by AI label (falls back to filename for files whose label lookup failed), grouping visually/semantically similar images together instead of leaving them in drop order. */
-export function sortBySmartAnalysis(files: File[], analysis: SmartAnalysis[]): File[] {
-  const byFile = new Map(analysis.map(a => [a.file, a.tag?.label ?? '~' + a.file.name]));
-  return files.slice().sort((a, b) => (byFile.get(a) ?? a.name).localeCompare(byFile.get(b) ?? b.name));
+export function sortBySmartAnalysis(
+  files: File[],
+  analysis: SmartAnalysis[],
+): File[] {
+  const byFile = new Map(
+    analysis.map((a) => [a.file, a.tag?.label ?? "~" + a.file.name]),
+  );
+  return files
+    .slice()
+    .sort((a, b) =>
+      (byFile.get(a) ?? a.name).localeCompare(byFile.get(b) ?? b.name),
+    );
 }

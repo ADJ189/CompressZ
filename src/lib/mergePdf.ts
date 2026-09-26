@@ -8,7 +8,7 @@
  * pass, so text stays selectable and vectors stay sharp at any zoom, same
  * as the "structural" strategy in compressPdf.ts.
  */
-import { PDFLIB_ESM } from './pdfLibs';
+import { PDFLIB_ESM } from "./pdfLibs";
 
 export interface MergeResult {
   blob: Blob;
@@ -20,10 +20,10 @@ export async function mergePdfs(
   files: File[],
   onProgress?: (pct: number) => void,
 ): Promise<MergeResult> {
-  if (files.length < 2) throw new Error('Add at least two PDFs to merge');
+  if (files.length < 2) throw new Error("Add at least two PDFs to merge");
   onProgress?.(2);
 
-  const { PDFDocument } = await import(/* @vite-ignore */ PDFLIB_ESM) as any;
+  const { PDFDocument } = (await import(/* @vite-ignore */ PDFLIB_ESM)) as any;
   const merged = await PDFDocument.create();
   let pageCount = 0;
 
@@ -34,7 +34,9 @@ export async function mergePdfs(
     try {
       bytes = await file.arrayBuffer();
     } catch {
-      throw new Error(`Couldn't read "${file.name}" — the file may be corrupted.`);
+      throw new Error(
+        `Couldn't read "${file.name}" — the file may be corrupted.`,
+      );
     }
 
     let src: any;
@@ -45,7 +47,9 @@ export async function mergePdfs(
       // still throws below and is reported by name.
       src = await PDFDocument.load(bytes, { ignoreEncryption: true });
     } catch {
-      throw new Error(`"${file.name}" isn't a readable PDF (invalid, corrupted, or password-protected).`);
+      throw new Error(
+        `"${file.name}" isn't a readable PDF (invalid, corrupted, or password-protected).`,
+      );
     }
 
     const indices = src.getPageIndices();
@@ -62,13 +66,14 @@ export async function mergePdfs(
     onProgress?.(2 + Math.round(((i + 1) / files.length) * 96));
   }
 
-  if (pageCount === 0) throw new Error('None of the selected PDFs contained any pages.');
+  if (pageCount === 0)
+    throw new Error("None of the selected PDFs contained any pages.");
 
   const outBytes = await merged.save();
   onProgress?.(100);
 
   return {
-    blob: new Blob([outBytes.buffer as ArrayBuffer], { type: 'application/pdf' }),
+    blob: new Blob([outBytes], { type: "application/pdf" }),
     pageCount,
     totalInputSize: files.reduce((sum, f) => sum + f.size, 0),
   };
