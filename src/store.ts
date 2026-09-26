@@ -11,8 +11,14 @@
  *   // write: imageStore.files = [...imageStore.files, newEntry];
  */
 
-import type { FileEntry, ImageFormat, AudioFormat, VideoCodec, PdfLevel } from './lib/types';
-import { getSettings } from './lib/settings';
+import type {
+  FileEntry,
+  ImageFormat,
+  AudioFormat,
+  VideoCodec,
+  PdfLevel,
+} from "./lib/types";
+import { getSettings } from "./lib/settings";
 
 // Each tool's starting values come from Settings → Engine Defaults instead
 // of being hardcoded here, so editing a default on the Settings page
@@ -24,110 +30,110 @@ const engineDefaults = getSettings().engines;
 
 // ── Images ────────────────────────────────────────────────────
 export interface ImageState {
-  files:        FileEntry[];
-  mode:         'quality' | 'targetSize';
-  quality:      number;
+  files: FileEntry[];
+  mode: "quality" | "targetSize";
+  quality: number;
   targetSizeKB: number;
-  format:       ImageFormat;
-  maxDim:       number;
+  format: ImageFormat;
+  maxDim: number;
 }
 export const imageStore: ImageState = {
-  files:        [],
-  mode:         'quality',
-  quality:      engineDefaults.images.quality,
+  files: [],
+  mode: "quality",
+  quality: engineDefaults.images.quality,
   targetSizeKB: 200,
-  format:       engineDefaults.images.format,
-  maxDim:       engineDefaults.images.maxDim,
+  format: engineDefaults.images.format,
+  maxDim: engineDefaults.images.maxDim,
 };
 
 // ── Audio ─────────────────────────────────────────────────────
 export interface AudioState {
-  files:       FileEntry[];
-  fmt:         AudioFormat;
-  bitrate:     number;
-  sampleRate:  number;
-  stripMeta:   boolean;
+  files: FileEntry[];
+  fmt: AudioFormat;
+  bitrate: number;
+  sampleRate: number;
+  stripMeta: boolean;
   passthrough: boolean;
 }
 export const audioStore: AudioState = {
-  files:       [],
-  fmt:         engineDefaults.audio.format,
-  bitrate:     engineDefaults.audio.bitrate,
-  sampleRate:  0,
-  stripMeta:   true,
+  files: [],
+  fmt: engineDefaults.audio.format,
+  bitrate: engineDefaults.audio.bitrate,
+  sampleRate: 0,
+  stripMeta: true,
   passthrough: false,
 };
 
 // ── Video ─────────────────────────────────────────────────────
 export interface VideoState {
-  files:        FileEntry[];
-  mode:         'crf' | 'bitrate' | 'targetSize';
-  crfQuality:   number;
-  bitrate:      number;
+  files: FileEntry[];
+  mode: "crf" | "bitrate" | "targetSize";
+  crfQuality: number;
+  bitrate: number;
   targetSizeMB: number;
-  codec:        VideoCodec;
-  preset:       'ultrafast' | 'fast' | 'medium' | 'slow';
-  maxWidth:     number;
-  fps:          number;
-  tenBit:       boolean;
-  proxy:        boolean;
+  codec: VideoCodec;
+  preset: "ultrafast" | "fast" | "medium" | "slow";
+  maxWidth: number;
+  fps: number;
+  tenBit: boolean;
+  proxy: boolean;
   audioPassthrough: boolean;
-  twoPass:      boolean;
-  audioTrackMode: 'first' | 'all';
-  audioDownmix:   boolean;
-  subtitleMode:   'none' | 'all';
-  editingId:      string | null; // id of a queued file whose settings are being edited, or null
+  twoPass: boolean;
+  audioTrackMode: "first" | "all";
+  audioDownmix: boolean;
+  subtitleMode: "none" | "all";
+  editingId: string | null; // id of a queued file whose settings are being edited, or null
 }
 export const videoStore: VideoState = {
-  files:        [],
-  mode:         'crf',
-  crfQuality:   engineDefaults.video.crfQuality,
-  bitrate:      2000,
+  files: [],
+  mode: "crf",
+  crfQuality: engineDefaults.video.crfQuality,
+  bitrate: 2000,
   targetSizeMB: 0,
-  codec:        engineDefaults.video.codec,
-  preset:       engineDefaults.video.preset,
-  maxWidth:     0,
-  fps:          0,
-  tenBit:       false,
-  proxy:        false,
+  codec: engineDefaults.video.codec,
+  preset: engineDefaults.video.preset,
+  maxWidth: 0,
+  fps: 0,
+  tenBit: false,
+  proxy: false,
   audioPassthrough: false,
-  twoPass:      false,
-  audioTrackMode: 'first',
-  audioDownmix:   false,
-  subtitleMode:   'none',
-  editingId:      null,
+  twoPass: false,
+  audioTrackMode: "first",
+  audioDownmix: false,
+  subtitleMode: "none",
+  editingId: null,
 };
 
 // ── GIF ───────────────────────────────────────────────────────
 export interface GifState {
-  files:      FileEntry[];
-  quality:    number;
+  files: FileEntry[];
+  quality: number;
   gifToVideo: boolean;
-  maxWidth:   number;
-  fps:        number;
+  maxWidth: number;
+  fps: number;
 }
 export const gifStore: GifState = {
-  files:      [],
-  quality:    engineDefaults.gif.quality,
+  files: [],
+  quality: engineDefaults.gif.quality,
   gifToVideo: false,
-  maxWidth:   0,
-  fps:        0,
+  maxWidth: 0,
+  fps: 0,
 };
 
 // ── PDF ───────────────────────────────────────────────────────
 export interface PdfState {
-  files:       FileEntry[];
-  level:       PdfLevel;
-  targetUnit:  'MB' | 'KB';
+  files: FileEntry[];
+  level: PdfLevel;
+  targetUnit: "MB" | "KB";
   targetInput: string;
-  stripMeta:   'auto' | 'on' | 'off'; // 'auto' defers to the preset's own default
+  stripMeta: "auto" | "on" | "off"; // 'auto' defers to the preset's own default
 }
 export const pdfStore: PdfState = {
-  files:       [],
-  level:       engineDefaults.pdf.level,
-  targetUnit:  'MB',
-  targetInput: '',
-  stripMeta:   'auto',
+  files: [],
+  level: engineDefaults.pdf.level,
+  targetUnit: "MB",
+  targetInput: "",
+  stripMeta: "auto",
 };
 
 // ── Merge PDF ─────────────────────────────────────────────────
@@ -136,11 +142,11 @@ export const pdfStore: PdfState = {
 // merge order) rather than the FileEntry[] queue the other tools use.
 export interface MergeState {
   files: File[];
-  busy:  boolean;
+  busy: boolean;
 }
 export const mergeStore: MergeState = {
   files: [],
-  busy:  false,
+  busy: false,
 };
 
 // ── Images → PDF ──────────────────────────────────────────────
@@ -148,20 +154,20 @@ export const mergeStore: MergeState = {
 // the couple of page-layout options this tool exposes that merge-pdf
 // doesn't need.
 export interface ImagesToPdfState {
-  files:    File[];
-  busy:     boolean;
-  pageSize: 'auto' | 'a4' | 'letter';
-  quality:  number; // JPEG quality used when embedding each image, 1-99
-  maxDim:   number; // cap the longer edge before embedding — 0 = no cap
+  files: File[];
+  busy: boolean;
+  pageSize: "auto" | "a4" | "letter";
+  quality: number; // JPEG quality used when embedding each image, 1-99
+  maxDim: number; // cap the longer edge before embedding — 0 = no cap
 }
 export const imagesToPdfStore: ImagesToPdfState = {
-  files:    [],
-  busy:     false,
-  pageSize: 'auto',
+  files: [],
+  busy: false,
+  pageSize: "auto",
   // Was hardcoded to 92 regardless of the Image Compressor's configured
   // default quality/max-dimension (Settings → Images), unlike every other
   // tool's store here, which all seed from `engineDefaults` — meaning a
   // quality/maxDim set in Settings silently didn't apply to Images → PDF.
-  quality:  engineDefaults.images.quality,
-  maxDim:   engineDefaults.images.maxDim,
+  quality: engineDefaults.images.quality,
+  maxDim: engineDefaults.images.maxDim,
 };
