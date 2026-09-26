@@ -18,12 +18,12 @@
 //
 // Run automatically as part of `npm run build` (see package.json).
 
-import { readdir, stat, unlink } from 'node:fs/promises';
-import { join } from 'node:path';
+import { readdir, stat, unlink } from "node:fs/promises";
+import { join } from "node:path";
 
-const DIST_DIR = new URL('../dist/assets', import.meta.url).pathname;
+const DIST_DIR = new URL("../dist/assets", import.meta.url).pathname;
 const CLOUDFLARE_PAGES_LIMIT = 25 * 1024 * 1024; // 25 MiB, Cloudflare Pages' hard per-file cap
-const SAFETY_MARGIN = 1 * 1024 * 1024;           // strip anything within 1MiB of the cap too
+const SAFETY_MARGIN = 1 * 1024 * 1024; // strip anything within 1MiB of the cap too
 const THRESHOLD = CLOUDFLARE_PAGES_LIMIT - SAFETY_MARGIN;
 
 async function main() {
@@ -31,7 +31,9 @@ async function main() {
   try {
     entries = await readdir(DIST_DIR);
   } catch {
-    console.warn(`[strip-oversized-assets] ${DIST_DIR} not found, skipping (did the build produce no assets?)`);
+    console.warn(
+      `[strip-oversized-assets] ${DIST_DIR} not found, skipping (did the build produce no assets?)`,
+    );
     return;
   }
 
@@ -42,19 +44,25 @@ async function main() {
     if (!st.isFile() || st.size <= THRESHOLD) continue;
 
     const mb = (st.size / (1024 * 1024)).toFixed(1);
-    console.log(`[strip-oversized-assets] Removing ${name} (${mb}MiB — exceeds Cloudflare Pages' 25MiB per-file limit)`);
+    console.log(
+      `[strip-oversized-assets] Removing ${name} (${mb}MiB — exceeds Cloudflare Pages' 25MiB per-file limit)`,
+    );
     await unlink(path);
     removed++;
   }
 
   if (removed === 0) {
-    console.log('[strip-oversized-assets] No oversized assets found — nothing to strip.');
+    console.log(
+      "[strip-oversized-assets] No oversized assets found — nothing to strip.",
+    );
   } else {
-    console.log(`[strip-oversized-assets] Stripped ${removed} file(s). Make sure any code referencing them (e.g. aiEngine.ts's onnxruntime wasmPaths) loads them from a CDN instead of a local path.`);
+    console.log(
+      `[strip-oversized-assets] Stripped ${removed} file(s). Make sure any code referencing them (e.g. aiEngine.ts's onnxruntime wasmPaths) loads them from a CDN instead of a local path.`,
+    );
   }
 }
 
-main().catch(err => {
-  console.error('[strip-oversized-assets] Failed:', err);
+main().catch((err) => {
+  console.error("[strip-oversized-assets] Failed:", err);
   process.exit(1);
 });
