@@ -130,8 +130,7 @@ async function videoViaFFmpeg(
     const audioBitrateK =
       opts.audioPassthrough || audioTrackCount === 0
         ? 0
-        : perTrackAudioK *
-          (audioTrackMode === "all" ? audioTrackCount : 1);
+        : perTrackAudioK * (audioTrackMode === "all" ? audioTrackCount : 1);
     const overheadK = Math.round(totalBitrateK * 0.02); // ~2% container/muxing overhead
     targetBitrateK = Math.max(32, totalBitrateK - audioBitrateK - overheadK);
   } else if (opts.videoBitrate) {
