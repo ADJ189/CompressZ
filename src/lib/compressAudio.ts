@@ -63,7 +63,7 @@ export async function compressAudio(
   await ff.deleteFile(`input${ext}`).catch(() => {});
   await ff.deleteFile(outN).catch(() => {});
 
-  const blob = new Blob([data.buffer as ArrayBuffer], { type: MIME_TYPE[fmt] });
+  const blob = new Blob([data], { type: MIME_TYPE[fmt] });
   onProgress?.(100);
 
   return {
@@ -105,7 +105,23 @@ async function passthroughAudio(
   await ff.deleteFile(`input${ext}`).catch(() => {});
   await ff.deleteFile(outN).catch(() => {});
 
-  const blob = new Blob([data.buffer as ArrayBuffer], { type: 'audio/x-matroska' });
+  // The blob's reported MIME has to match the container we actually wrote
+  // (outExt), not always claim Matroska — a passthrough .wav/.flac/.m4a/etc.
+  // stays in its native container whenever containerSafe is true, so the
+  // MIME type needs to track outExt rather than being hardcoded.
+  const PASSTHROUGH_MIME: Record<string, string> = {
+    '.mka':  'audio/x-matroska',
+    '.mkv':  'video/x-matroska',
+    '.m4a':  'audio/mp4',
+    '.mp4':  'video/mp4',
+    '.mov':  'video/quicktime',
+    '.wav':  'audio/wav',
+    '.flac': 'audio/flac',
+    '.ogg':  'audio/ogg',
+    '.opus': 'audio/ogg; codecs=opus',
+  };
+  const mime = PASSTHROUGH_MIME[outExt.toLowerCase()] ?? 'audio/x-matroska';
+  const blob = new Blob([data], { type: mime });
   onProgress?.(100);
 
   return {

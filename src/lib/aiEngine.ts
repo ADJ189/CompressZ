@@ -30,6 +30,11 @@
  */
 
 import { decodeImageBitmap } from './imageDecode';
+// The exact onnxruntime-web version bundled with @huggingface/transformers —
+// injected at build time (see vite.config.ts) by reading the installed
+// package directly, since onnxruntime-web's package.json isn't exposed
+// through its "exports" map and so can't be imported as a module here.
+declare const __ORT_VERSION__: string;
 
 export type AiModelTier = 'efficient' | 'powerful';
 
@@ -78,6 +83,21 @@ async function getClassifier(tier: AiModelTier, onProgress?: (pct: number, note:
     // so it's only downloaded once, same trade-off as PaddleOCR/Tesseract.
     env.allowLocalModels = false;
     env.useBrowserCache = true;
+
+    // onnxruntime-web's WASM binaries (the actual inference runtime, not the
+    // model weights) are ~15-30MB each. The threaded+SIMD+asyncify build in
+    // particular is a *build-time* asset Vite bundles locally by default
+    // (via a `new URL(...)` reference inside onnxruntime-web's loader) —
+    // and at ~26MB it exceeds Cloudflare Pages' 25MiB per-file limit,
+    // failing deployment outright. Pointing wasmPaths at the exact
+    // published onnxruntime-web version on a CDN makes the runtime fetch
+    // these binaries remotely instead, so the (still Vite-bundled, but now
+    // unused) local copy can be stripped from the build output — see
+    // scripts/strip-oversized-assets.mjs, run as part of `npm run build`.
+    if (env.backends.onnx?.wasm) {
+      env.backends.onnx.wasm.wasmPaths =
+        `https://cdn.jsdelivr.net/npm/onnxruntime-web@${__ORT_VERSION__}/dist/`;
+    }
 
     onProgress?.(0, 'Downloading model…');
     const clf = await pipeline('image-classification', MODEL_IDS[tier], {

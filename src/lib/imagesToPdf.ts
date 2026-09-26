@@ -84,7 +84,7 @@ export async function imagesToPdf(
 
   const bytes = await pdfDoc.save();
   onProgress?.(100);
-  return new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' });
+  return new Blob([bytes], { type: 'application/pdf' });
 }
 
 function encodeJpeg(c: HTMLCanvasElement | OffscreenCanvas, quality: number): Promise<ArrayBuffer> {

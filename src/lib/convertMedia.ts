@@ -87,7 +87,7 @@ export async function convertVideo(
     }
 
     const data = await ff.readFile(outN);
-    const blob = new Blob([data.buffer as ArrayBuffer], { type: VIDEO_MIME[target] });
+    const blob = new Blob([data], { type: VIDEO_MIME[target] });
     onProgress?.(100);
     return { blob, originalSize: file.size, convertedSize: blob.size, format: `${fmtLabel} · FFmpeg.wasm` };
   } finally {

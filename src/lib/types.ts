@@ -99,6 +99,8 @@ export function getOutputExtension(result: CompressResult): string {
   if (mime === 'video/webm')       return 'webm';
   if (mime === 'video/mp4')        return 'mp4';
   if (mime === 'video/x-matroska') return 'mkv';
+  if (mime === 'audio/x-matroska') return 'mka';
+  if (mime === 'video/quicktime')  return 'mov';
   if (mime === 'audio/mpeg')       return 'mp3';
   if (mime === 'audio/mp4')        return 'm4a';  // AAC in MP4 container
   if (mime === 'audio/opus')       return 'opus';

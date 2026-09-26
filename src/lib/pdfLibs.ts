@@ -13,6 +13,15 @@
 export const PDFJS_VERSION = '4.4.168';
 export const PDFJS_BASE    = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}`;
 export const PDFLIB_ESM    = 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm';
+// fontkit is what pdf-lib needs to embed arbitrary (non-Standard-14) fonts —
+// required for embedding a Unicode font so non-Latin OCR text layers don't
+// get mangled by Helvetica's WinAnsi-only glyph coverage.
+export const FONTKIT_ESM   = 'https://cdn.jsdelivr.net/npm/@pdf-lib/fontkit@1.1.1/+esm';
+// Noto Sans covers Latin/Cyrillic/Greek/Vietnamese in one file; it does not
+// cover Arabic, Hindi/Devanagari, Bengali, or CJK — those scripts fall back
+// to Helvetica (best-effort) unless/until per-script fonts are added here.
+export const NOTO_SANS_UNICODE_FONT =
+  'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notosans/NotoSans%5Bwdth%2Cwght%5D.ttf';
 
 // pdf.js module + worker setup used to be re-imported and re-configured
 // (GlobalWorkerOptions.workerSrc) independently in compressPdf.ts,

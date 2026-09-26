@@ -48,6 +48,7 @@ export async function compressImage(
   onProgress?.(18);
 
   let { width: w, height: h } = bitmap;
+  const origW = w, origH = h;
   const needsResize = w > maxW || h > maxH;
   if (needsResize) {
     const r = Math.min(maxW / w, maxH / h);
@@ -83,8 +84,20 @@ export async function compressImage(
     onProgress?.(95);
   }
 
-  // If PNG got larger, return original
-  if (format === 'image/png' && blob.size >= file.size) blob = file;
+  // If PNG re-encoding didn't actually shrink the file, returning the
+  // original is a reasonable choice — but the metadata describing the
+  // returned blob has to describe the blob we're actually returning, not
+  // the resized/re-encoded one we discarded. Otherwise the UI can show
+  // "resized to WxH, PNG" while the downloaded bytes are the original file
+  // at its original dimensions/format, and metadata-stripping guarantees
+  // silently don't hold.
+  let outFormat: ImageFormat = format;
+  let outW = w, outH = h;
+  if (format === 'image/png' && blob.size >= file.size) {
+    blob = file;
+    outFormat = (file.type as ImageFormat) || format;
+    outW = origW; outH = origH;
+  }
   onProgress?.(100);
 
   return {
@@ -92,9 +105,9 @@ export async function compressImage(
     originalSize:     file.size,
     compressedSize:   blob.size,
     compressionRatio: file.size / blob.size,
-    format,
-    width: w,
-    height: h,
+    format:           outFormat,
+    width: outW,
+    height: outH,
   };
 }
 

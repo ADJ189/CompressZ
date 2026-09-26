@@ -259,9 +259,19 @@ async function canvasRender(
 
   for (let i = 1; i <= total; i++) {
     const page = await srcDoc.getPage(i);
-    const vp   = page.getViewport({ scale: renderScale });
-    const w    = Math.floor(vp.width);
-    const h    = Math.floor(vp.height);
+    // PDF.js viewport dimensions scale 1:1 with `scale`, and at scale=1
+    // they equal the page's PDF points (1 unit = 1/72in for the default
+    // UserUnit). Using the *scaled* viewport as the new page's physical
+    // size — as this used to — made increasing render quality (renderScale)
+    // silently blow up the physical page dimensions. Points (page size)
+    // and pixels (render/image resolution) have to be tracked separately.
+    const pointsVp = page.getViewport({ scale: 1 });
+    const pageW    = pointsVp.width;
+    const pageH    = pointsVp.height;
+
+    const vp = page.getViewport({ scale: renderScale });
+    const w  = Math.floor(vp.width);
+    const h  = Math.floor(vp.height);
 
     let jpegBytes: Uint8Array;
 
@@ -294,8 +304,8 @@ async function canvasRender(
     }
 
     const img     = await (newPdf as any).embedJpg(jpegBytes);
-    const newPage = (newPdf as any).addPage([w, h]);
-    newPage.drawImage(img, { x: 0, y: 0, width: w, height: h });
+    const newPage = (newPdf as any).addPage([pageW, pageH]);
+    newPage.drawImage(img, { x: 0, y: 0, width: pageW, height: pageH });
     page.cleanup();
 
     onProgress?.(18 + Math.floor((i / total) * 76));

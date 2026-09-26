@@ -30,7 +30,7 @@ export async function compressGif(
       '-y', 'output.webm',
     ]);
     const d = await ff.readFile('output.webm');
-    blob    = new Blob([d.buffer as ArrayBuffer], { type: 'video/webm' });
+    blob    = new Blob([d], { type: 'video/webm' });
     fmt     = 'WebM VP9 (from GIF)';
     await ff.deleteFile('output.webm').catch(() => {});
 
@@ -59,7 +59,7 @@ export async function compressGif(
     ]);
 
     const d = await ff.readFile('output.gif');
-    blob    = new Blob([d.buffer as ArrayBuffer], { type: 'image/gif' });
+    blob    = new Blob([d], { type: 'image/gif' });
     fmt     = `GIF · ${colors} colours`;
     await ff.deleteFile('palette.png').catch(() => {});
     await ff.deleteFile('output.gif').catch(() => {});

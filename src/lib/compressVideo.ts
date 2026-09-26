@@ -79,7 +79,19 @@ async function videoViaFFmpeg(
   if (opts.targetSizeKB && opts.targetSizeKB > 0) {
     // FIX 1: use actual duration instead of hardcoded 60
     const dur = Math.max(1, meta.duration);
-    targetBitrateK = Math.round((opts.targetSizeKB * 8) / dur);
+    const totalBitrateK = Math.round((opts.targetSizeKB * 8) / dur);
+    // The total target-size bitrate has to be shared between video and
+    // audio — audio is muxed in on top of -b:v, so budgeting the *entire*
+    // total for video alone reliably overshoots the requested file size.
+    // Reserve the audio track's bitrate (and a small container-overhead
+    // margin) out of the total before deriving the video bitrate. When the
+    // audio is a passthrough copy we can't know its bitrate up front, so we
+    // just apply the overhead margin and leave the size target best-effort.
+    const audioBitrateK = opts.audioPassthrough
+      ? 0
+      : (codec === 'vp8' || codec === 'vp9') ? 96 : 128;
+    const overheadK = Math.round(totalBitrateK * 0.02); // ~2% container/muxing overhead
+    targetBitrateK = Math.max(32, totalBitrateK - audioBitrateK - overheadK);
   } else if (opts.videoBitrate) {
     targetBitrateK = Math.round(opts.videoBitrate / 1000);
   }
@@ -135,8 +147,11 @@ async function videoViaFFmpeg(
     // (TrueHD, DTS, DTS-HD, etc.) intact while the video re-encodes.
     audioArgs.push('-c:a', 'copy');
   } else {
-    if (codec === 'vp9') audioArgs.push('-c:a', 'libopus', '-b:a', '96k');
-    else                 audioArgs.push('-c:a', 'aac', '-b:a', '128k');
+    // WebM (vp8/vp9) can only legally carry Opus/Vorbis audio — AAC in a
+    // WebM container is invalid and can fail muxing or produce an
+    // unplayable file. Only mp4/mkv containers get AAC.
+    if (codec === 'vp8' || codec === 'vp9') audioArgs.push('-c:a', 'libopus', '-b:a', '96k');
+    else                                    audioArgs.push('-c:a', 'aac', '-b:a', '128k');
     if (opts.audioDownmixStereo) audioArgs.push('-ac', '2');
   }
 
@@ -162,7 +177,7 @@ async function videoViaFFmpeg(
   }
 
   const mime = container === 'webm' ? 'video/webm' : container === 'mkv' ? 'video/x-matroska' : 'video/mp4';
-  const blob = new Blob([data.buffer as ArrayBuffer], { type: mime });
+  const blob = new Blob([data], { type: mime });
   onProgress?.(100);
 
   return {
@@ -189,8 +204,12 @@ async function videoViaMediaRecorder(
 ): Promise<CompressResult> {
   const meta = await getVideoMeta(file);
   const { width: ow, height: oh, duration } = meta;
+  // Reserve a typical audio track bitrate (~128kbps, MediaRecorder's usual
+  // Opus default) out of the size target before budgeting video, since the
+  // audio track is recorded independently on top of videoBitsPerSecond.
+  const DEFAULT_AUDIO_BPS = 128_000;
   const bitrate = opts.targetSizeKB
-    ? Math.round((opts.targetSizeKB * 1024 * 8) / Math.max(duration, 1))
+    ? Math.max(32_000, Math.round((opts.targetSizeKB * 1024 * 8) / Math.max(duration, 1)) - DEFAULT_AUDIO_BPS)
     : (opts.videoBitrate ?? 1_500_000);
 
   const ua       = navigator.userAgent;
@@ -204,9 +223,12 @@ async function videoViaMediaRecorder(
   const mimeType = types.find(t => MediaRecorder.isTypeSupported(t)) ?? 'video/webm';
 
   const url = URL.createObjectURL(file);
-  // FIX 2: don't mute the video — we need its audio stream
+  // `muted` only silences local audio output — it does NOT affect the
+  // track(s) returned by captureStream(), so we can keep the element muted
+  // (required by autoplay policy in most browsers) while still capturing
+  // its audio below.
   const vid = Object.assign(document.createElement('video'),
-    { src: url, muted: false, playsInline: true, volume: 0 });
+    { src: url, muted: true, playsInline: true });
   await new Promise<void>(r => { vid.onloadedmetadata = () => r(); });
 
   const w      = opts.maxWidth ? Math.min(ow, opts.maxWidth) : ow;
@@ -241,15 +263,48 @@ async function videoViaMediaRecorder(
   const chunks: Blob[] = [];
   rec.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
   rec.start(250);
-  vid.play();
 
+  try {
+    await vid.play();
+  } catch (err) {
+    URL.revokeObjectURL(url);
+    throw new Error(`MediaRecorder fallback could not start playback (autoplay blocked?): ${err}`, { cause: err });
+  }
+
+  // `timeupdate` fires on a coarse, non-frame-aligned schedule (browsers
+  // throttle it to a few times per second), which produces duplicated /
+  // dropped frames and stutter when used to drive per-frame canvas capture.
+  // requestVideoFrameCallback fires once per actually-decoded frame and
+  // hands back the frame's presentation time, so drawing there is frame-
+  // accurate. Fall back to requestAnimationFrame on browsers without it.
   await new Promise<void>(resolve => {
-    vid.ontimeupdate = () => {
+    let done = false;
+    const finish = () => { if (!done) { done = true; resolve(); } };
+
+    const drawAndReport = (currentTime: number) => {
       ctx.drawImage(vid, 0, 0, w, h);
-      onProgress?.(5 + Math.round((vid.currentTime / Math.max(duration, 1)) * 90));
+      onProgress?.(5 + Math.round((currentTime / Math.max(duration, 1)) * 90));
     };
-    vid.onended = () => resolve();
-    setTimeout(() => resolve(), (duration + 5) * 1000);
+
+    const rvfc = (vid as any).requestVideoFrameCallback?.bind(vid);
+    if (rvfc) {
+      const onFrame = (_now: number, metadata: { mediaTime: number }) => {
+        if (done) return;
+        drawAndReport(metadata.mediaTime);
+        rvfc(onFrame);
+      };
+      rvfc(onFrame);
+    } else {
+      const onFrame = () => {
+        if (done) return;
+        drawAndReport(vid.currentTime);
+        requestAnimationFrame(onFrame);
+      };
+      requestAnimationFrame(onFrame);
+    }
+
+    vid.onended = finish;
+    setTimeout(finish, (duration + 5) * 1000);
   });
 
   rec.stop();

@@ -70,21 +70,25 @@ async function extractPptxSlides(file: File): Promise<SlideText[]> {
     throw new Error('Reading .pptx needs ZIP support (CompressionStream) — please use a current version of Chrome, Firefox, Safari, or Edge.');
   }
   const entries = await readZip(await file.arrayBuffer());
+  const parser  = new DOMParser();
 
-  const slideNames = [...entries.keys()]
-    .filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n))
-    // Real-world PPTX files name slides sequentially in save order, so a
-    // numeric sort on the filename reliably matches presentation order
-    // without needing to walk presentation.xml.rels + sldIdLst.
-    .sort((a, b) => {
-      const na = +(a.match(/slide(\d+)\.xml$/)?.[1] ?? 0);
-      const nb = +(b.match(/slide(\d+)\.xml$/)?.[1] ?? 0);
-      return na - nb;
-    });
+  const allSlideNames = [...entries.keys()].filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n));
+  if (!allSlideNames.length) throw new Error('No slides found — this file may not be a valid .pptx');
 
-  if (!slideNames.length) throw new Error('No slides found — this file may not be a valid .pptx');
+  // Presentation order is NOT guaranteed to match the slideN.xml filename
+  // numbers — PowerPoint assigns those at slide *creation* time and does
+  // not rename files when slides are later reordered, duplicated, or
+  // deleted. The authoritative order lives in ppt/presentation.xml's
+  // <p:sldIdLst>, resolved through ppt/_rels/presentation.xml.rels to the
+  // actual slide part for each relationship id.
+  const slideNames = resolvePptxSlideOrder(entries, parser) ?? allSlideNames.sort((a, b) => {
+    // Fallback only: used if presentation.xml/rels are missing or
+    // unparseable (a slightly malformed but still readable file).
+    const na = +(a.match(/slide(\d+)\.xml$/)?.[1] ?? 0);
+    const nb = +(b.match(/slide(\d+)\.xml$/)?.[1] ?? 0);
+    return na - nb;
+  });
 
-  const parser = new DOMParser();
   const slides: SlideText[] = [];
 
   for (let i = 0; i < slideNames.length; i++) {
@@ -108,6 +112,52 @@ async function extractPptxSlides(file: File): Promise<SlideText[]> {
     slides.push({ index: i + 1, paragraphs });
   }
   return slides;
+}
+
+/** Resolve the true presentation-order list of `ppt/slides/slideN.xml`
+ * paths by walking presentation.xml's <p:sldIdLst> (visual order) through
+ * presentation.xml.rels (r:id → target part). Returns null if either part
+ * is missing or doesn't parse, so the caller can fall back to filename
+ * order rather than throwing on a slightly nonstandard file. */
+function resolvePptxSlideOrder(entries: Map<string, Uint8Array>, parser: DOMParser): string[] | null {
+  try {
+    const presXmlBytes = entries.get('ppt/presentation.xml');
+    const relsBytes     = entries.get('ppt/_rels/presentation.xml.rels');
+    if (!presXmlBytes || !relsBytes) return null;
+
+    const presDoc = parser.parseFromString(new TextDecoder('utf-8').decode(presXmlBytes), 'application/xml');
+    const relsDoc = parser.parseFromString(new TextDecoder('utf-8').decode(relsBytes), 'application/xml');
+
+    const relNS = 'http://schemas.openxmlformats.org/package/2006/relationships';
+    const rIdToTarget = new Map<string, string>();
+    let relNodes = Array.from(relsDoc.getElementsByTagNameNS(relNS, 'Relationship'));
+    if (!relNodes.length) relNodes = Array.from(relsDoc.getElementsByTagName('Relationship'));
+    for (const rel of relNodes) {
+      const id     = rel.getAttribute('Id');
+      const target = rel.getAttribute('Target');
+      if (id && target) rIdToTarget.set(id, target.replace(/^\.?\//, ''));
+    }
+
+    const relIdNS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+    let sldIds = Array.from(presDoc.getElementsByTagName('p:sldId'));
+    if (!sldIds.length) sldIds = Array.from(presDoc.getElementsByTagNameNS(
+      'http://schemas.openxmlformats.org/presentationml/2006/main', 'sldId'));
+
+    const ordered: string[] = [];
+    for (const sldId of sldIds) {
+      const rId = sldId.getAttributeNS(relIdNS, 'id') || sldId.getAttribute('r:id');
+      if (!rId) continue;
+      const target = rIdToTarget.get(rId);
+      if (!target) continue;
+      // Targets in the rels file are relative to ppt/ (e.g. "slides/slide3.xml").
+      const normalized = target.startsWith('ppt/') ? target : `ppt/${target}`;
+      if (entries.has(normalized)) ordered.push(normalized);
+    }
+
+    return ordered.length ? ordered : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function pptxToText(file: File): Promise<string> {
@@ -163,7 +213,7 @@ export async function pptxToPdf(file: File, onProgress?: (pct: number) => void):
 
   const bytes = await pdfDoc.save();
   onProgress?.(100);
-  return new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' });
+  return new Blob([bytes], { type: 'application/pdf' });
 }
 
 function wrapText(text: string, font: any, size: number, maxWidth: number): string[] {
@@ -242,5 +292,5 @@ async function htmlToPdf(html: string, onProgress?: (pct: number) => void, start
 
   const bytes = await pdfDoc.save();
   onProgress?.(100);
-  return new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' });
+  return new Blob([bytes], { type: 'application/pdf' });
 }

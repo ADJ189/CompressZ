@@ -68,7 +68,7 @@ export async function mergePdfs(
   onProgress?.(100);
 
   return {
-    blob: new Blob([outBytes.buffer as ArrayBuffer], { type: 'application/pdf' }),
+    blob: new Blob([outBytes], { type: 'application/pdf' }),
     pageCount,
     totalInputSize: files.reduce((sum, f) => sum + f.size, 0),
   };

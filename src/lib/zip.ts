@@ -11,6 +11,12 @@
  * `unzip` tools — files written here open with any standard ZIP tool, and
  * files produced by other tools (DOCX/PPTX/XLSX are just ZIP containers)
  * read correctly here.
+ *
+ * Supported subset: single-disk archives, Store (0) and Deflate (8)
+ * compression methods, entries/archives under the 32-bit (4GiB) Zip64
+ * threshold. CRC-32 is verified on every read. Zip64 and multi-disk
+ * archives are detected and rejected with a clear error rather than
+ * silently misread.
  */
 
 export function zipSupported(): boolean {
@@ -89,7 +95,7 @@ export async function writeZip(entries: ZipEntryIn[]): Promise<Uint8Array> {
     const local = new DataView(new ArrayBuffer(30));
     local.setUint32(0, 0x04034b50, true);
     local.setUint16(4, 20, true);
-    local.setUint16(6, 0, true);
+    local.setUint16(6, 0x0800, true); // bit 11: filename/comment are UTF-8
     local.setUint16(8, method, true);
     local.setUint16(10, time, true);
     local.setUint16(12, date, true);
@@ -105,7 +111,10 @@ export async function writeZip(entries: ZipEntryIn[]): Promise<Uint8Array> {
     ch.setUint32(0, 0x02014b50, true);
     ch.setUint16(4, 20, true);
     ch.setUint16(6, 20, true);
-    ch.setUint16(8, 0, true);
+    ch.setUint16(8, 0x0800, true); // bit 11: filename/comment are UTF-8 — required for
+    // interoperability: without it, standard unzip tools fall back to the
+    // local codepage and mangle any non-ASCII filename, even though our own
+    // reader (which always assumes UTF-8) round-trips it fine either way.
     ch.setUint16(10, method, true);
     ch.setUint16(12, time, true);
     ch.setUint16(14, date, true);
@@ -139,7 +148,7 @@ export async function writeZip(entries: ZipEntryIn[]): Promise<Uint8Array> {
 
 export async function zipToBlob(entries: ZipEntryIn[]): Promise<Blob> {
   const bytes = await writeZip(entries);
-  return new Blob([bytes.buffer as ArrayBuffer], { type: 'application/zip' });
+  return new Blob([new Uint8Array(bytes)], { type: 'application/zip' });
 }
 
 // ── Reader ────────────────────────────────────────────────────
@@ -154,14 +163,28 @@ export async function readZip(buf: ArrayBuffer): Promise<Map<string, Uint8Array>
   }
   if (eocdOffset < 0) throw new Error('Not a valid ZIP file (end-of-central-directory not found)');
 
-  const entryCount   = dv.getUint16(eocdOffset + 10, true);
-  const centralStart = dv.getUint32(eocdOffset + 16, true);
+  const diskNumber      = dv.getUint16(eocdOffset + 4, true);
+  const diskWithCentral = dv.getUint16(eocdOffset + 6, true);
+  if (diskNumber !== 0 || diskWithCentral !== 0) {
+    throw new Error('Multi-disk/spanned ZIP archives are not supported');
+  }
+
+  let entryCount   = dv.getUint16(eocdOffset + 10, true);
+  let centralStart = dv.getUint32(eocdOffset + 16, true);
+
+  // 0xFFFFFFFF/0xFFFF sentinel values mean the real values live in a
+  // Zip64 end-of-central-directory record, which this reader doesn't
+  // parse — fail clearly instead of reading garbage offsets.
+  if (entryCount === 0xffff || centralStart === 0xffffffff) {
+    throw new Error('This ZIP uses Zip64 (large-archive) extensions, which are not supported');
+  }
 
   const out = new Map<string, Uint8Array>();
   let p = centralStart;
   for (let i = 0; i < entryCount; i++) {
     if (dv.getUint32(p, true) !== 0x02014b50) throw new Error('Corrupt ZIP central directory');
     const method       = dv.getUint16(p + 10, true);
+    const expectedCrc  = dv.getUint32(p + 16, true);
     const compSize     = dv.getUint32(p + 20, true);
     const nameLen      = dv.getUint16(p + 28, true);
     const extraLen     = dv.getUint16(p + 30, true);
@@ -169,13 +192,25 @@ export async function readZip(buf: ArrayBuffer): Promise<Map<string, Uint8Array>
     const localOffset  = dv.getUint32(p + 42, true);
     const name         = new TextDecoder().decode(bytes.subarray(p + 46, p + 46 + nameLen));
 
+    if (compSize === 0xffffffff || localOffset === 0xffffffff) {
+      throw new Error(`"${name}" uses Zip64 (large-file) extensions, which are not supported`);
+    }
+    if (method !== 0 && method !== 8) {
+      throw new Error(`"${name}" uses unsupported ZIP compression method ${method} (only Store and Deflate are supported)`);
+    }
+
     const lNameLen  = dv.getUint16(localOffset + 26, true);
     const lExtraLen = dv.getUint16(localOffset + 28, true);
     const dataStart = localOffset + 30 + lNameLen + lExtraLen;
     const raw       = bytes.subarray(dataStart, dataStart + compSize);
 
     if (!name.endsWith('/')) {
-      out.set(name, method === 8 ? await inflateRaw(raw) : new Uint8Array(raw));
+      const data = method === 8 ? await inflateRaw(raw) : new Uint8Array(raw);
+      const actualCrc = crc32(data);
+      if (actualCrc !== expectedCrc) {
+        throw new Error(`"${name}" failed CRC check (expected ${expectedCrc.toString(16)}, got ${actualCrc.toString(16)}) — archive may be corrupt`);
+      }
+      out.set(name, data);
     }
     p += 46 + nameLen + extraLen + commentLen;
   }

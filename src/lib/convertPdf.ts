@@ -57,7 +57,11 @@ export async function pdfToImages(
   onProgress?.(100);
 
   if (pages.length === 1) {
-    return { blob: new Blob([pages[0].data.buffer as ArrayBuffer], { type: mime }), isZip: false, pageCount: 1 };
+    // Re-wrap in a fresh Uint8Array so TS sees a concrete ArrayBuffer (not
+    // ArrayBufferLike/SharedArrayBuffer) backing — Blob's type requires
+    // that, and this also guarantees the exact byte range regardless of
+    // how `data` was constructed upstream.
+    return { blob: new Blob([new Uint8Array(pages[0].data)], { type: mime }), isZip: false, pageCount: 1 };
   }
   if (!zipSupported()) {
     throw new Error('Multi-page PDF → image needs one file per page, which requires ZIP support (CompressionStream) — please use a current version of Chrome, Firefox, Safari, or Edge.');

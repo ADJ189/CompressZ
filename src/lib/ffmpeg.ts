@@ -21,7 +21,7 @@ export async function getFFmpeg(): Promise<unknown> {
       ]);
 
       const ff   = new FFmpeg();
-      const hasMT = typeof SharedArrayBuffer !== 'undefined';
+      const hasMT = hasMultiThreadSupport();
       const base  = hasMT ? CORE_MT : CORE_ST;
 
       await ff.load({
@@ -48,8 +48,19 @@ export async function ffFetch(file: File | string): Promise<Uint8Array> {
   return fetchFile(file);
 }
 
+// `SharedArrayBuffer` can exist as a global without the page actually being
+// cross-origin isolated (behavior has varied across browsers/versions), and
+// the multithreaded core specifically needs COOP/COEP-driven isolation for
+// its worker-shared memory to behave — loading it without that can throw or
+// silently misbehave. `crossOriginIsolated` is the actual signal that those
+// headers are in effect; require both.
+function hasMultiThreadSupport(): boolean {
+  return typeof SharedArrayBuffer !== 'undefined' &&
+    typeof crossOriginIsolated !== 'undefined' && crossOriginIsolated === true;
+}
+
 export function ffHasMT(): boolean {
-  return typeof SharedArrayBuffer !== 'undefined';
+  return hasMultiThreadSupport();
 }
 
 // ── Progress handler management ────────────────────────────────
