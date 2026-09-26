@@ -110,7 +110,7 @@ export function mountImagesToPdf(root: HTMLElement) {
       const pageSizePt = s.pageSize === 'a4' ? A4_PT : s.pageSize === 'letter' ? LETTER_PT : undefined;
       const blob = await imagesToPdf(
         s.files,
-        { quality: s.quality / 100, pageSize: pageSizePt },
+        { quality: s.quality / 100, pageSize: pageSizePt, maxDim: s.maxDim },
         p => { progress = p; render(); },
       );
       const a = Object.assign(document.createElement('a'), {
