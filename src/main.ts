@@ -144,19 +144,30 @@ const settingsOverlay = document.getElementById("settings-dialog-overlay")!;
 const settingsDialog = document.getElementById("settings-dialog")!;
 const settingsClose = document.getElementById("settings-dialog-close")!;
 const settingsBody = document.getElementById("settings-dialog-body")!;
-let settingsMounted = false;
+// Shared in-flight/finished mount so rapid clicks mount the content once.
+// Cleared on failure so a later click can retry.
+let settingsMountPromise: Promise<void> | null = null;
 let settingsHideTimer: number | undefined;
 
-async function openSettings() {
-  if (!settingsMounted) {
-    try {
-      const { mountSettings } = await import("./pages/settings");
+function ensureSettingsMounted(): Promise<void> {
+  if (!settingsMountPromise) {
+    const p = import("./pages/settings").then(({ mountSettings }) => {
       mountSettings(settingsBody);
-      settingsMounted = true; // only after a successful mount, so a failed load can be retried
-    } catch (err) {
-      console.error("[settings] failed to load:", err);
-      return;
-    }
+    });
+    settingsMountPromise = p;
+    p.catch(() => {
+      if (settingsMountPromise === p) settingsMountPromise = null;
+    });
+  }
+  return settingsMountPromise;
+}
+
+async function openSettings() {
+  try {
+    await ensureSettingsMounted();
+  } catch (err) {
+    console.error("[settings] failed to load:", err);
+    return;
   }
   clearTimeout(settingsHideTimer);
   settingsOverlay.hidden = false;
@@ -266,6 +277,7 @@ async function mountPage(load: () => Promise<PageMount>) {
 }
 
 function showStatic(id: string) {
+  pageToken++; // invalidate any in-flight mountPage() so its result/error can't overwrite this page
   pageView.innerHTML = "";
   const tpl = document.getElementById(id) as HTMLTemplateElement | null;
   if (!tpl) return;
