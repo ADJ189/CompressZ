@@ -67,7 +67,9 @@ async function renderImageThumb(file: File): Promise<string | null> {
     const h = Math.max(1, Math.round(bitmap.height * scale));
     const canvas = document.createElement('canvas');
     canvas.width = w; canvas.height = h;
-    canvas.getContext('2d')!.drawImage(bitmap, 0, 0, w, h);
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); // JPEG has no alpha — avoid black behind transparency
+    ctx.drawImage(bitmap, 0, 0, w, h);
     bitmap.close?.();
     return await canvasToJpegUrl(canvas);
   } catch {

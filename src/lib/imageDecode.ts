@@ -45,6 +45,8 @@ async function heicToPngBlob(file: File): Promise<Blob> {
       return (Array.isArray(out) ? out[0] : out) as Blob;
     })();
     heicPngCache.set(file, pending);
+    const p = pending;
+    p.catch(() => { if (heicPngCache.get(file) === p) heicPngCache.delete(file); });
   }
   return pending;
 }

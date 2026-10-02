@@ -113,9 +113,13 @@ export async function compressImage(
   let outFormat: ImageFormat = format;
   let outW = w,
     outH = h;
-  if (format === "image/png" && blob.size >= file.size) {
+  if (
+    format === "image/png" &&
+    file.type === "image/png" &&
+    blob.size >= file.size
+  ) {
     blob = file;
-    outFormat = (file.type as ImageFormat) || format;
+    outFormat = "image/png";
     outW = origW;
     outH = origH;
   }

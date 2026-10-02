@@ -53,6 +53,42 @@ export async function getFFmpeg(): Promise<unknown> {
   return _loading;
 }
 
+// ── Serialised jobs + guaranteed temp-file cleanup ──────────────
+// Every FFmpeg-backed tool writes fixed names ("input.gif", "vin.mp4", ...)
+// into the one shared in-memory filesystem. The page-level "Compress all"
+// loops are sequential, but a per-card Compress button (or Compress-all
+// while a card job is running) could still start two jobs at once — they'd
+// overwrite each other's files and progress handler. Also, any exception
+// mid-job skipped the deleteFile() calls at the end of each function, so the
+// input (potentially hundreds of MB) stayed in wasm memory until reload.
+// ffJob() queues jobs one at a time and, in `finally`, removes whatever files
+// the job left behind in the FS root.
+let _jobQueue: Promise<unknown> = Promise.resolve();
+
+export function ffJob<T>(job: () => Promise<T>): Promise<T> {
+  const run = _jobQueue.then(async () => {
+    const ff = (await getFFmpeg()) as any;
+    const listFiles = async (): Promise<string[]> => {
+      try {
+        const nodes: { name: string; isDir: boolean }[] = await ff.listDir("/");
+        return nodes.filter((n) => !n.isDir).map((n) => n.name);
+      } catch {
+        return [];
+      }
+    };
+    const before = new Set(await listFiles());
+    try {
+      return await job();
+    } finally {
+      for (const name of await listFiles()) {
+        if (!before.has(name)) await ff.deleteFile(name).catch(() => {});
+      }
+    }
+  });
+  _jobQueue = run.catch(() => {});
+  return run;
+}
+
 export async function ffFetch(file: File | string): Promise<Uint8Array> {
   const { fetchFile } = await import(/* @vite-ignore */ FFMPEG_UTIL);
   return fetchFile(file);
