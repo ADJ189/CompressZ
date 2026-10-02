@@ -360,7 +360,7 @@ export function mountConvert(root: HTMLElement): void {
           <div class="file-card">
             <div class="fc-ico">🖼️</div>
             <div class="fc-info">
-              <div class="fc-name" title="${f.name}">${i + 1}. ${f.name}</div>
+              <div class="fc-name" title="${esc(f.name)}">${i + 1}. ${esc(f.name)}</div>
               <div class="fc-meta"><span>${formatBytes(f.size)}</span></div>
             </div>
             <div class="fc-actions">

@@ -43,10 +43,12 @@ export function mountGif(root: HTMLElement) {
 
   function downloadEntry(entry: FileEntry) {
     if (!entry.result) return;
-    const ext = s.gifToVideo ? 'webm' : 'gif';
+    // Use the option this file was compressed with, not the current toggle —
+    // the user may have flipped it after compressing.
+    const ext = entry.options.gifToVideo ? 'webm' : 'gif';
     const a = Object.assign(document.createElement('a'), {
       href: URL.createObjectURL(entry.result.blob),
-      download: entry.file.name.replace('.gif', `_compressed.${ext}`),
+      download: entry.file.name.replace(/\.gif$/i, '') + `_compressed.${ext}`,
     });
     a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
   }

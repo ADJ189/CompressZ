@@ -69,7 +69,7 @@ export function mountImagesToPdf(root: HTMLElement) {
     if (aiBusy) {
       const prog = document.createElement('div');
       prog.className = 'ai-progress-row';
-      prog.innerHTML = `<span>${aiNote}</span><span class="ai-progress-track"><span class="ai-progress-fill"></span></span>`;
+      prog.innerHTML = `<span>${esc(aiNote)}</span><span class="ai-progress-track"><span class="ai-progress-fill"></span></span>`;
       bar.appendChild(prog);
     }
   }

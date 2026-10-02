@@ -2,7 +2,7 @@ import { registerBusyCheck } from '../main';
 import { uid, getOutputExtension } from '../lib/types';
 import type { FileEntry, CompressOptions, ImageFormat } from '../lib/types';
 import { compressImage, getBestFormat } from '../lib/compressImage';
-import { createDropZone, renderFileCard, patchFileCard, renderBatchBar } from '../components';
+import { createDropZone, renderFileCard, patchFileCard, renderBatchBar, esc } from '../components';
 import { toast } from '../toast';
 import { imageStore } from '../store';
 import { getSettings, resolvedAiModelTier, resolvedConcurrency } from '../lib/settings';
@@ -169,7 +169,7 @@ export function mountImages(root: HTMLElement) {
     if (aiBusy) {
       const prog = document.createElement('div');
       prog.className = 'ai-progress-row';
-      prog.innerHTML = `<span>${aiNote}</span><span class="ai-progress-track"><span class="ai-progress-fill"></span></span>`;
+      prog.innerHTML = `<span>${esc(aiNote)}</span><span class="ai-progress-track"><span class="ai-progress-fill"></span></span>`;
       aiBarEl.appendChild(prog);
     }
   }

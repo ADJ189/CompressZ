@@ -1,3 +1,4 @@
+import { registerBusyCheck } from '../main';
 import { uid } from '../lib/types';
 import type { FileEntry, CompressOptions, PdfLevel } from '../lib/types';
 import { compressPdf } from '../lib/compressPdf';
@@ -242,5 +243,6 @@ export function mountPdf(root: HTMLElement) {
     }).catch(() => { /* motion is a progressive enhancement — cards still render without it */ });
   }
 
+  registerBusyCheck(() => s.files.some(f => f.status === 'compressing'));
   render();
 }

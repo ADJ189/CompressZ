@@ -11,6 +11,7 @@
  * gets a .slice(0) copy so the original is never detached.
  */
 
+import { registerBusyCheck } from '../main';
 import { uid, formatBytes } from '../lib/types';
 import { createDropZone }   from '../components';
 import { toast }            from '../toast';
@@ -904,5 +905,6 @@ export function mountOcr(root: HTMLElement): void {
     files.forEach(f=>listEl.appendChild(renderCard(f)));
   }
 
+  registerBusyCheck(() => files.some(f => f.status === 'processing'));
   render();
 }
