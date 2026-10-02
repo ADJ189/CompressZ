@@ -115,8 +115,8 @@ export async function compressImage(
     outH = h;
   if (
     format === "image/png" &&
-    file.type === "image/png" &&
-    blob.size >= file.size
+    blob.size >= file.size &&
+    (await isPngSource(file))
   ) {
     blob = file;
     outFormat = "image/png";
@@ -134,6 +134,22 @@ export async function compressImage(
     width: outW,
     height: outH,
   };
+}
+
+// Browsers often leave File.type empty (e.g. some drag-and-drop sources, or
+// unusual OS MIME mappings) even though the Images page accepts the file by
+// extension — so don't trust `type` alone. Check the MIME type, then the PNG
+// magic bytes, then the extension as a last resort.
+async function isPngSource(file: File): Promise<boolean> {
+  if (file.type === "image/png") return true;
+  try {
+    const head = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+    const sig = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    if (head.length === 8 && sig.every((b, i) => head[i] === b)) return true;
+  } catch {
+    /* fall through to the extension check */
+  }
+  return !file.type && /\.png$/i.test(file.name);
 }
 
 async function binarySearch(
