@@ -9,8 +9,10 @@ import { cn } from "../utils/cn";
 import { prefersReducedMotion } from "../utils/interaction";
 import { Button } from "./Button";
 
-export interface OversubscribedMeterProps
-  extends Omit<ComponentPropsWithoutRef<"div">, "children"> {
+export interface OversubscribedMeterProps extends Omit<
+  ComponentPropsWithoutRef<"div">,
+  "children"
+> {
   /** Final subscription, in percent. Anything above 100 overflows the round. */
   target?: number;
   /** Name of the round. */
@@ -171,7 +173,9 @@ export function OversubscribedMeter({
         <span className="pui-meter__sum">
           ${fmt((raise * pct) / 100)}M committed of ${fmt(raise)}M
         </span>
-        {done && over && <span className="pui-meter__stamp">Oversubscribed</span>}
+        {done && over && (
+          <span className="pui-meter__stamp">Oversubscribed</span>
+        )}
         {trigger === "click" && (
           <Button
             variant="ghost"

@@ -8,7 +8,10 @@ import "./styles.css";
 
 // Atoms
 export { Sparkle, type SparkleProps } from "./components/Sparkle";
-export { GradientText, type GradientTextProps } from "./components/GradientText";
+export {
+  GradientText,
+  type GradientTextProps,
+} from "./components/GradientText";
 export { StatusDot, type StatusDotProps } from "./components/StatusDot";
 export {
   QuestText,
@@ -25,7 +28,10 @@ export {
   type ButtonVariant,
   type ButtonSize,
 } from "./components/Button";
-export { StickyBanner, type StickyBannerProps } from "./components/StickyBanner";
+export {
+  StickyBanner,
+  type StickyBannerProps,
+} from "./components/StickyBanner";
 export { EyebrowPill, type EyebrowPillProps } from "./components/EyebrowPill";
 
 // Heroes
@@ -63,10 +69,7 @@ export {
 } from "./components/SpotlightCard";
 export { TiltCard, type TiltCardProps } from "./components/TiltCard";
 export { Magnetic, type MagneticProps } from "./components/Magnetic";
-export {
-  CursorTrail,
-  type CursorTrailProps,
-} from "./components/CursorTrail";
+export { CursorTrail, type CursorTrailProps } from "./components/CursorTrail";
 export {
   ScrambleText,
   type ScrambleTextProps,
@@ -129,7 +132,10 @@ export {
 // Pricing / waitlist
 export { PricingCard, type PricingCardProps } from "./components/PricingCard";
 export { BeforeAfter, type BeforeAfterProps } from "./components/BeforeAfter";
-export { WaitlistForm, type WaitlistFormProps } from "./components/WaitlistForm";
+export {
+  WaitlistForm,
+  type WaitlistFormProps,
+} from "./components/WaitlistForm";
 export { Popover, type PopoverProps } from "./components/Popover";
 
 // Footers
@@ -146,10 +152,7 @@ export {
   type UseTypewriterOptions,
   type UseTypewriterResult,
 } from "./hooks/useTypewriter";
-export {
-  useCounter,
-  type UseCounterOptions,
-} from "./hooks/useCounter";
+export { useCounter, type UseCounterOptions } from "./hooks/useCounter";
 export {
   useTokenStream,
   type UseTokenStreamOptions,
