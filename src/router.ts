@@ -32,9 +32,12 @@ export function init() {
   document.addEventListener('click', e => {
     const el = (e.target as Element).closest('[data-nav]') as HTMLElement | null;
     if (!el) return;
-    // Don't intercept external links (href with http/https)
+    // Let the browser handle "open in new tab/window" gestures natively.
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    // Don't intercept links to another origin. (Comparing origins rather than
+    // `href.includes(hostname)`, which a URL like https://evil.test/?x=<host> passes.)
     const href = (el as HTMLAnchorElement).href;
-    if (href && (href.startsWith('http://') || href.startsWith('https://')) && !href.includes(location.hostname)) return;
+    if (href && new URL(href, location.href).origin !== location.origin) return;
     e.preventDefault();
     navigate(el.dataset.nav ?? '');
   });

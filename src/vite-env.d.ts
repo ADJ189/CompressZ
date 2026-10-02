@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 /**
  * The onnxruntime-web version actually installed (read from
  * node_modules/onnxruntime-web/package.json and injected via Vite's

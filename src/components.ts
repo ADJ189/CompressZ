@@ -147,7 +147,7 @@ export function patchFileCard(entry: FileEntry, cbs: FileCardCallbacks) {
   if (old) old.replaceWith(renderFileCard(entry, cbs));
 }
 
-function esc(s: string) {
+export function esc(s: string) {
   return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 }
 

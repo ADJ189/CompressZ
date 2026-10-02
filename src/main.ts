@@ -115,13 +115,20 @@ const settingsDialog  = document.getElementById('settings-dialog')!;
 const settingsClose   = document.getElementById('settings-dialog-close')!;
 const settingsBody    = document.getElementById('settings-dialog-body')!;
 let settingsMounted = false;
+let settingsHideTimer: number | undefined;
 
 async function openSettings() {
   if (!settingsMounted) {
-    settingsMounted = true;
-    const { mountSettings } = await import('./pages/settings');
-    mountSettings(settingsBody);
+    try {
+      const { mountSettings } = await import('./pages/settings');
+      mountSettings(settingsBody);
+      settingsMounted = true; // only after a successful mount, so a failed load can be retried
+    } catch (err) {
+      console.error('[settings] failed to load:', err);
+      return;
+    }
   }
+  clearTimeout(settingsHideTimer);
   settingsOverlay.hidden = false;
   settingsDialog.hidden = false;
   // rAF so the "hidden" removal paints before the open class kicks the
@@ -137,7 +144,8 @@ function closeSettings() {
   settingsOverlay.classList.remove('open');
   settingsDialog.classList.remove('open');
   document.body.style.overflow = '';
-  setTimeout(() => { settingsOverlay.hidden = true; settingsDialog.hidden = true; }, 380);
+  clearTimeout(settingsHideTimer);
+  settingsHideTimer = window.setTimeout(() => { settingsOverlay.hidden = true; settingsDialog.hidden = true; }, 380);
 }
 settingsBtn.addEventListener('click', openSettings);
 settingsClose.addEventListener('click', closeSettings);
@@ -156,7 +164,9 @@ const toolsOverlay = document.getElementById('tools-dialog-overlay')!;
 const toolsDialog  = document.getElementById('tools-dialog')!;
 const toolsClose   = document.getElementById('tools-dialog-close')!;
 
+let toolsHideTimer: number | undefined;
 function openTools() {
+  clearTimeout(toolsHideTimer);
   toolsOverlay.hidden = false;
   toolsDialog.hidden = false;
   requestAnimationFrame(() => {
@@ -169,7 +179,8 @@ function closeTools() {
   toolsOverlay.classList.remove('open');
   toolsDialog.classList.remove('open');
   document.body.style.overflow = '';
-  setTimeout(() => { toolsOverlay.hidden = true; toolsDialog.hidden = true; }, 380);
+  clearTimeout(toolsHideTimer);
+  toolsHideTimer = window.setTimeout(() => { toolsOverlay.hidden = true; toolsDialog.hidden = true; }, 380);
 }
 toolsBtn.addEventListener('click', openTools);
 toolsClose.addEventListener('click', closeTools);
@@ -193,7 +204,21 @@ let pageToken = 0;
 async function mountPage(load: () => Promise<PageMount>) {
   const token = ++pageToken;
   pageView.innerHTML = '<div class="page-loading" aria-hidden="true"></div>';
-  const fn = await load();
+  let fn: PageMount;
+  try {
+    fn = await load();
+  } catch (err) {
+    // Offline, or a stale chunk hash after a redeploy — don't leave the
+    // loading skeleton on screen forever.
+    console.error('[router] failed to load page module:', err);
+    if (token !== pageToken) return;
+    pageView.innerHTML = '';
+    const msg = document.createElement('div');
+    msg.className = 'tool-wrap';
+    msg.innerHTML = '<p class="page-sub">Couldn\'t load this tool. Check your connection and <a href="" onclick="location.reload();return false">reload the page</a>.</p>';
+    pageView.appendChild(msg);
+    return;
+  }
   if (token !== pageToken) return;
   pageView.innerHTML = '';
   const wrapper = document.createElement('div');
