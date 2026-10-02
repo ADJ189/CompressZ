@@ -20,18 +20,21 @@
  *     <video> element and a decode per file, which is exactly the kind of
  *     background CPU/RAM cost this app is trying to avoid by default.
  */
-import { decodeImageBitmap, isHeicFile } from './imageDecode';
-import { openPdfDocument } from './pdfLibs';
+import { decodeImageBitmap, isHeicFile } from "./imageDecode";
+import { openPdfDocument } from "./pdfLibs";
 
 const THUMB_PX = 96;
 const cache = new WeakMap<File, Promise<string | null>>();
 
 function isImageFile(f: File): boolean {
-  return f.type.startsWith('image/') || isHeicFile(f) ||
-    /\.(jpg|jpeg|png|webp|avif|bmp|tiff?|gif)$/i.test(f.name);
+  return (
+    f.type.startsWith("image/") ||
+    isHeicFile(f) ||
+    /\.(jpg|jpeg|png|webp|avif|bmp|tiff?|gif)$/i.test(f.name)
+  );
 }
 function isPdfFile(f: File): boolean {
-  return f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+  return f.type === "application/pdf" || /\.pdf$/i.test(f.name);
 }
 
 // ── Concurrency limiter ─────────────────────────────────────────
@@ -43,19 +46,26 @@ function schedule<T>(job: () => Promise<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     const run = () => {
       active++;
-      job().then(resolve, reject).finally(() => {
-        active--;
-        const next = queue.shift();
-        if (next) next();
-      });
+      job()
+        .then(resolve, reject)
+        .finally(() => {
+          active--;
+          const next = queue.shift();
+          if (next) next();
+        });
     };
-    if (active < MAX_CONCURRENT) run(); else queue.push(run);
+    if (active < MAX_CONCURRENT) run();
+    else queue.push(run);
   });
 }
 
 function canvasToJpegUrl(canvas: HTMLCanvasElement): Promise<string | null> {
-  return new Promise(resolve => {
-    canvas.toBlob(b => resolve(b ? URL.createObjectURL(b) : null), 'image/jpeg', 0.6);
+  return new Promise((resolve) => {
+    canvas.toBlob(
+      (b) => resolve(b ? URL.createObjectURL(b) : null),
+      "image/jpeg",
+      0.6,
+    );
   });
 }
 
@@ -65,10 +75,12 @@ async function renderImageThumb(file: File): Promise<string | null> {
     const scale = Math.min(1, THUMB_PX / Math.max(bitmap.width, bitmap.height));
     const w = Math.max(1, Math.round(bitmap.width * scale));
     const h = Math.max(1, Math.round(bitmap.height * scale));
-    const canvas = document.createElement('canvas');
-    canvas.width = w; canvas.height = h;
-    const ctx = canvas.getContext('2d')!;
-    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); // JPEG has no alpha — avoid black behind transparency
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, w, h); // JPEG has no alpha — avoid black behind transparency
     ctx.drawImage(bitmap, 0, 0, w, h);
     bitmap.close?.();
     return await canvasToJpegUrl(canvas);
@@ -80,16 +92,17 @@ async function renderImageThumb(file: File): Promise<string | null> {
 async function renderPdfThumb(file: File): Promise<string | null> {
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const doc  = await openPdfDocument(bytes);
+    const doc = await openPdfDocument(bytes);
     const page = await doc.getPage(1);
     const base = page.getViewport({ scale: 1 });
     const scale = THUMB_PX / Math.max(base.width, base.height);
     const viewport = page.getViewport({ scale });
-    const canvas = document.createElement('canvas');
+    const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.round(viewport.width));
     canvas.height = Math.max(1, Math.round(viewport.height));
-    const ctx = canvas.getContext('2d')!;
-    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     await page.render({ canvasContext: ctx, viewport }).promise;
     await doc.destroy?.();
     return await canvasToJpegUrl(canvas);
@@ -120,24 +133,29 @@ export function revokeFileThumbnail(file: File) {
   const p = cache.get(file);
   if (!p) return;
   cache.delete(file);
-  p.then(url => { if (url) URL.revokeObjectURL(url); }).catch(() => {});
+  p.then((url) => {
+    if (url) URL.revokeObjectURL(url);
+  }).catch(() => {});
 }
 
 /** Mount a thumbnail into a `.fc-ico`-style container: shows the fallback
  * emoji immediately, then swaps in the real preview image once ready (a
  * no-op if the container has since been removed from the DOM, e.g. the
  * file was removed or the list re-rendered before generation finished). */
-export function mountThumbnail(container: HTMLElement, file: File, fallbackEmoji: string) {
+export function mountThumbnail(
+  container: HTMLElement,
+  file: File,
+  fallbackEmoji: string,
+) {
   container.textContent = fallbackEmoji;
   if (!isImageFile(file) && !isPdfFile(file)) return; // no cheap preview available — keep the icon
-  getFileThumbnail(file).then(url => {
+  getFileThumbnail(file).then((url) => {
     if (!url || !container.isConnected) return;
-    container.innerHTML = '';
-    const img = document.createElement('img');
+    container.innerHTML = "";
+    const img = document.createElement("img");
     img.src = url;
-    img.alt = '';
-    img.className = 'fc-thumb-img';
+    img.alt = "";
+    img.className = "fc-thumb-img";
     container.appendChild(img);
   });
 }
-

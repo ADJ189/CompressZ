@@ -1,13 +1,18 @@
-import { registerBusyCheck } from '../main';
-import { uid } from '../lib/types';
-import type { FileEntry, CompressOptions, PdfLevel } from '../lib/types';
-import { compressPdf } from '../lib/compressPdf';
-import { createDropZone, renderFileCard, patchFileCard, renderBatchBar } from '../components';
-import { toast } from '../toast';
-import { pdfStore } from '../store';
-import { runBatch } from '../lib/batch';
-import { resolvedConcurrency } from '../lib/settings';
-import { revokeFileThumbnail } from '../lib/thumb';
+import { registerBusyCheck } from "../main";
+import { uid } from "../lib/types";
+import type { FileEntry, CompressOptions, PdfLevel } from "../lib/types";
+import { compressPdf } from "../lib/compressPdf";
+import {
+  createDropZone,
+  renderFileCard,
+  patchFileCard,
+  renderBatchBar,
+} from "../components";
+import { toast } from "../toast";
+import { pdfStore } from "../store";
+import { runBatch } from "../lib/batch";
+import { resolvedConcurrency } from "../lib/settings";
+import { revokeFileThumbnail } from "../lib/thumb";
 
 export function mountPdf(root: HTMLElement) {
   // ── State — persisted in pdfStore across navigations ────────
@@ -16,42 +21,57 @@ export function mountPdf(root: HTMLElement) {
   function resolveTargetKB(): number {
     const v = parseFloat(s.targetInput);
     if (!s.targetInput || isNaN(v) || v <= 0) return 0;
-    return s.targetUnit === 'MB' ? Math.round(v * 1024) : Math.round(v);
+    return s.targetUnit === "MB" ? Math.round(v * 1024) : Math.round(v);
   }
 
   function buildOptions(): CompressOptions {
     const o: CompressOptions = { pdfCompressionLevel: s.level };
     const kb = resolveTargetKB();
     if (kb > 0) o.targetSizeKB = kb;
-    if (s.stripMeta === 'on')  o.stripMetadata = true;
-    if (s.stripMeta === 'off') o.stripMetadata = false;
+    if (s.stripMeta === "on") o.stripMetadata = true;
+    if (s.stripMeta === "off") o.stripMetadata = false;
     // 'auto' → leave stripMetadata undefined so the preset's own default applies
     return o;
   }
 
   function addFiles(fs: File[]) {
-    const valid = fs.filter(f =>
-      f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
-    if (!valid.length) { toast('No PDF files found', 'error'); return; }
-    s.files = [...s.files, ...valid.map(f => ({
-      id: uid(), file: f, type: 'pdf' as const,
-      status: 'idle' as const, progress: 0, options: buildOptions(),
-    }))];
+    const valid = fs.filter(
+      (f) =>
+        f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"),
+    );
+    if (!valid.length) {
+      toast("No PDF files found", "error");
+      return;
+    }
+    s.files = [
+      ...s.files,
+      ...valid.map((f) => ({
+        id: uid(),
+        file: f,
+        type: "pdf" as const,
+        status: "idle" as const,
+        progress: 0,
+        options: buildOptions(),
+      })),
+    ];
     render();
   }
 
   async function compressEntry(entry: FileEntry) {
-    entry.status = 'compressing'; entry.progress = 0; entry.options = buildOptions();
+    entry.status = "compressing";
+    entry.progress = 0;
+    entry.options = buildOptions();
     patchFileCard(entry, cbs);
     try {
-      entry.result = await compressPdf(entry.file, entry.options, p => {
-        entry.progress = p; patchFileCard(entry, cbs);
+      entry.result = await compressPdf(entry.file, entry.options, (p) => {
+        entry.progress = p;
+        patchFileCard(entry, cbs);
       });
-      entry.status = 'done';
+      entry.status = "done";
     } catch (e: any) {
-      entry.error = e.message ?? 'PDF compression failed';
-      entry.status = 'error';
-      toast(entry.error!, 'error');
+      entry.error = e.message ?? "PDF compression failed";
+      entry.status = "error";
+      toast(entry.error!, "error");
     }
     patchFileCard(entry, cbs);
     renderBatchBar(batchEl, s.files, compressAll, downloadAll, clearAll);
@@ -59,35 +79,44 @@ export function mountPdf(root: HTMLElement) {
 
   function downloadEntry(entry: FileEntry) {
     if (!entry.result) return;
-    const a = Object.assign(document.createElement('a'), {
+    const a = Object.assign(document.createElement("a"), {
       href: URL.createObjectURL(entry.result.blob),
-      download: entry.file.name.replace(/\.pdf$/i, '') + '_compressed.pdf',
+      download: entry.file.name.replace(/\.pdf$/i, "") + "_compressed.pdf",
     });
-    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
   }
 
   // Canvas/pdf-lib based (no shared singleton to serialize on), so this can
   // run several files at once — capped to what platform.ts recommends for
   // the current device instead of firing every file at once unbounded.
   function compressAll() {
-    const pending = s.files.filter(f => f.status === 'idle' || f.status === 'error');
+    const pending = s.files.filter(
+      (f) => f.status === "idle" || f.status === "error",
+    );
     runBatch(pending, compressEntry, resolvedConcurrency());
   }
-  function downloadAll()  { s.files.filter(f => f.status === 'done').forEach(downloadEntry); }
-  function clearAll()     { s.files = []; render(); }
+  function downloadAll() {
+    s.files.filter((f) => f.status === "done").forEach(downloadEntry);
+  }
+  function clearAll() {
+    s.files = [];
+    render();
+  }
   const cbs = {
     onCompress: compressEntry,
     onDownload: downloadEntry,
-    onRemove:   (id: string) => {
-      const removed = s.files.find(f => f.id === id);
+    onRemove: (id: string) => {
+      const removed = s.files.find((f) => f.id === id);
       if (removed) revokeFileThumbnail(removed.file);
-      s.files = s.files.filter(f => f.id !== id); render();
+      s.files = s.files.filter((f) => f.id !== id);
+      render();
     },
   };
 
   let batchEl!: HTMLElement;
-  let listEl!:  HTMLElement;
-  let dzWrap!:  ReturnType<typeof createDropZone>;
+  let listEl!: HTMLElement;
+  let dzWrap!: ReturnType<typeof createDropZone>;
 
   root.innerHTML = `
     <div class="tool-wrap">
@@ -124,8 +153,8 @@ export function mountPdf(root: HTMLElement) {
                 style="width:100px"
                 value="${s.targetInput}">
               <div class="ts-unit-toggle" role="group" aria-label="Size unit">
-                <button class="${s.targetUnit==='MB'?'on':''}" aria-pressed="${s.targetUnit==='MB'?'true':'false'}" id="ts-mb">MB</button>
-                <button class="${s.targetUnit==='KB'?'on':''}" aria-pressed="${s.targetUnit==='KB'?'true':'false'}" id="ts-kb">KB</button>
+                <button class="${s.targetUnit === "MB" ? "on" : ""}" aria-pressed="${s.targetUnit === "MB" ? "true" : "false"}" id="ts-mb">MB</button>
+                <button class="${s.targetUnit === "KB" ? "on" : ""}" aria-pressed="${s.targetUnit === "KB" ? "true" : "false"}" id="ts-kb">KB</button>
               </div>
               <span id="ts-warning" style="font-size:.72rem;color:var(--amber);display:none">
                 ⚠ Target may not be reachable for some PDFs
@@ -140,9 +169,9 @@ export function mountPdf(root: HTMLElement) {
           <div class="s-field full">
             <span class="s-label">Metadata <em>title, author, producer, creator tags — independent of compression level</em></span>
             <div class="seg" role="group" aria-label="PDF metadata handling">
-              <button class="${s.stripMeta==='auto'?'on':''}" aria-pressed="${s.stripMeta==='auto'?'true':'false'}" id="md-auto">Auto <span style="opacity:.65">(preset default)</span></button>
-              <button class="${s.stripMeta==='on'?'on':''}"   aria-pressed="${s.stripMeta==='on'?'true':'false'}"   id="md-on">Strip</button>
-              <button class="${s.stripMeta==='off'?'on':''}"  aria-pressed="${s.stripMeta==='off'?'true':'false'}"  id="md-off">Keep</button>
+              <button class="${s.stripMeta === "auto" ? "on" : ""}" aria-pressed="${s.stripMeta === "auto" ? "true" : "false"}" id="md-auto">Auto <span style="opacity:.65">(preset default)</span></button>
+              <button class="${s.stripMeta === "on" ? "on" : ""}"   aria-pressed="${s.stripMeta === "on" ? "true" : "false"}"   id="md-on">Strip</button>
+              <button class="${s.stripMeta === "off" ? "on" : ""}"  aria-pressed="${s.stripMeta === "off" ? "true" : "false"}"  id="md-off">Keep</button>
             </div>
           </div>
         </div>
@@ -154,79 +183,106 @@ export function mountPdf(root: HTMLElement) {
     </div>
   `;
 
-  batchEl = root.querySelector('#batch-bar')!;
-  listEl  = root.querySelector('#file-list')!;
-  dzWrap  = createDropZone({
-    accept:   'application/pdf,.pdf',
-    icon:     '📄',
-    title:    'Drop PDF files here',
-    subtitle: 'One or multiple PDFs — files stay in your browser',
-    onFiles:  addFiles,
+  batchEl = root.querySelector("#batch-bar")!;
+  listEl = root.querySelector("#file-list")!;
+  dzWrap = createDropZone({
+    accept: "application/pdf,.pdf",
+    icon: "📄",
+    title: "Drop PDF files here",
+    subtitle: "One or multiple PDFs — files stay in your browser",
+    onFiles: addFiles,
   });
-  root.querySelector('#dz-mount')!.appendChild(dzWrap);
+  root.querySelector("#dz-mount")!.appendChild(dzWrap);
 
   // Target size events
-  root.querySelector('#ts-input')!.addEventListener('input', e => {
+  root.querySelector("#ts-input")!.addEventListener("input", (e) => {
     s.targetInput = (e.target as HTMLInputElement).value;
     updateTsDetail();
   });
-  root.querySelector('#ts-mb')!.addEventListener('click', () => {
-    s.targetUnit = 'MB'; renderUnitToggle(); updateTsDetail();
+  root.querySelector("#ts-mb")!.addEventListener("click", () => {
+    s.targetUnit = "MB";
+    renderUnitToggle();
+    updateTsDetail();
   });
-  root.querySelector('#ts-kb')!.addEventListener('click', () => {
-    s.targetUnit = 'KB'; renderUnitToggle(); updateTsDetail();
+  root.querySelector("#ts-kb")!.addEventListener("click", () => {
+    s.targetUnit = "KB";
+    renderUnitToggle();
+    updateTsDetail();
   });
-  root.querySelector('#md-auto')!.addEventListener('click', () => { s.stripMeta = 'auto'; renderMetaToggle(); });
-  root.querySelector('#md-on')!.addEventListener('click',   () => { s.stripMeta = 'on';   renderMetaToggle(); });
-  root.querySelector('#md-off')!.addEventListener('click',  () => { s.stripMeta = 'off';  renderMetaToggle(); });
+  root.querySelector("#md-auto")!.addEventListener("click", () => {
+    s.stripMeta = "auto";
+    renderMetaToggle();
+  });
+  root.querySelector("#md-on")!.addEventListener("click", () => {
+    s.stripMeta = "on";
+    renderMetaToggle();
+  });
+  root.querySelector("#md-off")!.addEventListener("click", () => {
+    s.stripMeta = "off";
+    renderMetaToggle();
+  });
 
   function renderMetaToggle() {
-    (['auto','on','off'] as const).forEach(v => {
+    (["auto", "on", "off"] as const).forEach((v) => {
       const btn = root.querySelector(`#md-${v}`) as HTMLButtonElement;
-      btn.classList.toggle('on', s.stripMeta === v);
-      btn.setAttribute('aria-pressed', String(s.stripMeta === v));
+      btn.classList.toggle("on", s.stripMeta === v);
+      btn.setAttribute("aria-pressed", String(s.stripMeta === v));
     });
   }
 
   function renderUnitToggle() {
-    const mb = root.querySelector('#ts-mb') as HTMLButtonElement;
-    const kb = root.querySelector('#ts-kb') as HTMLButtonElement;
-    mb.classList.toggle('on', s.targetUnit === 'MB');
-    kb.classList.toggle('on', s.targetUnit === 'KB');
-    mb.setAttribute('aria-pressed', String(s.targetUnit === 'MB'));
-    kb.setAttribute('aria-pressed', String(s.targetUnit === 'KB'));
+    const mb = root.querySelector("#ts-mb") as HTMLButtonElement;
+    const kb = root.querySelector("#ts-kb") as HTMLButtonElement;
+    mb.classList.toggle("on", s.targetUnit === "MB");
+    kb.classList.toggle("on", s.targetUnit === "KB");
+    mb.setAttribute("aria-pressed", String(s.targetUnit === "MB"));
+    kb.setAttribute("aria-pressed", String(s.targetUnit === "KB"));
   }
 
   function updateTsDetail() {
-    const detail  = root.querySelector('#ts-detail') as HTMLElement;
-    const warning = root.querySelector('#ts-warning') as HTMLElement;
+    const detail = root.querySelector("#ts-detail") as HTMLElement;
+    const warning = root.querySelector("#ts-warning") as HTMLElement;
     const kb = resolveTargetKB();
     if (kb <= 0) {
-      detail.textContent  = 'Using preset quality — no size target.';
-      warning.style.display = 'none';
+      detail.textContent = "Using preset quality — no size target.";
+      warning.style.display = "none";
       return;
     }
     const mb = (kb / 1024).toFixed(2);
     detail.textContent = `Binary-searching quality to hit ≈ ${kb} KB (${mb} MB) per file.`;
-    warning.style.display = kb < 50 ? 'inline' : 'none';
+    warning.style.display = kb < 50 ? "inline" : "none";
   }
 
-  const PRESETS: { id: PdfLevel; emoji: string; label: string; sub: string }[] = [
-    { id: 'low',         emoji: '🟢', label: 'Low',         sub: 'High quality · 220 DPI' },
-    { id: 'recommended', emoji: '🔵', label: 'Recommended', sub: 'Balanced · 150 DPI' },
-    { id: 'extreme',     emoji: '🟠', label: 'Extreme',     sub: 'Max saving · 96 DPI' },
-  ];
+  const PRESETS: { id: PdfLevel; emoji: string; label: string; sub: string }[] =
+    [
+      { id: "low", emoji: "🟢", label: "Low", sub: "High quality · 220 DPI" },
+      {
+        id: "recommended",
+        emoji: "🔵",
+        label: "Recommended",
+        sub: "Balanced · 150 DPI",
+      },
+      {
+        id: "extreme",
+        emoji: "🟠",
+        label: "Extreme",
+        sub: "Max saving · 96 DPI",
+      },
+    ];
 
   function renderPresets() {
-    const container = root.querySelector('#pdf-presets')!;
-    container.innerHTML = '';
-    PRESETS.forEach(p => {
-      const el = document.createElement('div');
-      el.className = 'pdf-preset' + (s.level === p.id ? ' on' : '');
-      el.setAttribute('role', 'radio');
-      el.setAttribute('aria-checked', String(s.level === p.id));
+    const container = root.querySelector("#pdf-presets")!;
+    container.innerHTML = "";
+    PRESETS.forEach((p) => {
+      const el = document.createElement("div");
+      el.className = "pdf-preset" + (s.level === p.id ? " on" : "");
+      el.setAttribute("role", "radio");
+      el.setAttribute("aria-checked", String(s.level === p.id));
       el.innerHTML = `<div class="pp-emoji">${p.emoji}</div><div class="pp-label">${p.label}</div><div class="pp-sub">${p.sub}</div>`;
-      el.addEventListener('click', () => { s.level = p.id; renderPresets(); });
+      el.addEventListener("click", () => {
+        s.level = p.id;
+        renderPresets();
+      });
       container.appendChild(el);
     });
   }
@@ -236,13 +292,17 @@ export function mountPdf(root: HTMLElement) {
     updateTsDetail();
     (dzWrap as any).setHasFiles(s.files.length > 0);
     renderBatchBar(batchEl, s.files, compressAll, downloadAll, clearAll);
-    listEl.innerHTML = '';
-    s.files.forEach(f => listEl.appendChild(renderFileCard(f, cbs)));
-    import('../lib/motion').then(({ revealStagger }) => {
-      revealStagger(listEl.querySelectorAll('.file-card'));
-    }).catch(() => { /* motion is a progressive enhancement — cards still render without it */ });
+    listEl.innerHTML = "";
+    s.files.forEach((f) => listEl.appendChild(renderFileCard(f, cbs)));
+    import("../lib/motion")
+      .then(({ revealStagger }) => {
+        revealStagger(listEl.querySelectorAll(".file-card"));
+      })
+      .catch(() => {
+        /* motion is a progressive enhancement — cards still render without it */
+      });
   }
 
-  registerBusyCheck(() => s.files.some(f => f.status === 'compressing'));
+  registerBusyCheck(() => s.files.some((f) => f.status === "compressing"));
   render();
 }

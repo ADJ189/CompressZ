@@ -1,5 +1,11 @@
 import type { CompressOptions, CompressResult } from "./types";
-import { getFFmpeg, ffFetch, ffHasMT, ffJob, setProgressHandler } from "./ffmpeg";
+import {
+  getFFmpeg,
+  ffFetch,
+  ffHasMT,
+  ffJob,
+  setProgressHandler,
+} from "./ffmpeg";
 import { get2D } from "./gpu";
 
 export async function compressVideo(
