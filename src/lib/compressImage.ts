@@ -113,9 +113,13 @@ export async function compressImage(
   let outFormat: ImageFormat = format;
   let outW = w,
     outH = h;
-  if (format === "image/png" && blob.size >= file.size) {
+  if (
+    format === "image/png" &&
+    blob.size >= file.size &&
+    (await isPngSource(file))
+  ) {
     blob = file;
-    outFormat = (file.type as ImageFormat) || format;
+    outFormat = "image/png";
     outW = origW;
     outH = origH;
   }
@@ -130,6 +134,26 @@ export async function compressImage(
     width: outW,
     height: outH,
   };
+}
+
+// Browsers often leave File.type empty (e.g. some drag-and-drop sources, or
+// unusual OS MIME mappings) even though the Images page accepts the file by
+// extension — so don't trust `type` alone. Content wins over names: once the
+// bytes have been read, the PNG magic number is authoritative (a mislabelled
+// "photo.png" that is really a JPEG/WebP must NOT count as a PNG, or the
+// no-upsize fallback would hand back non-PNG bytes under a .png name). The
+// declared type / filename are only a last resort when the bytes can't be read.
+async function isPngSource(file: File): Promise<boolean> {
+  try {
+    const head = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+    if (head.length === 8) {
+      const sig = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+      return sig.every((b, i) => head[i] === b);
+    }
+  } catch {
+    /* unreadable: fall back to the declared type / extension below */
+  }
+  return file.type === "image/png" || (!file.type && /\.png$/i.test(file.name));
 }
 
 async function binarySearch(

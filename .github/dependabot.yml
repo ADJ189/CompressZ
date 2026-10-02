@@ -56,5 +56,3 @@ updates:
       prefix: "chore(ci)"
       include: "scope"
 
-    commit-message:
-      prefix: "ci(deps)"

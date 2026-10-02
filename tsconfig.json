@@ -13,11 +13,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "esModuleInterop": true,
-    "sourceMap": true,
-    "baseUrl": ".",
-    "paths": {
-      "$lib/*": ["src/lib/*"]
-    }
+    "sourceMap": true
   },
   "include": ["src"]
 }

@@ -1,5 +1,5 @@
 import type { CompressOptions, CompressResult, AudioFormat } from "./types";
-import { getFFmpeg, ffFetch, setProgressHandler } from "./ffmpeg";
+import { getFFmpeg, ffFetch, ffJob, setProgressHandler } from "./ffmpeg";
 
 const DEFAULT_BITRATE: Record<AudioFormat, number> = {
   mp3: 192,
@@ -19,7 +19,15 @@ const MIME_TYPE: Record<AudioFormat, string> = {
   wav: "audio/wav",
 };
 
-export async function compressAudio(
+export function compressAudio(
+  file: File,
+  options: CompressOptions,
+  onProgress?: (pct: number) => void,
+): Promise<CompressResult> {
+  return ffJob(() => runCompressAudio(file, options, onProgress));
+}
+
+async function runCompressAudio(
   file: File,
   options: CompressOptions,
   onProgress?: (pct: number) => void,

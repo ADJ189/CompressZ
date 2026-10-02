@@ -19,14 +19,14 @@
  * who never open a HEIC file.
  */
 
-const HEIC_EXT_RE  = /\.(heic|heif)$/i;
+const HEIC_EXT_RE = /\.(heic|heif)$/i;
 const HEIC_MIME_RE = /^image\/hei[cf]/i;
 
 export function isHeicFile(file: File): boolean {
   return HEIC_MIME_RE.test(file.type) || HEIC_EXT_RE.test(file.name);
 }
 
-const HEIC2ANY_CDN = 'https://esm.sh/heic2any@0.0.4';
+const HEIC2ANY_CDN = "https://esm.sh/heic2any@0.0.4";
 
 // Per-File cache of the decoded-to-PNG blob. HEIC decoding via WASM is slow
 // and memory-heavy (full-res decode + re-encode); without this, opening the
@@ -41,10 +41,18 @@ async function heicToPngBlob(file: File): Promise<Blob> {
     pending = (async () => {
       const mod: any = await import(/* @vite-ignore */ HEIC2ANY_CDN);
       const heic2any = mod.default ?? mod;
-      const out = await heic2any({ blob: file, toType: 'image/png', quality: 0.92 });
+      const out = await heic2any({
+        blob: file,
+        toType: "image/png",
+        quality: 0.92,
+      });
       return (Array.isArray(out) ? out[0] : out) as Blob;
     })();
     heicPngCache.set(file, pending);
+    const p = pending;
+    p.catch(() => {
+      if (heicPngCache.get(file) === p) heicPngCache.delete(file);
+    });
   }
   return pending;
 }
@@ -55,9 +63,16 @@ function loadViaImgTag(source: File | Blob): Promise<ImageBitmap> {
     const img = new Image();
     img.onload = async () => {
       URL.revokeObjectURL(url);
-      try { resolve(await createImageBitmap(img)); } catch (e) { reject(e); }
+      try {
+        resolve(await createImageBitmap(img));
+      } catch (e) {
+        reject(e);
+      }
     };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image load failed')); };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Image load failed"));
+    };
     img.src = url;
   });
 }
@@ -78,9 +93,9 @@ export async function decodeImageBitmap(file: File): Promise<ImageBitmap> {
       } catch (heicErr: any) {
         throw new Error(
           `"${file.name}" is a HEIC/HEIF photo this browser can't decode natively, and the ` +
-          `built-in HEIC converter couldn't read it either${heicErr?.message ? ` (${heicErr.message})` : ''}. ` +
-          `It may be a Live Photo or a corrupted export — try re-exporting it as JPEG from your Photos app.`,
-          { cause: heicErr }
+            `built-in HEIC converter couldn't read it either${heicErr?.message ? ` (${heicErr.message})` : ""}. ` +
+            `It may be a Live Photo or a corrupted export — try re-exporting it as JPEG from your Photos app.`,
+          { cause: heicErr },
         );
       }
     }
@@ -101,5 +116,9 @@ export async function decodeImageBitmap(file: File): Promise<ImageBitmap> {
  * callers fall back to a generic icon.
  */
 export async function heicPreviewBlob(file: File): Promise<Blob | null> {
-  try { return await heicToPngBlob(file); } catch { return null; }
+  try {
+    return await heicToPngBlob(file);
+  } catch {
+    return null;
+  }
 }

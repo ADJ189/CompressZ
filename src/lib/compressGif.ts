@@ -1,7 +1,15 @@
 import type { CompressOptions, CompressResult } from "./types";
-import { getFFmpeg, ffFetch, setProgressHandler } from "./ffmpeg";
+import { getFFmpeg, ffFetch, ffJob, setProgressHandler } from "./ffmpeg";
 
-export async function compressGif(
+export function compressGif(
+  file: File,
+  options: CompressOptions,
+  onProgress?: (pct: number) => void,
+): Promise<CompressResult> {
+  return ffJob(() => runCompressGif(file, options, onProgress));
+}
+
+async function runCompressGif(
   file: File,
   options: CompressOptions,
   onProgress?: (pct: number) => void,

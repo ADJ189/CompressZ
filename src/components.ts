@@ -1,52 +1,60 @@
-import { formatBytes } from './lib/types';
-import type { FileEntry } from './lib/types';
-import { mountThumbnail } from './lib/thumb';
+import { formatBytes } from "./lib/types";
+import type { FileEntry } from "./lib/types";
+import { mountThumbnail } from "./lib/thumb";
 
 // ── DropZone ──────────────────────────────────────────────────
 export function createDropZone(opts: {
-  accept:   string;
-  icon:     string;
-  title:    string;
+  accept: string;
+  icon: string;
+  title: string;
   subtitle: string;
-  onFiles:  (files: File[]) => void;
+  onFiles: (files: File[]) => void;
 }): HTMLElement {
-  const wrap = document.createElement('div');
-  wrap.className = 'dz';
+  const wrap = document.createElement("div");
+  wrap.className = "dz";
 
   function buildInner(hasFiles: boolean) {
-    wrap.innerHTML = '';
+    wrap.innerHTML = "";
     if (!hasFiles) {
-      const inner = document.createElement('div');
-      inner.className = 'dz-inner';
+      const inner = document.createElement("div");
+      inner.className = "dz-inner";
       inner.innerHTML = `
         <div class="dz-icon">${opts.icon}</div>
         <p class="dz-title">${opts.title}</p>
         <p class="dz-sub">${opts.subtitle}</p>
         <label class="dz-btn">Browse files<input type="file" accept="${opts.accept}" multiple style="display:none"></label>
       `;
-      inner.querySelector('input')!.addEventListener('change', handleInput);
+      inner.querySelector("input")!.addEventListener("change", handleInput);
       wrap.appendChild(inner);
     } else {
-      const lbl = document.createElement('label');
-      lbl.className = 'dz-add';
+      const lbl = document.createElement("label");
+      lbl.className = "dz-add";
       lbl.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add more files<input type="file" accept="${opts.accept}" multiple style="display:none">`;
-      lbl.querySelector('input')!.addEventListener('change', handleInput);
+      lbl.querySelector("input")!.addEventListener("change", handleInput);
       wrap.appendChild(lbl);
     }
   }
 
   function handleInput(e: Event) {
     const el = e.target as HTMLInputElement;
-    const files = Array.from(el.files ?? []).filter(f => f.size > 0);
+    const files = Array.from(el.files ?? []).filter((f) => f.size > 0);
     if (files.length) opts.onFiles(files);
-    el.value = '';
+    el.value = "";
   }
 
-  wrap.addEventListener('dragover', e => { e.preventDefault(); wrap.classList.add('drag-active'); });
-  wrap.addEventListener('dragleave', () => wrap.classList.remove('drag-active'));
-  wrap.addEventListener('drop', e => {
-    e.preventDefault(); wrap.classList.remove('drag-active');
-    const files = Array.from(e.dataTransfer?.files ?? []).filter(f => f.size > 0);
+  wrap.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    wrap.classList.add("drag-active");
+  });
+  wrap.addEventListener("dragleave", () =>
+    wrap.classList.remove("drag-active"),
+  );
+  wrap.addEventListener("drop", (e) => {
+    e.preventDefault();
+    wrap.classList.remove("drag-active");
+    const files = Array.from(e.dataTransfer?.files ?? []).filter(
+      (f) => f.size > 0,
+    );
     if (files.length) opts.onFiles(files);
   });
 
@@ -61,60 +69,76 @@ export function createDropZone(opts: {
 export interface FileCardCallbacks {
   onCompress: (e: FileEntry) => void;
   onDownload: (e: FileEntry) => void;
-  onRemove:   (id: string) => void;
-  onEdit?:    (e: FileEntry) => void; // optional: per-file settings editing (used by the video queue)
+  onRemove: (id: string) => void;
+  onEdit?: (e: FileEntry) => void; // optional: per-file settings editing (used by the video queue)
 }
 
 const TYPE_ICON: Record<string, string> = {
-  image: '🖼️', pdf: '📄', video: '🎬', audio: '🎵', gif: '🎞️', svg: '〽️',
+  image: "🖼️",
+  pdf: "📄",
+  video: "🎬",
+  audio: "🎵",
+  gif: "🎞️",
+  svg: "〽️",
 };
 
-export function renderFileCard(entry: FileEntry, cbs: FileCardCallbacks): HTMLElement {
-  const el = document.createElement('div');
-  el.className = 'file-card' + (
-    entry.status === 'done'        ? ' is-done' :
-    entry.status === 'error'       ? ' is-error' :
-    entry.status === 'compressing' ? ' is-compressing' : ''
-  );
-  el.id = 'card-' + entry.id;
+export function renderFileCard(
+  entry: FileEntry,
+  cbs: FileCardCallbacks,
+): HTMLElement {
+  const el = document.createElement("div");
+  el.className =
+    "file-card" +
+    (entry.status === "done"
+      ? " is-done"
+      : entry.status === "error"
+        ? " is-error"
+        : entry.status === "compressing"
+          ? " is-compressing"
+          : "");
+  el.id = "card-" + entry.id;
 
-  const icon = TYPE_ICON[entry.type] ?? '📁';
+  const icon = TYPE_ICON[entry.type] ?? "📁";
 
   // meta line
   let metaHtml = `<span>${formatBytes(entry.file.size)}</span>`;
   if (entry.result) {
-    const r    = entry.result;
-    const pct  = ((1 - r.compressedSize / r.originalSize) * 100).toFixed(1);
+    const r = entry.result;
+    const pct = ((1 - r.compressedSize / r.originalSize) * 100).toFixed(1);
     const bigger = r.compressionRatio < 1;
     metaHtml += `
       <span class="sep">→</span>
       <span class="comp">${formatBytes(r.compressedSize)}</span>
-      <span class="${bigger ? 'bigger' : 'ratio'}">${bigger ? 'larger' : `−${pct}%`}</span>
-      ${r.width ? `<span class="dim">${r.width}×${r.height}</span>` : ''}
-      ${r.format ? `<span class="eng">${r.format.split('·')[1]?.trim() ?? ''}</span>` : ''}
+      <span class="${bigger ? "bigger" : "ratio"}">${bigger ? "larger" : `−${pct}%`}</span>
+      ${r.width ? `<span class="dim">${r.width}×${r.height}</span>` : ""}
+      ${r.format ? `<span class="eng">${r.format.split("·")[1]?.trim() ?? ""}</span>` : ""}
     `;
   }
-  if (entry.status === 'error') {
-    metaHtml += `<span class="err-msg">⚠ ${esc(entry.error?.slice(0, 70) ?? 'Error')}</span>`;
+  if (entry.status === "error") {
+    metaHtml += `<span class="err-msg">⚠ ${esc(entry.error?.slice(0, 70) ?? "Error")}</span>`;
   }
   if (entry.aiLabel) {
     metaHtml += `<span class="fc-ai-tag" title="Detected locally by the on-device AI engine">✨ ${esc(entry.aiLabel)}</span>`;
   }
 
   // progress
-  const progressHtml = entry.status === 'compressing' ? `
+  const progressHtml =
+    entry.status === "compressing"
+      ? `
     <div class="fc-progress"><div class="fc-progress-fill" style="width:${entry.progress}%"></div></div>
-    <div class="fc-progress-label">${entry.progress < 6 ? 'Loading…' : `${entry.progress}%`}</div>
-  ` : '';
+    <div class="fc-progress-label">${entry.progress < 6 ? "Loading…" : `${entry.progress}%`}</div>
+  `
+      : "";
 
   // actions
-  let actHtml = '';
-  if (entry.status === 'idle' || entry.status === 'error') {
-    actHtml += `<button class="fc-btn primary" data-action="compress">${entry.status === 'error' ? 'Retry' : 'Compress'}</button>`;
-    if (cbs.onEdit) actHtml += `<button class="fc-btn icon" data-action="edit" aria-label="Edit settings for this file" title="Edit settings for this file">✎</button>`;
-  } else if (entry.status === 'compressing') {
+  let actHtml = "";
+  if (entry.status === "idle" || entry.status === "error") {
+    actHtml += `<button class="fc-btn primary" data-action="compress">${entry.status === "error" ? "Retry" : "Compress"}</button>`;
+    if (cbs.onEdit)
+      actHtml += `<button class="fc-btn icon" data-action="edit" aria-label="Edit settings for this file" title="Edit settings for this file">✎</button>`;
+  } else if (entry.status === "compressing") {
     actHtml += `<span class="fc-pct">${entry.progress}%</span>`;
-  } else if (entry.status === 'done') {
+  } else if (entry.status === "done") {
     actHtml += `<button class="fc-btn dl" data-action="download">⬇ Save</button>`;
   }
   actHtml += `<button class="fc-btn icon" data-action="remove" aria-label="Remove">
@@ -132,23 +156,37 @@ export function renderFileCard(entry: FileEntry, cbs: FileCardCallbacks): HTMLEl
     <div class="fc-actions">${actHtml}</div>
   `;
 
-  el.querySelector('[data-action="compress"]')?.addEventListener('click', () => cbs.onCompress(entry));
-  el.querySelector('[data-action="download"]')?.addEventListener('click', () => cbs.onDownload(entry));
-  el.querySelector('[data-action="remove"]')?.addEventListener('click',   () => cbs.onRemove(entry.id));
-  el.querySelector('[data-action="edit"]')?.addEventListener('click',     () => cbs.onEdit?.(entry));
+  el.querySelector('[data-action="compress"]')?.addEventListener("click", () =>
+    cbs.onCompress(entry),
+  );
+  el.querySelector('[data-action="download"]')?.addEventListener("click", () =>
+    cbs.onDownload(entry),
+  );
+  el.querySelector('[data-action="remove"]')?.addEventListener("click", () =>
+    cbs.onRemove(entry.id),
+  );
+  el.querySelector('[data-action="edit"]')?.addEventListener("click", () =>
+    cbs.onEdit?.(entry),
+  );
 
-  mountThumbnail(el.querySelector('.fc-ico')!, entry.file, icon);
+  mountThumbnail(el.querySelector(".fc-ico")!, entry.file, icon);
 
   return el;
 }
 
 export function patchFileCard(entry: FileEntry, cbs: FileCardCallbacks) {
-  const old = document.getElementById('card-' + entry.id);
+  const old = document.getElementById("card-" + entry.id);
   if (old) old.replaceWith(renderFileCard(entry, cbs));
 }
 
-function esc(s: string) {
-  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
+export function esc(s: string) {
+  return s.replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ]!,
+  );
 }
 
 // ── Batch bar helpers ─────────────────────────────────────────
@@ -157,30 +195,38 @@ export function renderBatchBar(
   files: FileEntry[],
   onCompressAll: () => void,
   onDownloadAll: () => void,
-  onClear:       () => void,
+  onClear: () => void,
 ) {
-  container.innerHTML = '';
-  if (!files.length) { container.style.display = 'none'; return; }
-  container.style.display = 'flex';
+  container.innerHTML = "";
+  if (!files.length) {
+    container.style.display = "none";
+    return;
+  }
+  container.style.display = "flex";
 
-  const done  = files.filter(f => f.status === 'done').length;
-  const queued = files.filter(f => f.status === 'idle' || f.status === 'error').length;
+  const done = files.filter((f) => f.status === "done").length;
+  const queued = files.filter(
+    (f) => f.status === "idle" || f.status === "error",
+  ).length;
 
-  const info = document.createElement('span');
-  info.className = 'batch-info';
-  info.textContent = `${files.length} file${files.length !== 1 ? 's' : ''} · ${done} done · ${queued} queued`;
+  const info = document.createElement("span");
+  info.className = "batch-info";
+  info.textContent = `${files.length} file${files.length !== 1 ? "s" : ""} · ${done} done · ${queued} queued`;
 
-  const btnAll = document.createElement('button');
-  btnAll.className = 'btn-sm btn-run'; btnAll.textContent = 'Compress all';
-  btnAll.addEventListener('click', onCompressAll);
+  const btnAll = document.createElement("button");
+  btnAll.className = "btn-sm btn-run";
+  btnAll.textContent = "Compress all";
+  btnAll.addEventListener("click", onCompressAll);
 
-  const btnDl = document.createElement('button');
-  btnDl.className = 'btn-sm btn-dl'; btnDl.textContent = 'Download all';
-  btnDl.addEventListener('click', onDownloadAll);
+  const btnDl = document.createElement("button");
+  btnDl.className = "btn-sm btn-dl";
+  btnDl.textContent = "Download all";
+  btnDl.addEventListener("click", onDownloadAll);
 
-  const btnClr = document.createElement('button');
-  btnClr.className = 'btn-sm btn-clr'; btnClr.textContent = 'Clear';
-  btnClr.addEventListener('click', onClear);
+  const btnClr = document.createElement("button");
+  btnClr.className = "btn-sm btn-clr";
+  btnClr.textContent = "Clear";
+  btnClr.addEventListener("click", onClear);
 
   container.append(info, btnAll, btnDl, btnClr);
 }

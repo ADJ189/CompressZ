@@ -10,7 +10,7 @@
  * compression tier. Audio conversion is already fully format-parameterised
  * in compressAudio.ts, so it's reused directly with a high-quality bitrate.
  */
-import { getFFmpeg, ffFetch, setProgressHandler } from "./ffmpeg";
+import { getFFmpeg, ffFetch, ffJob, setProgressHandler } from "./ffmpeg";
 
 export type VideoContainer = "mp4" | "webm" | "mov" | "mkv" | "avi" | "gif";
 
@@ -30,7 +30,15 @@ export interface ConvertResult {
   format: string;
 }
 
-export async function convertVideo(
+export function convertVideo(
+  file: File,
+  target: VideoContainer,
+  onProgress?: (pct: number) => void,
+): Promise<ConvertResult> {
+  return ffJob(() => runConvertVideo(file, target, onProgress));
+}
+
+async function runConvertVideo(
   file: File,
   target: VideoContainer,
   onProgress?: (pct: number) => void,

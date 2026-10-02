@@ -119,6 +119,11 @@ async function getClassifier(
     return ((input: any, opts?: any) => clf(input, opts)) as Classifier;
   })();
 
+  // Don't cache a failed load — otherwise one offline/transient failure
+  // makes every later "Smart" action fail until the page is reloaded.
+  p.catch(() => {
+    if (pipelines.get(tier) === p) pipelines.delete(tier);
+  });
   pipelines.set(tier, p);
   return p;
 }

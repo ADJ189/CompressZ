@@ -1,82 +1,116 @@
-import { formatBytes } from '../lib/types';
-import { imagesToPdf } from '../lib/imagesToPdf';
-import { createDropZone } from '../components';
-import { mountThumbnail, revokeFileThumbnail } from '../lib/thumb';
-import { toast } from '../toast';
-import { imagesToPdfStore } from '../store';
-import { registerBusyCheck } from '../main';
-import { getSettings, resolvedAiModelTier } from '../lib/settings';
-import { aiSupported } from '../lib/aiEngine';
+import { formatBytes } from "../lib/types";
+import { imagesToPdf } from "../lib/imagesToPdf";
+import { createDropZone } from "../components";
+import { mountThumbnail, revokeFileThumbnail } from "../lib/thumb";
+import { toast } from "../toast";
+import { imagesToPdfStore } from "../store";
+import { registerBusyCheck } from "../main";
+import { getSettings, resolvedAiModelTier } from "../lib/settings";
+import { aiSupported } from "../lib/aiEngine";
 
-const PAGE_SIZES: { id: 'auto' | 'a4' | 'letter'; label: string; sub: string }[] = [
-  { id: 'auto',   label: 'Auto',   sub: "Each page matches its image's own size" },
-  { id: 'a4',     label: 'A4',     sub: '210 × 297 mm, image scaled to fit' },
-  { id: 'letter', label: 'Letter', sub: '8.5 × 11 in, image scaled to fit' },
+const PAGE_SIZES: {
+  id: "auto" | "a4" | "letter";
+  label: string;
+  sub: string;
+}[] = [
+  { id: "auto", label: "Auto", sub: "Each page matches its image's own size" },
+  { id: "a4", label: "A4", sub: "210 × 297 mm, image scaled to fit" },
+  { id: "letter", label: "Letter", sub: "8.5 × 11 in, image scaled to fit" },
 ];
 
 // A4/Letter in PDF points (1/72in) — used to size+center pages that aren't 'auto'.
-const A4_PT     = { w: 595.28, h: 841.89 };
-const LETTER_PT = { w: 612,    h: 792   };
+const A4_PT = { w: 595.28, h: 841.89 };
+const LETTER_PT = { w: 612, h: 792 };
 
 export function mountImagesToPdf(root: HTMLElement) {
   const s = imagesToPdfStore;
   let progress = 0;
   let aiBusy = false;
-  let aiNote = '';
+  let aiNote = "";
   const aiLabels = new Map<File, string>(); // per-session tag cache, keyed by File — cleared implicitly when files are removed
 
   async function runSmartSort() {
     if (s.files.length < 2 || aiBusy) return;
     const settings = getSettings();
-    if (!settings.ai.enabled) { toast('Enable Local AI features in Settings first', 'error'); return; }
-    if (!aiSupported()) { toast('This browser can\u2019t run the local AI engine', 'error'); return; }
-
-    aiBusy = true; aiNote = 'Starting…'; render();
-    try {
-      const { smartAnalyze, sortBySmartAnalysis } = await import('../lib/aiEngine');
-      const tier = resolvedAiModelTier(settings);
-      const analysis = await smartAnalyze(s.files, tier, (done, total, note) => {
-        aiNote = `${note} (${done}/${total})`; renderAiBar();
-      });
-      analysis.forEach(a => { if (a.tag) aiLabels.set(a.file, a.tag.label); });
-      s.files = sortBySmartAnalysis(s.files, analysis);
-      const tagged = analysis.filter(a => a.tag).length;
-      toast(`Sorted ${analysis.length} image${analysis.length !== 1 ? 's' : ''} by content · ${tagged} tagged`, 'success');
-    } catch (e: any) {
-      toast(e?.message ?? 'Smart Sort failed', 'error');
+    if (!settings.ai.enabled) {
+      toast("Enable Local AI features in Settings first", "error");
+      return;
     }
-    aiBusy = false; render();
-    const { revealStagger } = await import('../lib/motion').catch(() => ({ revealStagger: undefined as any }));
-    if (revealStagger) revealStagger(listEl.querySelectorAll('.file-card'));
+    if (!aiSupported()) {
+      toast("This browser can\u2019t run the local AI engine", "error");
+      return;
+    }
+
+    aiBusy = true;
+    aiNote = "Starting…";
+    render();
+    try {
+      const { smartAnalyze, sortBySmartAnalysis } =
+        await import("../lib/aiEngine");
+      const tier = resolvedAiModelTier(settings);
+      const analysis = await smartAnalyze(
+        s.files,
+        tier,
+        (done, total, note) => {
+          aiNote = `${note} (${done}/${total})`;
+          renderAiBar();
+        },
+      );
+      analysis.forEach((a) => {
+        if (a.tag) aiLabels.set(a.file, a.tag.label);
+      });
+      s.files = sortBySmartAnalysis(s.files, analysis);
+      const tagged = analysis.filter((a) => a.tag).length;
+      toast(
+        `Sorted ${analysis.length} image${analysis.length !== 1 ? "s" : ""} by content · ${tagged} tagged`,
+        "success",
+      );
+    } catch (e: any) {
+      toast(e?.message ?? "Smart Sort failed", "error");
+    }
+    aiBusy = false;
+    render();
+    const { revealStagger } = await import("../lib/motion").catch(() => ({
+      revealStagger: undefined as any,
+    }));
+    if (revealStagger) revealStagger(listEl.querySelectorAll(".file-card"));
   }
 
   function renderAiBar() {
-    let bar = root.querySelector<HTMLElement>('#itp-ai-bar');
+    let bar = root.querySelector<HTMLElement>("#itp-ai-bar");
     if (!bar) return;
-    bar.innerHTML = '';
+    bar.innerHTML = "";
     if (s.files.length < 2) return;
-    const row = document.createElement('div');
-    row.className = 'batch-bar';
-    row.style.display = 'flex';
-    const btn = document.createElement('button');
-    btn.className = 'btn-sm btn-ai';
-    btn.textContent = aiBusy ? 'Sorting…' : '✨ Smart Sort (AI)';
+    const row = document.createElement("div");
+    row.className = "batch-bar";
+    row.style.display = "flex";
+    const btn = document.createElement("button");
+    btn.className = "btn-sm btn-ai";
+    btn.textContent = aiBusy ? "Sorting…" : "✨ Smart Sort (AI)";
     btn.disabled = aiBusy || s.busy;
-    btn.title = 'Groups visually/semantically similar images together, locally, before you combine them';
-    btn.addEventListener('click', runSmartSort);
+    btn.title =
+      "Groups visually/semantically similar images together, locally, before you combine them";
+    btn.addEventListener("click", runSmartSort);
     row.appendChild(btn);
     bar.appendChild(row);
     if (aiBusy) {
-      const prog = document.createElement('div');
-      prog.className = 'ai-progress-row';
-      prog.innerHTML = `<span>${aiNote}</span><span class="ai-progress-track"><span class="ai-progress-fill"></span></span>`;
+      const prog = document.createElement("div");
+      prog.className = "ai-progress-row";
+      prog.innerHTML = `<span>${esc(aiNote)}</span><span class="ai-progress-track"><span class="ai-progress-fill"></span></span>`;
       bar.appendChild(prog);
     }
   }
 
   function addFiles(fs: File[]) {
-    const valid = fs.filter(f => f.type.startsWith('image/') || /\.(jpg|jpeg|png|webp|avif|bmp|tiff|tif|heic|heif)$/i.test(f.name));
-    if (!valid.length) { toast('No image files found', 'error'); return; }
+    const valid = fs.filter(
+      (f) =>
+        f.type.startsWith("image/") ||
+        /\.(jpg|jpeg|png|webp|avif|bmp|tiff|tif|heic|heif)$/i.test(f.name),
+    );
+    if (!valid.length) {
+      toast("No image files found", "error");
+      return;
+    }
     s.files = [...s.files, ...valid];
     render();
   }
@@ -104,26 +138,43 @@ export function mountImagesToPdf(root: HTMLElement) {
   }
 
   async function runCombine() {
-    if (s.files.length < 1) { toast('Add at least one image', 'error'); return; }
-    s.busy = true; progress = 0; render();
+    if (s.files.length < 1) {
+      toast("Add at least one image", "error");
+      return;
+    }
+    s.busy = true;
+    progress = 0;
+    render();
     try {
-      const pageSizePt = s.pageSize === 'a4' ? A4_PT : s.pageSize === 'letter' ? LETTER_PT : undefined;
+      const pageSizePt =
+        s.pageSize === "a4"
+          ? A4_PT
+          : s.pageSize === "letter"
+            ? LETTER_PT
+            : undefined;
       const blob = await imagesToPdf(
         s.files,
         { quality: s.quality / 100, pageSize: pageSizePt, maxDim: s.maxDim },
-        p => { progress = p; render(); },
+        (p) => {
+          progress = p;
+          render();
+        },
       );
-      const a = Object.assign(document.createElement('a'), {
+      const a = Object.assign(document.createElement("a"), {
         href: URL.createObjectURL(blob),
-        download: 'images.pdf',
+        download: "images.pdf",
       });
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-      toast(`Combined ${s.files.length} image${s.files.length !== 1 ? 's' : ''} into one PDF`, 'success');
+      toast(
+        `Combined ${s.files.length} image${s.files.length !== 1 ? "s" : ""} into one PDF`,
+        "success",
+      );
     } catch (e: any) {
-      toast(e?.message ?? 'Combine failed', 'error');
+      toast(e?.message ?? "Combine failed", "error");
     }
-    s.busy = false; render();
+    s.busy = false;
+    render();
   }
 
   let dzWrap!: ReturnType<typeof createDropZone>;
@@ -154,19 +205,19 @@ export function mountImagesToPdf(root: HTMLElement) {
     </div>
   `;
 
-  cardEl = root.querySelector('#itp-settings')!;
+  cardEl = root.querySelector("#itp-settings")!;
 
   dzWrap = createDropZone({
-    accept:   'image/*,.heic,.heif',
-    icon:     '🧩',
-    title:    'Drop images here',
-    subtitle: 'Add two or more — reorder them below before combining',
-    onFiles:  addFiles,
+    accept: "image/*,.heic,.heif",
+    icon: "🧩",
+    title: "Drop images here",
+    subtitle: "Add two or more — reorder them below before combining",
+    onFiles: addFiles,
   });
-  root.querySelector('#dz-mount')!.appendChild(dzWrap);
+  root.querySelector("#dz-mount")!.appendChild(dzWrap);
 
-  barEl  = root.querySelector('#itp-bar')!;
-  listEl = root.querySelector('#itp-list')!;
+  barEl = root.querySelector("#itp-bar")!;
+  listEl = root.querySelector("#itp-list")!;
 
   function renderSettings() {
     cardEl.innerHTML = `
@@ -179,75 +230,98 @@ export function mountImagesToPdf(root: HTMLElement) {
         <input type="range" class="slider" min="10" max="99" value="${s.quality}" id="itp-q-range">
       </div>
     `;
-    const sizesEl = cardEl.querySelector('#itp-sizes')!;
-    PAGE_SIZES.forEach(p => {
-      const el = document.createElement('div');
-      el.className = 'pdf-preset' + (s.pageSize === p.id ? ' on' : '');
-      el.setAttribute('role', 'radio');
-      el.setAttribute('aria-checked', String(s.pageSize === p.id));
-      el.innerHTML = `<div class="pp-emoji">${p.id === 'auto' ? '📐' : p.id === 'a4' ? '📄' : '📃'}</div><div class="pp-label">${p.label}</div><div class="pp-sub">${p.sub}</div>`;
-      el.addEventListener('click', () => { s.pageSize = p.id; renderSettings(); });
+    const sizesEl = cardEl.querySelector("#itp-sizes")!;
+    PAGE_SIZES.forEach((p) => {
+      const el = document.createElement("div");
+      el.className = "pdf-preset" + (s.pageSize === p.id ? " on" : "");
+      el.setAttribute("role", "radio");
+      el.setAttribute("aria-checked", String(s.pageSize === p.id));
+      el.innerHTML = `<div class="pp-emoji">${p.id === "auto" ? "📐" : p.id === "a4" ? "📄" : "📃"}</div><div class="pp-label">${p.label}</div><div class="pp-sub">${p.sub}</div>`;
+      el.addEventListener("click", () => {
+        s.pageSize = p.id;
+        renderSettings();
+      });
       sizesEl.appendChild(el);
     });
-    cardEl.querySelector('#itp-q-range')!.addEventListener('input', e => {
+    cardEl.querySelector("#itp-q-range")!.addEventListener("input", (e) => {
       s.quality = +(e.target as HTMLInputElement).value;
-      cardEl.querySelector('#itp-q-label')!.textContent = `${s.quality}%`;
+      cardEl.querySelector("#itp-q-label")!.textContent = `${s.quality}%`;
     });
   }
 
   function renderBar() {
-    barEl.innerHTML = '';
-    if (!s.files.length) { barEl.style.display = 'none'; return; }
-    barEl.style.display = 'flex';
+    barEl.innerHTML = "";
+    if (!s.files.length) {
+      barEl.style.display = "none";
+      return;
+    }
+    barEl.style.display = "flex";
 
-    const info = document.createElement('span');
-    info.className = 'batch-info';
+    const info = document.createElement("span");
+    info.className = "batch-info";
     info.textContent = s.busy
       ? `Combining… ${progress}%`
-      : `${s.files.length} image${s.files.length !== 1 ? 's' : ''} selected`;
+      : `${s.files.length} image${s.files.length !== 1 ? "s" : ""} selected`;
 
-    const btnRun = document.createElement('button');
-    btnRun.className = 'btn-sm btn-run';
-    btnRun.textContent = s.busy ? 'Combining…' : 'Combine & download';
+    const btnRun = document.createElement("button");
+    btnRun.className = "btn-sm btn-run";
+    btnRun.textContent = s.busy ? "Combining…" : "Combine & download";
     btnRun.disabled = s.busy || s.files.length < 1;
-    btnRun.addEventListener('click', runCombine);
+    btnRun.addEventListener("click", runCombine);
 
-    const btnClr = document.createElement('button');
-    btnClr.className = 'btn-sm btn-clr';
-    btnClr.textContent = 'Clear';
+    const btnClr = document.createElement("button");
+    btnClr.className = "btn-sm btn-clr";
+    btnClr.textContent = "Clear";
     btnClr.disabled = s.busy || !s.files.length;
-    btnClr.addEventListener('click', clearAll);
+    btnClr.addEventListener("click", clearAll);
 
     barEl.append(info, btnRun, btnClr);
   }
 
   function renderList() {
-    listEl.innerHTML = '';
+    listEl.innerHTML = "";
     s.files.forEach((f, i) => {
-      const el = document.createElement('div');
-      el.className = 'file-card';
+      const el = document.createElement("div");
+      el.className = "file-card";
       el.innerHTML = `
         <div class="fc-ico">🖼️</div>
         <div class="fc-info">
           <div class="fc-name" title="${esc(f.name)}">${i + 1}. ${esc(f.name)}</div>
-          <div class="fc-meta"><span>${formatBytes(f.size)}</span>${aiLabels.has(f) ? `<span class="fc-ai-tag" title="Detected locally by the on-device AI engine">✨ ${esc(aiLabels.get(f)!)}</span>` : ''}</div>
+          <div class="fc-meta"><span>${formatBytes(f.size)}</span>${aiLabels.has(f) ? `<span class="fc-ai-tag" title="Detected locally by the on-device AI engine">✨ ${esc(aiLabels.get(f)!)}</span>` : ""}</div>
         </div>
         <div class="fc-actions">
-          <button class="fc-btn icon" data-up aria-label="Move up" ${i === 0 || s.busy ? 'disabled' : ''}>↑</button>
-          <button class="fc-btn icon" data-down aria-label="Move down" ${i === s.files.length - 1 || s.busy ? 'disabled' : ''}>↓</button>
-          <button class="fc-btn icon" data-rm aria-label="Remove" ${s.busy ? 'disabled' : ''}>
+          <button class="fc-btn icon" data-up aria-label="Move up" ${i === 0 || s.busy ? "disabled" : ""}>↑</button>
+          <button class="fc-btn icon" data-down aria-label="Move down" ${i === s.files.length - 1 || s.busy ? "disabled" : ""}>↓</button>
+          <button class="fc-btn icon" data-rm aria-label="Remove" ${s.busy ? "disabled" : ""}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>`;
-      el.querySelector('[data-up]')?.addEventListener('click', () => moveAt(i, -1));
-      el.querySelector('[data-down]')?.addEventListener('click', () => moveAt(i, 1));
-      el.querySelector('[data-rm]')?.addEventListener('click', () => removeAt(i));
-      mountThumbnail(el.querySelector('.fc-ico')!, f, '🖼️');
-      listEl.appendChild(el);    });
+      el.querySelector("[data-up]")?.addEventListener("click", () =>
+        moveAt(i, -1),
+      );
+      el.querySelector("[data-down]")?.addEventListener("click", () =>
+        moveAt(i, 1),
+      );
+      el.querySelector("[data-rm]")?.addEventListener("click", () =>
+        removeAt(i),
+      );
+      mountThumbnail(el.querySelector(".fc-ico")!, f, "🖼️");
+      listEl.appendChild(el);
+    });
   }
 
   function esc(str: string) {
-    return str.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+    return str.replace(
+      /[&<>"']/g,
+      (c) =>
+        ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        })[c]!,
+    );
   }
 
   function render() {
