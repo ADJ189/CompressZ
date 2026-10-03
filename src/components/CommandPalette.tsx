@@ -66,7 +66,10 @@ function fold(ch: string): string {
  * earlier hits. Returns the matched UTF-16 indices so the label can be
  * highlighted. Null when the query is not a subsequence of the text.
  */
-function fuzzy(query: string, text: string): { score: number; indices: number[] } | null {
+function fuzzy(
+  query: string,
+  text: string,
+): { score: number; indices: number[] } | null {
   const t = Array.from(text, fold).join("");
   const indices: number[] = [];
   let from = 0;
@@ -189,7 +192,11 @@ export function CommandPalette({
   useEffect(() => {
     if (!hotkey) return;
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "k") {
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        !e.altKey &&
+        e.key.toLowerCase() === "k"
+      ) {
         e.preventDefault();
         setOpen(!openRef.current);
       }
@@ -231,7 +238,8 @@ export function CommandPalette({
     const { overflow, paddingRight } = document.body.style;
     const gap = window.innerWidth - document.documentElement.clientWidth;
     if (gap > 0) {
-      const current = parseFloat(getComputedStyle(document.body).paddingRight) || 0;
+      const current =
+        parseFloat(getComputedStyle(document.body).paddingRight) || 0;
       document.body.style.paddingRight = `${current + gap}px`;
     }
     document.body.style.overflow = "hidden";
@@ -262,7 +270,10 @@ export function CommandPalette({
       list.scrollTop = 0;
     } else if (row.offsetTop < list.scrollTop) {
       list.scrollTop = row.offsetTop;
-    } else if (row.offsetTop + row.offsetHeight > list.scrollTop + list.clientHeight) {
+    } else if (
+      row.offsetTop + row.offsetHeight >
+      list.scrollTop + list.clientHeight
+    ) {
       list.scrollTop = row.offsetTop + row.offsetHeight - list.clientHeight;
     }
   }, [idx, results, mounted]);

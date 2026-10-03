@@ -8,8 +8,10 @@ import {
 import { cn } from "../utils/cn";
 import { prefersReducedMotion } from "../utils/interaction";
 
-export interface ScrambleTextProps
-  extends Omit<ComponentPropsWithoutRef<"span">, "children"> {
+export interface ScrambleTextProps extends Omit<
+  ComponentPropsWithoutRef<"span">,
+  "children"
+> {
   /** The text that the animation resolves to. */
   text: string;
   /** When to play. `hover` also plays on keyboard focus within. */
@@ -35,7 +37,9 @@ function pick(chars: string, i: number, tick: number): string {
 }
 
 function maskText(text: string, chars: string): string {
-  return Array.from(text, (ch, i) => (/\s/.test(ch) ? ch : pick(chars, i, 0))).join("");
+  return Array.from(text, (ch, i) =>
+    /\s/.test(ch) ? ch : pick(chars, i, 0),
+  ).join("");
 }
 
 // Code points, not UTF-16 units: indexing a string splits emoji and other

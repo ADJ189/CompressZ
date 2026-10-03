@@ -6,7 +6,11 @@ import {
   type ComponentPropsWithoutRef,
 } from "react";
 import { cn } from "../utils/cn";
-import { assignRef, canHover, prefersReducedMotion } from "../utils/interaction";
+import {
+  assignRef,
+  canHover,
+  prefersReducedMotion,
+} from "../utils/interaction";
 
 export interface MagneticProps extends ComponentPropsWithoutRef<"span"> {
   /** How much of the pointer offset the element follows, 0 to 1. */
@@ -78,8 +82,16 @@ export const Magnetic = forwardRef<HTMLSpanElement, MagneticProps>(
         // moves the element, which moves the centre, which moves the pull.
         const cx = r.left - curX + r.width / 2;
         const cy = r.top - curY + r.height / 2;
-        const ex = Math.max(cx - r.width / 2 - e.clientX, 0, e.clientX - (cx + r.width / 2));
-        const ey = Math.max(cy - r.height / 2 - e.clientY, 0, e.clientY - (cy + r.height / 2));
+        const ex = Math.max(
+          cx - r.width / 2 - e.clientX,
+          0,
+          e.clientX - (cx + r.width / 2),
+        );
+        const ey = Math.max(
+          cy - r.height / 2 - e.clientY,
+          0,
+          e.clientY - (cy + r.height / 2),
+        );
         if (Math.hypot(ex, ey) < radius) {
           tx = (e.clientX - cx) * strength;
           ty = (e.clientY - cy) * strength;

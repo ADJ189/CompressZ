@@ -5,7 +5,10 @@ import type { MutableRefObject, Ref } from "react";
 // `.matches` stays live, so a mid-session settings change is still seen.
 const cache = new Map<string, MediaQueryList>();
 function matches(query: string): boolean {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+  if (
+    typeof window === "undefined" ||
+    typeof window.matchMedia !== "function"
+  ) {
     return false;
   }
   let mql = cache.get(query);

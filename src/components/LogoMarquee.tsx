@@ -30,7 +30,16 @@ export interface LogoMarqueeProps extends ComponentPropsWithoutRef<"div"> {
  */
 export const LogoMarquee = forwardRef<HTMLDivElement, LogoMarqueeProps>(
   (
-    { logos, speed = 40, gap = 56, fade = true, pauseOnHover, className, style, ...rest },
+    {
+      logos,
+      speed = 40,
+      gap = 56,
+      fade = true,
+      pauseOnHover,
+      className,
+      style,
+      ...rest
+    },
     ref,
   ) => {
     const cssVars: CSSProperties = {
@@ -49,7 +58,11 @@ export const LogoMarquee = forwardRef<HTMLDivElement, LogoMarqueeProps>(
           <img src={it.src} alt={it.alt ?? ""} />
         </span>
       ) : (
-        <span key={dup ? `d${i}` : (it.key ?? `b${i}`)} className={cls} aria-hidden={dup || undefined}>
+        <span
+          key={dup ? `d${i}` : (it.key ?? `b${i}`)}
+          className={cls}
+          aria-hidden={dup || undefined}
+        >
           {it.node}
         </span>
       );
