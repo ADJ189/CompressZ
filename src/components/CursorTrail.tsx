@@ -1,4 +1,8 @@
-import { useEffect, useRef, type ComponentPropsWithoutRef } from "react";
+import {
+  useEffect,
+  useRef,
+  type ComponentPropsWithoutRef,
+} from "react";
 import { cn } from "../utils/cn";
 import { prefersReducedMotion } from "../utils/interaction";
 

@@ -8,10 +8,8 @@ import {
 import { cn } from "../utils/cn";
 import { prefersReducedMotion } from "../utils/interaction";
 
-export interface ScrambleTextProps extends Omit<
-  ComponentPropsWithoutRef<"span">,
-  "children"
-> {
+export interface ScrambleTextProps
+  extends Omit<ComponentPropsWithoutRef<"span">, "children"> {
   /** The text that the animation resolves to. */
   text: string;
   /** When to play. `hover` also plays on keyboard focus within. */
@@ -29,15 +27,15 @@ const SWAP_MS = 45;
 
 // Cheap deterministic pick so rendering stays pure and testable.
 function pick(chars: string, i: number, tick: number): string {
-  const n = Math.imul(i + 1, 374761393) ^ Math.imul(tick + 1, 668265263);
+  // An empty `chars` would make this a modulo by zero, and indexing with NaN
+  // renders the literal text "undefined". Fall back to the default alphabet.
   const alphabet = chars || DEFAULT_CHARS;
+  const n = Math.imul(i + 1, 374761393) ^ Math.imul(tick + 1, 668265263);
   return alphabet[Math.abs(n ^ (n >>> 13)) % alphabet.length];
 }
 
 function maskText(text: string, chars: string): string {
-  return Array.from(text, (ch, i) =>
-    /\s/.test(ch) ? ch : pick(chars, i, 0),
-  ).join("");
+  return Array.from(text, (ch, i) => (/\s/.test(ch) ? ch : pick(chars, i, 0))).join("");
 }
 
 // Code points, not UTF-16 units: indexing a string splits emoji and other
