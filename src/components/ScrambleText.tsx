@@ -30,7 +30,8 @@ const SWAP_MS = 45;
 // Cheap deterministic pick so rendering stays pure and testable.
 function pick(chars: string, i: number, tick: number): string {
   const n = Math.imul(i + 1, 374761393) ^ Math.imul(tick + 1, 668265263);
-  return chars[Math.abs(n ^ (n >>> 13)) % chars.length];
+  const alphabet = chars || DEFAULT_CHARS;
+  return alphabet[Math.abs(n ^ (n >>> 13)) % alphabet.length];
 }
 
 function maskText(text: string, chars: string): string {
