@@ -108,10 +108,7 @@ export const COMPONENTS: ComponentMeta[] = [
     sources: [
       { name: "v0.app", url: "https://v0.app" },
       { name: "lovable.dev", url: "https://lovable.dev" },
-      {
-        name: "notion.com/product/ai",
-        url: "https://www.notion.com/product/ai",
-      },
+      { name: "notion.com/product/ai", url: "https://www.notion.com/product/ai" },
     ],
     extra: 412,
     description:
@@ -146,22 +143,9 @@ export const COMPONENTS: ComponentMeta[] = [
       },
     ],
     props: [
-      {
-        name: "glyph",
-        type: "string",
-        default: '"✦"',
-        desc: "The character to render.",
-      },
-      {
-        name: "solid",
-        type: "boolean",
-        desc: "Skip gradient; render in currentColor.",
-      },
-      {
-        name: "static",
-        type: "boolean",
-        desc: "Disable the twinkle animation.",
-      },
+      { name: "glyph", type: "string", default: '"✦"', desc: "The character to render." },
+      { name: "solid", type: "boolean", desc: "Skip gradient; render in currentColor." },
+      { name: "static", type: "boolean", desc: "Disable the twinkle animation." },
     ],
   },
 
@@ -199,17 +183,8 @@ export const COMPONENTS: ComponentMeta[] = [
       },
     ],
     props: [
-      {
-        name: "as",
-        type: "ElementType",
-        default: "'span'",
-        desc: "Tag to render.",
-      },
-      {
-        name: "static",
-        type: "boolean",
-        desc: "Disable the gradient shift animation.",
-      },
+      { name: "as", type: "ElementType", default: "'span'", desc: "Tag to render." },
+      { name: "static", type: "boolean", desc: "Disable the gradient shift animation." },
     ],
   },
 
@@ -230,14 +205,7 @@ export const COMPONENTS: ComponentMeta[] = [
       {
         title: "Default green",
         Demo: () => (
-          <span
-            style={{
-              display: "inline-flex",
-              gap: 8,
-              alignItems: "center",
-              fontSize: 14,
-            }}
-          >
+          <span style={{ display: "inline-flex", gap: 8, alignItems: "center", fontSize: 14 }}>
             <StatusDot /> All systems normal
           </span>
         ),
@@ -246,14 +214,7 @@ export const COMPONENTS: ComponentMeta[] = [
       {
         title: "Warn (custom color)",
         Demo: () => (
-          <span
-            style={{
-              display: "inline-flex",
-              gap: 8,
-              alignItems: "center",
-              fontSize: 14,
-            }}
-          >
+          <span style={{ display: "inline-flex", gap: 8, alignItems: "center", fontSize: 14 }}>
             <StatusDot color="#fbbf24" /> Degraded performance
           </span>
         ),
@@ -261,12 +222,7 @@ export const COMPONENTS: ComponentMeta[] = [
       },
     ],
     props: [
-      {
-        name: "color",
-        type: "string",
-        default: "var(--pui-success)",
-        desc: "CSS color.",
-      },
+      { name: "color", type: "string", default: "var(--pui-success)", desc: "CSS color." },
       { name: "static", type: "boolean", desc: "Disable the pulse." },
     ],
   },
@@ -318,24 +274,9 @@ export const COMPONENTS: ComponentMeta[] = [
       },
     ],
     props: [
-      {
-        name: "text",
-        type: "string",
-        required: true,
-        desc: "The text to render.",
-      },
-      {
-        name: "animation",
-        type: '"wave" | "scroll" | "slide"',
-        default: '"wave"',
-        desc: "Motion treatment.",
-      },
-      {
-        name: "color",
-        type: '"flash1" | "flash2" | "flash3" | "glow1" | "glow2" | "glow3" | string',
-        default: '"glow1"',
-        desc: "Named preset or any CSS color string. Custom colors get an auto-tinted text-shadow.",
-      },
+      { name: "text", type: "string", required: true, desc: "The text to render." },
+      { name: "animation", type: '"wave" | "scroll" | "slide"', default: '"wave"', desc: "Motion treatment." },
+      { name: "color", type: '"flash1" | "flash2" | "flash3" | "glow1" | "glow2" | "glow3" | string', default: '"glow1"', desc: "Named preset or any CSS color string. Custom colors get an auto-tinted text-shadow." },
     ],
   },
 
@@ -357,17 +298,8 @@ export const COMPONENTS: ComponentMeta[] = [
       {
         title: "All five variants",
         Demo: () => (
-          <div
-            style={{
-              display: "flex",
-              gap: 12,
-              flexWrap: "wrap",
-              alignItems: "center",
-            }}
-          >
-            <Button variant="glow" sparkle>
-              Generate
-            </Button>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+            <Button variant="glow" sparkle>Generate</Button>
             <Button variant="shimmer">Start building</Button>
             <Button variant="ghost">Talk to sales</Button>
             <Button variant="solid">Upgrade</Button>
@@ -384,13 +316,9 @@ export const COMPONENTS: ComponentMeta[] = [
         title: "Sizes",
         Demo: () => (
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-            <Button size="sm" variant="ghost">
-              Small
-            </Button>
+            <Button size="sm" variant="ghost">Small</Button>
             <Button variant="ghost">Medium</Button>
-            <Button size="lg" variant="ghost">
-              Large
-            </Button>
+            <Button size="lg" variant="ghost">Large</Button>
           </div>
         ),
         code: `<Button size="sm">Small</Button>
@@ -399,11 +327,7 @@ export const COMPONENTS: ComponentMeta[] = [
       },
       {
         title: "Loading",
-        Demo: () => (
-          <Button variant="glow" loading>
-            Shipping…
-          </Button>
-        ),
+        Demo: () => <Button variant="glow" loading>Shipping…</Button>,
         code: `<Button variant="glow" loading>Shipping…</Button>`,
       },
       {
@@ -417,27 +341,12 @@ export const COMPONENTS: ComponentMeta[] = [
       },
     ],
     props: [
-      {
-        name: "variant",
-        type: '"glow" | "shimmer" | "ghost" | "solid" | "wave"',
-        default: '"glow"',
-        desc: "Visual style.",
-      },
-      {
-        name: "size",
-        type: '"sm" | "md" | "lg"',
-        default: '"md"',
-        desc: "Padding + font.",
-      },
+      { name: "variant", type: '"glow" | "shimmer" | "ghost" | "solid" | "wave"', default: '"glow"', desc: "Visual style." },
+      { name: "size", type: '"sm" | "md" | "lg"', default: '"md"', desc: "Padding + font." },
       { name: "sparkle", type: "boolean", desc: "Append a ✦ after the label." },
       { name: "loading", type: "boolean", desc: "Show spinner + disable." },
       { name: "block", type: "boolean", desc: "Render full-width." },
-      {
-        name: "as",
-        type: "ElementType",
-        default: '"button"',
-        desc: "Polymorphic tag.",
-      },
+      { name: "as", type: "ElementType", default: '"button"', desc: "Polymorphic tag." },
     ],
   },
 
@@ -470,11 +379,7 @@ export const COMPONENTS: ComponentMeta[] = [
     ],
     props: [
       { name: "hideSparkle", type: "boolean", desc: "Drop the leading ✦." },
-      {
-        name: "trailing",
-        type: "ReactNode",
-        desc: "Trailing accessory (arrow, etc.).",
-      },
+      { name: "trailing", type: "ReactNode", desc: "Trailing accessory (arrow, etc.)." },
     ],
   },
 
@@ -494,9 +399,7 @@ export const COMPONENTS: ComponentMeta[] = [
     examples: [
       {
         title: "Default",
-        Demo: () => (
-          <EyebrowPill>Now with GPT-5.5 Turbo Vision Pro</EyebrowPill>
-        ),
+        Demo: () => <EyebrowPill>Now with GPT-5.5 Turbo Vision Pro</EyebrowPill>,
         code: `<EyebrowPill>Now with GPT-5.5 Turbo Vision Pro</EyebrowPill>`,
       },
       {
@@ -506,17 +409,8 @@ export const COMPONENTS: ComponentMeta[] = [
       },
     ],
     props: [
-      {
-        name: "icon",
-        type: "ReactNode | false",
-        default: "<StatusDot />",
-        desc: "Leading icon. False to hide.",
-      },
-      {
-        name: "statusColor",
-        type: "string",
-        desc: "Color of the default dot.",
-      },
+      { name: "icon", type: "ReactNode | false", default: "<StatusDot />", desc: "Leading icon. False to hide." },
+      { name: "statusColor", type: "string", desc: "Color of the default dot." },
     ],
   },
 
@@ -624,84 +518,20 @@ export const COMPONENTS: ComponentMeta[] = [
       },
     ],
     props: [
-      {
-        name: "variant",
-        type: '"panel" | "bare"',
-        default: '"panel"',
-        desc: "panel = bordered card; bare = no chrome (for background use).",
-      },
-      {
-        name: "cols",
-        type: "number",
-        desc: "Grid width in cells. Auto-computed from container if omitted.",
-      },
-      {
-        name: "rows",
-        type: "number",
-        desc: "Grid height in cells. Auto-computed from container if omitted.",
-      },
-      {
-        name: "fontSize",
-        type: "number",
-        default: "11",
-        desc: "Character font size (px).",
-      },
-      {
-        name: "charRamp",
-        type: "string",
-        desc: "Sparsest → densest characters.",
-      },
-      {
-        name: "colorful",
-        type: "boolean",
-        desc: "Paint with the default aurora palette.",
-      },
-      {
-        name: "palette",
-        type: "string[]",
-        desc: "Custom palette; overrides `colorful`.",
-      },
-      {
-        name: "baseOpacity",
-        type: "number",
-        default: "1",
-        desc: "Base alpha. Drop low (≈ 0.18) for background use.",
-      },
-      {
-        name: "reactive",
-        type: "boolean",
-        default: "true",
-        desc: "Enable cursor reactivity.",
-      },
-      {
-        name: "rippleStrength",
-        type: "number",
-        default: "1.4",
-        desc: "Cursor ripple amplitude (changes which chars show).",
-      },
-      {
-        name: "rippleRadius",
-        type: "number",
-        default: "6",
-        desc: "Cursor ripple falloff radius (cells).",
-      },
-      {
-        name: "spotlightOpacity",
-        type: "number",
-        desc: "Alpha at the cursor center; falls off radially to baseOpacity.",
-      },
-      {
-        name: "spotlightRadius",
-        type: "number",
-        default: "8",
-        desc: "Cursor spotlight radius (cells).",
-      },
-      {
-        name: "frameMs",
-        type: "number",
-        default: "50",
-        desc: "Frame throttle (ms).",
-      },
+      { name: "variant", type: '"panel" | "bare"', default: '"panel"', desc: "panel = bordered card; bare = no chrome (for background use)." },
+      { name: "cols", type: "number", desc: "Grid width in cells. Auto-computed from container if omitted." },
+      { name: "rows", type: "number", desc: "Grid height in cells. Auto-computed from container if omitted." },
+      { name: "fontSize", type: "number", default: "11", desc: "Character font size (px)." },
+      { name: "charRamp", type: "string", desc: "Sparsest → densest characters." },
+      { name: "colorful", type: "boolean", desc: "Paint with the default aurora palette." },
+      { name: "palette", type: "string[]", desc: "Custom palette; overrides `colorful`." },
+      { name: "baseOpacity", type: "number", default: "1", desc: "Base alpha. Drop low (≈ 0.18) for background use." },
+      { name: "reactive", type: "boolean", default: "true", desc: "Enable cursor reactivity." },
+      { name: "rippleStrength", type: "number", default: "1.4", desc: "Cursor ripple amplitude (changes which chars show)." },
+      { name: "rippleRadius", type: "number", default: "6", desc: "Cursor ripple falloff radius (cells)." },
+      { name: "spotlightOpacity", type: "number", desc: "Alpha at the cursor center; falls off radially to baseOpacity." },
+      { name: "spotlightRadius", type: "number", default: "8", desc: "Cursor spotlight radius (cells)." },
+      { name: "frameMs", type: "number", default: "50", desc: "Frame throttle (ms)." },
     ],
   },
 
@@ -710,7 +540,9 @@ export const COMPONENTS: ComponentMeta[] = [
     category: "Heroes",
     name: "Goldeneye",
     snark: "Make them earn it.",
-    sources: [{ name: "mimo.xiaomi.com", url: "https://mimo.xiaomi.com" }],
+    sources: [
+      { name: "mimo.xiaomi.com", url: "https://mimo.xiaomi.com" },
+    ],
     extra: 20,
     description:
       "A reveal-on-hover headline over a tiled-letter background. The page shows `text_default` on a field of small repeating letters; a circular scope follows the cursor and swaps it for `text_reveal` on an inverted plate, with the background pattern resized inside the scope. Polarity flips with the theme automatically. Move your mouse over the demos.",
@@ -753,53 +585,14 @@ export const COMPONENTS: ComponentMeta[] = [
       },
     ],
     props: [
-      {
-        name: "text_default",
-        type: "string",
-        required: true,
-        desc: "Headline shown on the page, outside the scope.",
-      },
-      {
-        name: "text_reveal",
-        type: "string",
-        required: true,
-        desc: "Headline revealed inside the scope as the cursor passes over.",
-      },
-      {
-        name: "pattern",
-        type: "string",
-        default: '"0 1 0 1 "',
-        desc: "Tiled-letter background. Even rows are offset by half a tile so the grid reads as a diamond lattice.",
-      },
-      {
-        name: "pattern_size_default",
-        type: "number",
-        default: "14",
-        desc: "Pattern font size (px) outside the scope.",
-      },
-      {
-        name: "pattern_size_reveal",
-        type: "number",
-        default: "22",
-        desc: "Pattern font size (px) inside the scope.",
-      },
-      {
-        name: "scopeSize",
-        type: "number",
-        default: "320",
-        desc: "Diameter of the reveal scope, in px.",
-      },
-      {
-        name: "fontSize",
-        type: "number | string",
-        default: "clamp(48px, 11vw, 160px)",
-        desc: "Headline font size. Number = px; string = any CSS length (clamp, vw, etc.).",
-      },
-      {
-        name: "fontFamily",
-        type: "string",
-        desc: "CSS font-family for the headline. Defaults to the library sans (the pattern always uses mono).",
-      },
+      { name: "text_default", type: "string", required: true, desc: "Headline shown on the page, outside the scope." },
+      { name: "text_reveal", type: "string", required: true, desc: "Headline revealed inside the scope as the cursor passes over." },
+      { name: "pattern", type: "string", default: '"0 1 0 1 "', desc: "Tiled-letter background. Even rows are offset by half a tile so the grid reads as a diamond lattice." },
+      { name: "pattern_size_default", type: "number", default: "14", desc: "Pattern font size (px) outside the scope." },
+      { name: "pattern_size_reveal", type: "number", default: "22", desc: "Pattern font size (px) inside the scope." },
+      { name: "scopeSize", type: "number", default: "320", desc: "Diameter of the reveal scope, in px." },
+      { name: "fontSize", type: "number | string", default: "clamp(48px, 11vw, 160px)", desc: "Headline font size. Number = px; string = any CSS length (clamp, vw, etc.)." },
+      { name: "fontFamily", type: "string", desc: "CSS font-family for the headline. Defaults to the library sans (the pattern always uses mono)." },
     ],
   },
 
@@ -807,7 +600,7 @@ export const COMPONENTS: ComponentMeta[] = [
     slug: "rotator",
     category: "Heroes",
     name: "Rotator",
-    snark: 'Because saying "everything" wasn\'t ambitious enough.',
+    snark: "Because saying \"everything\" wasn't ambitious enough.",
     sources: [
       { name: "vapi.ai", url: "https://vapi.ai" },
       { name: "cresta.com", url: "https://www.cresta.com" },
@@ -863,9 +656,7 @@ export const COMPONENTS: ComponentMeta[] = [
             Built for{" "}
             <Rotator
               words={["builders", "thinkers", "doers"]}
-              renderWord={(w: string) => (
-                <span style={{ borderBottom: "2px solid #ec4899" }}>{w}</span>
-              )}
+              renderWord={(w: string) => <span style={{ borderBottom: "2px solid #ec4899" }}>{w}</span>}
             />
           </h2>
         ),
@@ -876,57 +667,15 @@ export const COMPONENTS: ComponentMeta[] = [
       },
     ],
     props: [
-      {
-        name: "words",
-        type: "string[]",
-        required: true,
-        desc: "Words to cycle through.",
-      },
-      {
-        name: "typeMs",
-        type: "number",
-        default: "70",
-        desc: "ms per character (typing).",
-      },
-      {
-        name: "deleteMs",
-        type: "number",
-        default: "32",
-        desc: "ms per character (deleting).",
-      },
-      {
-        name: "holdMs",
-        type: "number",
-        default: "1500",
-        desc: "ms to hold the full word.",
-      },
-      {
-        name: "loop",
-        type: "boolean",
-        default: "true",
-        desc: "Restart at the start once finished.",
-      },
-      {
-        name: "cursor",
-        type: "string",
-        default: '"▍"',
-        desc: "Cursor character.",
-      },
-      {
-        name: "hideCursor",
-        type: "boolean",
-        desc: "Hide the blinking cursor.",
-      },
-      {
-        name: "renderWord",
-        type: "(word, index) => ReactNode",
-        desc: "Custom word renderer.",
-      },
-      {
-        name: "onWordReached",
-        type: "(word, index) => void",
-        desc: "Callback at end of type.",
-      },
+      { name: "words", type: "string[]", required: true, desc: "Words to cycle through." },
+      { name: "typeMs", type: "number", default: "70", desc: "ms per character (typing)." },
+      { name: "deleteMs", type: "number", default: "32", desc: "ms per character (deleting)." },
+      { name: "holdMs", type: "number", default: "1500", desc: "ms to hold the full word." },
+      { name: "loop", type: "boolean", default: "true", desc: "Restart at the start once finished." },
+      { name: "cursor", type: "string", default: '"▍"', desc: "Cursor character." },
+      { name: "hideCursor", type: "boolean", desc: "Hide the blinking cursor." },
+      { name: "renderWord", type: "(word, index) => ReactNode", desc: "Custom word renderer." },
+      { name: "onWordReached", type: "(word, index) => void", desc: "Callback at end of type." },
     ],
   },
 
@@ -934,8 +683,7 @@ export const COMPONENTS: ComponentMeta[] = [
     slug: "word-roll",
     category: "Heroes",
     name: "WordRoll",
-    snark:
-      "All the breadth-flexing of a Rotator, without making the visitor wait for it to type.",
+    snark: "All the breadth-flexing of a Rotator, without making the visitor wait for it to type.",
     sources: [
       { name: "supermemory.ai", url: "https://supermemory.ai" },
       { name: "linear.app", url: "https://linear.app" },
@@ -985,35 +733,11 @@ export const COMPONENTS: ComponentMeta[] = [
       },
     ],
     props: [
-      {
-        name: "words",
-        type: "string[]",
-        required: true,
-        desc: "Words to cycle through.",
-      },
-      {
-        name: "intervalMs",
-        type: "number",
-        default: "2200",
-        desc: "ms each word holds before rolling out.",
-      },
-      {
-        name: "transitionMs",
-        type: "number",
-        default: "500",
-        desc: "ms of the slide animation itself.",
-      },
-      {
-        name: "direction",
-        type: '"up" | "down"',
-        default: '"up"',
-        desc: "Direction the active word rolls in from.",
-      },
-      {
-        name: "gradient",
-        type: "boolean",
-        desc: "Paint each word with the AI gradient. Use instead of nesting in <GradientText>.",
-      },
+      { name: "words", type: "string[]", required: true, desc: "Words to cycle through." },
+      { name: "intervalMs", type: "number", default: "2200", desc: "ms each word holds before rolling out." },
+      { name: "transitionMs", type: "number", default: "500", desc: "ms of the slide animation itself." },
+      { name: "direction", type: '"up" | "down"', default: '"up"', desc: "Direction the active word rolls in from." },
+      { name: "gradient", type: "boolean", desc: "Paint each word with the AI gradient. Use instead of nesting in <GradientText>." },
     ],
   },
 
@@ -1058,40 +782,13 @@ export const COMPONENTS: ComponentMeta[] = [
       },
     ],
     props: [
-      {
-        name: "placeholder",
-        type: "string",
-        default: '"Describe what you want to build…"',
-        desc: "Input placeholder.",
-      },
+      { name: "placeholder", type: "string", default: '"Describe what you want to build…"', desc: "Input placeholder." },
       { name: "value", type: "string", desc: "Controlled value." },
-      {
-        name: "defaultValue",
-        type: "string",
-        desc: "Uncontrolled initial value.",
-      },
-      {
-        name: "onChange",
-        type: "(value: string) => void",
-        desc: "Fired on every keystroke.",
-      },
-      {
-        name: "onSubmit",
-        type: "(value: string) => void",
-        desc: "Fired on form submit.",
-      },
-      {
-        name: "leading",
-        type: "ReactNode | false",
-        default: "<Sparkle />",
-        desc: "Leading icon.",
-      },
-      {
-        name: "ctaLabel",
-        type: "ReactNode",
-        default: '"Generate"',
-        desc: "Submit button label.",
-      },
+      { name: "defaultValue", type: "string", desc: "Uncontrolled initial value." },
+      { name: "onChange", type: "(value: string) => void", desc: "Fired on every keystroke." },
+      { name: "onSubmit", type: "(value: string) => void", desc: "Fired on form submit." },
+      { name: "leading", type: "ReactNode | false", default: "<Sparkle />", desc: "Leading icon." },
+      { name: "ctaLabel", type: "ReactNode", default: '"Generate"', desc: "Submit button label." },
       { name: "hideCta", type: "boolean", desc: "Render input-only." },
     ],
   },
@@ -1100,8 +797,7 @@ export const COMPONENTS: ComponentMeta[] = [
     slug: "prompt",
     category: "Primitives",
     name: "Prompt",
-    snark:
-      "The textarea every AI builder ships instead of explaining what their product does.",
+    snark: "The textarea every AI builder ships instead of explaining what their product does.",
     sources: [
       { name: "bolt.new", url: "https://bolt.new" },
       { name: "lovable.dev", url: "https://lovable.dev" },
@@ -1117,9 +813,7 @@ export const COMPONENTS: ComponentMeta[] = [
         title: "Default",
         stretch: true,
         Demo: () => (
-          <div
-            style={{ padding: 24, display: "flex", justifyContent: "center" }}
-          >
+          <div style={{ padding: 24, display: "flex", justifyContent: "center" }}>
             <Prompt
               onSubmit={(text: string, ctx: { model?: string }) =>
                 alert(`Building with ${ctx.model}:\n${text}`)
@@ -1135,9 +829,7 @@ export const COMPONENTS: ComponentMeta[] = [
         title: "Custom models + voice/context wired up",
         stretch: true,
         Demo: () => (
-          <div
-            style={{ padding: 24, display: "flex", justifyContent: "center" }}
-          >
+          <div style={{ padding: 24, display: "flex", justifyContent: "center" }}>
             <Prompt
               placeholder="Paste a tweet, get a landing page…"
               models={["o4-mini", "Claude Sonnet 4.6", "Llama 4 70B"]}
@@ -1160,74 +852,23 @@ export const COMPONENTS: ComponentMeta[] = [
     ],
     props: [
       { name: "value", type: "string", desc: "Controlled text value." },
-      {
-        name: "defaultValue",
-        type: "string",
-        desc: "Uncontrolled initial text.",
-      },
-      {
-        name: "onChange",
-        type: "(value: string) => void",
-        desc: "Fires on every keystroke.",
-      },
-      {
-        name: "onSubmit",
-        type: "(value, ctx: {model}) => void",
-        desc: "Fires on submit (button or Cmd/Ctrl+Enter).",
-      },
-      {
-        name: "placeholder",
-        type: "string",
-        default: '"Build me a…"',
-        desc: "Textarea placeholder.",
-      },
-      {
-        name: "rows",
-        type: "number",
-        default: "3",
-        desc: "Initial textarea height in rows.",
-      },
-      {
-        name: "models",
-        type: "string[]",
-        desc: "Model options for the dropdown.",
-      },
+      { name: "defaultValue", type: "string", desc: "Uncontrolled initial text." },
+      { name: "onChange", type: "(value: string) => void", desc: "Fires on every keystroke." },
+      { name: "onSubmit", type: "(value, ctx: {model}) => void", desc: "Fires on submit (button or Cmd/Ctrl+Enter)." },
+      { name: "placeholder", type: "string", default: '"Build me a…"', desc: "Textarea placeholder." },
+      { name: "rows", type: "number", default: "3", desc: "Initial textarea height in rows." },
+      { name: "models", type: "string[]", desc: "Model options for the dropdown." },
       { name: "model", type: "string", desc: "Controlled selected model." },
-      {
-        name: "defaultModel",
-        type: "string",
-        desc: "Uncontrolled initial model.",
-      },
-      {
-        name: "onModelChange",
-        type: "(model: string) => void",
-        desc: "Fires when the user picks a model.",
-      },
-      {
-        name: "onAddContext",
-        type: "() => void",
-        desc: "Fires when the + button is clicked.",
-      },
-      {
-        name: "onVoice",
-        type: "() => void",
-        desc: "Fires when the mic button is clicked.",
-      },
+      { name: "defaultModel", type: "string", desc: "Uncontrolled initial model." },
+      { name: "onModelChange", type: "(model: string) => void", desc: "Fires when the user picks a model." },
+      { name: "onAddContext", type: "() => void", desc: "Fires when the + button is clicked." },
+      { name: "onVoice", type: "() => void", desc: "Fires when the mic button is clicked." },
       { name: "hideAddContext", type: "boolean", desc: "Hide the + button." },
       { name: "hideModel", type: "boolean", desc: "Hide the model dropdown." },
       { name: "hideVoice", type: "boolean", desc: "Hide the mic button." },
       { name: "hideSend", type: "boolean", desc: "Hide the send button." },
-      {
-        name: "submitOnCmdEnter",
-        type: "boolean",
-        default: "true",
-        desc: "Submit when Cmd/Ctrl+Enter is pressed.",
-      },
-      {
-        name: "toolbarExtras",
-        type: "ReactNode",
-        desc: "Extra node rendered just before the mic + send buttons (e.g. a Cmd+↵ hint).",
-      },
+      { name: "submitOnCmdEnter", type: "boolean", default: "true", desc: "Submit when Cmd/Ctrl+Enter is pressed." },
+      { name: "toolbarExtras", type: "ReactNode", desc: "Extra node rendered just before the mic + send buttons (e.g. a Cmd+↵ hint)." },
     ],
   },
 
@@ -1251,26 +892,10 @@ export const COMPONENTS: ComponentMeta[] = [
         title: "Default purple/pink/cyan",
         stretch: true,
         Demo: () => (
-          <div
-            style={{
-              position: "relative",
-              height: 280,
-              overflow: "hidden",
-              isolation: "isolate",
-            }}
-          >
+          <div style={{ position: "relative", height: 280, overflow: "hidden", isolation: "isolate" }}>
             <Aurora />
-            <div
-              style={{
-                position: "relative",
-                zIndex: 1,
-                padding: 36,
-                textAlign: "center",
-              }}
-            >
-              <h2 style={{ margin: 0, fontSize: 32 }}>
-                Aurora as a hero backdrop
-              </h2>
+            <div style={{ position: "relative", zIndex: 1, padding: 36, textAlign: "center" }}>
+              <h2 style={{ margin: 0, fontSize: 32 }}>Aurora as a hero backdrop</h2>
             </div>
           </div>
         ),
@@ -1283,20 +908,13 @@ export const COMPONENTS: ComponentMeta[] = [
         title: "Lava-lamp animated (blobs push each other around)",
         stretch: true,
         Demo: () => (
-          <div
-            style={{
-              position: "relative",
-              height: 280,
-              overflow: "hidden",
-              isolation: "isolate",
-            }}
-          >
+          <div style={{ position: "relative", height: 280, overflow: "hidden", isolation: "isolate" }}>
             <Aurora
               animated
               blobs={[
                 { color: "rgba(124,58,237,0.55)", x: 30, y: 40, size: 55 },
                 { color: "rgba(236,72,153,0.45)", x: 65, y: 35, size: 50 },
-                { color: "rgba(6,182,212,0.40)", x: 55, y: 75, size: 50 },
+                { color: "rgba(6,182,212,0.40)",  x: 55, y: 75, size: 50 },
                 { color: "rgba(251,191,36,0.30)", x: 25, y: 70, size: 40 },
               ]}
             />
@@ -1316,9 +934,7 @@ export const COMPONENTS: ComponentMeta[] = [
         title: "Custom palette",
         stretch: true,
         Demo: () => (
-          <div
-            style={{ position: "relative", height: 220, overflow: "hidden" }}
-          >
+          <div style={{ position: "relative", height: 220, overflow: "hidden" }}>
             <Aurora
               blobs={[
                 { color: "rgba(34,197,94,0.45)", x: 25, y: 30, size: 55 },
@@ -1334,24 +950,11 @@ export const COMPONENTS: ComponentMeta[] = [
       },
     ],
     props: [
-      {
-        name: "blobs",
-        type: "{color,x,y,size?}[]",
-        desc: "Color stops with positions (0–100%).",
-      },
+      { name: "blobs", type: "{color,x,y,size?}[]", desc: "Color stops with positions (0–100%)." },
       { name: "blur", type: "number", default: "50", desc: "CSS blur in px." },
       { name: "static", type: "boolean", desc: "Disable the slow drift." },
-      {
-        name: "animated",
-        type: "boolean",
-        desc: "Lava-lamp mode, blobs become independent bubbles that push each other around. Overrides the CSS drift.",
-      },
-      {
-        name: "repulsion",
-        type: "number",
-        default: "0.18",
-        desc: "When animated, how aggressively blobs push each other apart (0 disables interaction).",
-      },
+      { name: "animated", type: "boolean", desc: "Lava-lamp mode, blobs become independent bubbles that push each other around. Overrides the CSS drift." },
+      { name: "repulsion", type: "number", default: "0.18", desc: "When animated, how aggressively blobs push each other apart (0 disables interaction)." },
     ],
   },
 
@@ -1374,14 +977,7 @@ export const COMPONENTS: ComponentMeta[] = [
         title: "Default",
         stretch: true,
         Demo: () => (
-          <div
-            style={{
-              position: "relative",
-              height: 280,
-              overflow: "hidden",
-              background: "#08080b",
-            }}
-          >
+          <div style={{ position: "relative", height: 280, overflow: "hidden", background: "#08080b" }}>
             <NodeGraphBackground />
           </div>
         ),
@@ -1393,14 +989,7 @@ export const COMPONENTS: ComponentMeta[] = [
         title: "Sparse + green",
         stretch: true,
         Demo: () => (
-          <div
-            style={{
-              position: "relative",
-              height: 240,
-              overflow: "hidden",
-              background: "#08080b",
-            }}
-          >
+          <div style={{ position: "relative", height: 240, overflow: "hidden", background: "#08080b" }}>
             <NodeGraphBackground
               density={35}
               linkColor="#22c55e"
@@ -1418,61 +1007,16 @@ export const COMPONENTS: ComponentMeta[] = [
       },
     ],
     props: [
-      {
-        name: "density",
-        type: "number",
-        default: "70",
-        desc: "Number of nodes.",
-      },
-      {
-        name: "speed",
-        type: "number",
-        default: "0.4",
-        desc: "Pixel speed per frame.",
-      },
-      {
-        name: "linkDistance",
-        type: "number",
-        default: "140",
-        desc: "Max px between linked nodes.",
-      },
+      { name: "density", type: "number", default: "70", desc: "Number of nodes." },
+      { name: "speed", type: "number", default: "0.4", desc: "Pixel speed per frame." },
+      { name: "linkDistance", type: "number", default: "140", desc: "Max px between linked nodes." },
       { name: "colors", type: "string[]", desc: "Pool of node colors." },
-      {
-        name: "linkColor",
-        type: "string",
-        default: '"#7c3aed"',
-        desc: "Link stroke color.",
-      },
-      {
-        name: "baseOpacity",
-        type: "number",
-        default: "0.45",
-        desc: "Resting alpha of nodes + edges. Field is dim at rest; cursor brightens it.",
-      },
-      {
-        name: "hoverDistance",
-        type: "number",
-        default: "200",
-        desc: "Radius of cursor effects (gravity + brighten). 0 disables both.",
-      },
-      {
-        name: "hoverGravity",
-        type: "number",
-        default: "0.005",
-        desc: "0–1 strength of cursor pull. Default is very subtle drift; set higher for stronger attraction.",
-      },
-      {
-        name: "hoverBrighten",
-        type: "number",
-        default: "0.8",
-        desc: "0–1 strength of opacity boost near the cursor.",
-      },
-      {
-        name: "overscan",
-        type: "number",
-        default: "80",
-        desc: "px the simulation world extends past the visible viewport, nodes bounce off the world edges, drifting in/out of view.",
-      },
+      { name: "linkColor", type: "string", default: '"#7c3aed"', desc: "Link stroke color." },
+      { name: "baseOpacity", type: "number", default: "0.45", desc: "Resting alpha of nodes + edges. Field is dim at rest; cursor brightens it." },
+      { name: "hoverDistance", type: "number", default: "200", desc: "Radius of cursor effects (gravity + brighten). 0 disables both." },
+      { name: "hoverGravity", type: "number", default: "0.005", desc: "0–1 strength of cursor pull. Default is very subtle drift; set higher for stronger attraction." },
+      { name: "hoverBrighten", type: "number", default: "0.8", desc: "0–1 strength of opacity boost near the cursor." },
+      { name: "overscan", type: "number", default: "80", desc: "px the simulation world extends past the visible viewport, nodes bounce off the world edges, drifting in/out of view." },
     ],
   },
 
@@ -1482,10 +1026,7 @@ export const COMPONENTS: ComponentMeta[] = [
     name: "FloatingSparkles",
     snark: "Magic doesn't ship itself.",
     sources: [
-      {
-        name: "notion.com/product/ai",
-        url: "https://www.notion.com/product/ai",
-      },
+      { name: "notion.com/product/ai", url: "https://www.notion.com/product/ai" },
       { name: "granola.ai", url: "https://www.granola.ai" },
     ],
     extra: 90,
@@ -1496,14 +1037,7 @@ export const COMPONENTS: ComponentMeta[] = [
         title: "Default",
         stretch: true,
         Demo: () => (
-          <div
-            style={{
-              position: "relative",
-              height: 240,
-              overflow: "hidden",
-              background: "#0a0a12",
-            }}
-          >
+          <div style={{ position: "relative", height: 240, overflow: "hidden", background: "#0a0a12" }}>
             <FloatingSparkles />
           </div>
         ),
@@ -1515,14 +1049,7 @@ export const COMPONENTS: ComponentMeta[] = [
         title: "Denser + emoji",
         stretch: true,
         Demo: () => (
-          <div
-            style={{
-              position: "relative",
-              height: 220,
-              overflow: "hidden",
-              background: "#0a0a12",
-            }}
-          >
+          <div style={{ position: "relative", height: 220, overflow: "hidden", background: "#0a0a12" }}>
             <FloatingSparkles
               count={40}
               glyphs={["✨", "⭐", "💫"]}
@@ -1540,25 +1067,10 @@ export const COMPONENTS: ComponentMeta[] = [
       },
     ],
     props: [
-      {
-        name: "count",
-        type: "number",
-        default: "18",
-        desc: "Number of sparkles.",
-      },
+      { name: "count", type: "number", default: "18", desc: "Number of sparkles." },
       { name: "glyphs", type: "string[]", desc: "Pool of glyphs." },
-      {
-        name: "durationS",
-        type: "[number, number]",
-        default: "[8, 18]",
-        desc: "[min, max] seconds.",
-      },
-      {
-        name: "sizeRange",
-        type: "[number, number]",
-        default: "[8, 20]",
-        desc: "[min, max] px font size.",
-      },
+      { name: "durationS", type: "[number, number]", default: "[8, 18]", desc: "[min, max] seconds." },
+      { name: "sizeRange", type: "[number, number]", default: "[8, 20]", desc: "[min, max] px font size." },
     ],
   },
 
@@ -1602,21 +1114,13 @@ export const COMPONENTS: ComponentMeta[] = [
     ],
     props: [
       { name: "breathing", type: "boolean", desc: "Slow shadow pulse." },
-      {
-        name: "glowOnHover",
-        type: "boolean",
-        default: "true",
-        desc: "Gradient halo on hover.",
-      },
+      { name: "glowOnHover", type: "boolean", default: "true", desc: "Gradient halo on hover." },
     ],
     subprops: [
       { name: "GlassCard.Icon", props: [] },
       { name: "GlassCard.Title", props: [] },
       { name: "GlassCard.Body", props: [] },
-      {
-        name: "GlassCard.Link",
-        props: [{ name: "href", type: "string", desc: "Anchor target." }],
-      },
+      { name: "GlassCard.Link", props: [{ name: "href", type: "string", desc: "Anchor target." }] },
     ],
   },
 
@@ -1661,51 +1165,23 @@ export const COMPONENTS: ComponentMeta[] = [
     ],
     props: [
       { name: "filename", type: "string", desc: "Shown in the tab." },
-      {
-        name: "tokens",
-        type: "IdeToken[]",
-        desc: "Source tokens to type out.",
-      },
-      {
-        name: "loop",
-        type: "boolean",
-        default: "true",
-        desc: "Restart after a 3s pause.",
-      },
-      {
-        name: "charMs",
-        type: "[number, number]",
-        default: "[14, 42]",
-        desc: "Per-char delay range.",
-      },
-      {
-        name: "thinkingLabel",
-        type: "ReactNode | false",
-        default: '"AI is writing…"',
-        desc: "Pill label; false to hide.",
-      },
+      { name: "tokens", type: "IdeToken[]", desc: "Source tokens to type out." },
+      { name: "loop", type: "boolean", default: "true", desc: "Restart after a 3s pause." },
+      { name: "charMs", type: "[number, number]", default: "[14, 42]", desc: "Per-char delay range." },
+      { name: "thinkingLabel", type: "ReactNode | false", default: '"AI is writing…"', desc: "Pill label; false to hide." },
     ],
     subprops: [
       {
         name: "MockIDE.Chrome",
         props: [
           { name: "filename", type: "string", desc: "Tab label." },
-          {
-            name: "thinking",
-            type: "ReactNode | false",
-            desc: "Pill content.",
-          },
+          { name: "thinking", type: "ReactNode | false", desc: "Pill content." },
         ],
       },
       {
         name: "MockIDE.Body",
         props: [
-          {
-            name: "tokens",
-            type: "IdeToken[]",
-            required: true,
-            desc: "Tokens to stream.",
-          },
+          { name: "tokens", type: "IdeToken[]", required: true, desc: "Tokens to stream." },
           { name: "loop", type: "boolean", desc: "Loop after finishing." },
         ],
       },
@@ -1778,7 +1254,8 @@ export const COMPONENTS: ComponentMeta[] = [
                 color: "var(--pui-fg-dim)",
               }}
             >
-              A larger radius and no border highlight. Softer, more enterprise.
+              A larger radius and no border highlight. Softer, more
+              enterprise.
             </p>
           </SpotlightCard>
         ),
@@ -1788,18 +1265,8 @@ export const COMPONENTS: ComponentMeta[] = [
       },
     ],
     props: [
-      {
-        name: "radius",
-        type: "number",
-        default: "320",
-        desc: "Radius of the light, in px.",
-      },
-      {
-        name: "edge",
-        type: "boolean",
-        default: "true",
-        desc: "Highlight the border on the side facing the pointer.",
-      },
+      { name: "radius", type: "number", default: "320", desc: "Radius of the light, in px." },
+      { name: "edge", type: "boolean", default: "true", desc: "Highlight the border on the side facing the pointer." },
     ],
   },
 
@@ -1838,12 +1305,7 @@ export const COMPONENTS: ComponentMeta[] = [
       {
         title: "Dramatic",
         Demo: () => (
-          <TiltCard
-            max={20}
-            perspective={600}
-            scale={1.06}
-            style={{ width: 300 }}
-          >
+          <TiltCard max={20} perspective={600} scale={1.06} style={{ width: 300 }}>
             <h3 style={{ margin: "0 0 6px", fontSize: 18 }}>Series Z</h3>
             <p
               style={{
@@ -1863,35 +1325,11 @@ export const COMPONENTS: ComponentMeta[] = [
       },
     ],
     props: [
-      {
-        name: "max",
-        type: "number",
-        default: "10",
-        desc: "Maximum tilt in degrees on each axis.",
-      },
-      {
-        name: "scale",
-        type: "number",
-        default: "1.03",
-        desc: "Scale applied while the pointer is over the card.",
-      },
-      {
-        name: "glare",
-        type: "boolean",
-        default: "true",
-        desc: "Specular highlight that follows the pointer.",
-      },
-      {
-        name: "perspective",
-        type: "number",
-        default: "900",
-        desc: "CSS perspective in px. Lower is more dramatic.",
-      },
-      {
-        name: "surfaceClassName",
-        type: "string",
-        desc: "Extra class for the tilting surface. `className` goes on the outer element.",
-      },
+      { name: "max", type: "number", default: "10", desc: "Maximum tilt in degrees on each axis." },
+      { name: "scale", type: "number", default: "1.03", desc: "Scale applied while the pointer is over the card." },
+      { name: "glare", type: "boolean", default: "true", desc: "Specular highlight that follows the pointer." },
+      { name: "perspective", type: "number", default: "900", desc: "CSS perspective in px. Lower is more dramatic." },
+      { name: "surfaceClassName", type: "string", desc: "Extra class for the tilting surface. `className` goes on the outer element." },
     ],
   },
 
@@ -1938,23 +1376,9 @@ export const COMPONENTS: ComponentMeta[] = [
       },
     ],
     props: [
-      {
-        name: "strength",
-        type: "number",
-        default: "0.35",
-        desc: "Fraction of the pointer offset the element follows, 0 to 1.",
-      },
-      {
-        name: "radius",
-        type: "number",
-        default: "80",
-        desc: "Distance in px outside the element's edge where the pull begins.",
-      },
-      {
-        name: "disabled",
-        type: "boolean",
-        desc: "Turn the effect off without unmounting.",
-      },
+      { name: "strength", type: "number", default: "0.35", desc: "Fraction of the pointer offset the element follows, 0 to 1." },
+      { name: "radius", type: "number", default: "80", desc: "Distance in px outside the element's edge where the pull begins." },
+      { name: "disabled", type: "boolean", desc: "Turn the effect off without unmounting." },
     ],
   },
 
@@ -2018,24 +1442,9 @@ export const COMPONENTS: ComponentMeta[] = [
       },
     ],
     props: [
-      {
-        name: "glyph",
-        type: "string",
-        default: '"✦"',
-        desc: "Character drawn for each particle. Pass an empty string for plain dots.",
-      },
-      {
-        name: "burst",
-        type: "boolean",
-        default: "true",
-        desc: "Spawn a radial burst on pointer down.",
-      },
-      {
-        name: "spacing",
-        type: "number",
-        default: "18",
-        desc: "Pixels of pointer travel between particles. Lower is denser.",
-      },
+      { name: "glyph", type: "string", default: '"✦"', desc: "Character drawn for each particle. Pass an empty string for plain dots." },
+      { name: "burst", type: "boolean", default: "true", desc: "Spawn a radial burst on pointer down." },
+      { name: "spacing", type: "number", default: "18", desc: "Pixels of pointer travel between particles. Lower is denser." },
     ],
   },
 
@@ -2074,11 +1483,7 @@ export const COMPONENTS: ComponentMeta[] = [
                   durationMs={1200}
                 />
               </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setN((x) => x + 1)}
-              >
+              <Button variant="ghost" size="sm" onClick={() => setN((x) => x + 1)}>
                 Replay
               </Button>
             </div>
@@ -2092,30 +1497,10 @@ export const COMPONENTS: ComponentMeta[] = [
       },
     ],
     props: [
-      {
-        name: "text",
-        type: "string",
-        required: true,
-        desc: "The text the animation resolves to.",
-      },
-      {
-        name: "trigger",
-        type: '"hover" | "mount" | "visible"',
-        default: '"hover"',
-        desc: "When to play. `visible` waits until the text is scrolled into view.",
-      },
-      {
-        name: "durationMs",
-        type: "number",
-        default: "700",
-        desc: "Time for the last character to lock in.",
-      },
-      {
-        name: "chars",
-        type: "string",
-        default: '"!<>-_\\\\/[]{}=+*^?#0123456789"',
-        desc: "Characters cycled through before each position resolves.",
-      },
+      { name: "text", type: "string", required: true, desc: "The text the animation resolves to." },
+      { name: "trigger", type: '"hover" | "mount" | "visible"', default: '"hover"', desc: "When to play. `visible` waits until the text is scrolled into view." },
+      { name: "durationMs", type: "number", default: "700", desc: "Time for the last character to lock in." },
+      { name: "chars", type: "string", default: '"!<>-_\\\\/[]{}=+*^?#0123456789"', desc: "Characters cycled through before each position resolves." },
     ],
   },
 
@@ -2131,9 +1516,7 @@ export const COMPONENTS: ComponentMeta[] = [
     examples: [
       {
         title: "Click to close the round",
-        Demo: () => (
-          <OversubscribedMeter target={340} raise={25} label="Series B" />
-        ),
+        Demo: () => <OversubscribedMeter target={340} raise={25} label="Series B" />,
         code: `<OversubscribedMeter target={340} raise={25} label="Series B" />`,
       },
       {
@@ -2157,36 +1540,11 @@ export const COMPONENTS: ComponentMeta[] = [
       },
     ],
     props: [
-      {
-        name: "target",
-        type: "number",
-        default: "340",
-        desc: "Final subscription in percent. Above 100 it overflows the round.",
-      },
-      {
-        name: "label",
-        type: "string",
-        default: '"Series B"',
-        desc: "Name of the round.",
-      },
-      {
-        name: "raise",
-        type: "number",
-        default: "25",
-        desc: "Size of the round in $M, used for the committed line.",
-      },
-      {
-        name: "trigger",
-        type: '"click" | "mount" | "visible"',
-        default: '"click"',
-        desc: "`click` shows a button. The others play on their own.",
-      },
-      {
-        name: "durationMs",
-        type: "number",
-        default: "1800",
-        desc: "Time for the count to reach the target.",
-      },
+      { name: "target", type: "number", default: "340", desc: "Final subscription in percent. Above 100 it overflows the round." },
+      { name: "label", type: "string", default: '"Series B"', desc: "Name of the round." },
+      { name: "raise", type: "number", default: "25", desc: "Size of the round in $M, used for the committed line." },
+      { name: "trigger", type: '"click" | "mount" | "visible"', default: '"click"', desc: "`click` shows a button. The others play on their own." },
+      { name: "durationMs", type: "number", default: "1800", desc: "Time for the count to reach the target." },
     ],
   },
 
@@ -2211,53 +1569,13 @@ export const COMPONENTS: ComponentMeta[] = [
           const [last, setLast] = useState<string | null>(null);
           const items = useMemo<CommandItem[]>(
             () => [
-              {
-                id: "round",
-                label: "Raise Series B",
-                group: "Company",
-                shortcut: ["R"],
-                onSelect: () => setLast("Raise Series B"),
-              },
-              {
-                id: "pivot",
-                label: "Pivot to AI",
-                group: "Company",
-                keywords: ["strategy", "roadmap"],
-                onSelect: () => setLast("Pivot to AI"),
-              },
-              {
-                id: "rename",
-                label: "Rename company to .ai",
-                group: "Company",
-                onSelect: () => setLast("Rename company to .ai"),
-              },
-              {
-                id: "agentic",
-                label: "Add the word agentic to the deck",
-                group: "Deck",
-                hint: "slide 1 to 40",
-                onSelect: () => setLast("Add the word agentic"),
-              },
-              {
-                id: "logo",
-                label: "Make the logo a sparkle",
-                group: "Deck",
-                shortcut: ["L"],
-                onSelect: () => setLast("Make the logo a sparkle"),
-              },
-              {
-                id: "board",
-                label: "Schedule board meeting",
-                group: "People",
-                keywords: ["investors"],
-                onSelect: () => setLast("Schedule board meeting"),
-              },
-              {
-                id: "sprint",
-                label: "Announce a hiring freeze",
-                group: "People",
-                onSelect: () => setLast("Announce a hiring freeze"),
-              },
+              { id: "round", label: "Raise Series B", group: "Company", shortcut: ["R"], onSelect: () => setLast("Raise Series B") },
+              { id: "pivot", label: "Pivot to AI", group: "Company", keywords: ["strategy", "roadmap"], onSelect: () => setLast("Pivot to AI") },
+              { id: "rename", label: "Rename company to .ai", group: "Company", onSelect: () => setLast("Rename company to .ai") },
+              { id: "agentic", label: "Add the word agentic to the deck", group: "Deck", hint: "slide 1 to 40", onSelect: () => setLast("Add the word agentic") },
+              { id: "logo", label: "Make the logo a sparkle", group: "Deck", shortcut: ["L"], onSelect: () => setLast("Make the logo a sparkle") },
+              { id: "board", label: "Schedule board meeting", group: "People", keywords: ["investors"], onSelect: () => setLast("Schedule board meeting") },
+              { id: "sprint", label: "Announce a hiring freeze", group: "People", onSelect: () => setLast("Announce a hiring freeze") },
             ],
             [],
           );
@@ -2269,11 +1587,7 @@ export const COMPONENTS: ComponentMeta[] = [
               <span style={{ fontSize: 13, color: "var(--pui-fg-dim)" }}>
                 {last ? `Ran: ${last}` : "Nothing run yet."}
               </span>
-              <CommandPalette
-                items={items}
-                open={open}
-                onOpenChange={setOpen}
-              />
+              <CommandPalette items={items} open={open} onOpenChange={setOpen} />
             </div>
           );
         },
@@ -2290,45 +1604,13 @@ export const COMPONENTS: ComponentMeta[] = [
       },
     ],
     props: [
-      {
-        name: "items",
-        type: "CommandItem[]",
-        required: true,
-        desc: "id, label, and optionally group, hint, keywords, shortcut, onSelect.",
-      },
-      {
-        name: "open",
-        type: "boolean",
-        desc: "Controlled open state. Omit to let the palette manage itself.",
-      },
-      {
-        name: "defaultOpen",
-        type: "boolean",
-        default: "false",
-        desc: "Initial state when uncontrolled.",
-      },
-      {
-        name: "onOpenChange",
-        type: "(open: boolean) => void",
-        desc: "Called on open, close, Escape, backdrop click, and selection.",
-      },
-      {
-        name: "hotkey",
-        type: "boolean",
-        default: "true",
-        desc: "Toggle on Cmd+K or Ctrl+K.",
-      },
-      {
-        name: "placeholder",
-        type: "string",
-        default: '"Type a command or search..."',
-        desc: "Input placeholder.",
-      },
-      {
-        name: "emptyText",
-        type: "string",
-        desc: "Shown when nothing matches.",
-      },
+      { name: "items", type: "CommandItem[]", required: true, desc: "id, label, and optionally group, hint, keywords, shortcut, onSelect." },
+      { name: "open", type: "boolean", desc: "Controlled open state. Omit to let the palette manage itself." },
+      { name: "defaultOpen", type: "boolean", default: "false", desc: "Initial state when uncontrolled." },
+      { name: "onOpenChange", type: "(open: boolean) => void", desc: "Called on open, close, Escape, backdrop click, and selection." },
+      { name: "hotkey", type: "boolean", default: "true", desc: "Toggle on Cmd+K or Ctrl+K." },
+      { name: "placeholder", type: "string", default: '"Type a command or search..."', desc: "Input placeholder." },
+      { name: "emptyText", type: "string", desc: "Shown when nothing matches." },
     ],
   },
 
@@ -2351,14 +1633,7 @@ export const COMPONENTS: ComponentMeta[] = [
       {
         title: "User + AI",
         Demo: () => (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 12,
-              width: "100%",
-            }}
-          >
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%" }}>
             <ChatBubble role="user">
               Summarize Q3 churn by cohort and tell me what's bleeding.
             </ChatBubble>
@@ -2375,23 +1650,10 @@ export const COMPONENTS: ComponentMeta[] = [
       },
     ],
     props: [
-      {
-        name: "role",
-        type: '"user" | "ai"',
-        required: true,
-        desc: "Bubble direction + styling.",
-      },
+      { name: "role", type: '"user" | "ai"', required: true, desc: "Bubble direction + styling." },
       { name: "agent", type: "ReactNode", desc: "Agent name (AI bubbles)." },
-      {
-        name: "thinking",
-        type: "ReactNode | false",
-        desc: "Thinking pill content; false to hide.",
-      },
-      {
-        name: "icon",
-        type: "ReactNode | false",
-        desc: "Leading icon override.",
-      },
+      { name: "thinking", type: "ReactNode | false", desc: "Thinking pill content; false to hide." },
+      { name: "icon", type: "ReactNode | false", desc: "Leading icon override." },
     ],
   },
 
@@ -2399,8 +1661,7 @@ export const COMPONENTS: ComponentMeta[] = [
     slug: "token-stream",
     category: "Conversation",
     name: "TokenStream",
-    snark:
-      "Server-sent events (SSE) were added to the HTML5 spec in 2008 but never used until 2025.",
+    snark: "Server-sent events (SSE) were added to the HTML5 spec in 2008 but never used until 2025.",
     sources: [
       { name: "chatgpt.com", url: "https://chatgpt.com" },
       { name: "claude.ai", url: "https://claude.ai" },
@@ -2448,36 +1709,13 @@ export const COMPONENTS: ComponentMeta[] = [
       },
     ],
     props: [
-      {
-        name: "text",
-        type: "string",
-        required: true,
-        desc: "The full text to reveal.",
-      },
-      {
-        name: "speedMs",
-        type: "number | [number, number]",
-        default: "[18, 80]",
-        desc: "Per-token delay (range = jitter).",
-      },
-      {
-        name: "tokenize",
-        type: "(s: string) => string[]",
-        desc: "Custom splitter. Default: words + whitespace.",
-      },
+      { name: "text", type: "string", required: true, desc: "The full text to reveal." },
+      { name: "speedMs", type: "number | [number, number]", default: "[18, 80]", desc: "Per-token delay (range = jitter)." },
+      { name: "tokenize", type: "(s: string) => string[]", desc: "Custom splitter. Default: words + whitespace." },
       { name: "loop", type: "boolean", desc: "Loop after a delay." },
-      {
-        name: "loopDelayMs",
-        type: "number",
-        default: "6000",
-        desc: "Pause before restarting.",
-      },
+      { name: "loopDelayMs", type: "number", default: "6000", desc: "Pause before restarting." },
       { name: "hideCaret", type: "boolean", desc: "Hide the trailing caret." },
-      {
-        name: "onComplete",
-        type: "() => void",
-        desc: "Fired when full text is shown.",
-      },
+      { name: "onComplete", type: "() => void", desc: "Fired when full text is shown." },
     ],
   },
 
@@ -2560,44 +1798,13 @@ function LiveTokens() {
       },
     ],
     props: [
-      {
-        name: "verbs",
-        type: "string[]",
-        desc: 'Verb pool. Defaults to the 186-verb Claude Code list. Pass a single-element array (e.g. ["Hardcoding"]) to pin one verb.',
-      },
-      {
-        name: "glyphs",
-        type: "string[]",
-        default: '["·","✢","✳","✶","✻","✽"]',
-        desc: "Cycle of glyphs to rotate through.",
-      },
-      {
-        name: "glyphInterval",
-        type: "number",
-        default: "250",
-        desc: "ms between glyph frames.",
-      },
-      {
-        name: "verbInterval",
-        type: "number",
-        desc: "ms between verb re-rolls. Omit to pick one verb at mount and never change it.",
-      },
-      {
-        name: "ellipsis",
-        type: "string",
-        default: '"…"',
-        desc: "Suffix rendered after the verb.",
-      },
-      {
-        name: "info",
-        type: "ReactNode",
-        desc: "Parenthetical content after the verb. Stateful children update independently without re-rendering the spinner.",
-      },
-      {
-        name: "glyphColor",
-        type: "string",
-        desc: "CSS color for the rotating glyph. Defaults to var(--pui-warn).",
-      },
+      { name: "verbs", type: "string[]", desc: "Verb pool. Defaults to the 186-verb Claude Code list. Pass a single-element array (e.g. [\"Hardcoding\"]) to pin one verb." },
+      { name: "glyphs", type: "string[]", default: '["·","✢","✳","✶","✻","✽"]', desc: "Cycle of glyphs to rotate through." },
+      { name: "glyphInterval", type: "number", default: "250", desc: "ms between glyph frames." },
+      { name: "verbInterval", type: "number", desc: "ms between verb re-rolls. Omit to pick one verb at mount and never change it." },
+      { name: "ellipsis", type: "string", default: '"…"', desc: "Suffix rendered after the verb." },
+      { name: "info", type: "ReactNode", desc: "Parenthetical content after the verb. Stateful children update independently without re-rendering the spinner." },
+      { name: "glyphColor", type: "string", desc: "CSS color for the rotating glyph. Defaults to var(--pui-warn)." },
     ],
   },
 
@@ -2646,23 +1853,10 @@ function LiveTokens() {
       },
     ],
     props: [
-      {
-        name: "label",
-        type: "ReactNode",
-        default: '"Ask AI"',
-        desc: "Button label.",
-      },
+      { name: "label", type: "ReactNode", default: '"Ask AI"', desc: "Button label." },
       { name: "open", type: "boolean", desc: "Controlled open state." },
-      {
-        name: "defaultOpen",
-        type: "boolean",
-        desc: "Uncontrolled initial state.",
-      },
-      {
-        name: "onOpenChange",
-        type: "(open: boolean) => void",
-        desc: "Open-state callback.",
-      },
+      { name: "defaultOpen", type: "boolean", desc: "Uncontrolled initial state." },
+      { name: "onOpenChange", type: "(open: boolean) => void", desc: "Open-state callback." },
       { name: "popover", type: "ReactNode", desc: "Popover contents." },
     ],
   },
@@ -2694,19 +1888,12 @@ function LiveTokens() {
               { kind: "img", src: ic("openai"), alt: "OpenAI" },
               { kind: "img", src: ic("stripe"), alt: "Stripe" },
               { kind: "img", src: ic("anthropic"), alt: "Anthropic" },
-              {
-                kind: "node",
-                node: <span className="pui-marquee__text">NASA</span>,
-              },
+              { kind: "node", node: <span className="pui-marquee__text">NASA</span> },
               { kind: "img", src: ic("notion"), alt: "Notion" },
               { kind: "img", src: ic("shopify"), alt: "Shopify" },
               {
                 kind: "node",
-                node: (
-                  <span className="pui-marquee__text pui-marquee__text--serif pui-marquee__text--italic">
-                    Harvard
-                  </span>
-                ),
+                node: <span className="pui-marquee__text pui-marquee__text--serif pui-marquee__text--italic">Harvard</span>,
               },
               { kind: "img", src: ic("vercel"), alt: "Vercel" },
               { kind: "img", src: ic("github"), alt: "GitHub" },
@@ -2727,35 +1914,11 @@ function LiveTokens() {
       },
     ],
     props: [
-      {
-        name: "logos",
-        type: "MarqueeItem[]",
-        required: true,
-        desc: "Mix of img/node entries.",
-      },
-      {
-        name: "speed",
-        type: "number",
-        default: "40",
-        desc: "Seconds per loop.",
-      },
-      {
-        name: "gap",
-        type: "number",
-        default: "56",
-        desc: "Pixel gap between items.",
-      },
-      {
-        name: "fade",
-        type: "boolean",
-        default: "true",
-        desc: "Edge-fade mask.",
-      },
-      {
-        name: "pauseOnHover",
-        type: "boolean",
-        desc: "Pause animation on hover.",
-      },
+      { name: "logos", type: "MarqueeItem[]", required: true, desc: "Mix of img/node entries." },
+      { name: "speed", type: "number", default: "40", desc: "Seconds per loop." },
+      { name: "gap", type: "number", default: "56", desc: "Pixel gap between items." },
+      { name: "fade", type: "boolean", default: "true", desc: "Edge-fade mask." },
+      { name: "pauseOnHover", type: "boolean", desc: "Pause animation on hover." },
     ],
   },
 
@@ -2783,26 +1946,10 @@ function LiveTokens() {
               { kind: "node", node: "a16z" },
               {
                 kind: "node",
-                node: (
-                  <span
-                    style={{
-                      fontFamily: "var(--pui-font-serif)",
-                      fontStyle: "italic",
-                    }}
-                  >
-                    Sequoia
-                  </span>
-                ),
+                node: <span style={{ fontFamily: "var(--pui-font-serif)", fontStyle: "italic" }}>Sequoia</span>,
               },
               { kind: "node", node: "FOUNDERS FUND" },
-              {
-                kind: "node",
-                node: (
-                  <span style={{ fontStyle: "italic" }}>
-                    …and 47 angels you've heard of
-                  </span>
-                ),
-              },
+              { kind: "node", node: <span style={{ fontStyle: "italic" }}>…and 47 angels you've heard of</span> },
             ]}
           />
         ),
@@ -2818,12 +1965,7 @@ function LiveTokens() {
     ],
     props: [
       { name: "heading", type: "ReactNode", desc: "Uppercase header copy." },
-      {
-        name: "logos",
-        type: "LogoRowItem[]",
-        required: true,
-        desc: "Mix of img/node entries.",
-      },
+      { name: "logos", type: "LogoRowItem[]", required: true, desc: "Mix of img/node entries." },
     ],
   },
 
@@ -2831,8 +1973,7 @@ function LiveTokens() {
     slug: "slippy-words",
     category: "Social Proof",
     name: "SlippyWords",
-    snark:
-      "Buzzwords that physically move when you scroll. Motion design, allegedly.",
+    snark: "Buzzwords that physically move when you scroll. Motion design, allegedly.",
     sources: [
       { name: "cursor.com", url: "https://cursor.com" },
       { name: "vercel.com", url: "https://vercel.com" },
@@ -2848,32 +1989,9 @@ function LiveTokens() {
         Demo: () => (
           <SlippyWords
             rows={[
-              [
-                "agentic",
-                "multimodal",
-                "RAG-native",
-                "zero-shot",
-                "fine-tuned",
-                "frontier-grade",
-                "context-aware",
-              ],
-              [
-                "SOC 2",
-                "HIPAA",
-                "on-prem",
-                "GDPR-ready",
-                "sub-100ms",
-                "infinitely scalable",
-                "enterprise",
-              ],
-              [
-                "10x faster",
-                "human-in-the-loop",
-                "self-healing",
-                "observable",
-                "vector-first",
-                "real-time",
-              ],
+              ["agentic", "multimodal", "RAG-native", "zero-shot", "fine-tuned", "frontier-grade", "context-aware"],
+              ["SOC 2", "HIPAA", "on-prem", "GDPR-ready", "sub-100ms", "infinitely scalable", "enterprise"],
+              ["10x faster", "human-in-the-loop", "self-healing", "observable", "vector-first", "real-time"],
             ]}
           />
         ),
@@ -2894,23 +2012,8 @@ function LiveTokens() {
             intensity={360}
             startDirection="right"
             rows={[
-              [
-                "ship",
-                "scale",
-                "synergize",
-                "disrupt",
-                "iterate",
-                "pivot",
-                "10x",
-              ],
-              [
-                "velocity",
-                "alignment",
-                "north star",
-                "moat",
-                "flywheel",
-                "tailwinds",
-              ],
+              ["ship", "scale", "synergize", "disrupt", "iterate", "pivot", "10x"],
+              ["velocity", "alignment", "north star", "moat", "flywheel", "tailwinds"],
             ]}
           />
         ),
@@ -2930,20 +2033,8 @@ function LiveTokens() {
         Demo: () => (
           <SlippyWords
             rows={[
-              [
-                "GPT-class",
-                { label: "now with reasoning", gradient: true },
-                "open weights",
-                "MoE",
-                "128k context",
-              ],
-              [
-                "BYO model",
-                "edge inference",
-                { label: "$0 to start", gradient: true },
-                "usage-based",
-                "no lock-in",
-              ],
+              ["GPT-class", { label: "now with reasoning", gradient: true }, "open weights", "MoE", "128k context"],
+              ["BYO model", "edge inference", { label: "$0 to start", gradient: true }, "usage-based", "no lock-in"],
             ]}
           />
         ),
@@ -2956,48 +2047,13 @@ function LiveTokens() {
       },
     ],
     props: [
-      {
-        name: "rows",
-        type: "SlippyWord[][]",
-        required: true,
-        desc: "Rows of badges. A SlippyWord is a string or { label, key?, gradient? }.",
-      },
-      {
-        name: "intensity",
-        type: "number",
-        default: "240",
-        desc: "Max horizontal travel in px across the full scroll range.",
-      },
-      {
-        name: "startDirection",
-        type: '"left" | "right"',
-        default: '"left"',
-        desc: "Direction the first row drifts on scroll down; rows alternate.",
-      },
-      {
-        name: "gap",
-        type: "number",
-        default: "12",
-        desc: "Gap between badges (and between rows) in px.",
-      },
-      {
-        name: "fade",
-        type: "boolean",
-        default: "true",
-        desc: "Apply an edge-fade mask so badges dissolve at the sides.",
-      },
-      {
-        name: "gradient",
-        type: "boolean",
-        default: "false",
-        desc: "Render every badge with the gradient fill.",
-      },
-      {
-        name: "static",
-        type: "boolean",
-        default: "false",
-        desc: "Disable scroll coupling. Also forced under prefers-reduced-motion.",
-      },
+      { name: "rows", type: "SlippyWord[][]", required: true, desc: "Rows of badges. A SlippyWord is a string or { label, key?, gradient? }." },
+      { name: "intensity", type: "number", default: "240", desc: "Max horizontal travel in px across the full scroll range." },
+      { name: "startDirection", type: '"left" | "right"', default: '"left"', desc: "Direction the first row drifts on scroll down; rows alternate." },
+      { name: "gap", type: "number", default: "12", desc: "Gap between badges (and between rows) in px." },
+      { name: "fade", type: "boolean", default: "true", desc: "Apply an edge-fade mask so badges dissolve at the sides." },
+      { name: "gradient", type: "boolean", default: "false", desc: "Render every badge with the gradient fill." },
+      { name: "static", type: "boolean", default: "false", desc: "Disable scroll coupling. Also forced under prefers-reduced-motion." },
     ],
   },
 
@@ -3032,10 +2088,7 @@ function LiveTokens() {
         title: "Currency",
         Demo: () => (
           <h2 style={{ fontSize: 40, margin: 0 }}>
-            <StatCounter
-              target={42_500_000}
-              format={(n: number) => "$" + n.toLocaleString()}
-            />
+            <StatCounter target={42_500_000} format={(n: number) => "$" + n.toLocaleString()} />
           </h2>
         ),
         code: `<StatCounter target={42_500_000} format={(n) => \`$\${n.toLocaleString()}\`} />`,
@@ -3044,22 +2097,9 @@ function LiveTokens() {
     props: [
       { name: "target", type: "number", required: true, desc: "End value." },
       { name: "from", type: "number", default: "0", desc: "Start value." },
-      {
-        name: "durationMs",
-        type: "number",
-        default: "1800",
-        desc: "Total animation length.",
-      },
-      {
-        name: "ease",
-        type: "(t: number) => number",
-        desc: "Custom easing (default ease-out-cubic).",
-      },
-      {
-        name: "format",
-        type: "(n: number) => string",
-        desc: "Display format.",
-      },
+      { name: "durationMs", type: "number", default: "1800", desc: "Total animation length." },
+      { name: "ease", type: "(t: number) => number", desc: "Custom easing (default ease-out-cubic)." },
+      { name: "format", type: "(n: number) => string", desc: "Display format." },
     ],
   },
 
@@ -3081,23 +2121,12 @@ function LiveTokens() {
       {
         title: "Trio",
         Demo: () => (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: 12,
-              width: "100%",
-            }}
-          >
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, width: "100%" }}>
             <CommunityBadge
               href="#"
               icon={ic("github")}
               title="Star us on GitHub"
-              subtitle={
-                <>
-                  <strong>12,847</strong> stars · +184 this week
-                </>
-              }
+              subtitle={<><strong>12,847</strong> stars · +184 this week</>}
             />
             <CommunityBadge
               href="#"
@@ -3122,29 +2151,11 @@ function LiveTokens() {
       },
     ],
     props: [
-      {
-        name: "icon",
-        type: "string",
-        desc: "SVG URL (gets inverted via CSS filter).",
-      },
+      { name: "icon", type: "string", desc: "SVG URL (gets inverted via CSS filter)." },
       { name: "iconNode", type: "ReactNode", desc: "Custom icon node." },
-      {
-        name: "title",
-        type: "ReactNode",
-        required: true,
-        desc: "Primary label.",
-      },
-      {
-        name: "subtitle",
-        type: "ReactNode",
-        required: true,
-        desc: "Secondary label (counts, captions).",
-      },
-      {
-        name: "href",
-        type: "string",
-        desc: "Anchor target (renders as `<a>`).",
-      },
+      { name: "title", type: "ReactNode", required: true, desc: "Primary label." },
+      { name: "subtitle", type: "ReactNode", required: true, desc: "Secondary label (counts, captions)." },
+      { name: "href", type: "string", desc: "Anchor target (renders as `<a>`)." },
     ],
   },
 
@@ -3157,10 +2168,7 @@ function LiveTokens() {
     sources: [
       { name: "vercel.com/pricing", url: "https://vercel.com/pricing" },
       { name: "linear.app/pricing", url: "https://linear.app/pricing" },
-      {
-        name: "anthropic.com/pricing",
-        url: "https://www.anthropic.com/pricing",
-      },
+      { name: "anthropic.com/pricing", url: "https://www.anthropic.com/pricing" },
     ],
     extra: 5000,
     description:
@@ -3169,14 +2177,7 @@ function LiveTokens() {
       {
         title: "Three tiers",
         Demo: () => (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: 14,
-              width: "100%",
-            }}
-          >
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, width: "100%" }}>
             <PricingCard>
               <PricingCard.Tier>Hobby</PricingCard.Tier>
               <PricingCard.Amount unit="/mo">$0</PricingCard.Amount>
@@ -3191,9 +2192,7 @@ function LiveTokens() {
               <PricingCard.Flag>Most popular</PricingCard.Flag>
               <PricingCard.Tier>Pro</PricingCard.Tier>
               <PricingCard.Amount unit="/mo">$49</PricingCard.Amount>
-              <PricingCard.Blurb>
-                For the serious solo builder.
-              </PricingCard.Blurb>
+              <PricingCard.Blurb>For the serious solo builder.</PricingCard.Blurb>
               <PricingCard.Features>
                 <li>1M tokens / day</li>
                 <li>Priority routing</li>
@@ -3204,9 +2203,7 @@ function LiveTokens() {
             <PricingCard>
               <PricingCard.Tier>Enterprise</PricingCard.Tier>
               <PricingCard.Amount>Custom</PricingCard.Amount>
-              <PricingCard.Blurb>
-                For teams who say "leverage" a lot.
-              </PricingCard.Blurb>
+              <PricingCard.Blurb>For teams who say "leverage" a lot.</PricingCard.Blurb>
               <PricingCard.Features>
                 <li>VPC deploy</li>
                 <li>SOC 2 / HIPAA</li>
@@ -3229,30 +2226,15 @@ function LiveTokens() {
       },
     ],
     props: [
-      {
-        name: "featured",
-        type: "boolean",
-        desc: "Gradient border + glow + lift.",
-      },
+      { name: "featured", type: "boolean", desc: "Gradient border + glow + lift." },
     ],
     subprops: [
-      {
-        name: "PricingCard.Flag",
-        props: [
-          { name: "hideSparkle", type: "boolean", desc: "Drop the leading ✦." },
-        ],
-      },
+      { name: "PricingCard.Flag", props: [{ name: "hideSparkle", type: "boolean", desc: "Drop the leading ✦." }] },
       { name: "PricingCard.Tier", props: [] },
-      {
-        name: "PricingCard.Amount",
-        props: [{ name: "unit", type: "ReactNode", desc: "Suffix like /mo." }],
-      },
+      { name: "PricingCard.Amount", props: [{ name: "unit", type: "ReactNode", desc: "Suffix like /mo." }] },
       { name: "PricingCard.Blurb", props: [] },
       { name: "PricingCard.Features", props: [] },
-      {
-        name: "PricingCard.CTA",
-        props: [{ name: "href", type: "string", desc: "Anchor target." }],
-      },
+      { name: "PricingCard.CTA", props: [{ name: "href", type: "string", desc: "Anchor target." }] },
     ],
   },
 
@@ -3262,10 +2244,7 @@ function LiveTokens() {
     name: "BeforeAfter",
     snark: "On the left: chaos. On the right: us.",
     sources: [
-      {
-        name: "notion.com/product/ai",
-        url: "https://www.notion.com/product/ai",
-      },
+      { name: "notion.com/product/ai", url: "https://www.notion.com/product/ai" },
       { name: "granola.ai", url: "https://www.granola.ai" },
       { name: "otter.ai", url: "https://otter.ai" },
     ],
@@ -3312,32 +2291,13 @@ function LiveTokens() {
       { name: "before", type: "ReactNode[]", desc: "Quick-form before items." },
       { name: "after", type: "ReactNode[]", desc: "Quick-form after items." },
       { name: "brand", type: "ReactNode", desc: "Name shown over the arrow." },
-      {
-        name: "beforeLabel",
-        type: "ReactNode",
-        default: '"Before"',
-        desc: "Override label.",
-      },
-      {
-        name: "afterLabel",
-        type: "ReactNode",
-        default: '"After"',
-        desc: "Override label.",
-      },
+      { name: "beforeLabel", type: "ReactNode", default: '"Before"', desc: "Override label." },
+      { name: "afterLabel", type: "ReactNode", default: '"After"', desc: "Override label." },
     ],
     subprops: [
-      {
-        name: "BeforeAfter.Before",
-        props: [{ name: "label", type: "ReactNode", desc: "Tag label." }],
-      },
-      {
-        name: "BeforeAfter.Arrow",
-        props: [{ name: "brand", type: "ReactNode", desc: "Brand label." }],
-      },
-      {
-        name: "BeforeAfter.After",
-        props: [{ name: "label", type: "ReactNode", desc: "Tag label." }],
-      },
+      { name: "BeforeAfter.Before", props: [{ name: "label", type: "ReactNode", desc: "Tag label." }] },
+      { name: "BeforeAfter.Arrow", props: [{ name: "brand", type: "ReactNode", desc: "Brand label." }] },
+      { name: "BeforeAfter.After", props: [{ name: "label", type: "ReactNode", desc: "Tag label." }] },
     ],
   },
 
@@ -3372,34 +2332,12 @@ function LiveTokens() {
       },
     ],
     props: [
-      {
-        name: "placeholder",
-        type: "string",
-        default: '"you@startup.ai"',
-        desc: "Input placeholder.",
-      },
+      { name: "placeholder", type: "string", default: '"you@startup.ai"', desc: "Input placeholder." },
       { name: "defaultValue", type: "string", desc: "Initial email value." },
-      {
-        name: "ctaLabel",
-        type: "ReactNode",
-        default: '"Notify me"',
-        desc: "Submit button label.",
-      },
-      {
-        name: "leading",
-        type: "ReactNode | false",
-        desc: "Leading icon. Defaults to an envelope SVG; pass false to remove or any node to replace.",
-      },
-      {
-        name: "footnote",
-        type: "ReactNode",
-        desc: "Small line of text rendered below the form.",
-      },
-      {
-        name: "onSubmit",
-        type: "(email: string) => void",
-        desc: "Submit callback.",
-      },
+      { name: "ctaLabel", type: "ReactNode", default: '"Notify me"', desc: "Submit button label." },
+      { name: "leading", type: "ReactNode | false", desc: "Leading icon. Defaults to an envelope SVG; pass false to remove or any node to replace." },
+      { name: "footnote", type: "ReactNode", desc: "Small line of text rendered below the form." },
+      { name: "onSubmit", type: "(email: string) => void", desc: "Submit callback." },
     ],
   },
 
@@ -3488,13 +2426,7 @@ return (
               title="You've been here 3 seconds"
               closeLabel="No thanks, I haven't raised my seed round yet."
             >
-              <p
-                style={{
-                  margin: 0,
-                  color: "var(--pui-fg-dim)",
-                  lineHeight: 1.55,
-                }}
-              >
+              <p style={{ margin: 0, color: "var(--pui-fg-dim)", lineHeight: 1.55 }}>
                 Now that we have your attention.
               </p>
               <WaitlistForm
@@ -3518,55 +2450,15 @@ return (
     ],
     props: [
       { name: "open", type: "boolean", desc: "Controlled open state." },
-      {
-        name: "defaultOpen",
-        type: "boolean",
-        desc: "Uncontrolled initial state.",
-      },
-      {
-        name: "onOpenChange",
-        type: "(open: boolean) => void",
-        desc: "Open-state callback.",
-      },
-      {
-        name: "timer",
-        type: "number",
-        default: "0",
-        desc: "ms before auto-opening once mounted. 0 disables.",
-      },
-      {
-        name: "title",
-        type: "ReactNode",
-        desc: "Title at the top of the popover.",
-      },
-      {
-        name: "children",
-        type: "ReactNode",
-        desc: "Body content (e.g. a WaitlistForm).",
-      },
-      {
-        name: "closeLabel",
-        type: "ReactNode | false",
-        default: '"Maybe later"',
-        desc: "Small dismissal link rendered under the body. false to hide.",
-      },
-      {
-        name: "closeOnEscape",
-        type: "boolean",
-        default: "false",
-        desc: "Allow the Escape key to close. Default false (obtrusive by design).",
-      },
-      {
-        name: "closeOnBackdrop",
-        type: "boolean",
-        default: "false",
-        desc: "Allow backdrop clicks to close. Default false.",
-      },
-      {
-        name: "container",
-        type: "HTMLElement | null",
-        desc: "Portal target. Defaults to document.body so the popover covers the viewport.",
-      },
+      { name: "defaultOpen", type: "boolean", desc: "Uncontrolled initial state." },
+      { name: "onOpenChange", type: "(open: boolean) => void", desc: "Open-state callback." },
+      { name: "timer", type: "number", default: "0", desc: "ms before auto-opening once mounted. 0 disables." },
+      { name: "title", type: "ReactNode", desc: "Title at the top of the popover." },
+      { name: "children", type: "ReactNode", desc: "Body content (e.g. a WaitlistForm)." },
+      { name: "closeLabel", type: "ReactNode | false", default: '"Maybe later"', desc: "Small dismissal link rendered under the body. false to hide." },
+      { name: "closeOnEscape", type: "boolean", default: "false", desc: "Allow the Escape key to close. Default false (obtrusive by design)." },
+      { name: "closeOnBackdrop", type: "boolean", default: "false", desc: "Allow backdrop clicks to close. Default false." },
+      { name: "container", type: "HTMLElement | null", desc: "Portal target. Defaults to document.body so the popover covers the viewport." },
     ],
   },
 
@@ -3601,11 +2493,7 @@ return (
               labelHigh="Unhinged"
               options={[
                 { key: "eco", label: "eco", color: "var(--pui-temp-medium)" },
-                {
-                  key: "balanced",
-                  label: "balanced",
-                  color: "var(--pui-temp-high)",
-                },
+                { key: "balanced", label: "balanced", color: "var(--pui-temp-high)" },
                 { key: "turbo", label: "turbo", color: "glow" },
                 { key: "warp", label: "warp", color: "rainbow" },
                 { key: "plaid", label: "plaid", color: "ludicrous" },
@@ -3654,36 +2542,12 @@ return <Temperature value={level} onChange={setLevel} />;`,
       },
     ],
     props: [
-      {
-        name: "options",
-        type: "TemperatureOption[]",
-        default: "low..ludicrous",
-        desc: "Tiers left to right: { key, label, color }. color is a flat CSS color or one of glow | rainbow | ludicrous.",
-      },
+      { name: "options", type: "TemperatureOption[]", default: "low..ludicrous", desc: "Tiers left to right: { key, label, color }. color is a flat CSS color or one of glow | rainbow | ludicrous." },
       { name: "value", type: "string", desc: "Controlled selected key." },
-      {
-        name: "defaultValue",
-        type: "string",
-        default: "middle tier",
-        desc: "Initial selected key when uncontrolled.",
-      },
-      {
-        name: "onChange",
-        type: "(key: string) => void",
-        desc: "Fires when a tier is committed (clicked anywhere).",
-      },
-      {
-        name: "labelLow",
-        type: "string",
-        default: '"Cheaper"',
-        desc: "Left pole caption.",
-      },
-      {
-        name: "labelHigh",
-        type: "string",
-        default: '"Faster"',
-        desc: "Right pole caption.",
-      },
+      { name: "defaultValue", type: "string", default: "middle tier", desc: "Initial selected key when uncontrolled." },
+      { name: "onChange", type: "(key: string) => void", desc: "Fires when a tier is committed (clicked anywhere)." },
+      { name: "labelLow", type: "string", default: '"Cheaper"', desc: "Left pole caption." },
+      { name: "labelHigh", type: "string", default: '"Faster"', desc: "Right pole caption." },
     ],
   },
 
@@ -3790,56 +2654,25 @@ return <Temperature value={level} onChange={setLevel} />;`,
       },
     ],
     props: [
-      {
-        name: "company",
-        type: "string",
-        desc: "The company name, set wall-sized as the wordmark. Required.",
-      },
-      {
-        name: "columns",
-        type: "BigBackColumn[]",
-        desc: "Link columns shown above the wordmark. Omit to render the wordmark alone.",
-      },
-      {
-        name: "social",
-        type: "BigBackLink[]",
-        desc: "Small links in the baseline row.",
-      },
-      {
-        name: "copyright",
-        type: "ReactNode",
-        default: '"All rights reserved"',
-        desc: "Baseline-row text on the left.",
-      },
-      {
-        name: "gradient",
-        type: "boolean",
-        default: "false",
-        desc: "Fill the wordmark with the brand gradient.",
-      },
+      { name: "company", type: "string", desc: "The company name, set wall-sized as the wordmark. Required." },
+      { name: "columns", type: "BigBackColumn[]", desc: "Link columns shown above the wordmark. Omit to render the wordmark alone." },
+      { name: "social", type: "BigBackLink[]", desc: "Small links in the baseline row." },
+      { name: "copyright", type: "ReactNode", default: '"All rights reserved"', desc: "Baseline-row text on the left." },
+      { name: "gradient", type: "boolean", default: "false", desc: "Fill the wordmark with the brand gradient." },
     ],
     subprops: [
       {
         name: "BigBackColumn",
         props: [
           { name: "heading", type: "ReactNode", desc: "Column title." },
-          {
-            name: "links",
-            type: "BigBackLink[]",
-            desc: "Links in the column.",
-          },
+          { name: "links", type: "BigBackLink[]", desc: "Links in the column." },
         ],
       },
       {
         name: "BigBackLink",
         props: [
           { name: "label", type: "ReactNode", desc: "Link text." },
-          {
-            name: "href",
-            type: "string",
-            default: '"#"',
-            desc: "Link target.",
-          },
+          { name: "href", type: "string", default: '"#"', desc: "Link target." },
         ],
       },
     ],
@@ -3878,6 +2711,6 @@ export const CATEGORIES = Array.from(
  * keyboard shortcuts and the "Next" card to step through
  * pages in TOC order rather than array-definition order.
  */
-export const ORDERED_COMPONENTS: ComponentMeta[] = CATEGORIES.flatMap((cat) =>
-  COMPONENTS.filter((c) => c.category === cat),
+export const ORDERED_COMPONENTS: ComponentMeta[] = CATEGORIES.flatMap(
+  (cat) => COMPONENTS.filter((c) => c.category === cat),
 );
