@@ -48,13 +48,19 @@ export const LogoMarquee = forwardRef<HTMLDivElement, LogoMarqueeProps>(
       ["--pui-marquee-speed" as string]: `${speed}s`,
       ["--pui-marquee-gap" as string]: `${gap}px`,
     };
-    // The second pass exists only to make the loop seamless. Hide it from
-    // assistive tech (otherwise every logo is announced twice) and tag it so
-    // reduced-motion styles can drop it from the static layout.
+    // The second pass exists only to make the loop seamless. `aria-hidden`
+    // removes it from the a11y tree and `inert` also removes it from tab
+    // order, so a link/button logo never gets a duplicate focus stop. It is
+    // tagged so reduced-motion styles can drop it from the static layout.
     const renderItem = (it: MarqueeItem, i: number, dup = false) => {
       const cls = cn("pui-marquee__item", dup && "pui-marquee__item--dup");
       return it.kind === "img" ? (
-        <span key={`a${i}`} className={cls} aria-hidden={dup || undefined}>
+        <span
+          key={`a${i}`}
+          className={cls}
+          aria-hidden={dup || undefined}
+          inert={dup || undefined}
+        >
           <img src={it.src} alt={it.alt ?? ""} />
         </span>
       ) : (
@@ -62,6 +68,7 @@ export const LogoMarquee = forwardRef<HTMLDivElement, LogoMarqueeProps>(
           key={dup ? `d${i}` : (it.key ?? `b${i}`)}
           className={cls}
           aria-hidden={dup || undefined}
+          inert={dup || undefined}
         >
           {it.node}
         </span>
