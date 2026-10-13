@@ -11,7 +11,10 @@ export interface ButtonProps extends ComponentPropsWithoutRef<"button"> {
 
 /** Minimal button using the `pui-btn` styles. */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ variant = "solid", size = "md", className, type = "button", ...rest }, ref) => (
+  (
+    { variant = "solid", size = "md", className, type = "button", ...rest },
+    ref,
+  ) => (
     <button
       ref={ref}
       type={type}
