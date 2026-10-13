@@ -87,6 +87,9 @@ for any new heavy library rather than adding it to `package.json`.
   helpers in `components.ts`. Don't introduce React/Svelte/etc. into this
   codebase — if you want a framework-based rewrite, open an issue to discuss
   first, since it's a much bigger conversation than a single PR.
+  The one exception is the standalone React library entry (`src/index.ts`,
+  `src/components/*.tsx`, `src/styles.css`): React is a devDependency there
+  and the app (`src/main.ts`) never imports it, so it stays out of the bundle.
 - **CSS lives in `src/style.css`.** It's intentionally one file with
   section banner comments (`═══`) rather than split per-component — search
   for the relevant banner before adding a new one. Use the existing custom
