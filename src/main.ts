@@ -332,7 +332,7 @@ on("convert", () => {
   mountPage(() => import("./pages/convert").then((m) => m.mountConvert));
 });
 on("settings", () => {
-  navigate("");
+  navigate("", { replace: true });
   openSettings();
 }); // old deep link →
 // Settings is a dialog now, not a page (see openSettings() above); send
