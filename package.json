@@ -35,6 +35,7 @@
     "@puppeteer/browsers": "^3.2.1",
     "adm-zip": "^0.6.1",
     "sharp": "^0.35.3",
-    "basic-ftp": "^6.2.3"
+    "basic-ftp": "^6.2.3",
+    "js-yaml": "^4.3.2"
   }
 }
