@@ -2,18 +2,20 @@ type Handler = () => void;
 const handlers = new Map<string, Handler>();
 
 // Derive the deployment base once (e.g. "/" on root, "/compressz/" on a sub-path).
-// Vite injects BASE_URL at build time via import.meta.env; the declaration below
-// satisfies the TypeScript compiler without needing a separate vite-env.d.ts.
-declare const __VITE_BASE__: string | undefined;
-const BASE: string = (import.meta as any).env?.BASE_URL ?? "/";
+// Vite injects BASE_URL at build time via import.meta.env (typed by vite/client).
+const BASE: string = import.meta.env.BASE_URL ?? "/";
 const BASE_NORM = BASE.endsWith("/") ? BASE : BASE + "/";
 
 export function on(route: string, fn: Handler) {
   handlers.set(route, fn);
 }
 
-export function navigate(route: string) {
-  history.pushState({}, "", BASE_NORM + route);
+// `replace: true` swaps the current history entry instead of adding one — use it
+// for redirects so the Back button doesn't bounce the user straight back to the
+// redirecting URL.
+export function navigate(route: string, opts: { replace?: boolean } = {}) {
+  if (opts.replace) history.replaceState({}, "", BASE_NORM + route);
+  else history.pushState({}, "", BASE_NORM + route);
   dispatch(BASE_NORM + route);
 }
 
