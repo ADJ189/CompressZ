@@ -1,6 +1,7 @@
 import {
   forwardRef,
   useCallback,
+  useEffect,
   useRef,
   type ComponentPropsWithoutRef,
   type CSSProperties,
@@ -59,10 +60,38 @@ export const TiltCard = forwardRef<HTMLDivElement, TiltCardProps>(
       [ref],
     );
 
+    const reset = useCallback(() => {
+      const el = local.current;
+      if (!el) return;
+      delete el.dataset.active;
+      el.style.removeProperty("--pui-tilt-rx");
+      el.style.removeProperty("--pui-tilt-ry");
+      el.style.removeProperty("--pui-tilt-gx");
+      el.style.removeProperty("--pui-tilt-gy");
+    }, []);
+
+    useEffect(() => {
+      const mq =
+        typeof window.matchMedia === "function"
+          ? window.matchMedia("(prefers-reduced-motion: reduce)")
+          : null;
+      const onMotionChange = () => {
+        if (mq?.matches) reset();
+      };
+      onMotionChange();
+      mq?.addEventListener?.("change", onMotionChange);
+      return () => mq?.removeEventListener?.("change", onMotionChange);
+    }, [reset]);
+
     const handleMove = (e: PointerEvent<HTMLDivElement>) => {
       onPointerMove?.(e);
       const el = local.current;
-      if (!el || e.pointerType === "touch" || prefersReducedMotion()) return;
+      if (!el) return;
+      if (prefersReducedMotion()) {
+        reset();
+        return;
+      }
+      if (e.pointerType === "touch") return;
       const r = el.getBoundingClientRect();
       const px = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
       const py = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
@@ -75,11 +104,7 @@ export const TiltCard = forwardRef<HTMLDivElement, TiltCardProps>(
 
     const handleLeave = (e: PointerEvent<HTMLDivElement>) => {
       onPointerLeave?.(e);
-      const el = local.current;
-      if (!el) return;
-      delete el.dataset.active;
-      el.style.removeProperty("--pui-tilt-rx");
-      el.style.removeProperty("--pui-tilt-ry");
+      reset();
     };
 
     return (

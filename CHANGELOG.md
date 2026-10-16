@@ -7,6 +7,11 @@ carry an `-a`/`-b` prerelease suffix (`-a` = early/alpha, `-b` = beta,
 close to ready) with a trailing counter, e.g. `1.12.0-b1`, `1.12.0-b2`.
 The suffix is dropped on the release that ships it (`1.12.0`).
 
+## [Unreleased]
+
+- Expose LogoMarquee's accessible region label and reset TiltCard when reduced
+  motion is enabled during use.
+
 ### [1.13.0-a1] - UI branch fixes (follow-up)
 
 - `src/index.ts` exported modules that don't exist (Sparkle, hooks, …), so

@@ -85,6 +85,7 @@ export const LogoMarquee = forwardRef<HTMLDivElement, LogoMarqueeProps>(
           className,
         )}
         style={cssVars}
+        role="region"
         aria-label="Trusted by"
         {...rest}
       >
