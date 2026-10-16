@@ -5,8 +5,6 @@ everything runs in the browser, nothing is uploaded — and contributions are
 expected to keep it that way. This guide covers how to get set up, the
 project's conventions, and how to submit changes.
 
-
-
 ---
 
 ## Ground rules
@@ -57,7 +55,7 @@ Compatibility table in [README.md](README.md) for feature support gaps).
 ```
 src/
   main.ts            # app bootstrap, router mount, sidebar/topbar wiring
-  router.ts           # hash-based page router
+  router.ts           # History API page router
   store.ts             # persisted app/tool state (localStorage-backed)
   components.ts        # shared DOM component helpers (file cards, etc.)
   toast.ts             # toast notifications
@@ -67,7 +65,10 @@ src/
     compressGif.ts, optimizeSvg.ts, convertMedia.ts, convertOffice.ts,
     convertPdf.ts, ffmpeg.ts (FFmpeg.wasm singleton), zip.ts, types.ts
   pages/                # one file per route (images, pdf, video, audio,
-    gif, ocr, convert)
+    gif, ocr, convert, imagesToPdf, mergePdf, settings)
+  components/, utils/   # standalone React library (see Conventions)
+  index.ts, styles.css  # library entry + styles
+e2e/                    # Playwright smoke tests (npm run test:e2e)
 ```
 
 Heavy dependencies (FFmpeg.wasm, PDF.js, pdf-lib, Tesseract.js, PaddleOCR,
@@ -87,6 +88,9 @@ for any new heavy library rather than adding it to `package.json`.
   helpers in `components.ts`. Don't introduce React/Svelte/etc. into this
   codebase — if you want a framework-based rewrite, open an issue to discuss
   first, since it's a much bigger conversation than a single PR.
+  The one exception is the standalone React library entry (`src/index.ts`,
+  `src/components/*.tsx`, `src/styles.css`): React is a devDependency there
+  and the app (`src/main.ts`) never imports it, so it stays out of the bundle.
 - **CSS lives in `src/style.css`.** It's intentionally one file with
   section banner comments (`═══`) rather than split per-component — search
   for the relevant banner before adding a new one. Use the existing custom

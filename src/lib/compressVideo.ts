@@ -1,4 +1,8 @@
-import type { CompressOptions, CompressResult } from "./types";
+import {
+  randomToken,
+  type CompressOptions,
+  type CompressResult,
+} from "./types";
 import {
   getFFmpeg,
   ffFetch,
@@ -45,7 +49,7 @@ async function probeAudioTrackCount(ff: any, inN: string): Promise<number> {
   } finally {
     ff.off("log", onLog);
   }
-  return lines.filter((l) => /Stream #\d+:\d+.*:\s*Audio:/.test(l)).length;
+  return lines.filter((l) => /Stream #\d+:\d+[^:]*:\s*Audio:/.test(l)).length;
 }
 
 // ── FFmpeg.wasm ───────────────────────────────────────────────
@@ -191,7 +195,7 @@ async function videoViaFFmpeg(
       codec === "vp9" ||
       codec === "vp8" ||
       codec === "av1");
-  const passPrefix = `pass_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const passPrefix = `pass_${Date.now()}_${randomToken(5)}`;
 
   if (twoPass) {
     const pass1 = [

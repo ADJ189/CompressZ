@@ -7,13 +7,29 @@ carry an `-a`/`-b` prerelease suffix (`-a` = early/alpha, `-b` = beta,
 close to ready) with a trailing counter, e.g. `1.12.0-b1`, `1.12.0-b2`.
 The suffix is dropped on the release that ships it (`1.12.0`).
 
+## [Unreleased]
+
+- Expose LogoMarquee's accessible region label and reset TiltCard when reduced
+  motion is enabled during use.
+
+### [1.13.0-a1] - UI branch fixes (follow-up)
+
+- `src/index.ts` exported modules that don't exist (Sparkle, hooks, …), so
+  `npm run typecheck` failed. It now exports only the shipped components.
+- `ScrambleText` splits custom alphabets by code point (emoji no longer
+  break). `OversubscribedMeter` lands exactly on fractional targets.
+  `CommandPalette` no longer steals focus back from `onSelect`.
+  `CursorTrail`/`Magnetic` honour reduced motion changed mid-session.
+- `package.json`/`tsconfig.json` merge damage repaired; lockfile regenerated.
+- CI now runs on every branch push, so Playwright runs on feature branches.
+- Docs: README/CONTRIBUTING layout, Vite version and router description.
 
 ### [1.13.0-a1] - HEIC decode fix, thumbnail previews, all-tools picker, manual resource limits
 
 **HEIC/HEIF photos silently failing outside Safari (the actual bug, root-caused):**
 every image entry point called `createImageBitmap(file)` directly and just
 threw on failure. Only Safari/WebKit (macOS + iOS, including Chrome/Firefox
-*on* iOS since Apple mandates WebKit there) can decode HEIC through that
+_on_ iOS since Apple mandates WebKit there) can decode HEIC through that
 path — Chrome, Firefox and Edge on Android, Windows, Linux and ChromeOS all
 fail on a real iPhone-shot `.heic`, which is the single most common photo
 format people drag in. Added `src/lib/imageDecode.ts`: tries native decode
@@ -66,7 +82,6 @@ since it's the one header button that opens a whole page of controls rather
 than a one-tap toggle or external link — it was previously identical in
 size/treatment to the theme toggle and GitHub link and easy to miss.
 
-
 ### [1.12.7] - Fixed — buttons silently unclickable app-wide, OCR batch overload, missing combine progress
 
 **"Most buttons aren't clickable" (root cause, confirmed with a headless-
@@ -117,7 +132,6 @@ every visible button/select/input/link/tab across all 13 routes) that no
 element is now covered by another at rest, and with a live combine run that
 the new progress bar actually updates mid-operation.
 
-
 ### [1.12.6] - Fixed — Cloudflare build, adm-zip advisory, platform-detection audit
 
 **Cloudflare Pages build failure:** `npm ci` was refusing to install because
@@ -137,6 +151,7 @@ bundle — `@huggingface/transformers`'s browser export condition resolves to
 machine, which is where the advisory applies.)
 
 **Platform-detection engine (`lib/platform.ts`) audit:**
+
 - Consolidated `platform.ts`'s and `gpu.ts`'s separate throwaway WebGL2
   detection contexts into a single shared one (new `lib/webgl.ts`) — no
   functional change, just one fewer live WebGL context opened per session
@@ -189,7 +204,7 @@ to start listening" warning even though it didn't end up blocking that
 particular run, which is exactly the kind of intermittent failure a
 slower/colder CI runner would hit for real.
 
-## [1.12.0] 
+## [1.12.0]
 
 ### Fixed — Horizontal tab bar regressions from the sidebar→tab-bar redesign
 
@@ -750,8 +765,6 @@ failing silently.
   (same versions, same jsDelivr URLs) already used by `compressPdf.ts`
   and the OCR page, so there's no new loading behavior to audit there.
 
-
-
 ### Fixed — Layout / Alignment
 
 - **Root cause of the settings-card alignment issue: every settings row was
@@ -762,7 +775,7 @@ failing silently.
   Apple grouped-list redesign) but never re-declared `align-items` — and
   because only one rule in the whole stylesheet touched that property, the
   old `flex-end` value kept applying. In a column flex container,
-  `align-items` controls the *horizontal* axis, so every row was right-
+  `align-items` controls the _horizontal_ axis, so every row was right-
   aligned and sized to its own content instead of stretching full width.
   Fixed by explicitly setting `align-items: stretch` on the scoped
   `.settings-card .s-row` rule.
@@ -823,7 +836,7 @@ failing silently.
 ### Fixed — Cross-Browser Compatibility
 
 - **AVIF-encode support detection relied on `navigator.userAgent.includes
-  ('Firefox/')`**, which only caught one browser that can't encode AVIF via
+('Firefox/')`**, which only caught one browser that can't encode AVIF via
   canvas and is inherently fragile (breaks on UA spoofing, doesn't cover
   Safari, doesn't adapt to future browser changes). Replaced with a real
   feature-detection check (`canvas.toDataURL('image/avif')`), run once and
@@ -840,7 +853,7 @@ failing silently.
   releases the lock on failure so it can be retried on the next file.
 - **Unbounded `'progress'` event listener growth on the shared FFmpeg
   instance.** Video, Audio, and GIF compression each called `ff.on
-  ('progress', …)` on every single compress call without ever removing the
+('progress', …)` on every single compress call without ever removing the
   previous listener. Since the FFmpeg instance is a session-wide singleton,
   compressing several files in a row accumulated one listener per file —
   each subsequent progress event then fired every prior file's (already

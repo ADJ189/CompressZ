@@ -73,8 +73,22 @@ export interface FileEntry {
 
 // ── Helpers ───────────────────────────────────────────────────
 
+/** Cryptographically strong random base-36 string of `len` characters. */
+export function randomToken(len: number): string {
+  let out = "";
+  const buf = new Uint8Array(len * 2);
+  while (out.length < len) {
+    crypto.getRandomValues(buf);
+    // Reject bytes >= 252 (252 = 36 * 7) so every symbol is equally likely.
+    for (const b of buf) {
+      if (b < 252 && out.length < len) out += (b % 36).toString(36);
+    }
+  }
+  return out;
+}
+
 export function uid(): string {
-  return Math.random().toString(36).slice(2, 10);
+  return randomToken(8);
 }
 
 export function formatBytes(bytes: number, decimals = 2): string {
