@@ -1,4 +1,8 @@
-import { randomToken, type CompressOptions, type CompressResult } from "./types";
+import {
+  randomToken,
+  type CompressOptions,
+  type CompressResult,
+} from "./types";
 import {
   getFFmpeg,
   ffFetch,
