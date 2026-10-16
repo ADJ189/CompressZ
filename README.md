@@ -9,7 +9,7 @@ Nothing ever leaves your device.
 
 [![Cloudflare Pages](https://img.shields.io/badge/Cloudflare_Pages-deployed-F38020?logo=cloudflare&logoColor=white)](https://compressz.pages.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
+[![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-22c55e.svg)](LICENSE)
 
 </div>
@@ -158,43 +158,55 @@ PDF.js renders each page to OffscreenCanvas with `colorSpace: 'srgb'` and `inten
 
 ```
 compressz/
+├── .github/
+│   ├── workflows/        # ci.yml (typecheck, lint, build, e2e), lighthouse.yml
+│   └── dependabot.yml    # Weekly grouped updates, major versions pinned
+├── e2e/
+│   └── smoke.spec.ts     # Playwright smoke tests (every route, theme, settings)
 ├── public/
 │   ├── _headers          # COOP/COEP → SharedArrayBuffer (FFmpeg MT)
 │   ├── _redirects        # SPA fallback
 │   ├── favicon.svg / .png
 │   ├── robots.txt
 │   └── sitemap.xml
+├── scripts/
+│   └── strip-oversized-assets.mjs  # Drops files over Cloudflare Pages' 25 MiB limit
 ├── src/
-│   ├── lib/
+│   ├── lib/              # Engines, one file per format
 │   │   ├── types.ts
-│   │   ├── compress.ts
+│   │   ├── compress.ts       # Type dispatcher (not imported by the app yet)
 │   │   ├── compressImage.ts
 │   │   ├── compressPdf.ts    # Two-strategy PDF compression
 │   │   ├── compressVideo.ts  # FFmpeg → WebCodecs → MediaRecorder
 │   │   ├── compressAudio.ts
 │   │   ├── compressGif.ts
-│   │   ├── optimizeSvg.ts
-│   │   └── ffmpeg.ts
-│   ├── pages/
-│   │   ├── images.ts
-│   │   ├── pdf.ts
-│   │   ├── video.ts
-│   │   ├── audio.ts
-│   │   ├── gif.ts
+│   │   ├── optimizeSvg.ts    # Pure TypeScript SVG optimizer
+│   │   ├── convertMedia.ts / convertOffice.ts / convertPdf.ts
+│   │   ├── imagesToPdf.ts / mergePdf.ts
+│   │   ├── imageDecode.ts / thumb.ts / aiEngine.ts
+│   │   └── ffmpeg.ts / pdfLibs.ts / zip.ts / …
+│   ├── pages/            # One file per route
+│   │   ├── images.ts / pdf.ts / video.ts / audio.ts / gif.ts
+│   │   ├── convert.ts / imagesToPdf.ts / mergePdf.ts / settings.ts
 │   │   └── ocr.ts            # PaddleOCR-VL 1.5 + Tesseract.js 5
-│   ├── components.ts
+│   ├── components/       # React component library (not used by the app)
+│   ├── utils/            # cn, prefersReducedMotion, canHover, assignRef
+│   ├── index.ts          # Library entry for src/components
+│   ├── styles.css        # Library styles (imported by index.ts)
+│   ├── components.ts     # Shared DOM helpers for the app
 │   ├── router.ts
+│   ├── store.ts
 │   ├── toast.ts
-│   ├── style.css
+│   ├── style.css         # App stylesheet
 │   └── main.ts
 ├── index.html                # App shell + page templates
-├── vite.config.ts            # Vite 6, esnext, COOP/COEP dev headers
+├── vite.config.ts            # Vite 8, esnext, COOP/COEP dev headers
+├── playwright.config.ts
 ├── tsconfig.json
 ├── package.json
 ├── CHANGELOG.md
 ├── CREDITS.md                # Open-source attributions & licenses
-├── PRIVACY.md                # Standalone copy of the in-app privacy page
-└── .github/dependabot.yml    # Weekly grouped updates, major versions pinned
+└── PRIVACY.md                # Standalone copy of the in-app privacy page
 ```
 
 ---
@@ -207,6 +219,9 @@ npm run dev        # http://localhost:5173
 npm run build      # → dist/
 npm run preview    # serve dist/ locally
 npm run typecheck  # TypeScript check
+npm run lint       # ESLint
+npx playwright install chromium   # once
+npm run test:e2e   # Playwright smoke tests (builds, then serves dist/)
 ```
 
 ## Browser Compatibility

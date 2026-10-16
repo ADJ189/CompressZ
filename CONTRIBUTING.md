@@ -55,7 +55,7 @@ Compatibility table in [README.md](README.md) for feature support gaps).
 ```
 src/
   main.ts            # app bootstrap, router mount, sidebar/topbar wiring
-  router.ts           # hash-based page router
+  router.ts           # History API page router
   store.ts             # persisted app/tool state (localStorage-backed)
   components.ts        # shared DOM component helpers (file cards, etc.)
   toast.ts             # toast notifications
@@ -65,7 +65,10 @@ src/
     compressGif.ts, optimizeSvg.ts, convertMedia.ts, convertOffice.ts,
     convertPdf.ts, ffmpeg.ts (FFmpeg.wasm singleton), zip.ts, types.ts
   pages/                # one file per route (images, pdf, video, audio,
-    gif, ocr, convert)
+    gif, ocr, convert, imagesToPdf, mergePdf, settings)
+  components/, utils/   # standalone React library (see Conventions)
+  index.ts, styles.css  # library entry + styles
+e2e/                    # Playwright smoke tests (npm run test:e2e)
 ```
 
 Heavy dependencies (FFmpeg.wasm, PDF.js, pdf-lib, Tesseract.js, PaddleOCR,

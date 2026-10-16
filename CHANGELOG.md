@@ -8,6 +8,18 @@ close to ready) with a trailing counter, e.g. `1.12.0-b1`, `1.12.0-b2`.
 The suffix is dropped on the release that ships it (`1.12.0`).
 
 
+### [1.13.0-a1] - UI branch fixes (follow-up)
+
+- `src/index.ts` exported modules that don't exist (Sparkle, hooks, …), so
+  `npm run typecheck` failed. It now exports only the shipped components.
+- `ScrambleText` splits custom alphabets by code point (emoji no longer
+  break). `OversubscribedMeter` lands exactly on fractional targets.
+  `CommandPalette` no longer steals focus back from `onSelect`.
+  `CursorTrail`/`Magnetic` honour reduced motion changed mid-session.
+- `package.json`/`tsconfig.json` merge damage repaired; lockfile regenerated.
+- CI now runs on every branch push, so Playwright runs on feature branches.
+- Docs: README/CONTRIBUTING layout, Vite version and router description.
+
 ### [1.13.0-a1] - HEIC decode fix, thumbnail previews, all-tools picker, manual resource limits
 
 **HEIC/HEIF photos silently failing outside Safari (the actual bug, root-caused):**
