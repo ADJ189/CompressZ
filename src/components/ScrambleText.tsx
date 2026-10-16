@@ -29,9 +29,11 @@ const SWAP_MS = 45;
 
 // Cheap deterministic pick so rendering stays pure and testable.
 function pick(chars: string, i: number, tick: number): string {
+  // Code points, not UTF-16 units: indexing a string splits emoji and other
+  // astral characters in half, which renders as replacement glyphs.
   // An empty `chars` would make this a modulo by zero, and indexing with NaN
   // renders the literal text "undefined". Fall back to the default alphabet.
-  const alphabet = chars || DEFAULT_CHARS;
+  const alphabet = Array.from(chars || DEFAULT_CHARS);
   const n = Math.imul(i + 1, 374761393) ^ Math.imul(tick + 1, 668265263);
   return alphabet[Math.abs(n ^ (n >>> 13)) % alphabet.length];
 }
@@ -41,9 +43,6 @@ function maskText(text: string, chars: string): string {
     /\s/.test(ch) ? ch : pick(chars, i, 0),
   ).join("");
 }
-
-// Code points, not UTF-16 units: indexing a string splits emoji and other
-// astral characters in half, which renders as replacement glyphs mid-scramble.
 
 /**
  * Text that decodes itself, one character at a time. Screen readers get

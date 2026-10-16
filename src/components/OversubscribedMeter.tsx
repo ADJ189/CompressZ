@@ -74,10 +74,14 @@ export function OversubscribedMeter({
     const start = performance.now();
     const tick = (now: number) => {
       const t = Math.min(1, (now - start) / durationMs);
-      setPct(Math.round(goal * (1 - Math.pow(1 - t, 3))));
       if (t < 1) {
+        // Whole numbers while counting up, so the readout doesn't flicker decimals.
+        setPct(Math.round(goal * (1 - Math.pow(1 - t, 3))));
         raf.current = requestAnimationFrame(tick);
       } else {
+        // Land exactly on the requested value (`target` may be fractional),
+        // matching the reduced-motion path and `aria-valuemax`.
+        setPct(goal);
         raf.current = 0;
         setRunning(false);
         setDone(true);
@@ -135,7 +139,7 @@ export function OversubscribedMeter({
       <div className="pui-meter__head">
         <span className="pui-meter__label">{label}</span>
         <span className="pui-meter__pct" aria-hidden="true">
-          {pct}%
+          {fmt(pct)}%
         </span>
       </div>
 
@@ -146,7 +150,7 @@ export function OversubscribedMeter({
         aria-valuemin={0}
         aria-valuemax={axisMax}
         aria-valuenow={pct}
-        aria-valuetext={`${pct}% subscribed`}
+        aria-valuetext={`${fmt(pct)}% subscribed`}
       >
         <div
           className="pui-meter__fill"

@@ -49,7 +49,7 @@ export const Magnetic = forwardRef<HTMLSpanElement, MagneticProps>(
 
     useEffect(() => {
       const el = local.current;
-      if (!el || disabled || prefersReducedMotion() || !canHover()) return;
+      if (!el || disabled || !canHover()) return;
 
       let curX = 0;
       let curY = 0;
@@ -72,10 +72,22 @@ export const Magnetic = forwardRef<HTMLSpanElement, MagneticProps>(
       const wake = () => {
         if (!raf) raf = requestAnimationFrame(step);
       };
+      // Snap back to rest immediately (no spring) and stop the loop.
+      const reset = () => {
+        cancelAnimationFrame(raf);
+        raf = 0;
+        curX = curY = tx = ty = 0;
+        el.style.transform = "";
+      };
 
       const onMove = (e: PointerEvent) => {
         // Hybrid laptops report canHover() but also deliver touch events.
         if (e.pointerType === "touch") return;
+        // Checked per event: the OS setting can change while the page is open.
+        if (prefersReducedMotion()) {
+          if (curX || curY || tx || ty || raf) reset();
+          return;
+        }
         const r = el.getBoundingClientRect();
         // The rect already includes our own translation. Subtract it so the
         // target is measured from the resting position; otherwise the pull
@@ -110,6 +122,15 @@ export const Magnetic = forwardRef<HTMLSpanElement, MagneticProps>(
         if (e.relatedTarget === null) release();
       };
 
+      const mq =
+        typeof window.matchMedia === "function"
+          ? window.matchMedia("(prefers-reduced-motion: reduce)")
+          : null;
+      const onMotionChange = () => {
+        if (prefersReducedMotion()) reset();
+      };
+      mq?.addEventListener?.("change", onMotionChange);
+
       window.addEventListener("pointermove", onMove, { passive: true });
       document.addEventListener("pointerout", onOut);
       window.addEventListener("blur", release);
@@ -117,6 +138,7 @@ export const Magnetic = forwardRef<HTMLSpanElement, MagneticProps>(
         window.removeEventListener("pointermove", onMove);
         document.removeEventListener("pointerout", onOut);
         window.removeEventListener("blur", release);
+        mq?.removeEventListener?.("change", onMotionChange);
         cancelAnimationFrame(raf);
         el.style.transform = "";
       };

@@ -54,7 +54,7 @@ export function CursorTrail({
     const host = box.current;
     const cv = canvas.current;
     const ctx = cv?.getContext("2d");
-    if (!host || !cv || !ctx || prefersReducedMotion()) return;
+    if (!host || !cv || !ctx) return;
 
     const particles: Particle[] = [];
     let colors = FALLBACK;
@@ -151,12 +151,26 @@ export function CursorTrail({
       return { x: e.clientX - r.left, y: e.clientY - r.top };
     };
 
+    // Re-read on every event: the OS setting can change while the page is open.
+    const stopAndReset = () => {
+      cancelAnimationFrame(raf);
+      raf = 0;
+      particles.length = 0;
+      acc = 0;
+      hasLast = false;
+      ctx.clearRect(0, 0, cv.width, cv.height);
+    };
     const onEnter = () => {
+      if (prefersReducedMotion()) return;
       readColors();
       hasLast = false;
     };
     const onMove = (e: PointerEvent) => {
       if (e.pointerType === "touch") return;
+      if (prefersReducedMotion()) {
+        if (raf || particles.length) stopAndReset();
+        return;
+      }
       const { x, y } = local(e);
       if (!hasLast) {
         lastX = x;
@@ -177,6 +191,10 @@ export function CursorTrail({
     };
     const onDown = (e: PointerEvent) => {
       if (!burst) return;
+      if (prefersReducedMotion()) {
+        if (raf || particles.length) stopAndReset();
+        return;
+      }
       const { x, y } = local(e);
       const count = 14;
       for (let i = 0; i < count; i++) {
@@ -189,6 +207,16 @@ export function CursorTrail({
       acc = 0;
     };
 
+    // Also react to the preference flipping while particles are in flight.
+    const mq =
+      typeof window.matchMedia === "function"
+        ? window.matchMedia("(prefers-reduced-motion: reduce)")
+        : null;
+    const onMotionChange = () => {
+      if (prefersReducedMotion()) stopAndReset();
+    };
+    mq?.addEventListener?.("change", onMotionChange);
+
     readColors();
     resize();
     const ro = new ResizeObserver(resize);
@@ -198,6 +226,7 @@ export function CursorTrail({
     host.addEventListener("pointerdown", onDown);
     host.addEventListener("pointerleave", onLeave);
     return () => {
+      mq?.removeEventListener?.("change", onMotionChange);
       cancelAnimationFrame(raf);
       // Without this the last drawn frame stays on the canvas, frozen,
       // when props change mid-animation.

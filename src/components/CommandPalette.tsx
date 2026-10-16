@@ -212,6 +212,7 @@ export function CommandPalette({
   const hlRef = useRef<HTMLDivElement>(null);
   const optionRefs = useRef<(HTMLDivElement | null)[]>([]);
   const returnFocus = useRef<HTMLElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const lastPointer = useRef({ x: -1, y: -1 });
   const uid = useId();
 
@@ -223,7 +224,16 @@ export function CommandPalette({
     setActive(0);
     return () => {
       const el = returnFocus.current;
-      if (el && el.isConnected) el.focus({ preventScroll: true });
+      if (!el || !el.isConnected) return;
+      // If a command already moved focus somewhere else (an existing field,
+      // a native dialog), don't yank it back to the old trigger.
+      const now = document.activeElement;
+      const moved =
+        now &&
+        now !== document.body &&
+        now !== el &&
+        !dialogRef.current?.contains(now);
+      if (!moved) el.focus({ preventScroll: true });
     };
   }, [open]);
 
@@ -279,6 +289,9 @@ export function CommandPalette({
   }, [idx, results, mounted]);
 
   const choose = (item: CommandItem) => {
+    // Give focus back first so the command can move it on without being undone.
+    const el = returnFocus.current;
+    if (el && el.isConnected) el.focus({ preventScroll: true });
     setOpen(false);
     item.onSelect?.();
   };
@@ -366,6 +379,7 @@ export function CommandPalette({
       }}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
