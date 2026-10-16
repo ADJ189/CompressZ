@@ -1,0 +1,3041 @@
+/* =============================================================
+   performative-ui, styles
+   -------------------------------------------------------------
+   All classes prefixed `pui-`. Themeable via CSS custom
+   properties on :root, .pui-theme, or any ancestor.
+   ============================================================= */
+
+/* =============================================================
+   TOKENS, override on :root or any ancestor to retheme.
+   ============================================================= */
+:root,
+.pui-theme {
+  /* Palette (the consensus AI purple problem). */
+  --pui-bg: #08080b;
+  --pui-bg-elev: #0e0e13;
+  --pui-bg-soft: #14141c;
+  --pui-border: #1f1f2b;
+  --pui-border-bright: #2a2a3a;
+  --pui-fg: #f4f4f6;
+  --pui-fg-dim: #a3a3b2;
+  --pui-fg-mute: #6b6b7a;
+
+  /* The mandatory gradient. */
+  --pui-grad-from: #7c3aed;
+  --pui-grad-mid: #ec4899;
+  --pui-grad-to: #06b6d4;
+  --pui-grad: linear-gradient(
+    120deg,
+    var(--pui-grad-from),
+    var(--pui-grad-mid),
+    var(--pui-grad-to)
+  );
+
+  /* Accent statuses. */
+  --pui-success: #22c55e;
+  --pui-danger: #f87171;
+  --pui-warn: #fbbf24;
+
+  /* Glows. */
+  --pui-glow: 0 0 24px rgba(124, 58, 237, 0.45);
+  --pui-glow-strong:
+    0 0 48px rgba(124, 58, 237, 0.55), 0 0 96px rgba(236, 72, 153, 0.25);
+
+  /* Type. */
+  --pui-font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --pui-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --pui-font-serif: "Instrument Serif", ui-serif, Georgia, serif;
+
+  /* Shape. */
+  --pui-radius-sm: 8px;
+  --pui-radius: 12px;
+  --pui-radius-lg: 18px;
+  --pui-radius-xl: 22px;
+
+  /* Motion. */
+  --pui-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* ----- Theme-aware surface tokens ----- */
+  /* Glass surfaces (translucent panels, ai-chat boxes, popovers). */
+  --pui-glass: rgba(15, 15, 22, 0.85);
+  --pui-glass-deep: rgba(15, 15, 22, 0.78);
+  --pui-glass-soft: rgba(15, 15, 22, 0.55);
+
+  /* Subtle overlay tones — used by card bg, button hover, etc. */
+  --pui-overlay: rgba(255, 255, 255, 0.04);
+  --pui-overlay-strong: rgba(255, 255, 255, 0.07);
+  --pui-overlay-bright: rgba(255, 255, 255, 0.12);
+
+  /* The dark "raised surface" gradient that glow/shimmer buttons,
+     ChatFAB, and similar dark UI elements use. */
+  --pui-button-dark-fill: linear-gradient(180deg, #1a1a26, #0e0e16);
+  --pui-button-dark-popover-fill: linear-gradient(180deg, #11111a, #0a0a12);
+  --pui-button-dark-border: rgba(255, 255, 255, 0.08);
+
+  /* Shimmer button sweep. White-on-dark by default; flipped in light. */
+  --pui-shimmer-sweep: rgba(255, 255, 255, 0.3);
+  --pui-shimmer-sweep-edge: rgba(255, 255, 255, 0.08);
+
+  /* Wave button text + border. The cool blue reads against the dark
+     elev fill; light mode swaps to a saturated indigo that survives
+     on white. */
+  --pui-wave-text: rgb(180, 200, 235);
+  --pui-wave-text-hover: rgb(210, 225, 245);
+  --pui-wave-border: rgba(124, 156, 220, 0.22);
+  --pui-wave-border-hover: rgba(124, 156, 220, 0.35);
+
+  /* Chat user bubble gradient. */
+  --pui-bubble-user-fill: linear-gradient(135deg, #1a1a26, #11111a);
+
+  /* AsciiHero panel backdrop gradient. */
+  --pui-ascii-panel-fill: linear-gradient(
+    180deg,
+    rgba(20, 20, 28, 0.6),
+    rgba(8, 8, 11, 0.6)
+  );
+
+  /* Drop shadows. */
+  --pui-shadow-card: 0 10px 40px rgba(0, 0, 0, 0.55);
+  --pui-shadow-deep: 0 30px 80px rgba(0, 0, 0, 0.55);
+  --pui-shadow-fab: 0 10px 40px rgba(0, 0, 0, 0.55);
+
+  /* Demo dot-grid color (used by docs example panels). */
+  --pui-grid-dot: rgba(255, 255, 255, 0.025);
+
+  /* Pointer-driven surfaces (SpotlightCard, TiltCard). */
+  --pui-spot-fill: rgba(124, 58, 237, 0.22);
+  --pui-spot-edge: rgba(167, 139, 250, 0.9);
+  --pui-tilt-glare: rgba(255, 255, 255, 0.16);
+
+  /* OversubscribedMeter and CommandPalette. */
+  --pui-meter-track: rgba(255, 255, 255, 0.08);
+  --pui-meter-hot: linear-gradient(90deg, #f59e0b, #ef4444 55%, #ec4899);
+  --pui-meter-stamp: #f87171;
+  --pui-scrim: rgba(4, 4, 10, 0.62);
+  --pui-cmd-active: rgba(255, 255, 255, 0.07);
+  --pui-cmd-match: #c4b5fd;
+
+  /* Logo treatment for LogoMarquee / LogoRow / CommunityBadge.
+     simple-icons SVGs are black-on-transparent. In dark mode we
+     invert them to render light-gray; in light mode we drop the
+     invert so they stay dark and visible on white. */
+  --pui-logo-filter: invert(92%) grayscale(100%) brightness(0.85);
+  --pui-logo-filter-hover: invert(100%);
+  --pui-logo-text: rgba(255, 255, 255, 0.55);
+  --pui-logo-text-strong: rgba(255, 255, 255, 0.7);
+
+  /* Temperature slider. Tier colors mirror Claude Code's /effort menu:
+     warn/success/permission for the flat tiers, an autoAccept teal for
+     the glow tier, and a violet pair for the ludicrous ripple. */
+  --pui-temp-low: #fbbf24;
+  --pui-temp-medium: #22c55e;
+  --pui-temp-high: #8b9cff;
+  --pui-temp-xhigh: #6cd1a8;
+  --pui-temp-shimmer-hot: #ffffff;
+  --pui-temp-violet: #a78bfa;
+  --pui-temp-ripple-dark: rgba(62, 22, 118, 0.3);
+  --pui-temp-ripple-bright: rgba(140, 80, 240, 0.95);
+  --pui-temp-track: rgba(255, 255, 255, 0.18);
+  /* Ripple gradient endpoints as bare "r, g, b" triplets, read by the
+     canvas (RippleLayer) so the flood honors the active theme. */
+  --pui-temp-ripple-from: 62, 22, 118;
+  --pui-temp-ripple-to: 140, 80, 240;
+}
+
+/* =============================================================
+   LIGHT THEME overrides. Activate with [data-theme="light"]
+   on any ancestor (typically <html>). Same token names, just
+   re-mapped to light values.
+   ============================================================= */
+[data-theme="light"] {
+  --pui-bg: #ffffff;
+  --pui-bg-elev: #f7f7fa;
+  --pui-bg-soft: #ededf2;
+  --pui-border: #e6e6ec;
+  --pui-border-bright: #d2d2da;
+  --pui-fg: #0b0b10;
+  --pui-fg-dim: #4a4a55;
+  --pui-fg-mute: #88889a;
+
+  /* Glow toned down for light bg (the dark values were tuned to
+     pop against near-black). */
+  --pui-glow: 0 0 24px rgba(124, 58, 237, 0.18);
+  --pui-glow-strong:
+    0 0 48px rgba(124, 58, 237, 0.22), 0 0 96px rgba(236, 72, 153, 0.12);
+
+  /* Surfaces flip to white/near-white. */
+  --pui-glass: rgba(255, 255, 255, 0.85);
+  --pui-glass-deep: rgba(255, 255, 255, 0.78);
+  --pui-glass-soft: rgba(255, 255, 255, 0.6);
+
+  /* Overlay tones flip from white-on-dark to black-on-white. */
+  --pui-overlay: rgba(0, 0, 0, 0.04);
+  --pui-overlay-strong: rgba(0, 0, 0, 0.06);
+  --pui-overlay-bright: rgba(0, 0, 0, 0.1);
+
+  /* "Dark raised surface" actually becomes a light raised surface. */
+  --pui-button-dark-fill: linear-gradient(180deg, #ffffff, #f4f4f8);
+  --pui-button-dark-popover-fill: linear-gradient(180deg, #ffffff, #f0f0f5);
+  --pui-button-dark-border: rgba(0, 0, 0, 0.12);
+
+  /* Shimmer sweep flips to a soft dark stripe so the movement reads
+     on the light fill. */
+  --pui-shimmer-sweep: rgba(15, 15, 30, 0.22);
+  --pui-shimmer-sweep-edge: rgba(15, 15, 30, 0.05);
+
+  /* Wave button text + border: soft pastel lavender. Light enough
+     to feel airy on white, dark enough to still read. */
+  --pui-wave-text: rgb(140, 122, 188);
+  --pui-wave-text-hover: rgb(112, 96, 162);
+  --pui-wave-border: rgba(196, 174, 232, 0.65);
+  --pui-wave-border-hover: rgba(170, 144, 220, 0.8);
+
+  --pui-bubble-user-fill: linear-gradient(135deg, #f6f6fa, #e8e8ee);
+
+  --pui-ascii-panel-fill: linear-gradient(
+    180deg,
+    rgba(247, 247, 250, 0.6),
+    rgba(255, 255, 255, 0.4)
+  );
+
+  /* Drop shadows much lighter on white bg. */
+  --pui-shadow-card: 0 10px 30px rgba(0, 0, 0, 0.08);
+  --pui-shadow-deep: 0 20px 50px rgba(0, 0, 0, 0.1);
+  --pui-shadow-fab: 0 10px 30px rgba(0, 0, 0, 0.12);
+
+  --pui-grid-dot: rgba(0, 0, 0, 0.045);
+
+  --pui-spot-fill: rgba(124, 58, 237, 0.1);
+  --pui-spot-edge: rgba(124, 58, 237, 0.65);
+  --pui-tilt-glare: rgba(124, 58, 237, 0.1);
+
+  --pui-meter-track: rgba(0, 0, 0, 0.07);
+  --pui-meter-stamp: #dc2626;
+  --pui-scrim: rgba(20, 20, 35, 0.32);
+  --pui-cmd-active: rgba(124, 58, 237, 0.09);
+  --pui-cmd-match: #6d28d9;
+
+  /* Logos: no invert in light mode (they're already black SVGs);
+     fade slightly so they read as muted brand marks. */
+  --pui-logo-filter: grayscale(100%) brightness(0.6);
+  --pui-logo-filter-hover: none;
+  --pui-logo-text: rgba(0, 0, 0, 0.65);
+  --pui-logo-text-strong: rgba(0, 0, 0, 0.8);
+
+  /* Temperature: darken the tier hues so they survive on white, and
+     swap the shimmer highlight to black-on-light. */
+  --pui-temp-low: #d4920a;
+  --pui-temp-medium: #16a34a;
+  --pui-temp-high: #5a6ad6;
+  --pui-temp-xhigh: #2e9e74;
+  --pui-temp-shimmer-hot: #0b0b10;
+  --pui-temp-violet: #7c3aed;
+  --pui-temp-ripple-dark: rgba(124, 58, 237, 0.14);
+  --pui-temp-ripple-bright: rgba(124, 58, 237, 0.85);
+  --pui-temp-track: rgba(0, 0, 0, 0.22);
+  /* Blue-violet endpoints that survive on white. */
+  --pui-temp-ripple-from: 124, 58, 237;
+  --pui-temp-ripple-to: 167, 139, 250;
+}
+
+/* =============================================================
+   Keyframes (reused across components).
+   ============================================================= */
+@keyframes pui-grad-shift {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+@keyframes pui-twinkle {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(0.85) rotate(15deg);
+  }
+}
+@keyframes pui-caret {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+@keyframes pui-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes pui-pulse-dot {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.4);
+    opacity: 0.6;
+  }
+}
+@keyframes pui-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(4px);
+  }
+}
+@keyframes pui-marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+@keyframes pui-shimmer {
+  0% {
+    left: -120%;
+  }
+  60% {
+    left: 120%;
+  }
+  100% {
+    left: 120%;
+  }
+}
+@keyframes pui-aurora-drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  100% {
+    transform: translate3d(-3%, 2%, 0) scale(1.08);
+  }
+}
+@keyframes pui-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 rgba(124, 58, 237, 0);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(124, 58, 237, 0.18);
+  }
+}
+@keyframes pui-float-up {
+  0% {
+    transform: translateY(20px) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: var(--pui-sparkle-peak, 1);
+  }
+  100% {
+    transform: translateY(-100vh) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+/* =============================================================
+   Atom: Sparkle
+   ============================================================= */
+.pui-sparkle {
+  display: inline-block;
+  background: var(--pui-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 700;
+}
+.pui-sparkle--blink {
+  animation: pui-twinkle 2.4s ease-in-out infinite;
+}
+.pui-sparkle--solid {
+  background: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  color: currentColor;
+}
+
+/* =============================================================
+   Atom: GradientText
+   -------------------------------------------------------------
+   iOS Safari (< 16.4 in particular) needs both `color: transparent`
+   AND `-webkit-text-fill-color: transparent` for background-clip: text
+   to hold up under React-driven text updates (e.g. the typewriter
+   Rotator inside a GradientText). Without the webkit one, dynamic
+   text can render as fully invisible.
+
+   Forcing `display: inline-block` for the same reason, text-clipping
+   on a plain inline element with inline-block descendants is fragile
+   on iOS.
+   ============================================================= */
+.pui-gradient-text {
+  display: inline-block;
+  background: var(--pui-grad);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+.pui-gradient-text--animate {
+  animation: pui-grad-shift 8s ease infinite;
+}
+
+/* =============================================================
+   Atom: Dot (status pulse)
+   ============================================================= */
+.pui-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--pui-success);
+  box-shadow: 0 0 10px currentColor;
+}
+.pui-dot--pulse {
+  animation: pui-pulse-dot 1.6s ease-in-out infinite;
+}
+
+/* =============================================================
+   Atom: Arrow (right caret)
+   ============================================================= */
+.pui-arrow {
+  display: inline-block;
+  transition: transform 220ms var(--pui-ease);
+}
+a:hover > .pui-arrow,
+button:hover > .pui-arrow,
+.pui-arrow--hover-target:hover .pui-arrow {
+  transform: translateX(4px);
+}
+
+/* =============================================================
+   Component: Rotator
+   ============================================================= */
+.pui-rotator {
+  display: inline-block;
+  text-align: left;
+}
+.pui-rotator__cursor {
+  display: inline-block;
+  margin-left: 2px;
+  /* Override `color` so we're not bitten by GradientText (which sets
+     color: transparent on its children). Consumers can still recolor
+     via `.pui-rotator__cursor { color: … }` overrides. */
+  color: var(--pui-fg);
+  -webkit-text-fill-color: currentColor;
+  background: none;
+}
+/* CSS-drawn cursor, a rectangle aligned to the text baseline, the
+   way a terminal renders it. Used when no `cursor` glyph is passed. */
+.pui-rotator__cursor--block {
+  width: 0.55em;
+  height: 1.05em;
+  background: currentColor;
+  vertical-align: -0.18em;
+  border-radius: 1px;
+}
+.pui-rotator__cursor--blink {
+  animation: pui-caret 1.05s steps(2, start) infinite;
+}
+
+/* =============================================================
+   Component: WordRoll (vertical slide-roll cousin of Rotator)
+   ============================================================= */
+.pui-roll {
+  display: inline-block;
+  position: relative;
+  /* clip-path instead of overflow:hidden because overflow:hidden on
+     an inline-block snaps its baseline to the bottom margin edge,
+     which makes the rolling word sit below the line of surrounding
+     text. clip-path keeps the natural inline-block baseline. */
+  clip-path: inset(0);
+}
+.pui-roll__sizer {
+  display: inline-block;
+  visibility: hidden;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.pui-roll__word {
+  display: inline-block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  white-space: nowrap;
+  transform: translateY(100%);
+  opacity: 0;
+  transition:
+    transform var(--pui-roll-ms, 500ms) var(--pui-ease),
+    opacity var(--pui-roll-ms, 500ms) var(--pui-ease);
+}
+.pui-roll__word--active {
+  transform: translateY(0);
+  opacity: 1;
+}
+.pui-roll__word--past {
+  transform: translateY(-100%);
+  opacity: 0;
+}
+
+.pui-roll--down .pui-roll__word {
+  transform: translateY(-100%);
+}
+.pui-roll--down .pui-roll__word--active {
+  transform: translateY(0);
+}
+.pui-roll--down .pui-roll__word--past {
+  transform: translateY(100%);
+}
+
+/* Gradient prop: paint each rolling word with the AI gradient
+   directly. Nesting in <GradientText> doesn't work for absolutely-
+   positioned children, this is the supported pattern. */
+.pui-roll--gradient .pui-roll__word {
+  background: var(--pui-grad);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: pui-grad-shift 8s ease infinite;
+}
+
+/* =============================================================
+   Component: Button
+   ============================================================= */
+.pui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-family: var(--pui-font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    transform 160ms var(--pui-ease),
+    box-shadow 200ms var(--pui-ease),
+    background 200ms var(--pui-ease),
+    border-color 200ms var(--pui-ease);
+}
+.pui-btn:active {
+  transform: translateY(1px);
+}
+.pui-btn--block {
+  width: 100%;
+}
+.pui-btn--sm {
+  padding: 7px 12px;
+  font-size: 13px;
+  gap: 6px;
+}
+.pui-btn--lg {
+  padding: 14px 22px;
+  font-size: 15px;
+}
+
+.pui-btn--solid {
+  color: var(--pui-bg);
+  background: var(--pui-grad);
+  background-size: 200% 200%;
+  border: 0;
+}
+
+.pui-btn--ghost {
+  background: transparent;
+  color: var(--pui-fg);
+  border: 1px solid var(--pui-border-bright);
+}
+.pui-btn--ghost:hover {
+  background: var(--pui-bg-elev);
+  border-color: #3a3a4e;
+}
+
+/* Wave variant, faithful reproduction of MUI's "Edit in Chat" button.
+
+   The recipe (via Web Animations API + getComputedStyle on MUI):
+
+   - Pill (border-radius: 999px) with a real border:
+       1px top/sides, 2px bottom, solid, faint primary-blue at 20% α.
+     The thicker bottom is where the rainbow shows through.
+   - Three background layers, all 200% size, drawn from front to back:
+       1. Solid dark, CLIPPED TO PADDING-BOX → covers the interior
+          (everything except the border ring).
+       2. Vertical fade: opaque dark from top to 80%, transparent at
+          100%, CLIPPED TO BORDER-BOX → covers the whole pill but
+          fades to nothing at the bottom edge.
+       3. Horizontal rainbow, CLIPPED TO BORDER-BOX → only visible
+          where layers 1 + 2 aren't covering, i.e. the bottom border
+          ring, wrapping the curve of the pill.
+   - A ::before holds a blurred (blur(8px)) horizontal rainbow strip
+     that hangs just below the pill, the diffuse glow.
+   - background-position of layer 3 + the ::before animates -100% →
+     100% over 2s / 3s for the rainbow to drift continuously. */
+.pui-btn--wave {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px 7px;
+  border-style: solid;
+  border-width: 1px 1px 2px;
+  border-color: var(--pui-wave-border);
+  border-radius: 999px;
+  color: var(--pui-wave-text);
+  font-weight: 500;
+  font-size: 13px;
+  background-color: transparent;
+  background-image:
+    linear-gradient(var(--pui-bg-elev), var(--pui-bg-elev)),
+    linear-gradient(
+      var(--pui-bg-elev) 50%,
+      var(--pui-bg-elev) 80%,
+      rgba(14, 14, 19, 0) 100%
+    ),
+    linear-gradient(
+      90deg,
+      var(--pui-grad-from),
+      var(--pui-grad-mid),
+      var(--pui-grad-to),
+      var(--pui-grad-mid),
+      var(--pui-grad-from)
+    );
+  background-clip: padding-box, border-box, border-box;
+  background-origin: border-box, border-box, border-box;
+  background-size: 200%, 200%, 200%;
+  background-repeat: repeat, repeat, repeat;
+  background-position:
+    0% 50%,
+    0% 50%,
+    -100% 50%;
+  animation: pui-wave-shift 2s linear infinite;
+  overflow: visible;
+  isolation: isolate;
+  transition:
+    color 0.12s ease-in,
+    border-color 0.12s ease-in;
+}
+/* Blurred rainbow halo bleeding outside the bottom edge. */
+.pui-btn--wave::before {
+  content: "";
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  width: 88%;
+  height: 5px;
+  transform: translateX(-50%);
+  background-image: linear-gradient(
+    90deg,
+    var(--pui-grad-from),
+    var(--pui-grad-mid),
+    var(--pui-grad-to),
+    var(--pui-grad-mid),
+    var(--pui-grad-from)
+  );
+  background-size: 200% 100%;
+  background-repeat: repeat;
+  animation: pui-wave-shift 3s linear infinite;
+  filter: blur(8px);
+  pointer-events: none;
+  z-index: -1;
+}
+.pui-btn--wave:hover {
+  color: var(--pui-wave-text-hover);
+  border-color: var(--pui-wave-border-hover);
+}
+.pui-btn--wave:disabled,
+.pui-btn--wave[aria-busy="true"] {
+  color: var(--pui-fg-mute);
+  border-color: var(--pui-border);
+  animation: none;
+}
+.pui-btn--wave:disabled::before {
+  display: none;
+}
+
+/* Animate only the rainbow layer's bg-position (layer 3). The dark
+   layers stay put, they're solid/fading and a position shift on
+   them would be invisible anyway. */
+@keyframes pui-wave-shift {
+  from {
+    background-position:
+      0% 50%,
+      0% 50%,
+      -100% 50%;
+  }
+  to {
+    background-position:
+      0% 50%,
+      0% 50%,
+      100% 50%;
+  }
+}
+
+.pui-btn--glow {
+  position: relative;
+  color: var(--pui-fg);
+  background: var(--pui-button-dark-fill);
+  border: 1px solid var(--pui-button-dark-border);
+  box-shadow: var(--pui-glow);
+}
+.pui-btn--glow::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 12px;
+  background: var(--pui-grad);
+  background-size: 300% 300%;
+  z-index: -1;
+  filter: blur(12px);
+  opacity: 0.55;
+  animation: pui-grad-shift 5s ease infinite;
+}
+.pui-btn--glow:hover {
+  box-shadow: var(--pui-glow-strong);
+}
+
+.pui-btn--shimmer {
+  background: var(--pui-button-dark-fill);
+  color: var(--pui-fg);
+  border: 1px solid var(--pui-border-bright);
+  overflow: hidden;
+  position: relative;
+}
+.pui-btn--shimmer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -120%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    115deg,
+    transparent 0%,
+    var(--pui-shimmer-sweep-edge) 35%,
+    var(--pui-shimmer-sweep) 50%,
+    var(--pui-shimmer-sweep-edge) 65%,
+    transparent 100%
+  );
+  animation: pui-shimmer 3.5s ease-in-out infinite;
+}
+
+.pui-btn__spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
+  border-top-color: currentColor;
+  animation: pui-spin 0.9s linear infinite;
+}
+
+/* =============================================================
+   Component: StickyBanner
+   ============================================================= */
+.pui-sticky-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: linear-gradient(
+    90deg,
+    rgba(124, 58, 237, 0.1),
+    rgba(236, 72, 153, 0.1),
+    rgba(6, 182, 212, 0.1)
+  );
+  border-bottom: 1px solid var(--pui-border);
+  font-family: var(--pui-font-sans);
+  font-size: 13px;
+  color: var(--pui-fg-dim);
+}
+
+/* =============================================================
+   Component: EyebrowPill
+   ============================================================= */
+.pui-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border: 1px solid var(--pui-border-bright);
+  border-radius: 999px;
+  font-family: var(--pui-font-sans);
+  font-size: 13px;
+  color: var(--pui-fg-dim);
+  background: var(--pui-glass-soft);
+  backdrop-filter: blur(6px);
+}
+
+/* =============================================================
+   Component: Aurora (background)
+   ============================================================= */
+.pui-aurora {
+  position: absolute;
+  inset: -20%;
+  z-index: 0;
+  pointer-events: none;
+  filter: blur(50px) saturate(140%);
+}
+.pui-aurora--drift {
+  animation: pui-aurora-drift 16s ease-in-out infinite alternate;
+}
+
+/* =============================================================
+   Component: NodeGraphBackground
+   ============================================================= */
+.pui-node-graph {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: auto;
+}
+
+/* =============================================================
+   Component: FloatingSparkles
+   ============================================================= */
+.pui-sparkle-field {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+}
+.pui-sparkle-field__item {
+  position: absolute;
+  bottom: -12px;
+  color: rgba(255, 255, 255, 0.7);
+  text-shadow: 0 0 8px rgba(236, 72, 153, 0.6);
+  animation: pui-float-up linear infinite;
+  /* Apply the 0% keyframe state (opacity:0, translateY(20px)) during
+     the animation-delay so sparkles aren't visible "waiting" at the
+     bottom before their turn. */
+  animation-fill-mode: backwards;
+}
+
+/* =============================================================
+   Component: AsciiHero (canvas-rendered)
+   ============================================================= */
+.pui-ascii {
+  display: block;
+  position: relative;
+  user-select: none;
+}
+.pui-ascii > canvas {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.pui-ascii--panel {
+  border: 1px solid var(--pui-border);
+  border-radius: var(--pui-radius);
+  background: var(--pui-ascii-panel-fill);
+  box-shadow: 0 0 60px rgba(124, 58, 237, 0.15);
+  cursor: crosshair;
+  width: min(720px, 100%);
+  min-height: 280px;
+  margin: 0 auto;
+  overflow: hidden;
+}
+
+/* =============================================================
+   Component: PromptHero
+   ============================================================= */
+.pui-prompt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 8px 8px 18px;
+  background: var(--pui-glass-deep);
+  border: 1px solid var(--pui-border-bright);
+  border-radius: 16px;
+  box-shadow:
+    var(--pui-shadow-card),
+    0 0 0 1px rgba(124, 58, 237, 0.18),
+    0 0 32px rgba(124, 58, 237, 0.18);
+  backdrop-filter: blur(10px);
+}
+.pui-prompt__icon {
+  font-size: 18px;
+}
+.pui-prompt__input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: var(--pui-fg);
+  font-family: var(--pui-font-sans);
+  font-size: 15px;
+  padding: 12px 0;
+}
+.pui-prompt__input::placeholder {
+  color: var(--pui-fg-mute);
+}
+
+/* =============================================================
+   Component: Prompt (the multi-line "chat" prompt box with a
+   toolbar — used by bolt.new, lovable.dev, v0.app, replit, etc.)
+   ============================================================= */
+.pui-promptbox {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 720px;
+  padding: 14px 14px 10px;
+  background: var(--pui-glass);
+  border: 1px solid var(--pui-border-bright);
+  border-radius: 18px;
+  box-shadow:
+    var(--pui-shadow-card),
+    0 0 0 1px rgba(124, 58, 237, 0.18),
+    0 0 32px rgba(124, 58, 237, 0.18);
+  backdrop-filter: blur(10px);
+  font-family: var(--pui-font-sans);
+}
+.pui-promptbox__textarea {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  resize: none;
+  color: var(--pui-fg);
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.5;
+  padding: 4px 4px 0;
+  min-height: 60px;
+}
+.pui-promptbox__textarea::placeholder {
+  color: var(--pui-fg-mute);
+}
+
+.pui-promptbox__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pui-promptbox__spacer {
+  flex: 1;
+}
+
+.pui-promptbox__iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 8px;
+  background: var(--pui-overlay);
+  border: 1px solid var(--pui-border-bright);
+  color: var(--pui-fg-dim);
+  cursor: pointer;
+  transition:
+    background 160ms var(--pui-ease),
+    color 160ms var(--pui-ease),
+    border-color 160ms var(--pui-ease),
+    box-shadow 200ms var(--pui-ease),
+    transform 120ms var(--pui-ease);
+}
+.pui-promptbox__iconbtn:hover {
+  background: var(--pui-overlay-strong);
+  color: var(--pui-fg);
+  border-color: #3a3a4e;
+}
+.pui-promptbox__iconbtn:active {
+  transform: translateY(1px);
+}
+
+.pui-promptbox__model-wrap {
+  position: relative;
+}
+.pui-promptbox__model {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px 0 12px;
+  border-radius: 8px;
+  background: var(--pui-overlay);
+  border: 1px solid var(--pui-border-bright);
+  color: var(--pui-fg-dim);
+  font-family: var(--pui-font-mono);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition:
+    background 160ms var(--pui-ease),
+    color 160ms var(--pui-ease),
+    border-color 160ms var(--pui-ease);
+}
+.pui-promptbox__model:hover {
+  color: var(--pui-fg);
+  background: var(--pui-overlay-strong);
+  border-color: #3a3a4e;
+}
+.pui-promptbox__menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  min-width: 220px;
+  padding: 4px;
+  background: var(--pui-bg-elev);
+  border: 1px solid var(--pui-border-bright);
+  border-radius: 12px;
+  box-shadow:
+    var(--pui-shadow-deep),
+    0 0 0 1px rgba(124, 58, 237, 0.1);
+  z-index: 10;
+}
+.pui-promptbox__menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--pui-fg);
+  font-family: var(--pui-font-mono);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms var(--pui-ease);
+}
+.pui-promptbox__menu-item:hover {
+  background: rgba(124, 58, 237, 0.14);
+}
+.pui-promptbox__menu-item--active {
+  background: linear-gradient(
+    180deg,
+    rgba(124, 58, 237, 0.18),
+    rgba(236, 72, 153, 0.06)
+  );
+}
+.pui-promptbox__menu-item--active:hover {
+  background: linear-gradient(
+    180deg,
+    rgba(124, 58, 237, 0.22),
+    rgba(236, 72, 153, 0.1)
+  );
+}
+
+/* Send button: AI gradient fill with a subtle glow on hover. */
+.pui-promptbox__send {
+  background: var(--pui-grad);
+  background-size: 200% 200%;
+  color: #0a0a12;
+  border-color: transparent;
+  animation: pui-grad-shift 6s ease infinite;
+}
+.pui-promptbox__send:hover {
+  color: #0a0a12;
+  background: var(--pui-grad);
+  background-size: 200% 200%;
+  border-color: transparent;
+  box-shadow: 0 0 18px rgba(124, 58, 237, 0.55);
+}
+
+/* =============================================================
+   Component: LogoMarquee
+   ============================================================= */
+.pui-marquee {
+  overflow: hidden;
+  position: relative;
+}
+.pui-marquee--fade {
+  mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 8%,
+    #000 92%,
+    transparent
+  );
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 8%,
+    #000 92%,
+    transparent
+  );
+}
+.pui-marquee__track {
+  display: flex;
+  align-items: center;
+  width: max-content;
+  animation: pui-marquee var(--pui-marquee-speed, 40s) linear infinite;
+}
+.pui-marquee--paused-on-hover .pui-marquee__track:hover {
+  animation-play-state: paused;
+}
+.pui-marquee__item {
+  margin-right: var(--pui-marquee-gap, 56px);
+  display: inline-flex;
+  align-items: center;
+}
+.pui-marquee__item img {
+  height: 28px;
+  width: auto;
+  opacity: 0.7;
+  filter: var(--pui-logo-filter);
+  transition:
+    opacity 200ms var(--pui-ease),
+    filter 200ms var(--pui-ease);
+}
+.pui-marquee__item img:hover {
+  opacity: 1;
+  filter: var(--pui-logo-filter-hover);
+}
+.pui-marquee__text {
+  font-family: var(--pui-font-sans);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--pui-logo-text);
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+.pui-marquee__text--serif {
+  font-family: var(--pui-font-serif);
+  font-weight: 400;
+  font-size: 28px;
+}
+.pui-marquee__text--italic {
+  font-style: italic;
+}
+
+/* =============================================================
+   Component: SlippyWords
+   ============================================================= */
+.pui-slippy {
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pui-slip-gap, 12px);
+  /* --pui-slip is written per-frame from JS (px offset, default 0). */
+}
+.pui-slippy--fade {
+  mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 10%,
+    #000 90%,
+    transparent
+  );
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 10%,
+    #000 90%,
+    transparent
+  );
+}
+.pui-slippy__row {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: center;
+  gap: var(--pui-slip-gap, 12px);
+  width: max-content;
+  min-width: 100%;
+  margin: 0 auto;
+  will-change: transform;
+  transform: translate3d(
+    calc(var(--pui-slip, 0px) * var(--pui-slip-dir, 1)),
+    0,
+    0
+  );
+}
+.pui-slippy__word {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  padding: 8px 18px;
+  border: 1px solid var(--pui-border-bright);
+  border-radius: 999px;
+  background: var(--pui-glass-soft);
+  font-family: var(--pui-font-sans);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--pui-fg-dim);
+}
+.pui-slippy__word--gradient {
+  border-color: transparent;
+  color: #fff;
+  background: var(--pui-grad);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pui-slippy__row {
+    transform: none;
+    flex-wrap: wrap;
+  }
+}
+
+/* =============================================================
+   Component: LogoRow
+   ============================================================= */
+.pui-logo-row {
+  text-align: center;
+  font-family: var(--pui-font-sans);
+}
+.pui-logo-row__heading {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--pui-fg-mute);
+  margin: 0 0 18px;
+}
+.pui-logo-row__items {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  flex-wrap: wrap;
+  opacity: 0.75;
+}
+.pui-logo-row__items img {
+  height: 24px;
+  opacity: 0.75;
+  filter: var(--pui-logo-filter);
+}
+.pui-logo-row__text {
+  color: var(--pui-logo-text-strong);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.pui-logo-row__text--serif {
+  font-family: var(--pui-font-serif);
+  font-weight: 400;
+  font-size: 22px;
+  letter-spacing: 0;
+}
+.pui-logo-row__text--italic {
+  font-style: italic;
+}
+.pui-logo-row__text--sans {
+  font-family: var(--pui-font-sans);
+}
+.pui-logo-row__text--bold {
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+/* =============================================================
+   Component: GlassCard
+   ============================================================= */
+.pui-glass-card {
+  position: relative;
+  padding: 28px 26px 24px;
+  border-radius: var(--pui-radius-xl);
+  background: linear-gradient(180deg, var(--pui-overlay), transparent);
+  border: 1px solid var(--pui-overlay-strong);
+  backdrop-filter: blur(20px);
+  overflow: hidden;
+  font-family: var(--pui-font-sans);
+  transition:
+    transform 240ms var(--pui-ease),
+    border-color 240ms var(--pui-ease);
+}
+.pui-glass-card--breathing {
+  animation: pui-breathe 6s ease-in-out infinite;
+}
+.pui-glass-card::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: var(--pui-grad);
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 240ms var(--pui-ease);
+}
+.pui-glass-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+.pui-glass-card--glow-hover:hover::before {
+  opacity: 0.35;
+  filter: blur(14px);
+}
+
+.pui-glass-card__icon {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(
+    135deg,
+    rgba(124, 58, 237, 0.25),
+    rgba(236, 72, 153, 0.15)
+  );
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 20px;
+  color: var(--pui-fg);
+  margin-bottom: 18px;
+}
+.pui-glass-card__title {
+  margin: 0 0 8px;
+  font-size: 19px;
+  letter-spacing: -0.01em;
+  color: var(--pui-fg);
+}
+.pui-glass-card__body {
+  margin: 0 0 18px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--pui-fg-dim);
+}
+.pui-glass-card__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--pui-fg);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  padding-bottom: 2px;
+  text-decoration: none;
+}
+
+/* =============================================================
+   Component: MockIDE
+   ============================================================= */
+.pui-ide {
+  border: 1px solid var(--pui-border-bright);
+  border-radius: var(--pui-radius);
+  overflow: hidden;
+  background: #0a0a10;
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.55),
+    0 0 60px rgba(124, 58, 237, 0.18);
+  font-family: var(--pui-font-mono);
+}
+.pui-ide__chrome {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #11111a;
+  border-bottom: 1px solid var(--pui-border);
+  font-size: 12px;
+  color: var(--pui-fg-mute);
+}
+.pui-ide__dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #4a4a55;
+  display: inline-block;
+}
+.pui-ide__dot--red {
+  background: #ff5f56;
+}
+.pui-ide__dot--yellow {
+  background: #ffbd2e;
+}
+.pui-ide__dot--green {
+  background: #27c93f;
+}
+.pui-ide__tab {
+  margin-left: 8px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: #1a1a26;
+  color: var(--pui-fg-dim);
+}
+.pui-ide__thinking {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--pui-fg-dim);
+}
+.pui-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  border-top-color: var(--pui-grad-mid);
+  animation: pui-spin 0.9s linear infinite;
+}
+.pui-spinner--sm {
+  width: 8px;
+  height: 8px;
+  border-width: 1.2px;
+}
+
+.pui-ide__body {
+  margin: 0;
+  padding: 22px 26px;
+  font-family: var(--pui-font-mono);
+  font-size: 13px;
+  line-height: 1.65;
+  color: #d5d5e0;
+  white-space: pre-wrap;
+  min-height: 280px;
+}
+.pui-tok-key {
+  color: #c084fc;
+}
+.pui-tok-str {
+  color: #6ee7b7;
+}
+.pui-tok-num {
+  color: #fbbf24;
+}
+.pui-tok-com {
+  color: #6b7280;
+  font-style: italic;
+}
+.pui-tok-fn {
+  color: #60a5fa;
+}
+.pui-caret {
+  display: inline-block;
+  width: 8px;
+  height: 14px;
+  background: var(--pui-grad-mid);
+  vertical-align: -2px;
+  animation: pui-caret 1s steps(2, start) infinite;
+  box-shadow: 0 0 8px var(--pui-grad-mid);
+}
+
+/* =============================================================
+   Component: ChatBubble
+   ============================================================= */
+.pui-bubble {
+  max-width: 88%;
+  padding: 14px 18px;
+  border-radius: 18px;
+  font-family: var(--pui-font-sans);
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--pui-fg);
+}
+.pui-bubble--user {
+  margin-left: auto;
+  background: var(--pui-bubble-user-fill);
+  border: 1px solid var(--pui-border-bright);
+  border-bottom-right-radius: 4px;
+}
+.pui-bubble--ai {
+  margin-right: auto;
+  background: var(--pui-glass-deep);
+  border: 1px solid rgba(124, 58, 237, 0.35);
+  box-shadow: 0 0 32px rgba(124, 58, 237, 0.18);
+  border-bottom-left-radius: 4px;
+}
+.pui-bubble__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--pui-fg-mute);
+  margin-bottom: 8px;
+  font-family: var(--pui-font-mono);
+}
+.pui-bubble__thinking-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--pui-border-bright);
+  font-size: 11px;
+}
+.pui-bubble__stream {
+  white-space: pre-wrap;
+  font-size: 15px;
+  line-height: 1.6;
+}
+.pui-bubble__stream-caret {
+  display: inline-block;
+  width: 8px;
+  height: 14px;
+  background: var(--pui-fg);
+  vertical-align: -2px;
+  margin-left: 1px;
+  animation: pui-caret 1s steps(2, start) infinite;
+}
+
+/* =============================================================
+   Component: PricingCard
+   ============================================================= */
+.pui-price {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 30px 28px;
+  border-radius: var(--pui-radius-xl);
+  border: 1px solid var(--pui-border-bright);
+  background: var(--pui-bg-elev);
+  font-family: var(--pui-font-sans);
+  color: var(--pui-fg);
+}
+.pui-price--featured {
+  border-color: rgba(124, 58, 237, 0.55);
+  background: linear-gradient(
+    180deg,
+    rgba(124, 58, 237, 0.08),
+    var(--pui-bg-elev)
+  );
+  box-shadow: 0 0 80px rgba(124, 58, 237, 0.2);
+}
+.pui-price__flag {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--pui-grad);
+  color: #1a1a26;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 6px 24px rgba(236, 72, 153, 0.4);
+}
+.pui-price__tier {
+  font-family: var(--pui-font-mono);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--pui-fg-dim);
+}
+.pui-price__amount {
+  font-size: 44px;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  margin: 8px 0 2px;
+}
+.pui-price__amount-unit {
+  font-size: 14px;
+  color: var(--pui-fg-mute);
+  font-weight: 500;
+  margin-left: 4px;
+}
+.pui-price__blurb {
+  font-size: 13px;
+  color: var(--pui-fg-dim);
+  margin: 0 0 22px;
+}
+.pui-price__features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 24px;
+  /* Grow to fill, so the CTA sits at the bottom and aligns
+     vertically across cards of varying feature counts. */
+  flex: 1;
+}
+.pui-price__features li {
+  padding: 9px 0;
+  border-top: 1px dashed var(--pui-border);
+  font-size: 13.5px;
+  color: var(--pui-fg-dim);
+}
+.pui-price__features li::before {
+  content: "✓ ";
+  color: var(--pui-success);
+  font-weight: 700;
+  margin-right: 6px;
+}
+
+/* =============================================================
+   Component: BeforeAfter
+   ============================================================= */
+.pui-ba {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 18px;
+  align-items: stretch;
+  font-family: var(--pui-font-sans);
+}
+.pui-ba__panel {
+  padding: 28px;
+  border-radius: var(--pui-radius-xl);
+  border: 1px solid var(--pui-border);
+  background: var(--pui-bg-elev);
+  color: var(--pui-fg);
+}
+.pui-ba__tag {
+  font-family: var(--pui-font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--pui-fg-mute);
+  margin-bottom: 12px;
+}
+.pui-ba__panel ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pui-ba__panel li {
+  padding: 12px 0;
+  border-bottom: 1px dashed var(--pui-border);
+  font-size: 15px;
+  color: var(--pui-fg-dim);
+}
+.pui-ba__panel li:last-child {
+  border-bottom: 0;
+}
+.pui-ba__panel--before {
+  opacity: 0.55;
+  filter: grayscale(45%);
+}
+.pui-ba__panel--before li {
+  text-decoration: line-through;
+  text-decoration-color: rgba(255, 255, 255, 0.25);
+}
+.pui-ba__panel--after {
+  border-color: rgba(124, 58, 237, 0.45);
+  box-shadow: 0 0 60px rgba(124, 58, 237, 0.2);
+  background: linear-gradient(
+    180deg,
+    rgba(124, 58, 237, 0.06),
+    var(--pui-bg-elev)
+  );
+}
+.pui-ba__panel--after li {
+  color: var(--pui-fg);
+}
+.pui-ba__arrow {
+  align-self: center;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--pui-fg-dim);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.pui-ba__arrow > :first-child {
+  font-size: 24px;
+}
+.pui-ba__arrow > :last-child {
+  font-size: 22px;
+}
+@media (max-width: 720px) {
+  .pui-ba {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =============================================================
+   Component: StatCounter
+   ============================================================= */
+.pui-stat {
+  font-family: var(--pui-font-sans);
+  font-variant: tabular-nums;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+/* =============================================================
+   Component: WibblingSpinner (the Claude Code loading spinner)
+   ============================================================= */
+.pui-wibble {
+  display: inline-flex;
+  align-items: baseline;
+  /* Exactly one monospace character's width between the glyph, the
+     verb, and the parenthetical. */
+  gap: 1ch;
+  font-family: var(--pui-font-mono);
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--pui-fg);
+}
+.pui-wibble__glyph {
+  display: inline-block;
+  width: 1ch;
+  text-align: center;
+  color: var(--pui-warn);
+}
+.pui-wibble__verb {
+  font-family: inherit;
+}
+.pui-wibble__info {
+  color: var(--pui-fg-mute);
+}
+
+/* =============================================================
+   Component: ChatFAB
+   ============================================================= */
+.pui-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border: 1px solid var(--pui-button-dark-border);
+  border-radius: 999px;
+  background: var(--pui-button-dark-fill);
+  color: var(--pui-fg);
+  font-family: var(--pui-font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow:
+    var(--pui-shadow-fab),
+    0 0 0 1px rgba(124, 58, 237, 0.25),
+    0 0 32px rgba(124, 58, 237, 0.35);
+}
+.pui-fab-popover {
+  position: fixed;
+  bottom: 76px;
+  right: 24px;
+  z-index: 30;
+  width: 340px;
+  border-radius: 18px;
+  border: 1px solid var(--pui-border-bright);
+  background: var(--pui-button-dark-popover-fill);
+  box-shadow:
+    var(--pui-shadow-deep),
+    0 0 60px rgba(124, 58, 237, 0.22);
+  overflow: hidden;
+  font-family: var(--pui-font-sans);
+  color: var(--pui-fg);
+}
+.pui-fab-popover__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--pui-border);
+  font-size: 14px;
+  font-weight: 600;
+}
+.pui-fab-popover__close {
+  margin-left: auto;
+  background: transparent;
+  border: 0;
+  color: var(--pui-fg-mute);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.pui-fab-popover__body {
+  padding: 16px;
+}
+
+/* =============================================================
+   Component: WaitlistForm
+   -------------------------------------------------------------
+   Visually distinct from PromptHero on purpose: lighter chrome,
+   no big glow, leading envelope icon, gradient-fill (solid)
+   button, optional footnote slot. Reads as "newsletter signup"
+   rather than "AI prompt".
+   ============================================================= */
+.pui-waitlist-wrap {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: min(520px, 100%);
+  font-family: var(--pui-font-sans);
+}
+.pui-waitlist {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--pui-glass-soft);
+  border: 1px solid var(--pui-border-bright);
+  border-radius: 999px;
+  padding: 5px 5px 5px 16px;
+  width: 100%;
+}
+.pui-waitlist__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--pui-fg-mute);
+  flex-shrink: 0;
+}
+.pui-waitlist__input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: var(--pui-fg);
+  font-family: inherit;
+  font-size: 14px;
+  padding: 10px 0;
+}
+.pui-waitlist__input::placeholder {
+  color: var(--pui-fg-mute);
+}
+.pui-waitlist__footnote {
+  font-size: 12px;
+  color: var(--pui-fg-mute);
+  letter-spacing: 0.02em;
+}
+/* Match the pill container's curve. */
+.pui-waitlist .pui-btn {
+  border-radius: 999px;
+}
+
+/* =============================================================
+   Component: Popover (the obtrusive newsletter / signup modal)
+   ============================================================= */
+.pui-popover-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  font-family: var(--pui-font-sans);
+}
+/* Heavy blur + theme-aware scrim so the page underneath is
+   meaningfully obscured in both light and dark mode. */
+.pui-popover-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(10px) saturate(120%);
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
+}
+[data-theme="light"] .pui-popover-backdrop {
+  background: rgba(245, 245, 250, 0.7);
+}
+.pui-popover {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  padding: 28px 28px 18px;
+  background: var(--pui-bg-elev);
+  border: 1px solid var(--pui-border-bright);
+  border-radius: var(--pui-radius-xl);
+  box-shadow:
+    var(--pui-shadow-deep),
+    0 0 0 1px rgba(124, 58, 237, 0.18),
+    0 0 60px rgba(124, 58, 237, 0.2);
+  color: var(--pui-fg);
+  animation: pui-popover-in 320ms var(--pui-ease);
+}
+@keyframes pui-popover-in {
+  0% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.pui-popover__title {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  margin: 0 0 16px;
+  color: var(--pui-fg);
+}
+.pui-popover__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.pui-popover__dismiss {
+  display: block;
+  margin: 16px auto 0;
+  padding: 8px 12px;
+  background: transparent;
+  border: 0;
+  color: var(--pui-fg-mute);
+  font-family: inherit;
+  font-size: 13px;
+  font-style: italic;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  transition:
+    color 160ms var(--pui-ease),
+    text-decoration-color 160ms var(--pui-ease);
+}
+.pui-popover__dismiss:hover {
+  color: var(--pui-fg-dim);
+  text-decoration-color: currentColor;
+}
+
+/* =============================================================
+   Component: CommunityBadge
+   ============================================================= */
+.pui-community {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  border: 1px solid var(--pui-border-bright);
+  border-radius: 14px;
+  background: var(--pui-bg-elev);
+  font-family: var(--pui-font-sans);
+  color: var(--pui-fg);
+  text-decoration: none;
+  transition:
+    transform 200ms var(--pui-ease),
+    border-color 200ms var(--pui-ease);
+}
+.pui-community:hover {
+  transform: translateY(-2px);
+  border-color: rgba(124, 58, 237, 0.4);
+}
+.pui-community__icon {
+  width: 28px;
+  height: 28px;
+  opacity: 0.85;
+  filter: var(--pui-logo-filter);
+}
+.pui-community__top {
+  font-size: 14px;
+  font-weight: 600;
+}
+.pui-community__bottom {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--pui-fg-mute);
+  font-family: var(--pui-font-mono);
+}
+
+/* ============================ Goldeneye ============================ */
+.pui-goldeneye {
+  position: relative;
+  width: 100%;
+  min-height: 360px;
+  background: var(--pui-bg);
+  overflow: hidden;
+  cursor: crosshair;
+  isolation: isolate;
+  user-select: none;
+  border-radius: inherit;
+}
+.pui-goldeneye__base,
+.pui-goldeneye__scope {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.pui-goldeneye__base {
+  color: var(--pui-fg);
+}
+.pui-goldeneye__scope {
+  background: var(--pui-fg);
+  color: var(--pui-bg);
+  will-change: clip-path;
+}
+.pui-goldeneye__pattern {
+  position: absolute;
+  inset: 0;
+  font-family: var(--pui-font-mono);
+  line-height: 2;
+  letter-spacing: 0.55em;
+  color: inherit;
+  opacity: 0.32;
+  overflow: hidden;
+  padding: 6px 10px;
+  box-sizing: border-box;
+}
+.pui-goldeneye__pattern-row {
+  white-space: nowrap;
+  overflow: hidden;
+}
+.pui-goldeneye__pattern-row:nth-child(even) {
+  padding-left: 1em;
+}
+.pui-goldeneye__headline {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--pui-goldeneye-font, var(--pui-font-sans));
+  font-weight: 900;
+  font-size: var(--pui-goldeneye-headline-size, clamp(48px, 11vw, 160px));
+  line-height: 1;
+  letter-spacing: -0.04em;
+  text-align: center;
+  white-space: nowrap;
+  padding: 0 4vw;
+  box-sizing: border-box;
+  color: inherit;
+}
+
+/* ============================ QuestText ============================ */
+.pui-quest {
+  display: inline-block;
+  font-family:
+    "RuneScape UF", "RuneScape Bold 07", "runescape_chat_bold_07regular",
+    "Press Start 2P", ui-monospace, monospace;
+  color: #ffff00;
+  text-shadow: 1px 1px #000;
+  vertical-align: baseline;
+  line-height: 1.2;
+}
+.pui-quest__char {
+  display: inline-block;
+  will-change: transform;
+}
+.pui-quest__motion {
+  display: inline-block;
+}
+
+/* --- Motion: wave (per-char vertical bob; parent class delivers
+   timing, each char gets a negative animation-delay so the wave
+   travels through the word from the first frame). --- */
+@keyframes pui-quest-wave {
+  0% {
+    transform: translateY(0);
+  }
+  25% {
+    transform: translateY(5px);
+  }
+  50% {
+    transform: translateY(0);
+  }
+  75% {
+    transform: translateY(-5px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+.pui-quest--wave .pui-quest__char {
+  animation: pui-quest-wave 0.66s linear infinite;
+}
+
+/* --- Motion: scroll (marquee via text-indent on an inner span so
+   color animations on the parent don't collide with the motion
+   animation; parent clips). --- */
+@keyframes pui-quest-scroll {
+  0% {
+    text-indent: 500px;
+  }
+  100% {
+    text-indent: -20em;
+  }
+}
+.pui-quest--scroll {
+  overflow: hidden;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.pui-quest__scroll {
+  display: inline-block;
+  white-space: nowrap;
+  animation: pui-quest-scroll 8s linear infinite;
+}
+
+/* --- Motion: slide (vertical enter-hold-exit on an inner span,
+   loops). --- */
+@keyframes pui-quest-slide {
+  0% {
+    top: -1.5em;
+  }
+  20%,
+  80% {
+    top: 0;
+  }
+  100% {
+    top: 1.5em;
+  }
+}
+.pui-quest--slide {
+  overflow: hidden;
+  padding: 0.5em 0;
+}
+.pui-quest__slide {
+  display: inline-block;
+  position: relative;
+  animation: pui-quest-slide 3s linear infinite;
+}
+
+/* --- Color: flash (hard-cut between two pure colors via steps). --- */
+@keyframes pui-quest-flash1 {
+  0%,
+  49.999% {
+    color: #ff0000;
+  }
+  50%,
+  100% {
+    color: #ffff00;
+  }
+}
+@keyframes pui-quest-flash2 {
+  0%,
+  49.999% {
+    color: #0000ff;
+  }
+  50%,
+  100% {
+    color: #00ffff;
+  }
+}
+@keyframes pui-quest-flash3 {
+  0%,
+  49.999% {
+    color: #00b000;
+  }
+  50%,
+  100% {
+    color: #80ff80;
+  }
+}
+.pui-quest--flash1 {
+  animation: pui-quest-flash1 0.45s steps(1, end) infinite;
+}
+.pui-quest--flash2 {
+  animation: pui-quest-flash2 0.45s steps(1, end) infinite;
+}
+.pui-quest--flash3 {
+  animation: pui-quest-flash3 0.45s steps(1, end) infinite;
+}
+
+/* --- Color: glow (smooth cycle through 3-4 pure colors). The
+   "glow" name is the source's; visually it's a slow color shift,
+   not a radiant halo. --- */
+@keyframes pui-quest-glow1 {
+  0% {
+    color: #ff0000;
+  }
+  33% {
+    color: #00b000;
+  }
+  66% {
+    color: #0000ff;
+  }
+  100% {
+    color: #ff0000;
+  }
+}
+@keyframes pui-quest-glow2 {
+  0% {
+    color: #ff0000;
+  }
+  33% {
+    color: #800080;
+  }
+  66% {
+    color: #0000ff;
+  }
+  100% {
+    color: #ff0000;
+  }
+}
+@keyframes pui-quest-glow3 {
+  0% {
+    color: #ffffff;
+  }
+  25% {
+    color: #00b000;
+  }
+  50% {
+    color: #ffffff;
+  }
+  67.5% {
+    color: #00ffff;
+  }
+  75% {
+    color: #0000ff;
+  }
+  100% {
+    color: #ffffff;
+  }
+}
+.pui-quest--glow1 {
+  animation: pui-quest-glow1 3s linear infinite;
+}
+.pui-quest--glow2 {
+  animation: pui-quest-glow2 3s linear infinite;
+}
+.pui-quest--glow3 {
+  animation: pui-quest-glow3 3s linear infinite;
+}
+
+/* =============================================================
+   Menu: Temperature (the /effort slider)
+   -------------------------------------------------------------
+   Fills its container: poles pinned to the top, the track stretched
+   through the middle, tiers pinned to the bottom. The active tier
+   (nearest the cursor, or the committed one when idle) is the only
+   one whose animation runs. `--pui-temp-pos` is the active column
+   center as a 0..1 fraction; the marker rides it. `--pui-temp-cols`
+   is the tier count.
+   ============================================================= */
+.pui-temperature {
+  display: flex;
+  flex-direction: column;
+  justify-content: center; /* center the compact text block; the ripple fills */
+  box-sizing: border-box;
+  position: relative; /* anchors the absolutely-positioned ripple canvas */
+  font-family: var(--pui-font-mono);
+  font-size: 14px;
+  line-height: 1.4;
+  width: 100%;
+  height: 100%;
+  min-height: 6em; /* fallback when the container has no explicit height */
+  /* Horizontal padding insets the text from the edges; the ripple canvas is
+     absolutely positioned (inset: 0) so it still radiates edge to edge. */
+  padding: 10px 24px;
+  user-select: none;
+  cursor: pointer; /* a click anywhere commits the nearest tier */
+  color: var(--pui-fg);
+}
+
+/* The ludicrous background ripple. A canvas painted per-cell with the
+   violet radial cosine wave, covering the whole component behind the text.
+   It is an overlay only (z-index/position), so it never affects layout.
+   Mounted only while a ludicrous tier is active. pointer-events stay off so
+   clicks fall through to the widget. */
+.pui-temperature__ripple {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: var(--pui-radius-sm);
+}
+/* Lift the real content above the canvas. */
+.pui-temperature__poles,
+.pui-temperature__track,
+.pui-temperature__levels {
+  position: relative;
+  z-index: 1;
+}
+
+.pui-temperature__poles {
+  display: flex;
+  justify-content: space-between;
+  color: var(--pui-fg-dim);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+/* The track line sits between poles and tiers. The compact poles/track/tiers
+   block is centered in the container, so this line lands at the container's
+   vertical middle, which is exactly where the ripple originates. */
+.pui-temperature__track {
+  position: relative;
+  flex: 0 0 auto;
+  min-height: 2.2em; /* breathing room above/below the line */
+  margin: 2px 0;
+}
+.pui-temperature__line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 1px solid var(--pui-temp-track);
+}
+.pui-temperature__divider,
+.pui-temperature__marker {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  line-height: 1;
+}
+.pui-temperature__divider {
+  left: calc(var(--pui-temp-divider) * 100%);
+  color: var(--pui-fg-mute);
+}
+.pui-temperature__marker {
+  left: calc(var(--pui-temp-pos) * 100%);
+  color: var(--pui-fg);
+  /* Slides between tiers as the cursor moves; the wave button ease. */
+  transition: left 0.18s var(--pui-ease);
+}
+
+.pui-temperature__levels {
+  display: grid;
+  grid-template-columns: repeat(var(--pui-temp-cols, 6), 1fr);
+}
+.pui-temperature__level {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  margin: 0;
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  color: var(--pui-fg-dim);
+  white-space: nowrap;
+}
+.pui-temperature__text {
+  display: inline-block;
+}
+.pui-temperature__char {
+  display: inline-block;
+  white-space: pre;
+}
+
+/* ---- Animated-tier base colors (shown frozen when idle). Static tiers
+   get their flat color from an inline style on the label. ---- */
+.pui-temperature__level--glow {
+  color: var(--pui-temp-xhigh);
+}
+.pui-temperature__level--ludicrous {
+  color: var(--pui-temp-violet);
+}
+/* rainbow keeps its frozen per-char rainbow from the inline base colors. */
+
+/* ---- Active tier: bolder, and animations switch on ---- */
+.pui-temperature__level--active {
+  color: var(--pui-fg);
+}
+.pui-temperature__level--active .pui-temperature__text {
+  font-weight: 700;
+}
+
+/* rainbow: scrolls hue by hue across the characters. */
+@keyframes pui-temp-rainbow {
+  0%,
+  14.2% {
+    color: #ff4d4d;
+  }
+  14.3%,
+  28.5% {
+    color: #ff9a3d;
+  }
+  28.6%,
+  42.8% {
+    color: #ffe24d;
+  }
+  42.9%,
+  57.1% {
+    color: #4dff88;
+  }
+  57.2%,
+  71.4% {
+    color: #4db8ff;
+  }
+  71.5%,
+  85.7% {
+    color: #7c5cff;
+  }
+  85.8%,
+  100% {
+    color: #c44dff;
+  }
+}
+.pui-temperature__level--rainbow.pui-temperature__level--active
+  .pui-temperature__char {
+  /* The per-char animation-delay set inline (TS) staggers the hues. */
+  animation: pui-temp-rainbow 1.4s steps(1, end) infinite;
+}
+
+/* ludicrous: the motion is the widget-wide background ripple (the canvas
+   .pui-temperature__ripple), not the glyphs. When active, the label sits
+   over the flooded cells and reads white-ish, with a soft glow so it stays
+   legible against the brightest violet bands. */
+.pui-temperature__level--ludicrous.pui-temperature__level--active
+  .pui-temperature__text {
+  color: #fff;
+  text-shadow: 0 0 8px var(--pui-temp-ripple-bright);
+}
+
+/* glow: a single bright highlight drags left to right. */
+@keyframes pui-temp-glow {
+  0%,
+  100% {
+    color: var(--pui-temp-xhigh);
+    text-shadow: none;
+  }
+  50% {
+    color: var(--pui-temp-shimmer-hot);
+    text-shadow: 0 0 6px var(--pui-temp-xhigh);
+  }
+}
+.pui-temperature__level--glow.pui-temperature__level--active
+  .pui-temperature__char {
+  animation: pui-temp-glow 1s ease-in-out infinite;
+}
+
+/* Respect reduced-motion: keep the frozen base colors, drop the loops. */
+@media (prefers-reduced-motion: reduce) {
+  .pui-temperature__char {
+    animation: none !important;
+  }
+  .pui-temperature__marker {
+    transition: none;
+  }
+}
+
+/* ============================ BigBack ============================ */
+.pui-bigback {
+  display: block;
+  width: 100%;
+  background: var(--pui-bg);
+  color: var(--pui-fg);
+  border-top: 1px solid var(--pui-border);
+  padding: clamp(28px, 5vw, 56px) clamp(20px, 5vw, 64px) 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.pui-bigback__cols {
+  display: flex;
+  flex-wrap: wrap;
+  gap: clamp(24px, 4vw, 64px);
+}
+.pui-bigback__heading {
+  font-family: var(--pui-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--pui-fg-mute);
+  margin-bottom: 14px;
+}
+.pui-bigback__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 9px;
+}
+.pui-bigback__link {
+  font-family: var(--pui-font-sans);
+  font-size: 14px;
+  color: var(--pui-fg-dim);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+.pui-bigback__link:hover {
+  color: var(--pui-fg);
+}
+
+.pui-bigback__wordmark {
+  display: block;
+  width: 100%;
+  margin-top: clamp(24px, 5vw, 56px);
+  /* The giant name is decorative, not selectable text; keep the arrow. */
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.pui-bigback__svg {
+  display: block;
+  width: 100%;
+  /* Bleed the wordmark off the bottom edge, the way the reference
+     sites do. The viewBox padding above the glyphs is trimmed here. */
+  margin-bottom: clamp(-22px, -3vw, -10px);
+}
+.pui-bigback__svg text {
+  font-family: var(--pui-font-sans);
+  font-weight: 900;
+  /* Near the viewBox height so caps fill it; lengthAdjust handles width. */
+  font-size: 190px;
+  letter-spacing: -0.02em;
+}
+.pui-bigback__wordmark .pui-bigback__svg {
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: bottom center;
+}
+.pui-bigback__wordmark:hover .pui-bigback__svg {
+  transform: scale(1.012);
+}
+
+.pui-bigback__base {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 0 22px;
+  border-top: 1px solid var(--pui-border);
+  font-family: var(--pui-font-mono);
+  font-size: 12px;
+  color: var(--pui-fg-mute);
+}
+.pui-bigback__social {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+.pui-bigback__social .pui-bigback__link {
+  font-family: var(--pui-font-mono);
+  font-size: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pui-bigback__wordmark .pui-bigback__svg {
+    transition: none;
+  }
+  .pui-bigback__wordmark:hover .pui-bigback__svg {
+    transform: none;
+  }
+}
+
+/* ========================= SpotlightCard ========================= */
+.pui-spotlight {
+  --pui-spot-x: 50%;
+  --pui-spot-y: 50%;
+  --pui-spot-r: 320px;
+  position: relative;
+  /* New stacking context so the glow can sit at z-index -1: above the
+     card background, below the content. */
+  isolation: isolate;
+  overflow: hidden;
+  padding: 24px;
+  border-radius: var(--pui-radius-lg);
+  background: var(--pui-bg-elev);
+  /* An inset shadow instead of a border, so the edge highlight below can
+     sit exactly on top of it. */
+  box-shadow: inset 0 0 0 1px var(--pui-border);
+  color: var(--pui-fg);
+}
+.pui-spotlight::before,
+.pui-spotlight--edge::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s var(--pui-ease);
+}
+.pui-spotlight::before {
+  z-index: -1;
+  background: radial-gradient(
+    var(--pui-spot-r) circle at var(--pui-spot-x) var(--pui-spot-y),
+    var(--pui-spot-fill),
+    transparent 70%
+  );
+}
+.pui-spotlight--edge::after {
+  padding: 1px;
+  border-radius: inherit;
+  background: radial-gradient(
+    calc(var(--pui-spot-r) * 0.8) circle at var(--pui-spot-x) var(--pui-spot-y),
+    var(--pui-spot-edge),
+    transparent 70%
+  );
+  /* Punch out the middle so only the 1px ring is painted. */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+}
+.pui-spotlight[data-active="true"]::before,
+.pui-spotlight--edge[data-active="true"]::after {
+  opacity: 1;
+}
+
+/* =========================== TiltCard ============================ */
+.pui-tilt {
+  --pui-tilt-scale: 1.03;
+  --pui-tilt-perspective: 900px;
+  display: block;
+  perspective: var(--pui-tilt-perspective);
+}
+.pui-tilt__surface {
+  position: relative;
+  overflow: hidden;
+  padding: 24px;
+  border-radius: var(--pui-radius-lg);
+  background: var(--pui-bg-elev);
+  box-shadow:
+    inset 0 0 0 1px var(--pui-border),
+    var(--pui-shadow-card);
+  color: var(--pui-fg);
+  /* Slow ease back to rest when the pointer leaves. */
+  transition:
+    transform 0.6s var(--pui-ease),
+    box-shadow 0.6s var(--pui-ease);
+  will-change: transform;
+}
+.pui-tilt[data-active="true"] .pui-tilt__surface {
+  transform: rotateX(var(--pui-tilt-rx, 0deg)) rotateY(var(--pui-tilt-ry, 0deg))
+    scale(var(--pui-tilt-scale));
+  box-shadow:
+    inset 0 0 0 1px var(--pui-border-bright),
+    var(--pui-shadow-deep);
+  /* Short and linear while tracking, so it follows rather than lags. */
+  transition:
+    transform 0.12s linear,
+    box-shadow 0.3s var(--pui-ease);
+}
+.pui-tilt__surface--glare::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at var(--pui-tilt-gx, 50%) var(--pui-tilt-gy, 50%),
+    var(--pui-tilt-glare),
+    transparent 55%
+  );
+  opacity: 0;
+  transition: opacity 0.3s var(--pui-ease);
+}
+.pui-tilt[data-active="true"] .pui-tilt__surface--glare::after {
+  opacity: 1;
+}
+
+/* =========================== Magnetic ============================ */
+.pui-magnetic {
+  display: inline-block;
+  will-change: transform;
+}
+
+/* ========================== CursorTrail ========================== */
+.pui-cursor-trail {
+  position: relative;
+  overflow: hidden;
+}
+.pui-cursor-trail__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* =========================== ScrambleText ======================== */
+.pui-scramble {
+  position: relative;
+  display: inline-block;
+}
+.pui-scramble__visual {
+  /* Mono keeps every glyph the same width, so the line never reflows
+     while characters are changing. */
+  font-family: var(--pui-font-mono);
+  font-variant-ligatures: none;
+  white-space: pre-wrap;
+}
+.pui-scramble__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pui-spotlight::before,
+  .pui-spotlight--edge::after,
+  .pui-tilt__surface--glare::after {
+    transition: none;
+  }
+  .pui-tilt__surface {
+    transition: none;
+    will-change: auto;
+  }
+  .pui-tilt[data-active="true"] .pui-tilt__surface {
+    transform: none;
+  }
+  .pui-magnetic {
+    will-change: auto;
+  }
+}
+
+/* ======================= OversubscribedMeter ===================== */
+.pui-meter {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  max-width: 480px;
+  box-sizing: border-box;
+  padding: 20px;
+  border-radius: var(--pui-radius-lg);
+  background: var(--pui-bg-elev);
+  box-shadow: inset 0 0 0 1px var(--pui-border);
+  color: var(--pui-fg);
+}
+.pui-meter__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pui-meter__label {
+  font-size: 14px;
+  font-weight: 600;
+}
+.pui-meter__pct {
+  font-family: var(--pui-font-mono);
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.pui-meter[data-over="true"] .pui-meter__pct {
+  background: var(--pui-meter-hot);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.pui-meter__track {
+  position: relative;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--pui-meter-track);
+}
+.pui-meter__track--marked {
+  margin-bottom: 16px;
+}
+.pui-meter__fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--pui-grad-from),
+    var(--pui-grad-mid),
+    var(--pui-grad-to)
+  );
+}
+.pui-meter__fill--over {
+  border-radius: 0 999px 999px 0;
+  background: var(--pui-meter-hot);
+  box-shadow: 0 0 18px rgba(239, 68, 68, 0.45);
+}
+.pui-meter__tick {
+  position: absolute;
+  top: -5px;
+  bottom: -5px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--pui-fg);
+  opacity: 0.55;
+}
+.pui-meter__tick::after {
+  content: "100%";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-top: 3px;
+  transform: translateX(-50%);
+  font: 500 10px var(--pui-font-mono);
+  letter-spacing: 0.08em;
+  color: var(--pui-fg-mute);
+}
+.pui-meter[data-over="true"] .pui-meter__tick {
+  animation: pui-meter-pulse 600ms var(--pui-ease) 1;
+}
+.pui-meter__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+.pui-meter__sum {
+  margin-right: auto;
+  font-size: 13px;
+  color: var(--pui-fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+.pui-meter__stamp {
+  padding: 4px 8px;
+  border: 1.5px solid currentColor;
+  border-radius: 6px;
+  color: var(--pui-meter-stamp);
+  font: 600 11px var(--pui-font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  transform: rotate(-4deg);
+  animation: pui-meter-stamp 380ms var(--pui-ease) both;
+}
+@keyframes pui-meter-pulse {
+  0% {
+    transform: scaleY(1);
+    opacity: 0.55;
+  }
+  35% {
+    transform: scaleY(1.7);
+    opacity: 1;
+  }
+  100% {
+    transform: scaleY(1);
+    opacity: 0.55;
+  }
+}
+@keyframes pui-meter-stamp {
+  from {
+    opacity: 0;
+    transform: rotate(-12deg) scale(1.8);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(-4deg) scale(1);
+  }
+}
+
+/* ========================= CommandPalette ======================== */
+.pui-cmd-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 14vh 16px 16px;
+  background: var(--pui-scrim);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  transition: opacity 180ms var(--pui-ease);
+}
+.pui-cmd-overlay[data-shown="true"] {
+  opacity: 1;
+}
+.pui-cmd {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 620px;
+  max-height: min(520px, 72vh);
+  overflow: hidden;
+  border-radius: var(--pui-radius-lg);
+  background: var(--pui-bg-elev);
+  box-shadow:
+    inset 0 0 0 1px var(--pui-border-bright),
+    var(--pui-shadow-deep);
+  color: var(--pui-fg);
+  opacity: 0;
+  transform: translateY(-10px) scale(0.97);
+  transition:
+    transform 220ms var(--pui-ease),
+    opacity 180ms var(--pui-ease);
+}
+.pui-cmd-overlay[data-shown="true"] .pui-cmd {
+  opacity: 1;
+  transform: none;
+}
+.pui-cmd__input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 18px 20px;
+  border: 0;
+  border-bottom: 1px solid var(--pui-border);
+  background: transparent;
+  color: inherit;
+  /* 16px keeps iOS from zooming the page on focus. */
+  font: 500 16px var(--pui-font-sans);
+  outline: none;
+}
+.pui-cmd__input::placeholder {
+  color: var(--pui-fg-mute);
+}
+.pui-cmd__list {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  padding: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.pui-cmd__hl {
+  position: absolute;
+  top: 0;
+  left: 8px;
+  right: 8px;
+  height: 0;
+  border-radius: 10px;
+  background: var(--pui-cmd-active);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform 160ms var(--pui-ease),
+    height 160ms var(--pui-ease),
+    opacity 120ms linear;
+}
+.pui-cmd__heading {
+  padding: 10px 12px 6px;
+  font: 500 11px var(--pui-font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--pui-fg-mute);
+}
+.pui-cmd__row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  cursor: pointer;
+  animation: pui-cmd-in 260ms var(--pui-ease) both;
+  animation-delay: calc(var(--i, 0) * 18ms);
+}
+.pui-cmd__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pui-cmd__mark {
+  background: none;
+  color: var(--pui-cmd-match);
+  font-weight: 700;
+}
+.pui-cmd__hint {
+  font-size: 12px;
+  color: var(--pui-fg-mute);
+}
+.pui-cmd__keys {
+  display: inline-flex;
+  gap: 4px;
+}
+.pui-cmd__kbd {
+  margin: 0 2px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--pui-cmd-active);
+  box-shadow: inset 0 0 0 1px var(--pui-border);
+  color: var(--pui-fg-dim);
+  font: 500 11px var(--pui-font-mono);
+}
+.pui-cmd__keys .pui-cmd__kbd {
+  margin: 0;
+}
+.pui-cmd__empty {
+  padding: 28px 12px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--pui-fg-mute);
+}
+.pui-cmd__foot {
+  display: flex;
+  gap: 16px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--pui-border);
+  font-size: 12px;
+  color: var(--pui-fg-mute);
+}
+@keyframes pui-cmd-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pui-meter__tick,
+  .pui-meter__stamp,
+  .pui-cmd__row {
+    animation: none;
+  }
+  .pui-cmd-overlay,
+  .pui-cmd,
+  .pui-cmd__hl {
+    transition: none;
+  }
+}
+
+/* =============================================================
+   Reduced motion: every endlessly looping decorative animation.
+   Spinners are deliberately left running (they are the loading
+   indicator) and Temperature has its own block above. Looping
+   motion is also the only place this library flashes, so this
+   covers the Quest flash and glow levels as well.
+   ============================================================= */
+@media (prefers-reduced-motion: reduce) {
+  .pui-sparkle--blink,
+  .pui-gradient-text--animate,
+  .pui-dot--pulse,
+  .pui-rotator__cursor--blink,
+  .pui-roll--gradient .pui-roll__word,
+  .pui-btn--wave,
+  .pui-btn--wave::before,
+  .pui-btn--glow::before,
+  .pui-btn--shimmer::after,
+  .pui-aurora--drift,
+  .pui-promptbox__send,
+  .pui-glass-card--breathing,
+  .pui-caret,
+  .pui-bubble__stream-caret,
+  .pui-quest--wave .pui-quest__char,
+  .pui-quest__scroll,
+  .pui-quest__slide,
+  .pui-quest--flash1,
+  .pui-quest--flash2,
+  .pui-quest--flash3,
+  .pui-quest--glow1,
+  .pui-quest--glow2,
+  .pui-quest--glow3 {
+    animation: none;
+  }
+
+  /* Floating sparkles are pure decoration; with nothing to animate they
+     would just sit clipped at the bottom edge. */
+  .pui-sparkle-field__item {
+    animation: none;
+    display: none;
+  }
+
+  /* Marquee: stop scrolling, show one copy of the logos wrapped and
+     centered, and drop the edge fade that only made sense while moving. */
+  .pui-marquee--fade {
+    mask-image: none;
+    -webkit-mask-image: none;
+  }
+  .pui-marquee__track {
+    animation: none;
+    width: auto;
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 16px;
+  }
+  .pui-marquee__item--dup {
+    display: none;
+  }
+}
