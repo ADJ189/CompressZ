@@ -9,6 +9,88 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 
 ## [Unreleased]
 
+### Changed — One execution profile for device performance
+
+- Added `resolveExecutionProfile()` in `src/lib/settings.ts` as the single
+  source of truth for the session's resource profile: resolved performance
+  tier, AI model tier, preferred AI backend, batch concurrency, image-dimension
+  cap, FFmpeg threading and video preset. Previously each resolver called
+  `recommend(detectPlatform())` separately, so a manual Performance Mode
+  changed the tier label but not the AI model, concurrency or threading.
+- `resolvedAiModelTier()`, `resolvedConcurrency()` and
+  `resolvedMaxImageDim()` now read that profile. Explicit per-engine overrides
+  (`ai.modelTier`, `resourceLimits.concurrency`, `resourceLimits.maxImageDim`,
+  video preset) still win over Performance Mode.
+- Performance Mode remains a *resource* mode: it does not silently lower
+  output quality or resolution.
+
+### Fixed — Local AI backend selection now reflects reality
+
+- The AI loader feature-tests WebGPU with a real
+  `navigator.gpu.requestAdapter()` **and** `requestDevice()` probe, tries
+  fp16/fp32 WebGPU, then falls back to WASM (q8/default).
+- `getAiRuntimeInfo()` reports the backend and model that actually loaded, so
+  Settings no longer implies GPU acceleration for a WASM run.
+- Documented that Smart Analyze sorts by **predicted label**; it does not
+  compute embeddings or visual-similarity groups.
+
+### Changed — OCR defaults and naming
+
+- Tesseract.js is now the default OCR engine (`auto` resolves to Tesseract).
+- The optional engine is labeled **PaddleOCR PP-OCRv3 (experimental)**. It was
+  previously presented as PaddleOCR-VL 1.5, whose VLM weights the app never
+  loaded. The UI now says plainly that it is not a vision-language model and
+  has no table/layout understanding.
+- The OCR page seeds engine/language from Settings and render DPI from the
+  resolved performance mode (Efficient 200, Balanced 250, Powerful 300).
+- Math/Greek symbol mode remains Tesseract-only and says so.
+
+### Fixed — GPU diagnostics and Smart Sort wording
+
+- `gpuAvailable()` now means WebGL2 only; `canvasPathAvailable()` separately
+  reports WebGL2/OffscreenCanvas. OffscreenCanvas is no longer treated as proof
+  of GPU acceleration.
+- Settings → Execution reports WebGL2, WebGPU, OffscreenCanvas and WebCodecs
+  separately.
+- Renamed `sortBySmartAnalysis` → `sortByPredictedLabel` and corrected Images /
+  Images → PDF copy to match what the classifier actually does.
+
+### Fixed — Build and dependency hygiene
+
+- Repaired malformed/duplicate entries in `package.json` and regenerated
+  `package-lock.json`; `npm ci`/`deno install` now complete cleanly.
+- Fixed `scripts/strip-oversized-assets.mjs` silently skipping every file on
+  Windows: `new URL(...).pathname` produced an invalid `/C:/…` path, so the
+  ~26 MiB `ort-wasm-simd-threaded.asyncify-*.wasm` was never removed. It now
+  uses `fileURLToPath()`; production builds correctly strip that asset before
+  Cloudflare Pages' 25 MiB per-file limit rejects it.
+- Default image quality is documented consistently as **82**.
+
+### Changed — Deno is the supported task runner
+
+- Added `deno.json` tasks (`dev`, `build`, `preview`, `typecheck`, `lint`,
+  `test:e2e`, `lighthouse`) that run the existing Vite/TypeScript/ESLint/
+  Playwright toolchain through `npm:` specifiers.
+- CI and Lighthouse workflows now use Deno 2.9.8; CI also runs the Playwright
+  smoke suite that the docs already described.
+- `playwright.config.ts` and `lighthouserc.json` start the server through
+  `deno task`; e2e workers are capped at 2 locally / 4 in CI because 8 workers
+  caused timeout flakes on constrained machines.
+- `package.json` scripts remain for Cloudflare Pages compatibility.
+
+### Docs
+
+- Added `AGENTS.md` with engine invariants, the settings/execution-profile
+  model, privacy rules and the verification checklist.
+- Updated `README.md`, `PRIVACY.md`, `CREDITS.md`, `CONTRIBUTING.md` and the
+  in-app About/Docs/Privacy templates: FFmpeg → MediaRecorder only (no
+  WebCodecs tier), Tesseract default, PP-OCRv3 labeling, WebGPU/WASM backend
+  reporting, sort-by-label wording, target-size iteration count, default
+  quality 82, Deno commands, and the current localStorage/CDN lists.
+- Credited `heic2any` and `onnxruntime-web`, and corrected PaddleOCR's role.
+- Replaced the placeholder `SECURITY.md` with a real vulnerability-reporting
+  policy (private GitHub advisory, scope, safe harbor).
+
 - Expose LogoMarquee's accessible region label and reset TiltCard when reduced
   motion is enabled during use.
 
@@ -348,12 +430,13 @@ slower/colder CI runner would hit for real.
   "graphic/screenshot/document" and suggest a format + quality for that
   content type.
 - **Images page**: new "✨ Smart Analyze & Sort (AI)" action — tags every
-  queued file, groups similar ones together (replacing upload order), and
+  queued file, groups images with the same predicted label together
+  (replacing upload order), and
   — if "Auto-apply suggested settings" is on in Settings — rewrites each
   untouched file's format/quality to the content-type suggestion. Tags
   render as a chip on the file card (`components.ts`).
 - **Images → PDF page**: new "✨ Smart Sort (AI)" action — same tagging and
-  grouping, without touching per-file compression options (this tool has
+  label grouping, without touching per-file compression options (this tool has
   none) — reorders the page sequence before combining.
 - New Settings → "AI Engine — Local" section: master enable toggle
   (disabled outright if `WebAssembly` isn't available), model tier
@@ -882,8 +965,10 @@ failing silently.
 
 - PDF compression: two-strategy (structural resample + canvas-render
   fallback) with binary-search target-size mode.
-- PDF OCR: PaddleOCR-VL 1.5 (primary) + Tesseract.js 5 (secondary), with
-  Tesseract-OSD-based auto language detection.
+- PDF OCR: Tesseract.js 5 (stable default) + optional PaddleOCR PP-OCRv3
+  (experimental). Earlier docs mislabeled that second engine as
+  "PaddleOCR-VL 1.5"; the app never loaded those vision-language weights.
+  Auto language detection uses Tesseract OSD.
 - Image, Video, Audio, GIF, and SVG compression tools, all running
   entirely client-side (OffscreenCanvas, FFmpeg.wasm, pure-TS SVG
   optimiser).

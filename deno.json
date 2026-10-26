@@ -1,0 +1,14 @@
+{
+  "$schema": "https://deno.land/x/deno/cli/schemas/config-file.v1.json",
+  "tasks": {
+    "dev": "deno run -A npm:vite@^8.3.5 dev",
+    "build": "deno run -A npm:vite@^8.3.5 build && deno run --allow-read --allow-write scripts/strip-oversized-assets.mjs",
+    "preview": "deno run -A npm:vite@^8.3.5 preview",
+    "typecheck": "deno run -A npm:typescript@~5.9.3/tsc --noEmit",
+    "lint": "deno run -A npm:eslint@^10.13.0 .",
+    "lint:fix": "deno run -A npm:eslint@^10.13.0 . --fix",
+    "test:e2e": "deno run -A npm:@playwright/test@^1.64.1/cli test",
+    "lighthouse": "deno run -A npm:@lhci/cli@^0.15.1 autorun"
+  },
+  "nodeModulesDir": "manual"
+}

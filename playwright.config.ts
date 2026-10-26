@@ -4,7 +4,7 @@ const PORT = 4173;
 const BASE_URL = `http://localhost:${PORT}`;
 
 // Optional: point at a pre-installed Chromium (e.g. offline CI / sandboxes where
-// `npx playwright install chromium` can't download a browser).
+// `deno run -A npm:@playwright/test/cli install chromium` can't download a browser).
 const executablePath = process.env.PW_CHROMIUM_PATH || undefined;
 const launchOptions = executablePath ? { executablePath } : {};
 
@@ -13,6 +13,9 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
+  // Eight local Chromium workers overloaded constrained machines and produced
+  // 30s timeouts in mobile tests; two is plenty for a smoke suite this size.
+  workers: process.env.CI ? 4 : 2,
   reporter: process.env.CI ? [["github"], ["list"]] : "list",
   use: {
     baseURL: BASE_URL,
@@ -30,9 +33,10 @@ export default defineConfig({
   ],
   webServer: {
     // Serve the real production build (COOP/COEP headers included).
-    command: `npm run build && npm run preview -- --port ${PORT} --strictPort`,
+    // Deno is the supported local/CI runner; see deno.json for the same tasks.
+    command: `deno task build && deno task preview --port ${PORT} --strictPort`,
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    timeout: 180_000,
   },
 });

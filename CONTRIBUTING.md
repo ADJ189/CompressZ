@@ -10,7 +10,8 @@ project's conventions, and how to submit changes.
 ## Ground rules
 
 - **No backend, ever.** No feature should require a server round-trip for
-  user files. Everything is Canvas/WebAssembly/WebCodecs in-browser. If a
+  user files. Everything is Canvas/WebAssembly/Web platform APIs in-browser
+  (there is no WebCodecs/muxer video path today — don't claim one). If a
   feature seems to need a backend, it's probably out of scope — open an
   issue to discuss first.
 - **No telemetry, analytics, or third-party trackers.** See
@@ -26,27 +27,36 @@ project's conventions, and how to submit changes.
 
 ## Getting set up
 
+CompressZ uses **Deno 2.9+** as its local and CI task runner. Deno runs the
+existing Vite/TypeScript/ESLint/Playwright toolchain through `npm:` specifiers
+(see `deno.json`), so you do not need a separate Node install.
+
 ```bash
 git clone <your fork URL>
 cd CompressZ
-npm install
-npm run dev        # http://localhost:5173
+deno install       # install npm dependencies declared in package.json
+deno task dev      # http://localhost:5173
 ```
 
-Other useful scripts:
+Other useful tasks:
 
 ```bash
-npm run build      # production build → dist/
-npm run preview    # serve the production build locally
-npm run typecheck  # tsc --noEmit
+deno task build      # production build → dist/ (+ oversized-asset strip)
+deno task preview    # serve the production build locally
+deno task typecheck  # tsc --noEmit
+deno task lint       # ESLint
+deno task test:e2e   # Playwright smoke tests (both desktop + mobile Chrome)
+deno task lighthouse # Lighthouse CI (optional)
 ```
 
-Run `npm run typecheck` before opening a PR — CI will fail on type errors.
+Run `deno task typecheck` and `deno task lint` before opening a PR — CI runs
+both. `deno task test:e2e` builds and serves `dist/` automatically, and needs
+Playwright's Chromium once: `deno run -A npm:@playwright/test/cli install chromium`.
 
-There's no test suite yet; manual verification in a Chromium-based browser
-plus the typecheck is the current bar. If you're adding a non-trivial
-feature, testing in Firefox and Safari too is appreciated (see the Browser
-Compatibility table in [README.md](README.md) for feature support gaps).
+The npm scripts in `package.json` are kept in sync for Cloudflare Pages and
+contributors who prefer npm; the Deno tasks are the supported path in CI.
+Heavy third-party engines are still fetched from CDNs at runtime, so an
+offline `deno task dev` only exercises the parts you have already cached.
 
 ---
 
@@ -64,19 +74,27 @@ src/
     compressImage.ts, compressPdf.ts, compressVideo.ts, compressAudio.ts,
     compressGif.ts, optimizeSvg.ts, convertMedia.ts, convertOffice.ts,
     convertPdf.ts, ffmpeg.ts (FFmpeg.wasm singleton), zip.ts, types.ts
+    settings.ts         # cz-settings-v2 + resolveExecutionProfile()
+    platform.ts         # device detection + performance-tier recommendation
+    aiEngine.ts         # local image classifier (WebGPU→WASM fallback)
+    gpu.ts / webgl.ts   # canvas + WebGL2 helpers, one shared GL context
+    batch.ts, imageDecode.ts, thumb.ts, motion.ts, pdfLibs.ts
   pages/                # one file per route (images, pdf, video, audio,
     gif, ocr, convert, imagesToPdf, mergePdf, settings)
   components/, utils/   # standalone React library (see Conventions)
   index.ts, styles.css  # library entry + styles
-e2e/                    # Playwright smoke tests (npm run test:e2e)
+e2e/                    # Playwright smoke tests (deno task test:e2e)
 ```
 
-Heavy dependencies (FFmpeg.wasm, PDF.js, pdf-lib, Tesseract.js, PaddleOCR,
-mammoth.js, html2canvas) are **not** npm dependencies — they're loaded
-lazily from jsDelivr at the point of use, inside the relevant `lib/*.ts`
-file. This keeps the initial bundle small and means a user who only ever
-compresses images never downloads the OCR or video stack. Keep this pattern
-for any new heavy library rather than adding it to `package.json`.
+Heavy engines (FFmpeg.wasm, PDF.js, pdf-lib, Tesseract.js, PaddleOCR,
+mammoth.js, html2canvas, heic2any) are **not** npm dependencies — they're
+loaded lazily from jsDelivr/esm.sh at the point of use, inside the relevant
+`lib/*.ts` file. This keeps the initial bundle small and means a user who only
+ever compresses images never downloads the OCR or video stack. Keep this
+pattern for any new heavy library rather than adding it to `package.json`.
+The exceptions are `@huggingface/transformers` (bundled, with
+`onnxruntime-web` WASM loaded from jsDelivr) and `animejs`, both of which are
+real npm dependencies.
 
 ---
 
@@ -106,7 +124,23 @@ for any new heavy library rather than adding it to `package.json`.
   `processAll` in the page files) must `await` each file in turn rather than
   firing them concurrently — the FFmpeg.wasm and OCR engines are loaded as
   singletons and don't tolerate concurrent jobs. This has been a real bug
-  before; don't reintroduce it.
+  before; don't reintroduce it. Canvas-only engines (Images, PDF) use
+  `runBatch()` from `batch.ts`, which is the one intentional exception.
+- **One execution profile.** Settings → Performance Mode is a *resource*
+  profile, not a quality goal. Resolve it once through
+  `resolveExecutionProfile()` in `settings.ts`; don't call
+  `recommend(detectPlatform())` independently in a page, and don't let a
+  manual tier silently change output quality. Explicit per-engine overrides
+  (`ai.modelTier`, `resourceLimits`, video preset) win over the tier.
+- **Report the backend you actually got.** WebGPU is opportunistic: probe
+  `navigator.gpu.requestAdapter()` *and* `requestDevice()`, attempt WebGPU,
+  then fall back to WASM, and surface the successful backend via
+  `getAiRuntimeInfo()`. Never label a WASM run as GPU-accelerated.
+- **Engine names are promises.** The optional OCR engine is **PaddleOCR
+  PP-OCRv3**, not PaddleOCR-VL (the app never loads those weights).
+  Smart Analyze produces ImageNet-style labels and sorts by *predicted
+  label* — it does not compute embeddings or visual-similarity groups.
+  Keep UI copy, README, and Settings diagnostics consistent with that.
 - **Format-agnostic file naming.** When an engine changes container/codec
   (e.g. VP8/VP9 → `.webm`), make sure the output filename and MIME type in
   `types.ts` are updated together.
@@ -115,15 +149,19 @@ for any new heavy library rather than adding it to `package.json`.
 
 ## Commit / PR checklist
 
-1. `npm run typecheck` passes.
-2. `npm run build` succeeds with no new warnings.
-3. New third-party code (npm or CDN) is credited in `CREDITS.md` with its
+1. `deno task typecheck` passes.
+2. `deno task lint` passes (warnings are currently tolerated; new errors are not).
+3. `deno task build` succeeds with no new warnings, and the build log shows
+   the oversized onnxruntime WASM asset being stripped.
+4. `deno task test:e2e` passes for both Chromium projects.
+5. New third-party code (npm or CDN) is credited in `CREDITS.md` with its
    license.
-4. If you touched `PRIVACY.md`-relevant behavior (anything involving data
-   leaving the browser), update `PRIVACY.md` in the same PR.
-5. Update `CHANGELOG.md` under an `## [Unreleased]` heading (add one if it
+6. If you touched `PRIVACY.md`-relevant behavior (anything involving data
+   leaving the browser, new CDN hosts, or localStorage keys), update
+   `PRIVACY.md` and the in-app `/privacy` template in the same PR.
+7. Update `CHANGELOG.md` under an `## [Unreleased]` heading (add one if it
    doesn't exist) — a short bullet describing the change is enough.
-6. Keep PRs scoped to one feature/fix. Large refactors are welcome but
+8. Keep PRs scoped to one feature/fix. Large refactors are welcome but
    should be discussed in an issue first so they don't collide with other
    work in flight.
 

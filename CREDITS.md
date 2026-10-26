@@ -19,7 +19,7 @@ for your data).
 | **tesseract.js-core** | WASM core powering Tesseract.js | Apache 2.0 | https://github.com/naptha/tesseract.js-core |
 | **Tesseract OCR** | The underlying OCR engine Tesseract.js wraps, originally developed at HP and now maintained by Google | Apache 2.0 | https://github.com/tesseract-ocr/tesseract |
 | **tessdata (fast)** | Trained language data, hosted by the Tesseract.js project via `tessdata.projectnaptha.com` | Apache 2.0 | https://github.com/tesseract-ocr/tessdata_fast |
-| **PaddleOCR / PP-OCRv3** | Detection + classification + recognition models used for the primary OCR engine | Apache 2.0 | https://github.com/PaddlePaddle/PaddleOCR |
+| **PaddleOCR / PP-OCRv3** | Detection + classification + recognition models used by the optional experimental OCR engine | Apache 2.0 | https://github.com/PaddlePaddle/PaddleOCR |
 | **@paddle-js-models/ocr** | Browser/WebGL runtime that loads the PP-OCRv3 models client-side | Apache 2.0 | https://github.com/PaddlePaddle/Paddle.js |
 
 ## PDF
@@ -51,8 +51,15 @@ FFmpeg's own are triggered by using it as a dynamically-loaded library.
 
 | Project | What it does here | License | Link |
 |---|---|---|---|
-| **🤗 Transformers.js** | Runs the on-device image-classification model (Settings → AI Engine) entirely in-browser via WASM/WebGPU — no upload | Apache 2.0 | https://github.com/huggingface/transformers.js |
-| **MobileNetV2 / ViT-Base (Xenova ONNX conversions)** | The two selectable model tiers (`Efficient`/`Powerful`) that back Smart Analyze/Sort | Apache 2.0 | https://huggingface.co/Xenova |
+| **🤗 Transformers.js** | Runs the on-device image-classification model (Settings → AI Engine) entirely in-browser via WASM, with an optional WebGPU backend when a real adapter/device is available — no upload | Apache 2.0 | https://github.com/huggingface/transformers.js |
+| **onnxruntime-web** | WASM/WebGPU inference runtime used by Transformers.js; its binaries are loaded from jsDelivr | MIT | https://github.com/microsoft/onnxruntime |
+| **MobileNetV2 / ViT-Base (Xenova ONNX conversions)** | The two selectable model tiers (`Efficient`/`Powerful`) that back Smart Analyze and sort-by-predicted-label | Apache 2.0 | https://huggingface.co/Xenova |
+
+## Image decoding
+
+| Project | What it does here | License | Link |
+|---|---|---|---|
+| **heic2any** | Lazy-loaded WASM fallback for decoding HEIC/HEIF photos in browsers without native support | MIT | https://github.com/alexcorvi/heic2any |
 
 ## Animation
 
@@ -73,8 +80,11 @@ FFmpeg's own are triggered by using it as a dynamically-loaded library.
   [PRIVACY.md](PRIVACY.md) for what that means for your IP address.
 - **Cloudflare Pages** — static hosting.
 - **jsDelivr** — CDN used to serve pdf.js, pdf-lib, Tesseract.js, PaddleOCR
-  model weights, mammoth.js, and html2canvas at runtime.
-- **esm.sh** — CDN used to serve FFmpeg.wasm's core and utility packages.
+  model weights, mammoth.js, html2canvas and onnxruntime-web at runtime.
+- **esm.sh** — CDN used to serve FFmpeg.wasm's core and utility packages, plus
+  heic2any when a HEIC/HEIF file needs fallback decoding.
+- **Hugging Face** — hosts the Xenova ONNX model weights downloaded on first
+  use by the local AI engine.
 
 ---
 
