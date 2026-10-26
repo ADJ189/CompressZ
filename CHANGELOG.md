@@ -21,7 +21,7 @@ The suffix is dropped on the release that ships it (`1.12.0`).
   `resolvedMaxImageDim()` now read that profile. Explicit per-engine overrides
   (`ai.modelTier`, `resourceLimits.concurrency`, `resourceLimits.maxImageDim`,
   video preset) still win over Performance Mode.
-- Performance Mode remains a *resource* mode: it does not silently lower
+- Performance Mode remains a _resource_ mode: it does not silently lower
   output quality or resolution.
 
 ### Fixed — Local AI backend selection now reflects reality

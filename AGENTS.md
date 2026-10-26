@@ -106,6 +106,7 @@ These are the claims the UI, README, Settings diagnostics, and changelog must
 match. Several were previously wrong; don't regress them.
 
 ### Images
+
 - Canvas 2D; `OffscreenCanvas` when available; optional WebGL2 texture-draw
   resize (`resizeViaWebGL`) with silent Canvas2D fallback.
 - GPU acceleration for images means **WebGL2 resize + `desynchronized` 2D
@@ -116,6 +117,7 @@ match. Several were previously wrong; don't regress them.
 - EXIF/GPS is stripped as a side effect of canvas re-encoding; say so.
 
 ### PDF
+
 - Structural strategy (Low/Recommended): walk XObjects, downscale embedded
   images, re-encode JPEG in place; text/vectors untouched.
 - Canvas strategy (Extreme, encrypted-PDF fallback): render pages with PDF.js
@@ -125,6 +127,7 @@ match. Several were previously wrong; don't regress them.
 - Merge PDF uses `copyPages()` — no rasterisation, text stays selectable.
 
 ### Video / Audio / GIF
+
 - Video: **FFmpeg.wasm primary → MediaRecorder fallback**. There is **no
   WebCodecs/muxer path**; the Settings diagnostic reports WebCodecs presence
   for information only. Do not describe a three-tier GPU pipeline.
@@ -139,10 +142,11 @@ match. Several were previously wrong; don't regress them.
   singleton). Canvas-only Images/PDF batches use `runBatch()`.
 
 ### OCR
+
 - **Tesseract.js 5 is the stable default.** `auto` resolves to Tesseract.
 - **PaddleOCR PP-OCRv3 is optional and experimental.** It is the lightweight
   PP-OCRv3 detection/classification/recognition pipeline via Paddle.js/WebGL,
-  *not* PaddleOCR-VL 1.5 (a ~0.9B vision-language model the app never loads).
+  _not_ PaddleOCR-VL 1.5 (a ~0.9B vision-language model the app never loads).
   Never label it as a VLM or as layout/table-aware.
 - Math/Greek symbol mode always runs on Tesseract (`grc` + `equ`), regardless
   of the selected engine.
@@ -152,6 +156,7 @@ match. Several were previously wrong; don't regress them.
   real crash bug.
 
 ### Local AI / Smart Analyze
+
 - `@huggingface/transformers` with ImageNet-style classification:
   `Xenova/mobilenet_v2_1.0_224` (efficient) or
   `Xenova/vit-base-patch16-224` (powerful).
@@ -169,6 +174,7 @@ match. Several were previously wrong; don't regress them.
   uploaded.
 
 ### Other tools
+
 - SVG optimiser is pure TypeScript, zero dependencies; it strips `<script>`,
   inline event handlers, and `javascript:` URLs.
 - DOCX→PDF is an image-based PDF (use TXT for selectable text);
@@ -200,6 +206,7 @@ match. Several were previously wrong; don't regress them.
   they are explicit user choices. `GPU_CAPABLE` is images/pdf/ocr/video.
 
 ### GPU / platform semantics
+
 - `gpuAvailable()` means **WebGL2 only**. OffscreenCanvas is not proof of GPU
   acceleration and must not be reported as such.
 - `canvasPathAvailable()` means WebGL2 **or** OffscreenCanvas (the

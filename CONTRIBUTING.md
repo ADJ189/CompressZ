@@ -126,20 +126,20 @@ real npm dependencies.
   singletons and don't tolerate concurrent jobs. This has been a real bug
   before; don't reintroduce it. Canvas-only engines (Images, PDF) use
   `runBatch()` from `batch.ts`, which is the one intentional exception.
-- **One execution profile.** Settings → Performance Mode is a *resource*
+- **One execution profile.** Settings → Performance Mode is a _resource_
   profile, not a quality goal. Resolve it once through
   `resolveExecutionProfile()` in `settings.ts`; don't call
   `recommend(detectPlatform())` independently in a page, and don't let a
   manual tier silently change output quality. Explicit per-engine overrides
   (`ai.modelTier`, `resourceLimits`, video preset) win over the tier.
 - **Report the backend you actually got.** WebGPU is opportunistic: probe
-  `navigator.gpu.requestAdapter()` *and* `requestDevice()`, attempt WebGPU,
+  `navigator.gpu.requestAdapter()` _and_ `requestDevice()`, attempt WebGPU,
   then fall back to WASM, and surface the successful backend via
   `getAiRuntimeInfo()`. Never label a WASM run as GPU-accelerated.
 - **Engine names are promises.** The optional OCR engine is **PaddleOCR
   PP-OCRv3**, not PaddleOCR-VL (the app never loads those weights).
-  Smart Analyze produces ImageNet-style labels and sorts by *predicted
-  label* — it does not compute embeddings or visual-similarity groups.
+  Smart Analyze produces ImageNet-style labels and sorts by _predicted
+  label_ — it does not compute embeddings or visual-similarity groups.
   Keep UI copy, README, and Settings diagnostics consistent with that.
 - **Format-agnostic file naming.** When an engine changes container/codec
   (e.g. VP8/VP9 → `.webm`), make sure the output filename and MIME type in
