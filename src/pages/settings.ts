@@ -205,7 +205,7 @@ export function mountSettings(root: HTMLElement) {
   // ── Resource Limits (manual RAM/CPU override) ────────────────────
   function resourceGroup(st: AppSettings): HTMLElement {
     const rl = st.resourceLimits;
-    const autoConcurrency = resolveExecutionProfile(st).maxConcurrentImages;
+    const autoConcurrency = resolveExecutionProfile({ ...st, resourceLimits: { ...rl, concurrency: 'auto' } }).maxConcurrentImages;
     const autoDim = resolvedMaxImageDim({ ...st, resourceLimits: { ...rl, maxImageDim: 'auto' } });
 
     const concField = segRow('Files processed at once (batches)', [
