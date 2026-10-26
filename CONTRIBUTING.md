@@ -27,36 +27,40 @@ project's conventions, and how to submit changes.
 
 ## Getting set up
 
-CompressZ uses **Deno 2.9+** as its local and CI task runner. Deno runs the
-existing Vite/TypeScript/ESLint/Playwright toolchain through `npm:` specifiers
-(see `deno.json`), so you do not need a separate Node install.
+CompressZ requires **Node.js `^20.19.0 || ^22.13.0 || >=24`**. npm is the
+canonical runner for GitHub Actions and Cloudflare Pages.
 
 ```bash
 git clone <your fork URL>
 cd CompressZ
-deno install       # install npm dependencies declared in package.json
-deno task dev      # http://localhost:5173
+npm ci             # reproducible install from package-lock.json
+npm run dev        # http://localhost:5173
 ```
 
-Other useful tasks:
+Other useful scripts:
 
 ```bash
-deno task build      # production build → dist/ (+ oversized-asset strip)
-deno task preview    # serve the production build locally
-deno task typecheck  # tsc --noEmit
-deno task lint       # ESLint
-deno task test:e2e   # Playwright smoke tests (both desktop + mobile Chrome)
-deno task lighthouse # Lighthouse CI (optional)
+npm run build      # production build → dist/ (+ oversized-asset strip)
+npm run preview    # serve the production build locally
+npm run typecheck  # tsc --noEmit
+npm run lint       # ESLint
+npm run test:e2e   # Playwright smoke tests (both desktop + mobile Chrome)
+npm run lighthouse # Lighthouse CI (optional)
 ```
 
-Run `deno task typecheck` and `deno task lint` before opening a PR — CI runs
-both. `deno task test:e2e` builds and serves `dist/` automatically, and needs
-Playwright's Chromium once: `deno run -A npm:@playwright/test/cli install chromium`.
+Run `npm run typecheck` and `npm run lint` before opening a PR — CI runs both.
+`npm run test:e2e` builds and serves `dist/` automatically, and needs
+Playwright's Chromium once: `npx --no-install playwright install chromium`.
 
-The npm scripts in `package.json` are kept in sync for Cloudflare Pages and
-contributors who prefer npm; the Deno tasks are the supported path in CI.
-Heavy third-party engines are still fetched from CDNs at runtime, so an
-offline `deno task dev` only exercises the parts you have already cached.
+**Deno is optional local tooling.** If you prefer it, `deno install` followed
+by `deno task typecheck|lint|build|test:e2e` runs the same toolchain through
+`deno.json`. `deno task test` also runs the unit suite in `tests/` (settings
+resolution, AI backend preference, predicted-label sorting). CI does not
+require Deno and uses the npm scripts above, so keep `package.json` and
+`deno.json` in sync when adding a new task.
+
+Heavy third-party engines are fetched from CDNs at runtime, so a fully offline
+dev server only exercises the parts you have already cached.
 
 ---
 
@@ -83,7 +87,8 @@ src/
     gif, ocr, convert, imagesToPdf, mergePdf, settings)
   components/, utils/   # standalone React library (see Conventions)
   index.ts, styles.css  # library entry + styles
-e2e/                    # Playwright smoke tests (deno task test:e2e)
+e2e/                    # Playwright smoke tests (npm run test:e2e)
+tests/                  # Deno unit tests (deno task test; optional local)
 ```
 
 Heavy engines (FFmpeg.wasm, PDF.js, pdf-lib, Tesseract.js, PaddleOCR,
@@ -126,20 +131,20 @@ real npm dependencies.
   singletons and don't tolerate concurrent jobs. This has been a real bug
   before; don't reintroduce it. Canvas-only engines (Images, PDF) use
   `runBatch()` from `batch.ts`, which is the one intentional exception.
-- **One execution profile.** Settings → Performance Mode is a _resource_
+- **One execution profile.** Settings → Performance Mode is a *resource*
   profile, not a quality goal. Resolve it once through
   `resolveExecutionProfile()` in `settings.ts`; don't call
   `recommend(detectPlatform())` independently in a page, and don't let a
   manual tier silently change output quality. Explicit per-engine overrides
   (`ai.modelTier`, `resourceLimits`, video preset) win over the tier.
 - **Report the backend you actually got.** WebGPU is opportunistic: probe
-  `navigator.gpu.requestAdapter()` _and_ `requestDevice()`, attempt WebGPU,
+  `navigator.gpu.requestAdapter()` *and* `requestDevice()`, attempt WebGPU,
   then fall back to WASM, and surface the successful backend via
   `getAiRuntimeInfo()`. Never label a WASM run as GPU-accelerated.
 - **Engine names are promises.** The optional OCR engine is **PaddleOCR
   PP-OCRv3**, not PaddleOCR-VL (the app never loads those weights).
-  Smart Analyze produces ImageNet-style labels and sorts by _predicted
-  label_ — it does not compute embeddings or visual-similarity groups.
+  Smart Analyze produces ImageNet-style labels and sorts by *predicted
+  label* — it does not compute embeddings or visual-similarity groups.
   Keep UI copy, README, and Settings diagnostics consistent with that.
 - **Format-agnostic file naming.** When an engine changes container/codec
   (e.g. VP8/VP9 → `.webm`), make sure the output filename and MIME type in
@@ -149,11 +154,11 @@ real npm dependencies.
 
 ## Commit / PR checklist
 
-1. `deno task typecheck` passes.
-2. `deno task lint` passes (warnings are currently tolerated; new errors are not).
-3. `deno task build` succeeds with no new warnings, and the build log shows
+1. `npm run typecheck` passes.
+2. `npm run lint` passes (warnings are currently tolerated; new errors are not).
+3. `npm run build` succeeds with no new warnings, and the build log shows
    the oversized onnxruntime WASM asset being stripped.
-4. `deno task test:e2e` passes for both Chromium projects.
+4. `npm run test:e2e` passes for both Chromium projects.
 5. New third-party code (npm or CDN) is credited in `CREDITS.md` with its
    license.
 6. If you touched `PRIVACY.md`-relevant behavior (anything involving data
@@ -164,6 +169,9 @@ real npm dependencies.
 8. Keep PRs scoped to one feature/fix. Large refactors are welcome but
    should be discussed in an issue first so they don't collide with other
    work in flight.
+
+Optional local extras: `deno task test` for the unit suite, and
+`deno task lighthouse` / `npm run lighthouse` for Lighthouse CI.
 
 ---
 

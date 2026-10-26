@@ -19,45 +19,55 @@ It is a fork of [CompressF](https://github.com/ADJ189/CompressF). The deployed
 site is <https://compressz.pages.dev>; the repo lives at
 <https://github.com/ADJ189/compressz>.
 
-## Quick start (Deno is the supported runner)
+## Quick start (npm is canonical; Deno is optional)
 
-Node is **not** required. Deno 2.9+ runs the existing Vite/TypeScript/ESLint/
-Playwright toolchain via `npm:` specifiers declared in `deno.json`.
+GitHub Actions and Cloudflare Pages use **Node/npm**. CompressZ requires Node
+`^20.19.0 || ^22.13.0 || >=24`.
 
 ```bash
-deno install                 # install npm deps from package.json
-deno task dev                # http://localhost:5173
-deno task build              # dist/ + strip >25 MiB assets
-deno task preview            # serve dist/
-deno task typecheck          # tsc --noEmit
-deno task lint               # ESLint (0 errors expected; warnings tolerated)
-deno task test:e2e           # Playwright, desktop + mobile Chrome
-deno task lighthouse         # optional Lighthouse CI
+npm ci                       # install from package-lock.json
+npm run dev                  # http://localhost:5173
+npm run build                # dist/ + strip >25 MiB assets
+npm run preview              # serve dist/
+npm run typecheck            # tsc --noEmit
+npm run lint                 # ESLint (0 errors expected; warnings tolerated)
+npm run test:e2e             # Playwright, desktop + mobile Chrome
+npm run lighthouse           # optional Lighthouse CI
 ```
+
+Deno 2.9+ can run the same toolchain locally via `deno.json` (`deno install`,
+then `deno task dev|build|preview|typecheck|lint|test:e2e|lighthouse`). It is
+**not** required by CI. `deno task test` runs the unit suite in `tests/`
+(settings/execution-profile resolution, AI backend preference, predicted-label
+sorting, HEIC detection).
 
 One-time browser install for e2e:
 
 ```bash
-deno run -A npm:@playwright/test/cli install chromium
+npx --no-install playwright install chromium
+# Deno equivalent: deno run -A npm:@playwright/test/cli install chromium
 ```
 
-`package.json` keeps parallel npm scripts for Cloudflare Pages and for
-contributors who prefer npm; CI uses Deno. Do not let the two drift: if you
-add a task, add it to both `deno.json` and `package.json`.
+Keep `package.json` and `deno.json` in sync when adding a task, but remember
+that only the npm scripts may be assumed by GitHub Actions and Cloudflare
+Pages.
 
 ### Verification checklist (run all four before calling work done)
 
-1. `deno task typecheck` — must be clean.
-2. `deno task lint` — must be **0 errors**. The repo currently has ~100
+1. `npm run typecheck` — must be clean.
+2. `npm run lint` — must be **0 errors**. The repo currently has ~100
    pre-existing `@typescript-eslint/no-explicit-any` warnings; do not add new
    ones, but do not treat the existing count as failure.
-3. `deno task build` — must succeed. The log should show
+3. `npm run build` — must succeed. The log should show
    `[strip-oversized-assets] Removing ort-wasm-simd-threaded.asyncify-*.wasm`;
    `dist/assets` must contain **no file ≥ 24 MiB** (Cloudflare Pages rejects
    any single file over 25 MiB).
-4. `deno task test:e2e` — 42 tests (21 per browser project) must pass. The
+4. `npm run test:e2e` — 44 tests (22 per browser project) must pass. The
    config caps workers at 2 locally / 4 in CI because 8 Chromium workers caused
    timeout flakes on constrained machines. It builds and serves `dist/` itself.
+
+Optional local extras: `deno task test` (9 unit tests), `npm run lighthouse`
+(or `deno task lighthouse` with `lighthouserc.deno.json`).
 
 If a change affects only docs, 1–2 are still required; run e2e when routed UI,
 settings, routing, or privacy copy changes.
@@ -90,7 +100,10 @@ src/pages/                 one file per route: images, pdf, video, audio, gif,
                            ocr, convert, imagesToPdf, mergePdf, settings
 src/components/            standalone React component library (unused by app)
 e2e/smoke.spec.ts          Playwright smoke tests
+tests/                     Deno unit tests (optional local; not run by CI)
 scripts/strip-oversized-assets.mjs  Cloudflare 25 MiB guard
+lighthouserc.json          Lighthouse CI config (npm)
+lighthouserc.deno.json     Lighthouse config for optional local Deno runs
 ```
 
 Heavy runtime engines (FFmpeg.wasm, PDF.js, pdf-lib, Tesseract.js,
@@ -106,7 +119,6 @@ These are the claims the UI, README, Settings diagnostics, and changelog must
 match. Several were previously wrong; don't regress them.
 
 ### Images
-
 - Canvas 2D; `OffscreenCanvas` when available; optional WebGL2 texture-draw
   resize (`resizeViaWebGL`) with silent Canvas2D fallback.
 - GPU acceleration for images means **WebGL2 resize + `desynchronized` 2D
@@ -117,7 +129,6 @@ match. Several were previously wrong; don't regress them.
 - EXIF/GPS is stripped as a side effect of canvas re-encoding; say so.
 
 ### PDF
-
 - Structural strategy (Low/Recommended): walk XObjects, downscale embedded
   images, re-encode JPEG in place; text/vectors untouched.
 - Canvas strategy (Extreme, encrypted-PDF fallback): render pages with PDF.js
@@ -127,7 +138,6 @@ match. Several were previously wrong; don't regress them.
 - Merge PDF uses `copyPages()` — no rasterisation, text stays selectable.
 
 ### Video / Audio / GIF
-
 - Video: **FFmpeg.wasm primary → MediaRecorder fallback**. There is **no
   WebCodecs/muxer path**; the Settings diagnostic reports WebCodecs presence
   for information only. Do not describe a three-tier GPU pipeline.
@@ -142,11 +152,10 @@ match. Several were previously wrong; don't regress them.
   singleton). Canvas-only Images/PDF batches use `runBatch()`.
 
 ### OCR
-
 - **Tesseract.js 5 is the stable default.** `auto` resolves to Tesseract.
 - **PaddleOCR PP-OCRv3 is optional and experimental.** It is the lightweight
   PP-OCRv3 detection/classification/recognition pipeline via Paddle.js/WebGL,
-  _not_ PaddleOCR-VL 1.5 (a ~0.9B vision-language model the app never loads).
+  *not* PaddleOCR-VL 1.5 (a ~0.9B vision-language model the app never loads).
   Never label it as a VLM or as layout/table-aware.
 - Math/Greek symbol mode always runs on Tesseract (`grc` + `equ`), regardless
   of the selected engine.
@@ -156,7 +165,6 @@ match. Several were previously wrong; don't regress them.
   real crash bug.
 
 ### Local AI / Smart Analyze
-
 - `@huggingface/transformers` with ImageNet-style classification:
   `Xenova/mobilenet_v2_1.0_224` (efficient) or
   `Xenova/vit-base-patch16-224` (powerful).
@@ -164,6 +172,11 @@ match. Several were previously wrong; don't regress them.
   **and** `requestDevice()`, try WebGPU fp16/fp32, then fall back to WASM
   (q8/default). `getAiRuntimeInfo()` must report the backend that actually
   succeeded. Never call a WASM run GPU-accelerated.
+- Settings → AI Engine → **Inference backend** (`ai.backend`) offers `auto`,
+  `webgpu` and `wasm`. `wasm` is an explicit CPU opt-out and skips the WebGPU
+  probe entirely; `webgpu` still falls back to WASM rather than disabling the
+  feature. Changing it calls `unloadModels()` so the next Smart action uses
+  the new path; cached weights stay in the browser.
 - `onnxruntime-web` WASM binaries load from jsDelivr via `wasmPaths`; the
   locally bundled asyncify WASM is dead weight and is stripped after build.
 - `sortByPredictedLabel()` orders by the classifier's predicted label. Smart
@@ -174,7 +187,6 @@ match. Several were previously wrong; don't regress them.
   uploaded.
 
 ### Other tools
-
 - SVG optimiser is pure TypeScript, zero dependencies; it strips `<script>`,
   inline event handlers, and `javascript:` URLs.
 - DOCX→PDF is an image-based PDF (use TXT for selectable text);
@@ -197,8 +209,11 @@ match. Several were previously wrong; don't regress them.
 - Performance Mode (`Auto`/`Efficient`/`Balanced`/`Powerful`) is a
   **resource** mode, not a quality goal. It must not silently lower output
   quality or resolution. Explicit per-engine overrides win:
-  `ai.modelTier`, `resourceLimits.concurrency`, `resourceLimits.maxImageDim`,
-  and the video preset.
+  `ai.modelTier`, `ai.backend`, `resourceLimits.concurrency`,
+  `resourceLimits.maxImageDim`, and the video preset. `ai.backend: 'auto'`
+  prefers WebGPU only when `navigator.gpu` exists; `resolveExecutionProfile()`
+  reports that choice, while `aiEngine` performs the real adapter/device probe
+  and fallback.
 - Tier defaults: concurrency 1/2/3; image cap 6000/10000/0 (0 = uncapped);
   AI tier efficient/efficient/powerful; video preset
   ultrafast/fast/medium.
@@ -206,7 +221,6 @@ match. Several were previously wrong; don't regress them.
   they are explicit user choices. `GPU_CAPABLE` is images/pdf/ocr/video.
 
 ### GPU / platform semantics
-
 - `gpuAvailable()` means **WebGL2 only**. OffscreenCanvas is not proof of GPU
   acceleration and must not be reported as such.
 - `canvasPathAvailable()` means WebGL2 **or** OffscreenCanvas (the
@@ -259,7 +273,8 @@ match. Several were previously wrong; don't regress them.
   `fileURLToPath()` so it also works on Windows (`new URL(...).pathname`
   produced an invalid `/C:/…` path and silently skipped everything).
 - `npm run build` remains the Cloudflare-compatible command. `deno task build`
-  runs the same Vite build plus the strip script.
+  runs the same Vite build plus the strip script for local Deno users; CI uses
+  npm only.
 - COOP/COEP headers in `vite.config.ts` (dev) and `public/_headers`
   (production) enable SharedArrayBuffer for multithreaded FFmpeg.
 

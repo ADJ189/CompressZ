@@ -19,9 +19,9 @@ The suffix is dropped on the release that ships it (`1.12.0`).
   changed the tier label but not the AI model, concurrency or threading.
 - `resolvedAiModelTier()`, `resolvedConcurrency()` and
   `resolvedMaxImageDim()` now read that profile. Explicit per-engine overrides
-  (`ai.modelTier`, `resourceLimits.concurrency`, `resourceLimits.maxImageDim`,
-  video preset) still win over Performance Mode.
-- Performance Mode remains a _resource_ mode: it does not silently lower
+  (`ai.modelTier`, `ai.backend`, `resourceLimits.concurrency`,
+  `resourceLimits.maxImageDim`, video preset) still win over Performance Mode.
+- Performance Mode remains a *resource* mode: it does not silently lower
   output quality or resolution.
 
 ### Fixed — Local AI backend selection now reflects reality
@@ -66,17 +66,36 @@ The suffix is dropped on the release that ships it (`1.12.0`).
   Cloudflare Pages' 25 MiB per-file limit rejects it.
 - Default image quality is documented consistently as **82**.
 
-### Changed — Deno is the supported task runner
+### Changed — AI backend is now a real Settings preference
 
-- Added `deno.json` tasks (`dev`, `build`, `preview`, `typecheck`, `lint`,
-  `test:e2e`, `lighthouse`) that run the existing Vite/TypeScript/ESLint/
-  Playwright toolchain through `npm:` specifiers.
-- CI and Lighthouse workflows now use Deno 2.9.8; CI also runs the Playwright
-  smoke suite that the docs already described.
-- `playwright.config.ts` and `lighthouserc.json` start the server through
-  `deno task`; e2e workers are capped at 2 locally / 4 in CI because 8 workers
-  caused timeout flakes on constrained machines.
-- `package.json` scripts remain for Cloudflare Pages compatibility.
+- Settings → AI Engine adds **Inference backend** (`auto` / `webgpu` /
+  `wasm`). `wasm` is an explicit CPU opt-out that skips the WebGPU probe
+  entirely; `webgpu` still falls back to WASM if the adapter/device probe
+  fails. Changing it releases the in-memory model so the next Smart action
+  uses the new path; downloaded weights stay cached.
+- `resolveExecutionProfile()` exposes the resolved `aiBackendPreference`, and
+  AI Engine / Settings diagnostics show the backend that actually loaded.
+- Playwright coverage now opens Settings and verifies the backend control
+  persists an explicit `wasm` choice.
+
+### Changed — Deno is optional local tooling, not a CI requirement
+
+- GitHub Actions and Cloudflare Pages remain **Node/npm** (`npm ci`,
+  `npm run typecheck|lint|build|test:e2e|test`); the workflows and
+  `lighthouserc.json` are unchanged in that respect.
+- Added optional `deno.json` tasks (`dev`, `build`, `preview`, `typecheck`,
+  `lint`, `test`, `test:e2e`, `lighthouse`) so contributors can run the same
+  Vite/TypeScript/ESLint/Playwright toolchain through Deno 2.9+ locally.
+- `playwright.config.ts` picks the build/preview command from the runtime: the
+  Deno task under Deno, otherwise the npm script. `lighthouserc.deno.json`
+  mirrors the Lighthouse config for local Deno runs.
+- Added a Deno unit suite in `tests/` (9 tests) covering execution-profile
+  resolution, the AI backend preference, predicted-label sorting and HEIC
+  detection. CI continues to run the Playwright smoke suite.
+- e2e workers are capped at 2 locally / 4 in CI because 8 workers caused
+  timeout flakes on constrained machines.
+- `package.json` scripts remain the canonical path for CI, Cloudflare Pages
+  and npm users.
 
 ### Docs
 
@@ -86,7 +105,8 @@ The suffix is dropped on the release that ships it (`1.12.0`).
   in-app About/Docs/Privacy templates: FFmpeg → MediaRecorder only (no
   WebCodecs tier), Tesseract default, PP-OCRv3 labeling, WebGPU/WASM backend
   reporting, sort-by-label wording, target-size iteration count, default
-  quality 82, Deno commands, and the current localStorage/CDN lists.
+  quality 82, Node-first commands with Deno as optional local tooling, and the
+  current localStorage/CDN lists.
 - Credited `heic2any` and `onnxruntime-web`, and corrected PaddleOCR's role.
 - Replaced the placeholder `SECURITY.md` with a real vulnerability-reporting
   policy (private GitHub advisory, scope, safe harbor).

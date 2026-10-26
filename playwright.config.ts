@@ -3,10 +3,18 @@ import { defineConfig, devices } from "@playwright/test";
 const PORT = 4173;
 const BASE_URL = `http://localhost:${PORT}`;
 
-// Optional: point at a pre-installed Chromium (e.g. offline CI / sandboxes where
-// `deno run -A npm:@playwright/test/cli install chromium` can't download a browser).
+// Optional: point at a pre-installed Chromium (e.g. offline CI / sandboxes
+// where `npx --no-install playwright install chromium` can't download a browser).
 const executablePath = process.env.PW_CHROMIUM_PATH || undefined;
 const launchOptions = executablePath ? { executablePath } : {};
+
+// This project's canonical CI runner is Node/npm (see .github/workflows).
+// When the suite is launched through Deno locally (`deno task test:e2e`),
+// `globalThis.Deno` exists and the Deno tasks build/serve the app instead.
+const isDenoRun = !!(globalThis as { Deno?: unknown }).Deno;
+const buildAndPreview = isDenoRun
+  ? `deno task build && deno task preview --port ${PORT} --strictPort`
+  : `npm run build && npm run preview -- --port ${PORT} --strictPort`;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -33,8 +41,8 @@ export default defineConfig({
   ],
   webServer: {
     // Serve the real production build (COOP/COEP headers included).
-    // Deno is the supported local/CI runner; see deno.json for the same tasks.
-    command: `deno task build && deno task preview --port ${PORT} --strictPort`,
+    // Node/npm is the GitHub CI path; Deno is supported for local runs.
+    command: buildAndPreview,
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
