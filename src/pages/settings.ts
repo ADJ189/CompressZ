@@ -159,7 +159,7 @@ export function mountSettings(root: HTMLElement) {
           : hasWebGpuApi()
             ? 'WASM (CPU) · WebGPU adapter not confirmed yet'
             : 'WASM (CPU) · WebGPU unavailable';
-    const imagePath = hasWebGL2()
+    const imagePath = st.gpu.images && hasWebGL2()
       ? 'Canvas/OffscreenCanvas + WebGL2 resize'
       : hasOffscreenCanvas()
         ? 'Canvas/OffscreenCanvas only (no WebGL2 resize)'
