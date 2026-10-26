@@ -45,7 +45,7 @@ export function mountImagesToPdf(root: HTMLElement) {
     aiNote = "Starting…";
     render();
     try {
-      const { smartAnalyze, sortBySmartAnalysis } =
+      const { smartAnalyze, sortByPredictedLabel } =
         await import("../lib/aiEngine");
       const tier = resolvedAiModelTier(settings);
       const analysis = await smartAnalyze(
@@ -59,14 +59,14 @@ export function mountImagesToPdf(root: HTMLElement) {
       analysis.forEach((a) => {
         if (a.tag) aiLabels.set(a.file, a.tag.label);
       });
-      s.files = sortBySmartAnalysis(s.files, analysis);
+      s.files = sortByPredictedLabel(s.files, analysis);
       const tagged = analysis.filter((a) => a.tag).length;
       toast(
-        `Sorted ${analysis.length} image${analysis.length !== 1 ? "s" : ""} by content · ${tagged} tagged`,
+        `Sorted ${analysis.length} image${analysis.length !== 1 ? "s" : ""} by predicted label · ${tagged} tagged`,
         "success",
       );
     } catch (e: any) {
-      toast(e?.message ?? "Smart Sort failed", "error");
+      toast(e?.message ?? "AI sort failed", "error");
     }
     aiBusy = false;
     render();
@@ -86,10 +86,10 @@ export function mountImagesToPdf(root: HTMLElement) {
     row.style.display = "flex";
     const btn = document.createElement("button");
     btn.className = "btn-sm btn-ai";
-    btn.textContent = aiBusy ? "Sorting…" : "✨ Smart Sort (AI)";
+    btn.textContent = aiBusy ? "Sorting…" : "✨ Sort by predicted label (AI)";
     btn.disabled = aiBusy || s.busy;
     btn.title =
-      "Groups visually/semantically similar images together, locally, before you combine them";
+      "Runs a local image classifier and sorts by its predicted label — not by visual similarity";
     btn.addEventListener("click", runSmartSort);
     row.appendChild(btn);
     bar.appendChild(row);
@@ -193,7 +193,7 @@ export function mountImagesToPdf(root: HTMLElement) {
         <p class="page-sub">
           Combine two or more images into a single PDF, one image per page, in the order you choose.
         </p>
-        <p class="page-sub" style="color:var(--text-4)">GPU-accelerated resize when Settings → GPU Acceleration → Images is on</p>
+        <p class="page-sub" style="color:var(--text-4)">WebGL2-accelerated resize when Settings → GPU Acceleration → Images is on and the browser supports WebGL2</p>
       </div>
 
       <div class="settings-card" id="itp-settings"></div>
