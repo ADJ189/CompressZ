@@ -6,7 +6,7 @@
  */
 import type { ImageFormat, AudioFormat, VideoCodec, PdfLevel } from './types';
 import { detectPlatform, recommend } from './platform';
-import type { PerformanceTier } from './platform';
+import type { EngineRecommendation, PerformanceTier, PlatformInfo } from './platform';
 import type { AiModelTier } from './aiEngine';
 
 const KEY = 'cz-settings-v2';
@@ -33,6 +33,14 @@ export interface EngineDefaults {
 export interface AiSettings {
   enabled:         boolean;     // master switch for Smart Analyze/Sort features on the Images pages
   modelTier:       AiModelTier | 'auto'; // 'auto' follows Performance Mode's recommendation
+  /**
+   * Preferred inference backend. 'auto' uses WebGPU only when the device
+   * exposes it (the AI loader still performs a real adapter/device probe and
+   * falls back to WASM). 'wasm' explicitly keeps inference on the CPU even on
+   * a WebGPU-capable machine; 'webgpu' asks for the GPU first but still falls
+   * back to WASM instead of making the feature unavailable.
+   */
+  backend:         'auto' | 'webgpu' | 'wasm';
   autoApplySuggestions: boolean; // let Smart Analyze also rewrite each file's format/quality, not just tag+sort
 }
 
@@ -75,10 +83,13 @@ function defaults(): AppSettings {
       video:  { codec: 'h264', preset: 'fast', crfQuality: 75 },
       audio:  { format: 'mp3', bitrate: 192 },
       gif:    { quality: 82 },
-      ocr:    { engine: 'paddle', lang: 'eng' },
+      // Tesseract is the stable default. PaddleOCR PP-OCRv3 remains
+      // selectable, but its integration is experimental and the PP-OCRv3
+      // recognizer is not a layout/handwriting model.
+      ocr:    { engine: 'tesseract', lang: 'eng' },
     },
     performanceMode: 'auto',
-    ai: { enabled: true, modelTier: 'auto', autoApplySuggestions: false },
+    ai: { enabled: true, modelTier: 'auto', backend: 'auto', autoApplySuggestions: false },
     resourceLimits: { concurrency: 'auto', maxImageDim: 'auto' },
   };
 }
@@ -108,37 +119,128 @@ function applyAutoDefaults(s: AppSettings, isFirstRun: boolean): AppSettings {
   return s;
 }
 
+/**
+ * The single resolved "how should this session run" profile.
+ *
+ * Before this existed, each resolver independently called
+ * `recommend(detectPlatform())`, so a manual Performance Mode choice changed
+ * the tier label but *not* the AI model, concurrency or FFmpeg threading.
+ * Now every engine-facing resolver below reads this one object. Explicit
+ * per-engine overrides (AI model tier, batch concurrency, image dimension
+ * cap, video preset) still win — Performance Mode only supplies the values
+ * for choices left on 'auto'.
+ *
+ * This is a resource profile, not a quality goal: it never changes the
+ * requested image/video/audio quality or silently lowers output resolution.
+ */
+export interface ExecutionProfile {
+  mode: PerformanceTier;
+  modeSource: 'auto' | 'manual';
+  aiModelTier: AiModelTier;
+  /** Preferred inference backend. aiEngine still feature-tests it and falls back to WASM at load time. */
+  aiBackendPreference: 'webgpu' | 'wasm';
+  maxConcurrentImages: number;
+  /** PDF page rendering shares the same canvas batch pool as images today. */
+  maxConcurrentPdfs: number;
+  maxDecodedImageDimension: number; // 0 = no extra cap
+  ffmpegThreaded: boolean;
+  videoPreset: 'ultrafast' | 'fast' | 'medium' | 'slow';
+  gpu: EngineRecommendation['gpu'];
+  reason: string;
+}
+
+function fallbackRecommendation(tier: PerformanceTier): EngineRecommendation {
+  return {
+    gpu: { images: false, pdf: false, ocr: false, video: false },
+    videoPreset: tier === 'efficient' ? 'ultrafast' : tier === 'powerful' ? 'medium' : 'fast',
+    ffmpegThreaded: false,
+    batchConcurrency: tier === 'efficient' ? 1 : tier === 'powerful' ? 3 : 2,
+    aiModelTier: tier === 'powerful' ? 'powerful' : 'efficient',
+    reason: 'Device detection unavailable — using conservative defaults.',
+  };
+}
+
+function tierImageCap(tier: PerformanceTier): number {
+  return tier === 'efficient' ? 6000 : tier === 'balanced' ? 10000 : 0;
+}
+
+export function resolveExecutionProfile(
+  s: AppSettings = getSettings(),
+  /**
+   * Test/injection hook: pass `null` to skip device detection entirely, or a
+   * concrete `PlatformInfo` to resolve against a fixed device. Normal callers
+   * omit it and get the cached `detectPlatform()` snapshot.
+   */
+  infoOverride?: PlatformInfo | null,
+): ExecutionProfile {
+  let info: PlatformInfo | null;
+  if (infoOverride !== undefined) {
+    info = infoOverride;
+  } else {
+    info = null;
+    try { info = detectPlatform(); } catch { /* non-browser/test env */ }
+  }
+
+  const tier: PerformanceTier =
+    s.performanceMode !== 'auto' ? s.performanceMode : (info?.tier ?? 'balanced');
+  const rec = info ? recommend(info, tier) : fallbackRecommendation(tier);
+
+  const maxConcurrentImages =
+    s.resourceLimits.concurrency !== 'auto'
+      ? s.resourceLimits.concurrency
+      : rec.batchConcurrency;
+  const maxDecodedImageDimension =
+    s.resourceLimits.maxImageDim !== 'auto'
+      ? s.resourceLimits.maxImageDim
+      : tierImageCap(tier);
+
+  const aiBackendPreference: 'webgpu' | 'wasm' =
+    s.ai.backend === 'webgpu'
+      ? 'webgpu'
+      : s.ai.backend === 'wasm'
+        ? 'wasm'
+        : info?.webgpu
+          ? 'webgpu'
+          : 'wasm';
+
+  return {
+    mode: tier,
+    modeSource: s.performanceMode === 'auto' ? 'auto' : 'manual',
+    aiModelTier: s.ai.modelTier !== 'auto' ? s.ai.modelTier : rec.aiModelTier,
+    aiBackendPreference,
+    maxConcurrentImages,
+    maxConcurrentPdfs: maxConcurrentImages,
+    maxDecodedImageDimension,
+    ffmpegThreaded: rec.ffmpegThreaded,
+    videoPreset: s.engines.video.preset,
+    gpu: rec.gpu,
+    reason: rec.reason,
+  };
+}
+
 export function resolvedPerformanceTier(s: AppSettings = getSettings()): PerformanceTier {
   if (s.performanceMode !== 'auto') return s.performanceMode;
   try { return detectPlatform().tier; } catch { return 'balanced'; }
 }
 
 export function resolvedAiModelTier(s: AppSettings = getSettings()): AiModelTier {
-  if (s.ai.modelTier !== 'auto') return s.ai.modelTier;
-  try { return recommend(detectPlatform()).aiModelTier; } catch { return 'efficient'; }
+  return resolveExecutionProfile(s).aiModelTier;
 }
 
 /** How many files a batch should process at once — the manual override
- * when set, otherwise the device-recommended value (same default as
- * before this setting existed). */
+ * when set, otherwise the value from the same resolved profile the rest of
+ * the app uses. */
 export function resolvedConcurrency(s: AppSettings = getSettings()): number {
-  if (s.resourceLimits.concurrency !== 'auto') return s.resourceLimits.concurrency;
-  try { return recommend(detectPlatform()).batchConcurrency; } catch { return 1; }
+  return resolveExecutionProfile(s).maxConcurrentImages;
 }
 
 /** Longer-edge pixel cap applied before any per-tool resize setting —
  * 0 means "no extra cap" (still subject to each tool's own maxWidth/
- * maxHeight, just not this additional guardrail). 'auto' scales the cap
- * to the detected performance tier, same spirit as every other 'auto'
- * value in this file: efficient devices get a firmer ceiling so a single
- * huge photo can't blow past what the device can comfortably hold in
- * memory, powerful devices go uncapped. */
+ * maxHeight, just not this additional guardrail). 'auto' scales the cap to
+ * the *resolved* performance mode, so a manual Eco choice actually applies
+ * the firmer ceiling even on powerful hardware. */
 export function resolvedMaxImageDim(s: AppSettings = getSettings()): number {
-  if (s.resourceLimits.maxImageDim !== 'auto') return s.resourceLimits.maxImageDim;
-  try {
-    const tier = resolvedPerformanceTier(s);
-    return tier === 'efficient' ? 6000 : tier === 'balanced' ? 10000 : 0;
-  } catch { return 0; }
+  return resolveExecutionProfile(s).maxDecodedImageDimension;
 }
 
 // Safari private mode (and storage-disabled browsers generally) throw on
