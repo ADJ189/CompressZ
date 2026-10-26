@@ -116,3 +116,30 @@ test("Back after /settings is not a redirect trap", async ({ page }) => {
   await page.goBack();
   await expect(page).toHaveURL(/\/about$/);
 });
+
+test("AI Engine settings expose model tier and inference backend", async ({
+  page,
+}) => {
+  const problems = await watch(page);
+  await page.goto("/");
+  await page.locator("#settings-btn").click();
+
+  const dialog = page.locator("#settings-dialog");
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText("AI Engine — Local")).toBeVisible();
+  await expect(dialog.getByText("Inference backend")).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: "WebGPU first" }),
+  ).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "CPU (WASM)" })).toBeVisible();
+
+  // Picking the CPU path must persist the explicit preference (not just look
+  // selected), so a later session does not silently re-enable WebGPU.
+  await dialog.getByRole("button", { name: "CPU (WASM)" }).click();
+  const backend = await page.evaluate(() => {
+    const raw = localStorage.getItem("cz-settings-v2");
+    return raw ? JSON.parse(raw).ai?.backend : null;
+  });
+  expect(backend).toBe("wasm");
+  expect(problems).toEqual([]);
+});
