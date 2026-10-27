@@ -9,19 +9,71 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 
 ## [Unreleased]
 
+### Added — Adaptive Resource Guard, home workbench, contextual suggestions
+
+- **Adaptive Resource Guard** (`src/lib/resourceManager.ts`). Every heavy
+  engine now asks for a slot through `runScheduled()` before it starts, with
+  separate heavy (FFmpeg, OCR, PDF rasterisation, AI) and light (Canvas
+  image/PDF encode) pools. Job weight is estimated from file size, pixel count
+  and page count. Batches can no longer flood the tab by starting every file
+  at once, and a long batch no longer starves a video encode.
+- `getResourceSnapshot()` exposes an honest, estimate-only view: mode label,
+  running/queued counts, admission limit, engine hint and any automatic
+  pressure reduction. It deliberately does not pretend to read free RAM —
+  browsers don't expose it — and both the UI and docs say so.
+- **`resourceMode`** (`auto` / `memory-saver` / `balanced` / `maximum`)
+  replaces the old Performance Mode (`efficient`/`balanced`/`powerful`) as the
+  single resource control. Existing installs are migrated on first read; the
+  legacy value is no longer rendered as a second overlapping control. It
+  remains a resource mode — format, quality and resolution are never lowered
+  behind your back, and per-engine overrides still win.
+- **Home workbench**: tool search/filter, quick actions, pin favourites,
+  recently opened tools, and a live **Processing queue** panel fed by the
+  Resource Guard. The home page is useful before JavaScript runs and the
+  workbench is loaded on demand.
+- **Contextual suggestions** (`src/lib/recommendations.ts`): one compact,
+  dismissible notice per workflow. Rules are deterministic and local —
+  natural filename ordering, photo input → WebP instead of PNG, very high
+  quality → 82, fixed page size → Auto, PDF Extreme/large Low →
+  Recommended, and OCR engine choice by script. They never reorder files,
+  change quality or start a job on their own; dismissals persist in
+  `cz-recommendations-v1`.
+- **Sectioned Settings dialog**: General, Appearance, Performance, AI engine,
+  Suggestions, Compression, Privacy & data, Diagnostics. Adds a live Resource
+  Guard status card, per-section reset buttons, model-cache clearing, a
+  dismissed-suggestion counter/clear action, a local-data clear action, and
+  **Copy diagnostics** (JSON containing capability/preference data only, with
+  a download fallback when the clipboard is blocked).
+- **Appearance**: light / dark / **system**, stored under the existing
+  `theme` key. `data-theme` always receives the resolved value, so every
+  existing dark-theme rule keeps working; the header button is still a quick
+  light/dark flip.
+- **Incremental OCR**: pages are now rendered, recognised and embedded one at
+  a time (`openPageRenderer()` + incremental `createSearchablePdfBuilder()`),
+  releasing each page bitmap before the next is decoded. A 200-page scan no
+  longer pins every rendered page in memory before OCR starts.
+- New UI styles live in `src/styles/workbench.css` and every selector is
+  prefixed `.cz-`, so the new workbench, recommendation and settings layouts
+  cannot restyle the legacy `.tool-wrap` / `.settings-card` markup.
+- Playwright now runs four projects (`chromium-desktop`, `chromium-mobile`,
+  `webkit-desktop`, `webkit-mobile`) and covers the workbench search/pins/
+  recents, system-theme persistence, live Resource Guard status, suggestion
+  apply + dismissal persistence, the sectioned Settings navigation, 320–1440
+  responsive overflow, and the real app version from `package.json`.
+
 ### Changed — One execution profile for device performance
 
 - Added `resolveExecutionProfile()` in `src/lib/settings.ts` as the single
   source of truth for the session's resource profile: resolved performance
   tier, AI model tier, preferred AI backend, batch concurrency, image-dimension
   cap, FFmpeg threading and video preset. Previously each resolver called
-  `recommend(detectPlatform())` separately, so a manual Performance Mode
-  changed the tier label but not the AI model, concurrency or threading.
+  `recommend(detectPlatform())` separately, so a manual resource mode
+  changed the label but not the AI model, concurrency or threading.
 - `resolvedAiModelTier()`, `resolvedConcurrency()` and
   `resolvedMaxImageDim()` now read that profile. Explicit per-engine overrides
   (`ai.modelTier`, `ai.backend`, `resourceLimits.concurrency`,
-  `resourceLimits.maxImageDim`, video preset) still win over Performance Mode.
-- Performance Mode remains a *resource* mode: it does not silently lower
+  `resourceLimits.maxImageDim`, video preset) still win over the resource mode.
+- The resource mode remains a *resource* mode: it does not silently lower
   output quality or resolution.
 
 ### Fixed — Local AI backend selection now reflects reality
@@ -42,7 +94,7 @@ The suffix is dropped on the release that ships it (`1.12.0`).
   loaded. The UI now says plainly that it is not a vision-language model and
   has no table/layout understanding.
 - The OCR page seeds engine/language from Settings and render DPI from the
-  resolved performance mode (Efficient 200, Balanced 250, Powerful 300).
+  resolved resource mode (Memory Saver 200, Balanced 250, Maximum 300).
 - Math/Greek symbol mode remains Tesseract-only and says so.
 
 ### Fixed — GPU diagnostics and Smart Sort wording
@@ -50,12 +102,12 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 - `gpuAvailable()` now means WebGL2 only; `canvasPathAvailable()` separately
   reports WebGL2/OffscreenCanvas. OffscreenCanvas is no longer treated as proof
   of GPU acceleration.
-- Settings → Execution reports WebGL2, WebGPU, OffscreenCanvas and WebCodecs
+- Settings → Diagnostics reports WebGL2, WebGPU, OffscreenCanvas and WebCodecs
   separately.
-- Settings → Execution → Image path now honors the Images GPU toggle, so
+- Settings → Diagnostics → Image path now honors the Images GPU toggle, so
   turning WebGL2 resize off is reflected immediately instead of still
   reporting browser support.
-- Settings → Resource Limits → the `Auto (n)` batch label now resolves a
+- Settings → Performance → the `Auto (n)` batch label now resolves a
   temporary `concurrency: 'auto'` profile, so it keeps showing what Auto would
   use while a manual value is selected. Previously it echoed the manual value.
 - Renamed `sortBySmartAnalysis` → `sortByPredictedLabel` and corrected Images /
@@ -64,7 +116,7 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 ### Fixed — Build and dependency hygiene
 
 - Repaired malformed/duplicate entries in `package.json` and regenerated
-  `package-lock.json`; `npm ci`/`deno install` now complete cleanly.
+  `package-lock.json`; `npm ci` now completes cleanly.
 - Fixed `scripts/strip-oversized-assets.mjs` silently skipping every file on
   Windows: `new URL(...).pathname` produced an invalid `/C:/…` path, so the
   ~26 MiB `ort-wasm-simd-threaded.asyncify-*.wasm` was never removed. It now
@@ -84,24 +136,15 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 - Playwright coverage now opens Settings and verifies the backend control
   persists an explicit `wasm` choice.
 
-### Changed — Deno is optional local tooling, not a CI requirement
+### Changed — one Node/npm toolchain
 
-- GitHub Actions and Cloudflare Pages remain **Node/npm** (`npm ci`,
-  `npm run typecheck|lint|build|test:e2e`); the workflows and
-  `lighthouserc.json` are unchanged in that respect.
-- Added optional `deno.json` tasks (`dev`, `build`, `preview`, `typecheck`,
-  `lint`, `test`, `test:e2e`, `lighthouse`) so contributors can run the same
-  Vite/TypeScript/ESLint/Playwright toolchain through Deno 2.9+ locally.
-- `playwright.config.ts` picks the build/preview command from the runtime: the
-  Deno task under Deno, otherwise the npm script. `lighthouserc.deno.json`
-  mirrors the Lighthouse config for local Deno runs.
-- Added a Deno unit suite in `tests/` (9 tests) covering execution-profile
-  resolution, the AI backend preference, predicted-label sorting and HEIC
-  detection. CI continues to run the Playwright smoke suite.
+- GitHub Actions, Cloudflare Pages, Playwright and Lighthouse all use
+  **Node/npm** (`npm ci`, `npm run typecheck|lint|build|test:e2e`).
+- The repository ships a single manifest (`package.json` + `package-lock.json`)
+  and a single Lighthouse config (`lighthouserc.json`); there is no alternate
+  runtime toolchain to keep in sync.
 - e2e workers are capped at 2 locally / 4 in CI because 8 workers caused
   timeout flakes on constrained machines.
-- `package.json` scripts remain the canonical path for CI, Cloudflare Pages
-  and npm users.
 
 ### Docs
 
@@ -111,7 +154,7 @@ The suffix is dropped on the release that ships it (`1.12.0`).
   in-app About/Docs/Privacy templates: FFmpeg → MediaRecorder only (no
   WebCodecs tier), Tesseract default, PP-OCRv3 labeling, WebGPU/WASM backend
   reporting, sort-by-label wording, target-size iteration count, default
-  quality 82, Node-first commands with Deno as optional local tooling, and the
+  quality 82, Node-first commands, and the
   current localStorage/CDN lists.
 - Credited `heic2any` and `onnxruntime-web`, and corrected PaddleOCR's role.
 - Replaced the placeholder `SECURITY.md` with a real vulnerability-reporting
@@ -121,9 +164,10 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 - Corrected the FFmpeg.wasm privacy description: `esm.sh` serves its
   JavaScript wrapper, core scripts, worker, and WebAssembly binaries — not
   "WebAssembly binaries only". File bytes are still never sent there.
-- Playwright coverage now also verifies that the Execution panel's Image path
+- Playwright coverage now also verifies that the Diagnostics panel's Image path
   follows the Images GPU toggle and that the manual batch limit does not
-  change the `Auto (n)` label (46 tests total).
+  change the `Auto (n)` label. The suite runs 152 tests across four projects
+  (Chromium and WebKit, desktop and mobile).
 
 - Expose LogoMarquee's accessible region label and reset TiltCard when reduced
   motion is enabled during use.

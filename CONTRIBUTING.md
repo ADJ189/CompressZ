@@ -44,20 +44,16 @@ npm run build      # production build → dist/ (+ oversized-asset strip)
 npm run preview    # serve the production build locally
 npm run typecheck  # tsc --noEmit
 npm run lint       # ESLint
-npm run test:e2e   # Playwright smoke tests (both desktop + mobile Chrome)
+npm run test:e2e   # Playwright matrix (Chromium + WebKit, desktop + mobile)
 npm run lighthouse # Lighthouse CI (optional)
 ```
 
 Run `npm run typecheck` and `npm run lint` before opening a PR — CI runs both.
-`npm run test:e2e` builds and serves `dist/` automatically, and needs
-Playwright's Chromium once: `npx --no-install playwright install chromium`.
+`npm run test:e2e` builds and serves `dist/` automatically, and needs the
+Playwright browsers once:
+`npx --no-install playwright install chromium webkit`.
 
-**Deno is optional local tooling.** If you prefer it, `deno install` followed
-by `deno task typecheck|lint|build|test:e2e` runs the same toolchain through
-`deno.json`. `deno task test` also runs the unit suite in `tests/` (settings
-resolution, AI backend preference, predicted-label sorting). CI does not
-require Deno and uses the npm scripts above, so keep `package.json` and
-`deno.json` in sync when adding a new task.
+npm is the only supported runner. CI and Cloudflare Pages use these scripts.
 
 Heavy third-party engines are fetched from CDNs at runtime, so a fully offline
 dev server only exercises the parts you have already cached.
@@ -68,17 +64,22 @@ dev server only exercises the parts you have already cached.
 
 ```
 src/
-  main.ts            # app bootstrap, router mount, sidebar/topbar wiring
+  main.ts            # app bootstrap, router mount, header/tabbar/dialog wiring
   router.ts           # History API page router
   store.ts             # persisted app/tool state (localStorage-backed)
-  components.ts        # shared DOM component helpers (file cards, etc.)
+  components.ts        # shared DOM component helpers (file cards, notices)
   toast.ts             # toast notifications
-  style.css            # single global stylesheet (no CSS modules/framework)
+  style.css            # tokens + legacy `.tool-*`/`.settings-*` component styles
+  styles/workbench.css # new UI only; every selector is prefixed `.cz-`
   lib/                  # compression/conversion engines, one file per format
     compressImage.ts, compressPdf.ts, compressVideo.ts, compressAudio.ts,
     compressGif.ts, optimizeSvg.ts, convertMedia.ts, convertOffice.ts,
     convertPdf.ts, ffmpeg.ts (FFmpeg.wasm singleton), zip.ts, types.ts
     settings.ts         # cz-settings-v2 + resolveExecutionProfile()
+    resourceManager.ts  # Adaptive Resource Guard (admission, queue, snapshot)
+    recommendations.ts  # deterministic contextual suggestions + dismissals
+    recents.ts / workbench.ts  # home pins, recents, live queue panel
+    theme.ts            # light / dark / system preference
     platform.ts         # device detection + performance-tier recommendation
     aiEngine.ts         # local image classifier (WebGPU→WASM fallback)
     gpu.ts / webgl.ts   # canvas + WebGL2 helpers, one shared GL context
@@ -87,8 +88,7 @@ src/
     gif, ocr, convert, imagesToPdf, mergePdf, settings)
   components/, utils/   # standalone React library (see Conventions)
   index.ts, styles.css  # library entry + styles
-e2e/                    # Playwright smoke tests (npm run test:e2e)
-tests/                  # Deno unit tests (deno task test; optional local)
+e2e/                    # Playwright tests (npm run test:e2e)
 ```
 
 Heavy engines (FFmpeg.wasm, PDF.js, pdf-lib, Tesseract.js, PaddleOCR,
@@ -114,11 +114,13 @@ real npm dependencies.
   The one exception is the standalone React library entry (`src/index.ts`,
   `src/components/*.tsx`, `src/styles.css`): React is a devDependency there
   and the app (`src/main.ts`) never imports it, so it stays out of the bundle.
-- **CSS lives in `src/style.css`.** It's intentionally one file with
-  section banner comments (`═══`) rather than split per-component — search
-  for the relevant banner before adding a new one. Use the existing custom
-  properties (`--accent`, `--text-3`, `--r`, `--t`, etc.) instead of hardcoding
-  colors, radii, or transition timings.
+- **CSS lives in two files.** `src/style.css` holds the design tokens and the
+  legacy `.tool-wrap` / `.settings-card` component styles, split by `═══`
+  section banners. New UI (workbench, recommendation notice, sectioned
+  Settings) goes in `src/styles/workbench.css`, and every selector there must
+  be prefixed `.cz-` so it cannot restyle legacy markup. Both use the existing
+  custom properties (`--accent`, `--text-3`, `--r`, `--t`, etc.) instead of
+  hardcoded colors, radii, or transition timings.
 - **Font stack:** headings/branding use `var(--display)`, the wordmark next
   to the logo uses `var(--brand)`, body/UI text uses `var(--sans)`, code/meta
   text uses `var(--mono)`. Don't add a new `@font-face`/Google Fonts family
@@ -130,13 +132,19 @@ real npm dependencies.
   firing them concurrently — the FFmpeg.wasm and OCR engines are loaded as
   singletons and don't tolerate concurrent jobs. This has been a real bug
   before; don't reintroduce it. Canvas-only engines (Images, PDF) use
-  `runBatch()` from `batch.ts`, which is the one intentional exception.
-- **One execution profile.** Settings → Performance Mode is a *resource*
-  profile, not a quality goal. Resolve it once through
+  `runBatch()` from `batch.ts`, which is the one intentional exception. Every
+  batch item still goes through `runScheduled()` from `resourceManager.ts`.
+- **One execution profile.** `resourceMode` (Settings → Performance) is a
+  *resource* profile, not a quality goal. Resolve it once through
   `resolveExecutionProfile()` in `settings.ts`; don't call
   `recommend(detectPlatform())` independently in a page, and don't let a
-  manual tier silently change output quality. Explicit per-engine overrides
-  (`ai.modelTier`, `resourceLimits`, video preset) win over the tier.
+  manual mode silently change output quality. Explicit per-engine overrides
+  (`ai.modelTier`, `resourceLimits`, video preset) win over the mode.
+- **Suggestions never act on their own.** `recommendations.ts` rules may only
+  read metadata already on the page; applying a suggestion is an ordinary user
+  action that re-renders the visible UI. Don't add a modal, a toast on every
+  visit, or an AI-dependent rule without gating it on
+  `settings.recommendations.allowAi`.
 - **Report the backend you actually got.** WebGPU is opportunistic: probe
   `navigator.gpu.requestAdapter()` *and* `requestDevice()`, attempt WebGPU,
   then fall back to WASM, and surface the successful backend via
@@ -158,7 +166,8 @@ real npm dependencies.
 2. `npm run lint` passes (warnings are currently tolerated; new errors are not).
 3. `npm run build` succeeds with no new warnings, and the build log shows
    the oversized onnxruntime WASM asset being stripped.
-4. `npm run test:e2e` passes for both Chromium projects.
+4. `npm run test:e2e` passes for all four projects (`chromium-desktop`,
+   `chromium-mobile`, `webkit-desktop`, `webkit-mobile`).
 5. New third-party code (npm or CDN) is credited in `CREDITS.md` with its
    license.
 6. If you touched `PRIVACY.md`-relevant behavior (anything involving data
@@ -170,8 +179,7 @@ real npm dependencies.
    should be discussed in an issue first so they don't collide with other
    work in flight.
 
-Optional local extras: `deno task test` for the unit suite, and
-`deno task lighthouse` / `npm run lighthouse` for Lighthouse CI.
+Optional local extra: `npm run lighthouse` for Lighthouse CI.
 
 ---
 

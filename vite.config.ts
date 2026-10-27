@@ -13,11 +13,18 @@ const onnxPkgPath = fileURLToPath(
 const ortVersion = JSON.parse(readFileSync(onnxPkgPath, "utf8"))
   .version as string;
 
+// App version for Settings → General. Same fs-read pattern as above so the
+// number can never drift from package.json.
+const appVersion = JSON.parse(
+  readFileSync(fileURLToPath(new URL("./package.json", import.meta.url)), "utf8"),
+).version as string;
+
 export default defineConfig({
   root: ".",
   publicDir: "public",
   define: {
     __ORT_VERSION__: JSON.stringify(ortVersion),
+    __APP_VERSION__: JSON.stringify(appVersion),
   },
   build: {
     outDir: "dist",

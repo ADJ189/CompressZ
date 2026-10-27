@@ -12,8 +12,6 @@ export default tseslint.config(
       "*.config.js",
       "*.config.ts",
       "scripts/**",
-      // Deno-only unit tests; typechecked by `deno task test` (see tests/deno.json).
-      "tests/**",
     ],
   },
   js.configs.recommended,

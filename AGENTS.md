@@ -19,7 +19,7 @@ It is a fork of [CompressF](https://github.com/ADJ189/CompressF). The deployed
 site is <https://compressz.pages.dev>; the repo lives at
 <https://github.com/ADJ189/compressz>.
 
-## Quick start (npm is canonical; Deno is optional)
+## Quick start (npm is canonical)
 
 GitHub Actions and Cloudflare Pages use **Node/npm**. CompressZ requires Node
 `^20.19.0 || ^22.13.0 || >=24`.
@@ -31,26 +31,18 @@ npm run build                # dist/ + strip >25 MiB assets
 npm run preview              # serve dist/
 npm run typecheck            # tsc --noEmit
 npm run lint                 # ESLint (0 errors expected; warnings tolerated)
-npm run test:e2e             # Playwright, desktop + mobile Chrome
+npm run test:e2e             # Playwright, Chromium + WebKit, desktop + mobile
 npm run lighthouse           # optional Lighthouse CI
 ```
-
-Deno 2.9+ can run the same toolchain locally via `deno.json` (`deno install`,
-then `deno task dev|build|preview|typecheck|lint|test:e2e|lighthouse`). It is
-**not** required by CI. `deno task test` runs the unit suite in `tests/`
-(settings/execution-profile resolution, AI backend preference, predicted-label
-sorting, HEIC detection).
 
 One-time browser install for e2e:
 
 ```bash
-npx --no-install playwright install chromium
-# Deno equivalent: deno run -A npm:@playwright/test/cli install chromium
+npx --no-install playwright install chromium webkit
 ```
 
-Keep `package.json` and `deno.json` in sync when adding a task, but remember
-that only the npm scripts may be assumed by GitHub Actions and Cloudflare
-Pages.
+There is no second toolchain to keep in sync: `package.json` is the canonical
+manifest for CI, Cloudflare Pages, Playwright and Lighthouse.
 
 ### Verification checklist (run all four before calling work done)
 
@@ -62,12 +54,12 @@ Pages.
    `[strip-oversized-assets] Removing ort-wasm-simd-threaded.asyncify-*.wasm`;
    `dist/assets` must contain **no file ≥ 24 MiB** (Cloudflare Pages rejects
    any single file over 25 MiB).
-4. `npm run test:e2e` — 46 tests (23 per browser project) must pass. The
-   config caps workers at 2 locally / 4 in CI because 8 Chromium workers caused
-   timeout flakes on constrained machines. It builds and serves `dist/` itself.
+4. `npm run test:e2e` — the `chromium-desktop`, `chromium-mobile`,
+   `webkit-desktop` and `webkit-mobile` projects must pass. The config caps
+   workers at 2 locally / 4 in CI because 8 Chromium workers caused timeout
+   flakes on constrained machines. It builds and serves `dist/` itself.
 
-Optional local extras: `deno task test` (9 unit tests), `npm run lighthouse`
-(or `deno task lighthouse` with `lighthouserc.deno.json`).
+Optional local extra: `npm run lighthouse`.
 
 If a change affects only docs, 1–2 are still required; run e2e when routed UI,
 settings, routing, or privacy copy changes.
@@ -81,9 +73,15 @@ src/router.ts              History API router
 src/store.ts               persisted per-tool state (localStorage-backed)
 src/components.ts          shared DOM helpers (file cards, tags, progress)
 src/toast.ts               toasts
-src/style.css              one global stylesheet, section banners with ═══
+src/style.css              app stylesheet: tokens + legacy `.tool-*`/`.settings-*`
+src/styles/workbench.css   new UI only, every selector `.cz-*`
 src/lib/                   engines, one file per format
   settings.ts              cz-settings-v2 + resolveExecutionProfile()
+  resourceManager.ts       Adaptive Resource Guard (admission, queue, snapshot)
+  recommendations.ts       deterministic contextual suggestions + dismissals
+  recents.ts               cz-recent-tools / cz-favourite-tools helpers
+  workbench.ts             home search, pins, live queue panel
+  theme.ts                 light / dark / system preference
   platform.ts              device detection + performance-tier recommendation
   gpu.ts / webgl.ts        shared canvas helpers + one shared WebGL2 context
   aiEngine.ts              transformers.js classifier, WebGPU→WASM fallback
@@ -99,11 +97,9 @@ src/lib/                   engines, one file per format
 src/pages/                 one file per route: images, pdf, video, audio, gif,
                            ocr, convert, imagesToPdf, mergePdf, settings
 src/components/            standalone React component library (unused by app)
-e2e/smoke.spec.ts          Playwright smoke tests
-tests/                     Deno unit tests (optional local; not run by CI)
+e2e/smoke.spec.ts          Playwright tests
 scripts/strip-oversized-assets.mjs  Cloudflare 25 MiB guard
-lighthouserc.json          Lighthouse CI config (npm)
-lighthouserc.deno.json     Lighthouse config for optional local Deno runs
+lighthouserc.json          Lighthouse CI config
 ```
 
 Heavy runtime engines (FFmpeg.wasm, PDF.js, pdf-lib, Tesseract.js,
@@ -149,7 +145,8 @@ match. Several were previously wrong; don't regress them.
 - Multi-track/subtitle handling uses ffmpeg stream wildcards; subtitle burn-in
   is not implemented (no libass guarantee in the CDN core).
 - Audio/GIF/Video queues are intentionally sequential (shared FFmpeg
-  singleton). Canvas-only Images/PDF batches use `runBatch()`.
+  singleton). Canvas-only Images/PDF batches use `runBatch()`, and every
+  batch item still passes through `runScheduled()` for global admission.
 
 ### OCR
 - **Tesseract.js 5 is the stable default.** `auto` resolves to Tesseract.
@@ -159,8 +156,12 @@ match. Several were previously wrong; don't regress them.
   Never label it as a VLM or as layout/table-aware.
 - Math/Greek symbol mode always runs on Tesseract (`grc` + `equ`), regardless
   of the selected engine.
-- OCR page seeds engine/language from Settings and render DPI from the
-  resolved performance mode: Efficient 200, Balanced 250, Powerful 300.
+- OCR page seeds engine/language from Settings → Compression → OCR defaults
+  and render DPI from the resolved resource mode: Memory Saver 200, Balanced
+  250, Maximum 300.
+- OCR renders and embeds one page at a time (`openPageRenderer()` +
+  incremental `createSearchablePdfBuilder()`), releasing each page blob after
+  recognition. Don't go back to rendering every page up front.
 - Batch OCR is sequential and awaits each file; a bare `forEach()` here was a
   real crash bug.
 
@@ -198,27 +199,66 @@ match. Several were previously wrong; don't regress them.
 ## Settings and the execution profile
 
 - Persisted key: `cz-settings-v2`. Legacy `cz-settings-v1` is read once to
-  migrate GPU/engine choices. `theme` is separate.
+  migrate GPU/engine choices (including the old `performanceMode` tier, which
+  is mapped onto `resourceMode`). `theme` is separate.
 - `resolveExecutionProfile()` in `src/lib/settings.ts` is the **single source
   of truth** for this session's resource profile: tier, AI model tier,
   backend preference, concurrency, image-dimension cap, FFmpeg threading,
   video preset, GPU recommendation.
 - Before it existed, each resolver independently called
-  `recommend(detectPlatform())`, so a manual Performance Mode changed the
-  label but not the AI model/concurrency/threading. Do not reintroduce that.
-- Performance Mode (`Auto`/`Efficient`/`Balanced`/`Powerful`) is a
-  **resource** mode, not a quality goal. It must not silently lower output
-  quality or resolution. Explicit per-engine overrides win:
-  `ai.modelTier`, `ai.backend`, `resourceLimits.concurrency`,
-  `resourceLimits.maxImageDim`, and the video preset. `ai.backend: 'auto'`
-  prefers WebGPU only when `navigator.gpu` exists; `resolveExecutionProfile()`
-  reports that choice, while `aiEngine` performs the real adapter/device probe
-  and fallback.
+  `recommend(detectPlatform())`, so a manual resource mode changed the label
+  but not the AI model/concurrency/threading. Do not reintroduce that.
+- `resourceMode` (`auto` / `memory-saver` / `balanced` / `maximum`) is the
+  supported control. It replaced the old `performanceMode`
+  (`efficient`/`balanced`/`powerful`), which is migration-only and must not be
+  rendered as a second overlapping control. It is a **resource** mode, not a
+  quality goal: it must not silently lower output quality or resolution.
+  Explicit per-engine overrides win: `ai.modelTier`, `ai.backend`,
+  `resourceLimits.concurrency`, `resourceLimits.maxImageDim`, and the video
+  preset.
 - Tier defaults: concurrency 1/2/3; image cap 6000/10000/0 (0 = uncapped);
   AI tier efficient/efficient/powerful; video preset
-  ultrafast/fast/medium.
+  ultrafast/fast/medium. `resourceLimits.*: 'auto'` defers to the tier.
 - GPU toggles are seeded from device detection on first run only; after that
   they are explicit user choices. `GPU_CAPABLE` is images/pdf/ocr/video.
+- Settings is a sectioned dialog (`src/pages/settings.ts`): General,
+  Appearance, Performance, AI engine, Suggestions, Compression, Privacy &
+  data, Diagnostics. Tests must click `#settings-nav` before asserting
+  section content.
+- Theme preference is three-way (`light`/`dark`/`system`) in `lib/theme.ts`
+  under the existing `theme` key. `data-theme` always receives the *resolved*
+  value (`light`/`dark`), so `[data-theme="dark"]` rules stay valid.
+
+## Adaptive Resource Guard
+
+- `src/lib/resourceManager.ts` is the only admittance path for heavyweight
+  work. `runScheduled(job, fn)` takes a job descriptor
+  (`kind`, `label`, optional `bytes`/`pages`/`pixels`) and resolves with the
+  function's result. Heavy pools: ffmpeg, OCR, PDF rasterisation, AI.
+  Light pool: Canvas image/PDF encode.
+- `getResourceSnapshot()` returns `estimateOnly: true` plus honest mode
+  labels, active/queued counts, `concurrencyLabel`, `engineHint` and a
+  pressure notice. It must never claim to read free RAM — browsers don't
+  expose it.
+- Video/audio/GIF/OCR loops stay sequential end to end (shared FFmpeg
+  singleton / one OCR worker). The guard adds global admission control; it
+  does not parallelise those engines.
+- `resourceStatusLine()` feeds the Settings/queue UI. Do not add a second
+  scheduler or bypass `runScheduled()` in a new engine.
+
+## Contextual recommendations
+
+- `src/lib/recommendations.ts` is deterministic and model-free. Rules read
+  metadata already on the page (names, byte sizes, MIME types, current
+  options) and never mutate anything: the caller applies an action.
+- Rules currently shipped: natural filename order (images, images → PDF,
+  merge PDF), photo input → WebP instead of PNG, quality ≥ 96 → 82, fixed
+  page size → Auto, PDF Extreme/Low-large-file → Recommended, CJK → PaddleOCR
+  and Latin/RTL/Indic → Tesseract. Do not add an AI-dependent suggestion
+  without gating it on `settings.recommendations.allowAi`.
+- Dismissals persist in `cz-recommendations-v1` as `scope:rule:action` keys.
+- UI: `createRecommendationNotice()` renders one primary suggestion plus a
+  collapsed "Other suggestions (N)"; never a modal or repeated toast.
 
 ### GPU / platform semantics
 - `gpuAvailable()` means **WebGL2 only**. OffscreenCanvas is not proof of GPU
@@ -238,7 +278,10 @@ match. Several were previously wrong; don't regress them.
   (Tesseract language data), `paddlejs.bj.bcebos.com` (PaddleOCR weights),
   `fonts.googleapis.com` (typography), and Hugging Face for model weights.
 - Only static assets/model weights leave the device; never file content.
-- localStorage keys: `theme`, `cz-settings-v2`, and legacy `cz-settings-v1`.
+- localStorage keys: `theme` (`light`/`dark`/`system`), `cz-settings-v2`,
+  `cz-recommendations-v1`, `cz-recent-tools`, `cz-favourite-tools`, and
+  legacy `cz-settings-v1`. Recent/pinned lists store tool route names only —
+  never file names or contents.
 - If you add a CDN host, storage key, or data flow, update **both**
   `PRIVACY.md` and the `/privacy` template in `index.html` in the same change.
 - `CREDITS.md` must credit any new third-party code with its license
@@ -250,9 +293,12 @@ match. Several were previously wrong; don't regress them.
 - Vanilla DOM for the app. Don't introduce React/Svelte/etc. into
   `src/main.ts` or `src/pages/*`; the React library under `src/components` is
   standalone and unused by the app.
-- CSS lives in `src/style.css`, one file with `═══` section banners. Reuse
-  existing custom properties (`--accent`, `--text-3`, `--r`, `--t`, …) rather
-  than hardcoding colors/radii/timings.
+- CSS lives in two files: `src/style.css` (tokens + the legacy
+  `.tool-wrap`/`.settings-card` component styles, section banners with ═══)
+  and `src/styles/workbench.css` (every selector prefixed `.cz-`). New UI
+  goes in the second file so it cannot restyle legacy markup. Reuse existing
+  custom properties (`--accent`, `--text-3`, `--r`, `--t`, …) rather than
+  hardcoding colours/radii/timings.
 - Respect `prefers-reduced-motion`; motion helpers apply the end state
   instantly instead of skipping the state change.
 - Canvas-based engines use `makeCanvas`/`get2D` from `gpu.ts`; don't add local
@@ -272,9 +318,7 @@ match. Several were previously wrong; don't regress them.
   reason `scripts/strip-oversized-assets.mjs` exists; it uses
   `fileURLToPath()` so it also works on Windows (`new URL(...).pathname`
   produced an invalid `/C:/…` path and silently skipped everything).
-- `npm run build` remains the Cloudflare-compatible command. `deno task build`
-  runs the same Vite build plus the strip script for local Deno users; CI uses
-  npm only.
+- `npm run build` remains the Cloudflare-compatible command. CI uses npm only.
 - COOP/COEP headers in `vite.config.ts` (dev) and `public/_headers`
   (production) enable SharedArrayBuffer for multithreaded FFmpeg.
 

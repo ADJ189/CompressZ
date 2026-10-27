@@ -41,21 +41,29 @@ CompressF is still maintained as its own project.
 
 ---
 
-## Device-Aware Performance & Local AI
+## Device-Aware Performance, Workbench &amp; Local AI
 
-Settings now includes four sections beyond the per-engine defaults:
+Settings is a dialog split into eight sections: **General**, **Appearance**, **Performance**, **AI engine**,
+**Suggestions**, **Compression**, **Privacy &amp; data**, and **Diagnostics**.
 
-- **This Device** — a read-only snapshot of what your browser exposes locally (OS, CPU cores, memory,
-  GPU/WebGL2/WebGPU, cross-origin isolation, network type) and the performance tier CompressZ derived from it.
-  Nothing here is sent anywhere; it's computed by `src/lib/platform.ts` on load.
-- **Performance Mode** — `Auto` (follows the device's tier) or a manual `Efficient` / `Balanced` / `Powerful`
-  resource profile. It is a *resource* mode, not a quality goal: it live-controls batch concurrency, the auto
-  image-dimension cap, FFmpeg threading and which AI model tier `Auto` uses. GPU toggles and the video preset
-  are seeded from the device on first run and remain explicit per-engine overrides after that.
-- **Execution — Effective This Session** — a read-only diagnostic showing the actual image path, AI backend/model,
-  video path, FFmpeg core mode, concurrency, dimension cap and OCR default. WebGL2, WebGPU, OffscreenCanvas and
-  WebCodecs are reported separately; OffscreenCanvas is not treated as proof of GPU acceleration.
-- **AI Engine — Local** — an on/off switch for **Smart Analyze** and **sort by predicted label** on the Images
+- **Appearance** — `Light`, `Dark`, or `System` (follow the operating system). The header button remains a quick
+  light/dark flip; picking a side there opts out of `System`. The resolved value is always written to
+  `data-theme`, so the whole stylesheet keeps working unchanged.
+- **This Device / Diagnostics** — a read-only snapshot of what your browser exposes locally (OS, CPU cores,
+  memory, GPU/WebGL2/WebGPU, cross-origin isolation, network type) plus the execution profile CompressZ derived
+  from it. Nothing here is sent anywhere; it is computed by `src/lib/platform.ts`. **Copy diagnostics** writes a
+  JSON report containing capability and preference data only — never file names or contents.
+- **Resource mode** — `Auto` (follows the device tier), `Memory Saver`, `Balanced`, or `Maximum`. It is a
+  *resource* mode, not a quality goal: it controls how many heavyweight jobs the **Adaptive Resource Guard**
+  admits at once, the automatic image-dimension cap, FFmpeg threading and which AI model tier `Auto` uses.
+  Explicit per-engine overrides (including `resourceLimits.concurrency`, `resourceLimits.maxImageDim` and the
+  video preset) still win, and output quality/resolution is never silently lowered.
+- **Adaptive Resource Guard** — every heavy engine asks the guard for a slot before it starts. Heavy jobs
+  (FFmpeg, OCR, PDF rasterisation, AI inference) and light jobs (Canvas image work) use separate pools, and job
+  weight is estimated from file size, pixel count and page count. Browsers do not expose free RAM, so this is a
+  scheduling boundary — **not a memory meter**; Settings and the home queue panel say so explicitly. Video,
+  audio, GIF and OCR still run one file at a time end to end because they share a single FFmpeg/OCR engine.
+- **AI engine — local** — an on/off switch for **Smart Analyze** and **sort by predicted label** on the Images
   and Images → PDF pages. When enabled, a small image-classification model (`Xenova/mobilenet_v2_1.0_224` on
   `Efficient`, `Xenova/vit-base-patch16-224` on `Powerful`, both via
   [`@huggingface/transformers`](https://github.com/huggingface/transformers.js)) runs entirely in your browser.
@@ -66,7 +74,18 @@ Settings now includes four sections beyond the per-engine defaults:
   **not** compute embeddings or visual-similarity groups. A second, model-free heuristic looks at edge density
   and palette size to guess "photo" vs. "graphic/document" and can optionally auto-apply a matching
   format/quality. No image or file ever leaves your device; model weights are cached by the browser after the
-  first download, the same way PaddleOCR and Tesseract already work.
+  first download, the same way PaddleOCR and Tesseract already work. **Clear model cache** releases the in-memory
+  session and deletes matching Cache Storage entries where the browser allows it.
+- **Suggestions** — compact, dismissible, one-primary-at-a-time hints inside a workflow (natural filename order,
+  photo→WebP output, Recommended instead of Extreme PDF, PaddleOCR for CJK). Rules are deterministic and read
+  only metadata already on the page; they never reorder files, change quality or start a job on their own.
+  Dismissals live in `cz-recommendations-v1` and can be forgotten here.
+
+### Home workbench
+
+The home page is a searchable workbench rather than a static hero: filter tools by name or keyword, pin
+favourites, and see recently opened tools (`cz-favourite-tools`, `cz-recent-tools` — route names only). A
+**Processing queue** panel shows the live Resource Guard state, so a long batch is visible from the home page.
 
 ---
 
@@ -202,6 +221,11 @@ compressz/
 │   │   ├── convertMedia.ts / convertOffice.ts / convertPdf.ts
 │   │   ├── imagesToPdf.ts / mergePdf.ts
 │   │   ├── imageDecode.ts / thumb.ts / aiEngine.ts
+│   │   ├── resourceManager.ts # Adaptive Resource Guard (admission + queue)
+│   │   ├── recommendations.ts # Deterministic contextual suggestions
+│   │   ├── recents.ts / workbench.ts # Home pins, recents, live queue panel
+│   │   ├── theme.ts          # light / dark / system preference
+│   │   ├── settings.ts       # cz-settings-v2 + resolveExecutionProfile()
 │   │   └── ffmpeg.ts / pdfLibs.ts / zip.ts / …
 │   ├── pages/            # One file per route
 │   │   ├── images.ts / pdf.ts / video.ts / audio.ts / gif.ts
@@ -215,16 +239,13 @@ compressz/
 │   ├── router.ts
 │   ├── store.ts
 │   ├── toast.ts
-│   ├── style.css         # App stylesheet
+│   ├── styles/workbench.css  # `.cz-*` scoped styles for new UI
+│   ├── style.css         # App stylesheet (legacy components + tokens)
 │   └── main.ts
 ├── index.html                # App shell + page templates
 ├── vite.config.ts            # Vite 8, esnext, COOP/COEP dev headers
 ├── playwright.config.ts
-├── deno.json                 # Optional local Deno tasks (CI uses npm)
-├── deno.lock                 # Optional Deno resolution lockfile
-├── lighthouserc.json         # Lighthouse CI config (npm/CI)
-├── lighthouserc.deno.json    # Lighthouse config for optional local Deno runs
-├── tests/                    # Deno unit tests for pure settings/AI logic
+├── lighthouserc.json         # Lighthouse CI config
 ├── tsconfig.json
 ├── package.json              # Canonical npm scripts (CI + Cloudflare Pages)
 ├── AGENTS.md                 # Engine invariants + agent/contributor checklist
@@ -249,15 +270,14 @@ npm run build      # → dist/ (also strips oversize assets)
 npm run preview    # serve dist/ locally
 npm run typecheck  # TypeScript check
 npm run lint       # ESLint
-npx --no-install playwright install chromium   # once
-npm run test:e2e   # Playwright smoke tests (builds, then serves dist/)
+npx --no-install playwright install chromium webkit   # once
+npm run test:e2e   # Playwright matrix (builds, then serves dist/)
 npm run lighthouse # Lighthouse CI
 ```
 
-**Deno is optional local tooling.** Deno 2.9+ can run the same toolchain through
-`deno.json` (`deno install`, then `deno task dev|build|typecheck|lint|test:e2e`),
-and `deno task test` runs the unit suite. `deno.lock` pins that optional
-resolution. CI does not require Deno and uses the npm scripts above.
+Node/npm is the only supported runner. GitHub Actions, Cloudflare Pages,
+Playwright and Lighthouse all use these scripts; there is no second toolchain
+to keep in sync.
 
 See [AGENTS.md](AGENTS.md) for the engine invariants and verification checklist.
 

@@ -82,16 +82,29 @@ offline pack yet.
 
 CompressZ stores these keys in your browser's `localStorage`:
 
-- `theme` — your light/dark mode preference.
-- `cz-settings-v2` — engine defaults, GPU toggles, Performance Mode and
-  resource limits.
+- `theme` — your appearance preference: `light`, `dark`, or `system`
+  (follow the operating system).
+- `cz-settings-v2` — engine defaults, GPU toggles, the Adaptive Resource
+  Guard mode and limits, local-AI options, and whether contextual
+  suggestions are enabled.
 - `cz-settings-v1` — a legacy settings blob, only read once to migrate an
   older install.
+- `cz-recommendations-v1` — the small set of suggestions you have dismissed,
+  stored as rule/action ids (no file names).
+- `cz-recent-tools` — the route names of tools you opened recently, used for
+  the "Pinned & recent" panel on the home page.
+- `cz-favourite-tools` — the route names you pinned on the home page.
 
-These values never leave your device. No file metadata, file names, or
-file contents are stored in localStorage. Model/binary caches are
-managed by the browser's own HTTP/IndexedDB cache and can be cleared
-through browser settings.
+These values never leave your device. Contextual suggestions are evaluated
+locally from metadata that is already in the page (file names, byte sizes,
+MIME types and the options you picked); the rules have no network access and
+never run a model unless you explicitly allow local AI for suggestions. No
+file metadata, file contents, or file paths are stored in localStorage. The
+home page's "Pinned & recent" panel stores tool route names only.
+
+Model/binary caches are managed by the browser's own HTTP/IndexedDB cache and
+can be cleared through browser settings, or through
+Settings → AI engine → Clear model cache.
 
 ## 6. Hosting and infrastructure
 

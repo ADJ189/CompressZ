@@ -233,132 +233,160 @@
 
 <!-- HOME -->
 <template id="tpl-home">
-<div class="home-wrap">
-  <div class="home-hero">
-    <div class="home-eyebrow">
-      <span class="ey-pill">New</span>
-      Client-side · Zero uploads · OCR included
+<div class="cz-workbench">
+  <section class="cz-wb-head">
+    <div class="cz-wb-head__text">
+      <p class="cz-wb-eyebrow">Local-first file workbench</p>
+      <h1 class="cz-wb-title">Compress, convert, OCR.</h1>
+      <p class="cz-wb-sub">Everything runs in this tab — no uploads, no accounts, no analytics.</p>
     </div>
-    <h1 class="home-title">
-      <span class="ht-plain">Compress anything.</span>
-      <span class="ht-grad">Stay private.</span>
-    </h1>
-    <p class="home-sub">
-      Compress images, PDFs, video, audio and GIFs — and run OCR on scanned documents —
-      entirely in your browser. Nothing leaves your device, ever.
+    <div class="cz-wb-search">
+      <svg class="cz-wb-search__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="wb-search" type="search" placeholder="Search tools — images, pdf, ocr…" aria-label="Search tools" autocomplete="off" spellcheck="false">
+    </div>
+  </section>
+
+  <section class="cz-wb-section" aria-labelledby="wb-quick-title">
+    <h2 class="cz-wb-section__title" id="wb-quick-title">Quick actions</h2>
+    <div class="cz-wb-quick">
+      <a class="cz-wb-quick__card" href="/compress/images" data-wb-quick data-nav="compress/images" data-label="Images" data-keywords="compress photo jpeg png webp avif heic resize">
+        <span class="cz-wb-quick__icon" aria-hidden="true">🖼️</span>
+        <span class="cz-wb-quick__name">Images</span>
+        <span class="cz-wb-quick__desc">JPEG · PNG · WebP · AVIF</span>
+      </a>
+      <a class="cz-wb-quick__card" href="/compress/pdf" data-wb-quick data-nav="compress/pdf" data-label="PDF" data-keywords="compress document target size structural">
+        <span class="cz-wb-quick__icon" aria-hidden="true">📄</span>
+        <span class="cz-wb-quick__name">PDF</span>
+        <span class="cz-wb-quick__desc">Structural · target size</span>
+      </a>
+      <a class="cz-wb-quick__card" href="/compress/ocr" data-wb-quick data-nav="compress/ocr" data-label="PDF OCR" data-keywords="ocr scan searchable tesseract paddle text language">
+        <span class="cz-wb-quick__icon" aria-hidden="true">🔍</span>
+        <span class="cz-wb-quick__name">PDF OCR</span>
+        <span class="cz-wb-quick__desc">Searchable scans</span>
+      </a>
+      <a class="cz-wb-quick__card" href="/compress/video" data-wb-quick data-nav="compress/video" data-label="Video" data-keywords="video mp4 mp4 h264 h265 vp9 av1 ffmpeg">
+        <span class="cz-wb-quick__icon" aria-hidden="true">🎬</span>
+        <span class="cz-wb-quick__name">Video</span>
+        <span class="cz-wb-quick__desc">H.264 · H.265 · VP9 · AV1</span>
+      </a>
+      <a class="cz-wb-quick__card" href="/compress/images-to-pdf" data-wb-quick data-nav="compress/images-to-pdf" data-label="Images → PDF" data-keywords="images pdf combine pages scan">
+        <span class="cz-wb-quick__icon" aria-hidden="true">🧩</span>
+        <span class="cz-wb-quick__name">Images → PDF</span>
+        <span class="cz-wb-quick__desc">One page per image</span>
+      </a>
+      <a class="cz-wb-quick__card" href="/convert" data-wb-quick data-nav="convert" data-label="Convert" data-keywords="convert format video audio image docx pptx pdf word powerpoint">
+        <span class="cz-wb-quick__icon" aria-hidden="true">🔁</span>
+        <span class="cz-wb-quick__name">Convert</span>
+        <span class="cz-wb-quick__desc">Media · documents · PDF</span>
+      </a>
+    </div>
+  </section>
+
+  <section class="cz-wb-grid2">
+    <div class="cz-wb-panel">
+      <h2 class="cz-wb-panel__title">Pinned &amp; recent</h2>
+      <div class="cz-wb-pinned" id="wb-pinned"></div>
+    </div>
+    <div class="cz-wb-panel">
+      <div class="cz-wb-panel__head">
+        <h2 class="cz-wb-panel__title">Processing queue</h2>
+        <button type="button" class="cz-wb-panel__link" data-nav="settings">Resource settings</button>
+      </div>
+      <div class="cz-wb-queue" id="wb-queue" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <section class="cz-wb-section" aria-labelledby="wb-all-title">
+    <div class="cz-wb-section__head">
+      <h2 class="cz-wb-section__title" id="wb-all-title">All tools</h2>
+      <input id="wb-filter" class="cz-wb-filter" type="search" placeholder="Filter" aria-label="Filter tools" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="cz-wb-all" id="wb-all">
+      <div class="cz-wb-all__card" data-wb-tool data-nav="compress/images" data-label="Images" data-icon="🖼️" data-keywords="compress photo jpeg png webp avif heic resize">
+        <span class="cz-wb-all__icon" aria-hidden="true">🖼️</span>
+        <span class="cz-wb-all__text">
+          <span class="cz-wb-all__name">Images</span>
+          <span class="cz-wb-all__desc">Canvas/OffscreenCanvas encoding with a WebGL2 resize path when available.</span>
+        </span>
+        <button type="button" class="cz-wb-all__fav" data-wb-fav aria-label="Pin Images" aria-pressed="false">☆</button>
+      </div>
+      <div class="cz-wb-all__card" data-wb-tool data-nav="compress/pdf" data-label="PDF" data-icon="📄" data-keywords="compress document target size structural">
+        <span class="cz-wb-all__icon" aria-hidden="true">📄</span>
+        <span class="cz-wb-all__text">
+          <span class="cz-wb-all__name">PDF</span>
+          <span class="cz-wb-all__desc">Structural image resampling — text and vectors untouched.</span>
+        </span>
+        <button type="button" class="cz-wb-all__fav" data-wb-fav aria-label="Pin PDF" aria-pressed="false">☆</button>
+      </div>
+      <div class="cz-wb-all__card" data-wb-tool data-nav="compress/merge-pdf" data-label="Merge PDF" data-icon="🧷" data-keywords="merge pdf combine join reorder">
+        <span class="cz-wb-all__icon" aria-hidden="true">🧷</span>
+        <span class="cz-wb-all__text">
+          <span class="cz-wb-all__name">Merge PDF</span>
+          <span class="cz-wb-all__desc">Combine PDFs in any order — pages copied directly, nothing rasterised.</span>
+        </span>
+        <button type="button" class="cz-wb-all__fav" data-wb-fav aria-label="Pin Merge PDF" aria-pressed="false">☆</button>
+      </div>
+      <div class="cz-wb-all__card" data-wb-tool data-nav="compress/images-to-pdf" data-label="Images → PDF" data-icon="🧩" data-keywords="images pdf combine pages scan">
+        <span class="cz-wb-all__icon" aria-hidden="true">🧩</span>
+        <span class="cz-wb-all__text">
+          <span class="cz-wb-all__name">Images → PDF</span>
+          <span class="cz-wb-all__desc">Photos or screenshots into one PDF, one page each, reorderable.</span>
+        </span>
+        <button type="button" class="cz-wb-all__fav" data-wb-fav aria-label="Pin Images to PDF" aria-pressed="false">☆</button>
+      </div>
+      <div class="cz-wb-all__card" data-wb-tool data-nav="compress/video" data-label="Video" data-icon="🎬" data-keywords="video mp4 h264 h265 vp9 av1 ffmpeg">
+        <span class="cz-wb-all__icon" aria-hidden="true">🎬</span>
+        <span class="cz-wb-all__text">
+          <span class="cz-wb-all__name">Video</span>
+          <span class="cz-wb-all__desc">FFmpeg.wasm encoding with a MediaRecorder compatibility fallback.</span>
+        </span>
+        <button type="button" class="cz-wb-all__fav" data-wb-fav aria-label="Pin Video" aria-pressed="false">☆</button>
+      </div>
+      <div class="cz-wb-all__card" data-wb-tool data-nav="compress/audio" data-label="Audio" data-icon="🎵" data-keywords="audio mp3 aac opus flac wav bitrate">
+        <span class="cz-wb-all__icon" aria-hidden="true">🎵</span>
+        <span class="cz-wb-all__text">
+          <span class="cz-wb-all__name">Audio</span>
+          <span class="cz-wb-all__desc">FFmpeg.wasm encodes to six formats with custom bitrate and sample rate.</span>
+        </span>
+        <button type="button" class="cz-wb-all__fav" data-wb-fav aria-label="Pin Audio" aria-pressed="false">☆</button>
+      </div>
+      <div class="cz-wb-all__card" data-wb-tool data-nav="compress/gif" data-label="GIF" data-icon="🎞️" data-keywords="gif webm palette dither ffmpeg animation">
+        <span class="cz-wb-all__icon" aria-hidden="true">🎞️</span>
+        <span class="cz-wb-all__text">
+          <span class="cz-wb-all__name">GIF</span>
+          <span class="cz-wb-all__desc">Two-pass palettegen + paletteuse, or WebM VP9 conversion.</span>
+        </span>
+        <button type="button" class="cz-wb-all__fav" data-wb-fav aria-label="Pin GIF" aria-pressed="false">☆</button>
+      </div>
+      <div class="cz-wb-all__card" data-wb-tool data-nav="compress/ocr" data-label="PDF OCR" data-icon="🔍" data-keywords="ocr scan searchable tesseract paddle text language">
+        <span class="cz-wb-all__icon" aria-hidden="true">🔍</span>
+        <span class="cz-wb-all__text">
+          <span class="cz-wb-all__name">PDF OCR</span>
+          <span class="cz-wb-all__desc">Tesseract.js by default, with optional PaddleOCR PP-OCRv3 for CJK.</span>
+        </span>
+        <button type="button" class="cz-wb-all__fav" data-wb-fav aria-label="Pin PDF OCR" aria-pressed="false">☆</button>
+      </div>
+      <div class="cz-wb-all__card" data-wb-tool data-nav="convert" data-label="Convert" data-icon="🔁" data-keywords="convert format video audio image docx pptx pdf word powerpoint">
+        <span class="cz-wb-all__icon" aria-hidden="true">🔁</span>
+        <span class="cz-wb-all__text">
+          <span class="cz-wb-all__name">Convert</span>
+          <span class="cz-wb-all__desc">Video, audio, images, PDF ⇄ images, Word and PowerPoint.</span>
+        </span>
+        <button type="button" class="cz-wb-all__fav" data-wb-fav aria-label="Pin Convert" aria-pressed="false">☆</button>
+      </div>
+    </div>
+    <p class="cz-wb-empty" id="wb-empty" hidden>No tool matches that search.</p>
+  </section>
+
+  <footer class="cz-wb-footer">
+    <p><strong>No uploads. No accounts. No analytics.</strong> Heavy engines are fetched once from a CDN and then cached by your browser; file bytes never leave the device.</p>
+    <p class="cz-wb-footer__links">
+      <button type="button" class="cz-wb-footer__link" data-nav="privacy">Privacy</button>
+      <button type="button" class="cz-wb-footer__link" data-nav="docs">Docs</button>
+      <button type="button" class="cz-wb-footer__link" data-nav="about">About</button>
+      <a class="cz-wb-footer__link" href="https://github.com/ADJ189/compressz" target="_blank" rel="noopener">Source ↗</a>
     </p>
-    <div class="home-actions">
-      <span class="btn-primary" data-nav="compress/images">
-        Start compressing
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-      </span>
-      <span class="btn-ghost" data-nav="about">How it works</span>
-    </div>
-    <div class="trust-row">
-      <div class="trust-chip">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-        No uploads
-      </div>
-      <div class="trust-chip">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-        No accounts
-      </div>
-      <div class="trust-chip">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-        No tracking
-      </div>
-      <div class="trust-chip">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-        Open source
-      </div>
-    </div>
-  </div>
-
-  <div class="home-tools-title">Tools</div>
-  <div class="home-tools-grid">
-    <div class="htc" data-t="images" data-nav="compress/images">
-      <div class="htc-head"><div class="htc-icon">🖼️</div><svg class="htc-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 17L17 7M7 7h10v10"/></svg></div>
-      <div class="htc-name">Images</div>
-      <div class="htc-desc">Browser-native encoding via Canvas/OffscreenCanvas, with a WebGL2 resize path when available. Binary search to hit exact target sizes. Optional local AI tagging &amp; sort by predicted label.</div>
-      <div class="htc-tags"><span class="htc-tag">JPEG</span><span class="htc-tag">PNG</span><span class="htc-tag">WebP</span><span class="htc-tag">AVIF</span><span class="htc-tag">HEIC</span><span class="htc-tag">✨ AI</span></div>
-    </div>
-    <div class="htc" data-t="pdf" data-nav="compress/pdf">
-      <div class="htc-head"><div class="htc-icon">📄</div><svg class="htc-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 17L17 7M7 7h10v10"/></svg></div>
-      <div class="htc-name">PDF</div>
-      <div class="htc-desc">Structural image resampling — text and vectors untouched. Compress to exact MB/KB target.</div>
-      <div class="htc-tags"><span class="htc-tag">Structural</span><span class="htc-tag">pdf-lib</span><span class="htc-tag">Target size</span></div>
-    </div>
-    <div class="htc" data-t="merge" data-nav="compress/merge-pdf">
-      <div class="htc-head"><div class="htc-icon">🧷</div><svg class="htc-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 17L17 7M7 7h10v10"/></svg></div>
-      <div class="htc-name">Merge PDF</div>
-      <div class="htc-desc">Combine multiple PDFs into one, in any order — pages copied directly, nothing rasterised.</div>
-      <div class="htc-tags"><span class="htc-tag">pdf-lib</span><span class="htc-tag">Reorderable</span></div>
-    </div>
-    <div class="htc" data-t="images-to-pdf" data-nav="compress/images-to-pdf">
-      <div class="htc-head"><div class="htc-icon">🧩</div><svg class="htc-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 17L17 7M7 7h10v10"/></svg></div>
-      <div class="htc-name">Images → PDF</div>
-      <div class="htc-desc">Combine photos or screenshots into one PDF, one page each, reorderable — WebGL2 resize when available, optional local AI sort by predicted label.</div>
-      <div class="htc-tags"><span class="htc-tag">pdf-lib</span><span class="htc-tag">Reorderable</span><span class="htc-tag">WebGL2</span><span class="htc-tag">✨ AI</span></div>
-    </div>
-    <div class="htc" data-t="video" data-nav="compress/video">
-      <div class="htc-head"><div class="htc-icon">🎬</div><svg class="htc-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 17L17 7M7 7h10v10"/></svg></div>
-      <div class="htc-name">Video</div>
-      <div class="htc-desc">FFmpeg.wasm encoding with a MediaRecorder compatibility fallback. No WebCodecs muxer tier yet. Configurable in Settings.</div>
-      <div class="htc-tags"><span class="htc-tag">H.264</span><span class="htc-tag">H.265</span><span class="htc-tag">VP9</span><span class="htc-tag">AV1</span></div>
-    </div>
-    <div class="htc" data-t="audio" data-nav="compress/audio">
-      <div class="htc-head"><div class="htc-icon">🎵</div><svg class="htc-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 17L17 7M7 7h10v10"/></svg></div>
-      <div class="htc-name">Audio</div>
-      <div class="htc-desc">FFmpeg.wasm encodes to 6 formats with custom bitrate and sample rate.</div>
-      <div class="htc-tags"><span class="htc-tag">MP3</span><span class="htc-tag">AAC</span><span class="htc-tag">Opus</span><span class="htc-tag">FLAC</span><span class="htc-tag">WAV</span></div>
-    </div>
-    <div class="htc" data-t="gif" data-nav="compress/gif">
-      <div class="htc-head"><div class="htc-icon">🎞️</div><svg class="htc-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 17L17 7M7 7h10v10"/></svg></div>
-      <div class="htc-name">GIF</div>
-      <div class="htc-desc">Gold-standard two-pass palettegen + paletteuse Bayer dithering or WebM VP9 conversion.</div>
-      <div class="htc-tags"><span class="htc-tag">GIF</span><span class="htc-tag">WebM VP9</span><span class="htc-tag">FFmpeg</span></div>
-    </div>
-    <div class="htc" data-t="ocr" data-nav="compress/ocr">
-      <div class="htc-head"><div class="htc-icon">🔍</div><svg class="htc-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 17L17 7M7 7h10v10"/></svg></div>
-      <div class="htc-name">PDF OCR</div>
-      <div class="htc-desc">Make scanned PDFs searchable. Tesseract.js LSTM (stable default, 100+ langs) + optional PaddleOCR PP-OCRv3 (printed CJK/Latin).</div>
-      <div class="htc-tags"><span class="htc-tag">Tesseract</span><span class="htc-tag">PaddleOCR</span><span class="htc-tag">Searchable PDF</span></div>
-    </div>
-    <div class="htc" data-t="convert" data-nav="convert">
-      <div class="htc-head"><div class="htc-icon">🔁</div><svg class="htc-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 17L17 7M7 7h10v10"/></svg></div>
-      <div class="htc-name">Convert</div>
-      <div class="htc-desc">Format conversion for video, audio, images, PDF ⇄ images, Word, and PowerPoint.</div>
-      <div class="htc-tags"><span class="htc-tag">Video</span><span class="htc-tag">DOCX</span><span class="htc-tag">PPTX</span><span class="htc-tag">PDF</span></div>
-    </div>
-  </div>
-
-  <div class="how-row">
-    <div class="how-card"><div class="how-num">01</div><div class="how-title">Drop your file</div><div class="how-desc">Drag & drop or click to browse. All file processing starts immediately in your browser.</div></div>
-    <div class="how-card"><div class="how-num">02</div><div class="how-title">Set options</div><div class="how-desc">Choose quality, format, target size, engine, or just use the smart defaults.</div></div>
-    <div class="how-card"><div class="how-num">03</div><div class="how-title">Compress</div><div class="how-desc">WebAssembly, Canvas API, and Web platform APIs handle everything locally.</div></div>
-    <div class="how-card"><div class="how-num">04</div><div class="how-title">Download</div><div class="how-desc">Save your file. Nothing was uploaded. Nothing was logged. Your data is yours.</div></div>
-  </div>
-
-  <div class="priv-highlight">
-    <div class="ph-title">🔒 Your files never leave your device</div>
-    <p class="ph-sub">CompressZ has no backend. All processing happens locally using WebAssembly and Web APIs. We don't collect any data, run no analytics, and have no servers that touch your files.</p>
-    <div class="ph-actions">
-      <span class="btn-white" data-nav="privacy">Read Privacy Policy</span>
-      <a class="btn-white-ghost" href="https://github.com/ADJ189/compressz" target="_blank" rel="noopener">View Source Code ↗</a>
-    </div>
-  </div>
-
-  <!-- Footer credit -->
-  <div style="text-align:center;padding:2rem 0 0;border-top:1px solid var(--border);margin-top:3rem">
-    <p style="font-size:.82rem;color:var(--text-4)">
-      Made with ❤️ by <strong style="color:var(--text-3)">ADJ and team</strong>
-      &nbsp;·&nbsp;
-      <span data-nav="privacy" style="cursor:pointer;color:var(--accent)">Privacy Policy</span>
-      &nbsp;·&nbsp;
-      <a href="https://github.com/ADJ189/compressz" target="_blank" rel="noopener" style="color:var(--text-4)">GitHub ↗</a>
-    </p>
-  </div>
-
+  </footer>
 </div>
 </template>
 
@@ -372,7 +400,7 @@
   <p>CompressZ runs entirely in your browser using WebAssembly, the Canvas API, and Web platform APIs, with two local OCR engines. Every byte of your files stays on your device throughout the entire process.</p>
 
   <h2>CompressZ &amp; CompressF</h2>
-  <p>CompressZ is a fork of <a href="https://github.com/ADJ189/CompressF" target="_blank" rel="noopener" style="color:var(--accent)">CompressF</a>, ADJ's earlier browser-native compression tool. CompressF is still maintained on its own — a leaner, format-focused sister site — while CompressZ has grown into the broader multi-engine workspace you're using now (Convert, OCR, GPU acceleration, device-aware Performance Mode, and the local AI engine below).</p>
+  <p>CompressZ is a fork of <a href="https://github.com/ADJ189/CompressF" target="_blank" rel="noopener" style="color:var(--accent)">CompressF</a>, ADJ's earlier browser-native compression tool. CompressF is still maintained on its own — a leaner, format-focused sister site — while CompressZ has grown into the broader multi-engine workspace you're using now (Convert, OCR, GPU acceleration, the device-aware Adaptive Resource Guard, and the local AI engine below).</p>
 
   <h2>Technology stack</h2>
   <div class="tech-grid">
@@ -383,7 +411,7 @@
     <div class="tech-card"><h3>🔤 Tesseract.js 5</h3><p>LSTM neural OCR compiled to SIMD-accelerated WASM. 100+ languages, ~10 MB, runs offline after first load. Stable default OCR engine.</p></div>
     <div class="tech-card"><h3>🧠 PaddleOCR PP-OCRv3</h3><p>An optional PP-OCRv3 detection/classification/recognition pipeline via WebGL (~20–25 MB) for printed CJK/Latin text. It is not a vision-language model and does not understand tables or layouts.</p></div>
     <div class="tech-card"><h3>✨ Transformers.js</h3><p>Runs a real image-classification model locally (WASM, or feature-tested WebGPU with WASM fallback) for Smart Analyze and sort-by-label on the Images pages — Settings → AI Engine, where you can also pick Auto / WebGPU-first / CPU (WASM). Nothing is uploaded.</p></div>
-    <div class="tech-card"><h3>🧭 Platform detection</h3><p>Reports CPU cores, memory, WebGL2, WebGPU, OffscreenCanvas, WebCodecs and cross-origin isolation separately, then derives an Efficiency/Balanced/Powerful resource profile — see Settings → This Device and Execution.</p></div>
+    <div class="tech-card"><h3>🧭 Platform detection</h3><p>Reports CPU cores, memory, WebGL2, WebGPU, OffscreenCanvas, WebCodecs and cross-origin isolation separately, then derives the resource profile used by the Adaptive Resource Guard (Auto, Memory Saver, Balanced or Maximum) — see Settings → Performance and Diagnostics.</p></div>
   </div>
 
   <h2>PDF compression strategies</h2>
@@ -459,20 +487,37 @@
     <li>Shares its resize/encode path with the Image compressor, including WebGL2-accelerated downscaling when available — see GPU Acceleration below.</li>
   </ul>
 
-  <h2>GPU Acceleration &amp; Settings</h2>
+  <h2>GPU Acceleration</h2>
   <ul>
-    <li>Settings (gear icon, top-right header) opens as a dialog with a per-engine GPU toggle and default values for every engine — defaults apply the next time you open that tool, and everything is stored only in this browser's <code>localStorage</code>.</li>
+    <li>Settings (gear icon, top-right header) opens as a dialog split into eight sections: General, Appearance, Performance, AI engine, Suggestions, Compression, Privacy &amp; data, and Diagnostics. Every value is stored only in this browser's <code>localStorage</code>.</li>
     <li><strong>Images / Images → PDF:</strong> when downscaling, resize runs as a WebGL2 texture draw (hardware bilinear filtering) instead of Canvas2D's <code>drawImage()</code> scaler, with a silent fallback if WebGL2 isn't available.</li>
     <li><strong>PDF / OCR:</strong> page-rasterisation canvases use the <code>desynchronized</code> context hint, letting the browser hand the canvas straight to the compositor.</li>
     <li><strong>Video:</strong> applies only to the MediaRecorder fallback canvas (per-frame draw loop). Primary encoding is FFmpeg.wasm, which runs in WebAssembly — there's no browser API that hands a WASM module a hardware encoder, so this toggle doesn't change the primary encode path.</li>
     <li><strong>Audio / GIF:</strong> both are pure FFmpeg.wasm pipelines with no canvas step — their toggle is shown for a consistent layout but is a documented no-op.</li>
   </ul>
 
+  <h2>Performance and the Adaptive Resource Guard</h2>
+  <ul>
+    <li><strong>Resource mode</strong> (<code>Auto</code>, <code>Memory Saver</code>, <code>Balanced</code>, <code>Maximum</code>) sets how much work CompressZ admits at once. It is a <em>resource</em> mode, not a quality goal: it never lowers the format, quality or resolution you asked for. Explicit per-engine limits still win.</li>
+    <li>Every heavyweight engine asks the guard for a slot before it starts. Heavy jobs (FFmpeg, OCR, PDF rasterisation, AI inference) and light jobs (Canvas image work) have separate pools, so a 50-file image batch cannot starve a video encode or flood the tab.</li>
+    <li>Job weight is estimated from file size, pixel count and page count. Browsers do not expose free RAM, so this is a scheduling boundary — not a memory meter. Memory Saver also reduces the concurrency ceiling and the automatic image-dimension cap.</li>
+    <li>Video, audio, GIF and OCR still process one file at a time end-to-end because they share a single FFmpeg engine or a single OCR worker; the guard adds global admission control, not parallel encoding.</li>
+    <li>The home page's <strong>Processing queue</strong> panel and Settings → Performance show the live mode, running/queued counts and any automatic reduction. Settings → Diagnostics can copy a JSON report that contains capability and preference data only — never file names or contents.</li>
+  </ul>
+
+  <h2>Home workbench and contextual suggestions</h2>
+  <ul>
+    <li>The home page is a searchable workbench: filter tools by name or keyword, pin favourites (☆), and see recently opened tools. Only tool route names are stored (<code>cz-favourite-tools</code>, <code>cz-recent-tools</code>).</li>
+    <li>Tool pages may show one compact, dismissible suggestion at a time — for example natural filename ordering, switching PNG output to WebP for photo inputs, preferring the Recommended PDF preset over Extreme, or trying PaddleOCR for CJK text.</li>
+    <li>Suggestions are deterministic rules over metadata already on the page (names, sizes, MIME types, your current choices). They never reorder files, change quality or start a job on their own — you apply or dismiss each one, and dismissals are remembered in <code>cz-recommendations-v1</code> (rule/action ids only).</li>
+    <li>Settings → Suggestions can turn the whole layer off or forget dismissed suggestions. No suggestion uploads anything, and none requires the local AI model.</li>
+  </ul>
+
   <h2>PDF OCR options</h2>
   <ul>
     <li><code>engine</code> — <code>tesseract</code> (stable default), <code>paddle</code> (optional experimental PP-OCRv3), or <code>auto</code> (currently resolves to Tesseract)</li>
     <li><code>language</code> — <code>auto</code>, <code>eng</code>, <code>fra</code>, <code>deu</code>, <code>spa</code>, <code>chi_sim</code>, <code>chi_tra</code>, <code>jpn</code>, <code>kor</code>, <code>ara</code>, <code>hin</code>, and more. Settings → OCR seeds this value on a fresh page.</li>
-    <li><code>renderDpi</code> — 150–400 DPI. Default is 200 in Efficient mode, 250 in Balanced, 300 in Powerful. Higher = better accuracy, slower and more memory.</li>
+    <li><code>renderDpi</code> — 150–400 DPI. Default is 200 in Memory Saver, 250 in Balanced, 300 in Maximum. Higher = better accuracy, slower and more memory.</li>
     <li><code>overlayMode</code> — Add invisible text over original PDF vs. new image PDF.</li>
     <li><code>extractText</code> — Also export a <code>.txt</code> file.</li>
   </ul>
@@ -487,7 +532,6 @@
     <li><strong>Output directory:</strong> <code>dist</code></li>
     <li><strong>Framework preset:</strong> Vite</li>
     <li><strong>Runtime:</strong> Node.js 20.19+, 22.13+, or 24+ (see <code>package.json</code> engines). GitHub Actions and Cloudflare Pages use the npm scripts.</li>
-    <li><strong>Optional local tooling:</strong> Deno 2.9+ can run the same build and checks through <code>deno task build</code> and the other tasks in <code>deno.json</code>; it is not required to deploy.</li>
     <li>The <code>public/_headers</code> file sets COOP/COEP automatically on Cloudflare Pages.</li>
   </ul>
 
@@ -552,11 +596,14 @@
   <h2>5. Local storage</h2>
   <p>CompressZ stores these keys in your browser's <code>localStorage</code>:</p>
   <ul>
-    <li><code>theme</code> — your light/dark mode preference.</li>
-    <li><code>cz-settings-v2</code> — engine defaults, GPU toggles, Performance Mode and resource limits.</li>
+    <li><code>theme</code> — your appearance preference: <code>light</code>, <code>dark</code>, or <code>system</code> (follow the operating system).</li>
+    <li><code>cz-settings-v2</code> — engine defaults, GPU toggles, the Adaptive Resource Guard mode and limits, local-AI options, and whether contextual suggestions are enabled.</li>
     <li><code>cz-settings-v1</code> — a legacy settings blob, only read once to migrate an older install.</li>
+    <li><code>cz-recommendations-v1</code> — the suggestions you dismissed, stored as rule/action ids (no file names).</li>
+    <li><code>cz-recent-tools</code> — route names of tools you opened recently, for the home page's "Pinned &amp; recent" panel.</li>
+    <li><code>cz-favourite-tools</code> — route names you pinned on the home page.</li>
   </ul>
-  <p>These values never leave your device. No file metadata, file names, or file contents are stored in localStorage. Model/binary caches are managed by the browser's own HTTP/IndexedDB cache and can be cleared through browser settings.</p>
+  <p>These values never leave your device. Contextual suggestions are evaluated locally from metadata already on the page (file names, byte sizes, MIME types and the options you picked); the rules make no network requests and never run a model unless you allow local AI for suggestions. No file content, file paths, or file metadata is stored in localStorage — the pinned/recent panel stores tool route names only. Model/binary caches are managed by the browser's own HTTP/IndexedDB cache and can be cleared through browser settings or Settings → AI engine → Clear model cache.</p>
 
   <h2>6. Hosting and infrastructure</h2>
   <p>CompressZ is served from <strong>Cloudflare Pages</strong>. When you access the website, Cloudflare's servers handle the HTTP request to deliver the static HTML, CSS, and JavaScript files. Cloudflare may log access requests (IP address, browser user agent, timestamp) per their <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener" style="color:var(--accent)">privacy policy</a>. These logs do not contain your file data.</p>

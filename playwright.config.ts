@@ -4,17 +4,14 @@ const PORT = 4173;
 const BASE_URL = `http://localhost:${PORT}`;
 
 // Optional: point at a pre-installed Chromium (e.g. offline CI / sandboxes
-// where `npx --no-install playwright install chromium` can't download a browser).
+// where `npx --no-install playwright install chromium` can't download a
+// browser). Chromium only — never pass a Chromium executable to WebKit.
 const executablePath = process.env.PW_CHROMIUM_PATH || undefined;
-const launchOptions = executablePath ? { executablePath } : {};
+const chromiumLaunch = executablePath ? { executablePath } : {};
 
-// This project's canonical CI runner is Node/npm (see .github/workflows).
-// When the suite is launched through Deno locally (`deno task test:e2e`),
-// `globalThis.Deno` exists and the Deno tasks build/serve the app instead.
-const isDenoRun = !!(globalThis as { Deno?: unknown }).Deno;
-const buildAndPreview = isDenoRun
-  ? `deno task build && deno task preview --port ${PORT} --strictPort`
-  : `npm run build && npm run preview -- --port ${PORT} --strictPort`;
+// Node/npm is the only supported runtime for the build, preview, and tests.
+// CI and Cloudflare Pages both use the npm scripts in package.json.
+const buildAndPreview = `npm run build && npm run preview -- --port ${PORT} --strictPort`;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -31,17 +28,24 @@ export default defineConfig({
   },
   projects: [
     {
-      name: "chromium",
-      use: { ...devices["Desktop Chrome"], launchOptions },
+      name: "chromium-desktop",
+      use: { ...devices["Desktop Chrome"], launchOptions: chromiumLaunch },
     },
     {
-      name: "mobile-chrome",
-      use: { ...devices["Pixel 7"], launchOptions },
+      name: "chromium-mobile",
+      use: { ...devices["Pixel 7"], launchOptions: chromiumLaunch },
+    },
+    {
+      name: "webkit-desktop",
+      use: { ...devices["Desktop Safari"] },
+    },
+    {
+      name: "webkit-mobile",
+      use: { ...devices["iPhone 13"] },
     },
   ],
   webServer: {
     // Serve the real production build (COOP/COEP headers included).
-    // Node/npm is the GitHub CI path; Deno is supported for local runs.
     command: buildAndPreview,
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
