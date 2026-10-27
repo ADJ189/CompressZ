@@ -1,35 +1,51 @@
 /**
- * batch.ts — Hardware-aware batch concurrency.
+ * batch.ts — bounded batch execution on top of the global Resource Guard.
  *
- * platform.ts already derives a `batchConcurrency` recommendation from real
- * device signals (CPU cores, memory, GPU, save-data) — but nothing actually
- * consulted it. Canvas-based engines (Images, PDF) instead fired every
- * queued file's compress() at once via a bare `.forEach()` with no limit,
- * so a 40-image batch meant 40 concurrent createImageBitmap()/toBlob()
- * jobs even on a 2-core/2GB phone that platform.ts had already flagged as
- * 'efficient' (batchConcurrency: 1). runBatch() closes that gap: it pulls
- * the recommended concurrency for the current device and runs at most that
- * many jobs at once, so the batch actually respects the hardware it's
- * running on instead of a single one-size-fits-all default.
- *
- * FFmpeg-backed engines (video/audio/gif/convert) are deliberately NOT
- * routed through this — they all share one FFmpeg.wasm singleton
- * (see ffmpeg.ts), so true concurrent jobs would just queue on the same
- * WASM module anyway; those stay sequential regardless of tier.
+ * This used to be a private concurrency limiter for Images/PDF. It now hands
+ * each item to `runScheduled()` in resourceManager.ts, so a batch cannot
+ * bypass the app-wide heavy/light budget, and a manual concurrency ceiling
+ * still caps the number of lanes. FFmpeg-backed engines stay sequential for
+ * correctness (they share one FFmpeg.wasm singleton) but still acquire a heavy
+ * slot through the same guard.
  */
-import { recommend } from './platform';
+import { resolvedConcurrency } from './settings';
+import { runScheduled, type JobDescriptor } from './resourceManager';
+
+function inferDescriptor(item: unknown): JobDescriptor {
+  if (item instanceof File) {
+    const isPdf =
+      item.type === 'application/pdf' || /\.pdf$/i.test(item.name);
+    return {
+      kind: isPdf ? 'pdf' : 'image',
+      label: item.name,
+      bytes: item.size,
+    };
+  }
+  if (item && typeof item === 'object' && 'file' in item) {
+    const file = (item as { file?: File }).file;
+    if (file instanceof File) {
+      const isPdf =
+        file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+      return {
+        kind: isPdf ? 'pdf' : 'image',
+        label: file.name,
+        bytes: file.size,
+      };
+    }
+  }
+  return { kind: 'document', label: 'Batch item' };
+}
 
 /**
- * Run `worker(item)` across `items`, at most `concurrency` at a time
- * (falls back to the device's recommended batchConcurrency when omitted).
- * Items are started in order but complete in whatever order they finish —
- * each freed slot immediately picks up the next queued item, so a device
- * with room for 3 concurrent jobs never sits idle waiting for a slow one.
+ * Run `worker(item)` across `items`, at most `concurrency` lanes at a time.
+ * The shared Resource Guard still decides what actually runs simultaneously;
+ * a freed lane immediately picks up the next queued item.
  */
 export async function runBatch<T>(
   items: T[],
   worker: (item: T, index: number) => Promise<void>,
-  concurrency: number = recommend().batchConcurrency,
+  concurrency: number = resolvedConcurrency(),
+  describe?: (item: T, index: number) => JobDescriptor,
 ): Promise<void> {
   const limit = Math.max(1, Math.floor(concurrency) || 1);
   let cursor = 0;
@@ -37,7 +53,10 @@ export async function runBatch<T>(
   async function lane() {
     while (cursor < items.length) {
       const i = cursor++;
-      await worker(items[i], i);
+      const item = items[i];
+      await runScheduled(describe?.(item, i) ?? inferDescriptor(item), () =>
+        worker(item, i),
+      );
     }
   }
 
