@@ -32,7 +32,7 @@ export interface EngineDefaults {
 
 export interface AiSettings {
   enabled:         boolean;     // master switch for Smart Analyze/Sort features on the Images pages
-  modelTier:       AiModelTier | 'auto'; // 'auto' follows Performance Mode's recommendation
+  modelTier:       AiModelTier | 'auto'; // 'auto' follows the resolved resource profile
   /**
    * Preferred inference backend. 'auto' uses WebGPU only when the device
    * exposes it (the AI loader still performs a real adapter/device probe and
@@ -45,25 +45,41 @@ export interface AiSettings {
 }
 
 /**
+ * Adaptive Resource Guard profile. This is the single user-facing resource
+ * control; the older `performanceMode` tier values are migrated into it and
+ * kept only for rollback safety.
+ */
+export type ResourceMode = 'auto' | 'memory-saver' | 'balanced' | 'maximum';
+
+export interface RecommendationSettings {
+  enabled: boolean; // contextual suggestions in tool workflows
+  allowAi: boolean; // allow the optional local classifier to inform suggestions
+}
+
+/**
  * Manual overrides for how much CPU/RAM the app is allowed to use at once.
- * 'auto' (the default for both) means "trust lib/platform.ts's device
- * detection" — the same hardware-aware behaviour the app already had.
- * Setting either to a fixed number opts out of that detection for people
- * who know their situation better than a heuristic can (a phone that's
+ * 'auto' (the default for both) means "trust the resolved Resource Guard
+ * profile". Setting either to a fixed number opts out of that detection for
+ * people who know their situation better than a heuristic can (a phone that's
  * about to throttle, a shared/low-power machine, a tab they want to keep
- * light while doing other work) — see the explanatory copy in the
- * Settings page for the concrete trade-offs of each direction.
+ * light while doing other work).
  */
 export interface ResourceLimits {
-  concurrency: number | 'auto'; // how many files runBatch() processes at once (Images/PDF batches)
+  concurrency: number | 'auto'; // user ceiling for concurrent lightweight batch jobs
   maxImageDim: number | 'auto'; // hard cap, in px on the longer edge, applied before any per-tool resize setting
 }
 
 export interface AppSettings {
   gpu:     GpuSettings;
   engines: EngineDefaults;
-  performanceMode: PerformanceTier | 'auto'; // 'auto' = follow lib/platform.ts's device-based recommendation
+  /**
+   * @deprecated Legacy tier control (`efficient`/`balanced`/`powerful`).
+   * Migrated into `resourceMode` on read; never rendered as a second control.
+   */
+  performanceMode: PerformanceTier | 'auto';
+  resourceMode: ResourceMode;
   ai:      AiSettings;
+  recommendations: RecommendationSettings;
   resourceLimits: ResourceLimits;
 }
 
@@ -89,9 +105,34 @@ function defaults(): AppSettings {
       ocr:    { engine: 'tesseract', lang: 'eng' },
     },
     performanceMode: 'auto',
+    resourceMode: 'auto',
     ai: { enabled: true, modelTier: 'auto', backend: 'auto', autoApplySuggestions: false },
+    recommendations: { enabled: true, allowAi: true },
     resourceLimits: { concurrency: 'auto', maxImageDim: 'auto' },
   };
+}
+
+/** Map the legacy tier control onto the Resource Guard profile exactly once. */
+export function migrateLegacyResourceMode(
+  legacy: PerformanceTier | 'auto' | undefined,
+): ResourceMode {
+  if (legacy === 'efficient') return 'memory-saver';
+  if (legacy === 'powerful') return 'maximum';
+  if (legacy === 'balanced') return 'balanced';
+  return 'auto';
+}
+
+/** The performance tier a resource profile resolves to on this device. */
+export function resourceModeTier(
+  mode: ResourceMode,
+  detectedTier: PerformanceTier,
+): PerformanceTier {
+  switch (mode) {
+    case 'memory-saver': return 'efficient';
+    case 'balanced':    return 'balanced';
+    case 'maximum':     return 'powerful';
+    default:            return detectedTier;
+  }
 }
 
 /**
@@ -134,7 +175,10 @@ function applyAutoDefaults(s: AppSettings, isFirstRun: boolean): AppSettings {
  * requested image/video/audio quality or silently lowers output resolution.
  */
 export interface ExecutionProfile {
+  /** Resolved performance tier (derived from resourceMode + device). */
   mode: PerformanceTier;
+  /** User-facing Resource Guard profile. */
+  resourceMode: ResourceMode;
   modeSource: 'auto' | 'manual';
   aiModelTier: AiModelTier;
   /** Preferred inference backend. aiEngine still feature-tests it and falls back to WASM at load time. */
@@ -181,8 +225,10 @@ export function resolveExecutionProfile(
     try { info = detectPlatform(); } catch { /* non-browser/test env */ }
   }
 
-  const tier: PerformanceTier =
-    s.performanceMode !== 'auto' ? s.performanceMode : (info?.tier ?? 'balanced');
+  const tier: PerformanceTier = resourceModeTier(
+    s.resourceMode,
+    info?.tier ?? 'balanced',
+  );
   const rec = info ? recommend(info, tier) : fallbackRecommendation(tier);
 
   const maxConcurrentImages =
@@ -205,7 +251,8 @@ export function resolveExecutionProfile(
 
   return {
     mode: tier,
-    modeSource: s.performanceMode === 'auto' ? 'auto' : 'manual',
+    resourceMode: s.resourceMode,
+    modeSource: s.resourceMode === 'auto' ? 'auto' : 'manual',
     aiModelTier: s.ai.modelTier !== 'auto' ? s.ai.modelTier : rec.aiModelTier,
     aiBackendPreference,
     maxConcurrentImages,
@@ -219,8 +266,7 @@ export function resolveExecutionProfile(
 }
 
 export function resolvedPerformanceTier(s: AppSettings = getSettings()): PerformanceTier {
-  if (s.performanceMode !== 'auto') return s.performanceMode;
-  try { return detectPlatform().tier; } catch { return 'balanced'; }
+  return resolveExecutionProfile(s).mode;
 }
 
 export function resolvedAiModelTier(s: AppSettings = getSettings()): AiModelTier {
@@ -263,8 +309,30 @@ function writeRaw(v: AppSettings) {
 // Merge saved settings over defaults key-by-key (not a blind spread) so a
 // settings shape added in a later app version — a new engine, a new GPU
 // key — isn't lost or left undefined when merging an older saved blob.
-function merge(base: AppSettings, saved: any): AppSettings {
-  if (!saved || typeof saved !== 'object') return base;
+/** Shape of a persisted blob. Everything is optional because it comes from
+ *  an older (or hand-edited) install and must be merged defensively. */
+type SavedSettings = {
+  gpu?: Partial<AppSettings['gpu']>;
+  engines?: Partial<EngineDefaults>;
+  performanceMode?: PerformanceTier | 'auto';
+  resourceMode?: string;
+  ai?: Partial<AiSettings>;
+  recommendations?: Partial<RecommendationSettings>;
+  resourceLimits?: Partial<ResourceLimits>;
+};
+
+function merge(base: AppSettings, raw: unknown): AppSettings {
+  if (!raw || typeof raw !== 'object') return base;
+  const saved = raw as SavedSettings;
+  const resourceMode: ResourceMode =
+    saved.resourceMode === 'auto' ||
+    saved.resourceMode === 'memory-saver' ||
+    saved.resourceMode === 'balanced' ||
+    saved.resourceMode === 'maximum'
+      ? saved.resourceMode
+      : saved.performanceMode !== undefined
+        ? migrateLegacyResourceMode(saved.performanceMode)
+        : base.resourceMode;
   return {
     gpu: { ...base.gpu, ...(saved.gpu ?? {}) },
     engines: {
@@ -276,7 +344,9 @@ function merge(base: AppSettings, saved: any): AppSettings {
       ocr:    { ...base.engines.ocr,    ...(saved.engines?.ocr    ?? {}) },
     },
     performanceMode: saved.performanceMode ?? base.performanceMode,
+    resourceMode,
     ai: { ...base.ai, ...(saved.ai ?? {}) },
+    recommendations: { ...base.recommendations, ...(saved.recommendations ?? {}) },
     resourceLimits: { ...base.resourceLimits, ...(saved.resourceLimits ?? {}) },
   };
 }
@@ -289,6 +359,9 @@ export function getSettings(): AppSettings {
   const savedV2 = readRaw();
   if (savedV2) {
     _settings = merge(defaults(), savedV2);
+    // Persist the merged shape so one-time migrations (legacy performanceMode
+    // → resourceMode, newly added fields) survive a later reload.
+    writeRaw(_settings);
     return _settings;
   }
 
@@ -319,6 +392,11 @@ export function resetSettings() {
   _settings = applyAutoDefaults(defaults(), true);
   writeRaw(_settings);
   notify();
+}
+
+/** Fresh copy of the built-in defaults — used by Settings' per-section reset. */
+export function defaultSettings(): AppSettings {
+  return JSON.parse(JSON.stringify(defaults())) as AppSettings;
 }
 
 // Lightweight pub/sub, same render()-on-change pattern every page already
