@@ -52,6 +52,12 @@ The suffix is dropped on the release that ships it (`1.12.0`).
   of GPU acceleration.
 - Settings → Execution reports WebGL2, WebGPU, OffscreenCanvas and WebCodecs
   separately.
+- Settings → Execution → Image path now honors the Images GPU toggle, so
+  turning WebGL2 resize off is reflected immediately instead of still
+  reporting browser support.
+- Settings → Resource Limits → the `Auto (n)` batch label now resolves a
+  temporary `concurrency: 'auto'` profile, so it keeps showing what Auto would
+  use while a manual value is selected. Previously it echoed the manual value.
 - Renamed `sortBySmartAnalysis` → `sortByPredictedLabel` and corrected Images /
   Images → PDF copy to match what the classifier actually does.
 
@@ -81,7 +87,7 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 ### Changed — Deno is optional local tooling, not a CI requirement
 
 - GitHub Actions and Cloudflare Pages remain **Node/npm** (`npm ci`,
-  `npm run typecheck|lint|build|test:e2e|test`); the workflows and
+  `npm run typecheck|lint|build|test:e2e`); the workflows and
   `lighthouserc.json` are unchanged in that respect.
 - Added optional `deno.json` tasks (`dev`, `build`, `preview`, `typecheck`,
   `lint`, `test`, `test:e2e`, `lighthouse`) so contributors can run the same
@@ -109,7 +115,15 @@ The suffix is dropped on the release that ships it (`1.12.0`).
   current localStorage/CDN lists.
 - Credited `heic2any` and `onnxruntime-web`, and corrected PaddleOCR's role.
 - Replaced the placeholder `SECURITY.md` with a real vulnerability-reporting
-  policy (private GitHub advisory, scope, safe harbor).
+  policy (private GitHub advisory, scope, safe harbor). Its security boundary
+  now states the truth: file bytes stay local, while trusted third-party
+  engine code and model weights are downloaded from the documented CDNs.
+- Corrected the FFmpeg.wasm privacy description: `esm.sh` serves its
+  JavaScript wrapper, core scripts, worker, and WebAssembly binaries — not
+  "WebAssembly binaries only". File bytes are still never sent there.
+- Playwright coverage now also verifies that the Execution panel's Image path
+  follows the Images GPU toggle and that the manual batch limit does not
+  change the `Auto (n)` label (46 tests total).
 
 - Expose LogoMarquee's accessible region label and reset TiltCard when reduced
   motion is enabled during use.

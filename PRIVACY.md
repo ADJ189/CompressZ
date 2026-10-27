@@ -46,8 +46,9 @@ first use and cached by your browser thereafter. Full attribution and
 licenses for all of these are in [CREDITS.md](CREDITS.md); the
 privacy-relevant summary is:
 
-- **FFmpeg.wasm** — loaded from `esm.sh` (video/audio/GIF). These are
-  WebAssembly binaries only; no file data is sent to esm.sh.
+- **FFmpeg.wasm** — loaded from `esm.sh` (video/audio/GIF). The CDN serves
+  the JavaScript wrapper, core scripts, worker, and WebAssembly binaries; no
+  file data is sent to esm.sh.
 - **PDF.js** — loaded from `cdn.jsdelivr.net` (PDF rendering).
 - **pdf-lib** — loaded from `cdn.jsdelivr.net` (PDF generation).
 - **Tesseract.js** — loaded from `cdn.jsdelivr.net` and

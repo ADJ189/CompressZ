@@ -5,7 +5,7 @@
 # CompressZ
 
 **Private, browser-native file compression and OCR.**  
-Nothing ever leaves your device.
+Your files never leave your device.
 
 [![Cloudflare Pages](https://img.shields.io/badge/Cloudflare_Pages-deployed-F38020?logo=cloudflare&logoColor=white)](https://compressz.pages.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)

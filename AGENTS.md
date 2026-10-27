@@ -62,7 +62,7 @@ Pages.
    `[strip-oversized-assets] Removing ort-wasm-simd-threaded.asyncify-*.wasm`;
    `dist/assets` must contain **no file ≥ 24 MiB** (Cloudflare Pages rejects
    any single file over 25 MiB).
-4. `npm run test:e2e` — 44 tests (22 per browser project) must pass. The
+4. `npm run test:e2e` — 46 tests (23 per browser project) must pass. The
    config caps workers at 2 locally / 4 in CI because 8 Chromium workers caused
    timeout flakes on constrained machines. It builds and serves `dist/` itself.
 

@@ -1,9 +1,15 @@
 # Security Policy
 
 CompressZ processes files entirely in the browser and has no backend, so the
-most important security properties are: no file content leaves the device, no
-remote code is executed outside the app's own bundle, and user-controlled text
-never becomes executable markup.
+most important security properties are: file content never leaves the device,
+user-controlled text never becomes executable markup, and the only remotely
+fetched executable code is third-party engine code from the documented CDNs in
+[PRIVACY.md](PRIVACY.md#4-third-party-libraries-loaded-at-runtime). Model
+weights and fonts are also downloaded as static assets, but they do not carry
+user file data. Some engines (for example FFmpeg.wasm via `esm.sh` and PDF.js/
+pdf-lib via `cdn.jsdelivr.net`) are deliberately not bundled; the app downloads
+and runs them on first use. File bytes are never part of those requests, and
+the CDN hosts, versions and licenses are listed in [CREDITS.md](CREDITS.md).
 
 ## Supported versions
 
