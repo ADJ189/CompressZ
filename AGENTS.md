@@ -158,8 +158,9 @@ match. Several were previously wrong; don't regress them.
 - EXIF/GPS is stripped as a side effect of canvas re-encoding; say so.
 - `planOutputSize()` in `qualityGuard.ts` is the only scale planner: a max
   dimension is a ceiling and images are **never upscaled**.
-- After a lossy encode, `measureEncoded()` samples source and output to a
-  ≤96×96 luma grid and computes global SSIM. Below `SSIM_FLOOR` (0.90) the
+- After a lossy encode, `measureEncoded()` decodes the output at the ≤96px
+  sample size (not full resolution), samples source and output to a ≤96×96 luma
+  grid and computes global SSIM. Below `SSIM_FLOOR` (0.90) the
   guard retries **once at a higher quality** — never lower — unless a byte
   target is active (then it warns) or the user explicitly requested quality
   <0.70 (an intentional soft look). It never rescales to chase a score, and a
@@ -177,8 +178,10 @@ match. Several were previously wrong; don't regress them.
 ### Video / Audio / GIF
 - Video: **WebCodecs + Mediabunny fast path → FFmpeg.wasm → MediaRecorder**.
   Only simple request shapes take the fast path: H.264/HEVC/AV1 in MP4,
-  VP8/VP9 in WebM, AAC (MP4) or Opus (WebM), and **no** 10-bit, edit proxy,
-  two-pass, audio passthrough, multi-audio or subtitle passthrough.
+  VP8/VP9 in WebM, AAC (MP4) or Opus (WebM), the default `fast` video preset,
+  and **no** 10-bit, edit proxy, two-pass, audio passthrough, multi-audio or
+  subtitle passthrough. Mediabunny has no encoder-speed preset, so an explicit
+  ultrafast/medium/slow choice routes to FFmpeg.
 - The fast path is capability-gated per run: `canEncodeVideo` and
   `canEncodeAudio` must accept the exact output configuration, the input and
   its tracks must decode, and any discarded video/audio track aborts back to

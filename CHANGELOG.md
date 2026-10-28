@@ -70,6 +70,27 @@ The suffix is dropped on the release that ships it (`1.12.0`).
   from `package.json`. Pure `e2e/engines.spec.ts` tests cover WebCodecs
   routing, video/image size planning, bitrate budgeting and the SSIM guard.
 
+### Fixed — review follow-ups
+
+- **Video preset is no longer ignored by the fast path.** Mediabunny exposes
+  no encoder-speed preset, so only the app-default `fast` may take the
+  WebCodecs route; an explicit `ultrafast`/`medium`/`slow` choice now falls
+  through to FFmpeg, which actually applies it.
+- **Target-size budgets reserve audio only when the input has audio.** The
+  WebCodecs route now reads the input's track list before computing the video
+  bitrate instead of assuming an audio track exists.
+- **Image SSIM measurement decodes a bounded sample**, using
+  `createImageBitmap(..., { resizeWidth, resizeHeight })` and header-only
+  dimension reads (JPEG/WebP/AVIF). A 6000px output is no longer materialised
+  at full resolution just to compare it.
+- The SSIM zero-denominator check now treats non-finite/near-zero values as
+  identical input instead of comparing a computed float to `0`.
+- The home workbench mounts once per rendered host, so a late chunk load after
+  navigation cannot attach duplicate search/star/queue handlers.
+- The opt-in WebCodecs test probes the H.264/AAC encoders separately and now
+  **fails** (instead of skipping) when the encoders exist but the route drops
+  audio or returns no file.
+
 ### Added — WebCodecs/Mediabunny video fast path, image quality guard, five-project CI
 
 - **WebCodecs + Mediabunny video fast path** (`src/lib/webcodecsVideo.ts`).
