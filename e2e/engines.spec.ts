@@ -77,6 +77,14 @@ test.describe("WebCodecs routing", () => {
     expect(webCodecsRouteFor({ subtitleMode: "all" })).toBeNull();
   });
 
+  test("declines a non-default encoder preset the fast path cannot apply", () => {
+    // "fast" is the app default and means "no preference" here.
+    expect(webCodecsRouteFor({ videoPreset: "fast" })).toEqual(MP4_AVC);
+    expect(webCodecsRouteFor({ videoPreset: "ultrafast" })).toBeNull();
+    expect(webCodecsRouteFor({ videoPreset: "medium" })).toBeNull();
+    expect(webCodecsRouteFor({ videoPreset: "slow" })).toBeNull();
+  });
+
   test("labels the route with its real MIME type", () => {
     expect(webCodecsRouteLabel(MP4_AVC)).toContain("video/mp4");
     expect(

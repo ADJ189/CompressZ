@@ -59,6 +59,32 @@ test.describe("WebCodecs + Mediabunny real encode", () => {
         ALL_FORMATS: unknown;
       };
 
+      // Probe the exact encoders the MP4/H.264 route needs *before* the
+      // conversion. This keeps capability skips separate from real failures:
+      // once both encoders are known to exist, a null result below is a
+      // regression (dropped audio, undecodable track, broken mux), not a
+      // reason to quietly skip.
+      const encoderSupported =
+        typeof VideoEncoder !== "undefined" &&
+        typeof AudioEncoder !== "undefined" &&
+        (
+          await VideoEncoder.isConfigSupported({
+            codec: "avc1.42001f",
+            width: 320,
+            height: 240,
+            bitrate: 1_000_000,
+            framerate: 30,
+          })
+        ).supported === true &&
+        (
+          await AudioEncoder.isConfigSupported({
+            codec: "mp4a.40.2",
+            sampleRate: 48_000,
+            numberOfChannels: 1,
+            bitrate: 96_000,
+          })
+        ).supported === true;
+
       // A real source clip: canvas video + oscillator audio.
       const canvas = document.createElement("canvas");
       canvas.width = 320;
@@ -112,7 +138,7 @@ test.describe("WebCodecs + Mediabunny real encode", () => {
         { videoCodec: "h264", quality: 0.8 },
         (pct) => progress.push(pct),
       );
-      if (!converted) return { converted: false as const };
+      if (!converted) return { encoderSupported, converted: false as const };
 
       const input = new mb.Input({
         formats: mb.ALL_FORMATS,
@@ -133,6 +159,7 @@ test.describe("WebCodecs + Mediabunny real encode", () => {
       input.dispose();
 
       return {
+        encoderSupported,
         converted: true as const,
         bytes: converted.blob.size,
         type: converted.blob.type,
@@ -146,9 +173,13 @@ test.describe("WebCodecs + Mediabunny real encode", () => {
     });
 
     test.skip(
-      !result.converted,
-      "This browser has no WebCodecs H.264 encoder; the route correctly fell through to FFmpeg.",
+      !result.encoderSupported,
+      "This browser has no WebCodecs H.264/AAC encoder; the route correctly fell through to FFmpeg.",
     );
+    // The encoders exist, so the shipped route must have produced a file.
+    // Returning null here would mean a capability-gated abort (e.g. audio
+    // dropped) and is treated as a failure, not a skip.
+    expect(result.converted).toBe(true);
     if (!result.converted) return;
 
     expect(result.type).toBe("video/mp4");
