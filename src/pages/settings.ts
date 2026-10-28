@@ -1,20 +1,29 @@
-import { getSettings, updateSettings, resetSettings, GPU_CAPABLE, resolvedPerformanceTier, resolvedAiModelTier, resolvedMaxImageDim } from '../lib/settings';
+import {
+  getSettings,
+  updateSettings,
+  resetSettings,
+  GPU_CAPABLE,
+  resolveExecutionProfile,
+  resolvedPerformanceTier,
+  resolvedAiModelTier,
+  resolvedMaxImageDim,
+} from '../lib/settings';
 import type { AppSettings, GpuSettings } from '../lib/settings';
-import { gpuAvailable, hasWebGL2 } from '../lib/gpu';
-import { detectPlatform, recommend, tierLabel } from '../lib/platform';
-import { aiSupported, unloadModels } from '../lib/aiEngine';
+import { gpuAvailable, canvasPathAvailable, hasWebGL2, hasOffscreenCanvas } from '../lib/gpu';
+import { detectPlatform, tierLabel } from '../lib/platform';
+import { aiSupported, unloadModels, getAiRuntimeInfo, aiModelId, hasWebGpuApi } from '../lib/aiEngine';
 import type { ImageFormat, VideoCodec, AudioFormat, PdfLevel } from '../lib/types';
 import { toast } from '../toast';
 
 const GPU_ENGINES: { id: keyof GpuSettings; icon: string; name: string; desc: string }[] = [
   { id: 'images', icon: '🖼️', name: 'Images',
-    desc: 'WebGL2 hardware-filtered resize when downscaling, plus a GPU-composited canvas for encoding.' },
+    desc: 'WebGL2 hardware-filtered resize when downscaling (needs WebGL2), plus a desynchronized canvas hint for encoding.' },
   { id: 'pdf', icon: '📄', name: 'PDF',
-    desc: 'GPU-composited canvas for page rasterisation, used by both the PDF compressor and Convert’s PDF ⇄ Images.' },
+    desc: 'Desynchronized canvas-compositing hint for page rasterisation (not hardware decode/encode). Used by the PDF compressor and Convert’s PDF ⇄ Images.' },
   { id: 'ocr', icon: '🔍', name: 'OCR',
-    desc: 'GPU-composited canvas for rasterising pages before they’re handed to the OCR engine.' },
+    desc: 'Desynchronized canvas-compositing hint for rasterising pages before the OCR engine runs. OCR inference itself is CPU/WASM/WebGL, not covered by this toggle.' },
   { id: 'video', icon: '🎬', name: 'Video',
-    desc: 'Applies to the MediaRecorder fallback path only. Primary encoding runs on FFmpeg.wasm, which is CPU/WASM — browsers don’t expose a GPU encode path to WebAssembly.' },
+    desc: 'Applies to the MediaRecorder fallback’s per-frame canvas only. Primary encoding runs on FFmpeg.wasm, which is CPU/WASM — browsers don’t expose a GPU encode path to WebAssembly.' },
   { id: 'gif', icon: '🎞️', name: 'GIF',
     desc: 'Not applicable — GIF compression runs entirely through FFmpeg.wasm (CPU/WASM) with no canvas step to accelerate.' },
   { id: 'audio', icon: '🎵', name: 'Audio',
@@ -43,9 +52,12 @@ export function mountSettings(root: HTMLElement) {
     </div>
   `;
 
-  root.querySelector('#gpu-cap-badge')!.innerHTML = gpuAvailable()
-    ? `<span class="settings-gpu-badge"><span class="dot"></span>GPU available in this browser${hasWebGL2() ? ' · WebGL2' : ''}</span>`
-    : `<span class="settings-gpu-badge off"><span class="dot"></span>No GPU-eligible canvas API detected — toggles below have no effect</span>`;
+  const gpuBadge = gpuAvailable()
+    ? `<span class="settings-gpu-badge"><span class="dot"></span>WebGL2 hardware resize available</span>`
+    : canvasPathAvailable()
+      ? `<span class="settings-gpu-badge"><span class="dot"></span>Canvas compositing available · no WebGL2 resize path (OffscreenCanvas is not GPU proof)</span>`
+      : `<span class="settings-gpu-badge off"><span class="dot"></span>No GPU-eligible canvas API detected — toggles below have no effect</span>`;
+  root.querySelector('#gpu-cap-badge')!.innerHTML = gpuBadge;
 
   groupsEl = root.querySelector('#settings-groups')!;
 
@@ -54,6 +66,7 @@ export function mountSettings(root: HTMLElement) {
     groupsEl.innerHTML = '';
     groupsEl.appendChild(deviceGroup());
     groupsEl.appendChild(performanceGroup(st));
+    groupsEl.appendChild(executionGroup(st));
     groupsEl.appendChild(resourceGroup(st));
     groupsEl.appendChild(aiGroup(st));
     groupsEl.appendChild(gpuGroup(st));
@@ -90,8 +103,10 @@ export function mountSettings(root: HTMLElement) {
       ['Browser engine', info.engine],
       ['CPU cores', info.cores ? String(info.cores) : 'Unknown'],
       ['Memory', info.memoryGB ? `~${info.memoryGB} GB` : 'Not reported by this browser'],
-      ['GPU', info.webgl2 ? (info.gpuRenderer ?? 'WebGL2 available') : 'No WebGL2 detected'],
-      ['WebGPU', info.webgpu ? 'Available' : 'Not available'],
+      ['WebGL2 renderer', info.webgl2 ? (info.gpuRenderer ?? 'WebGL2 available') : 'No WebGL2 detected'],
+      ['WebGPU API', info.webgpu ? 'Present (adapter tested on first AI use)' : 'Not available'],
+      ['OffscreenCanvas', info.offscreenCanvas ? 'Available (worker/compositor canvas, not proof of GPU)' : 'Not available'],
+      ['WebCodecs API', info.webCodecs ? 'Present (codec configs still need per-run probing)' : 'Not available'],
       ['Multi-threaded WASM', info.crossOriginIsolated ? 'Available (cross-origin isolated)' : 'Unavailable'],
       ['Network', info.connection ? info.connection.toUpperCase() + (info.saveData ? ' · Data Saver on' : '') : 'Unknown'],
     ];
@@ -110,7 +125,7 @@ export function mountSettings(root: HTMLElement) {
 
   // ── Performance Mode ────────────────────────────────────────────
   function performanceGroup(st: AppSettings): HTMLElement {
-    const rec = recommend(detectPlatform());
+    const profile = resolveExecutionProfile(st);
     const resolved = resolvedPerformanceTier(st);
     const modes: { id: AppSettings['performanceMode']; label: string }[] = [
       { id: 'auto', label: `Auto (${tierLabel(resolved)})` },
@@ -123,15 +138,74 @@ export function mountSettings(root: HTMLElement) {
 
     const noteField = document.createElement('div');
     noteField.className = 's-field full';
-    noteField.innerHTML = `<span class="s-field-sub">${escHtml(rec.reason)} Affects GPU-acceleration defaults, the video encode preset, batch concurrency, and which AI model tier "Auto" picks below.</span>`;
+    noteField.innerHTML = `<span class="s-field-sub">${escHtml(profile.reason)} This is a <strong>resource</strong> mode, not a quality goal: it never changes the image/video/audio quality you asked for. It live-controls batch concurrency, the auto image-dimension cap, FFmpeg threading and which AI model tier "Auto" picks. GPU toggles and the video preset are seeded from the detected device on first run and remain explicit per-engine overrides after that.</span>`;
 
-    return groupWrap('Performance Mode', 'Controls how aggressively engines use this device\u2019s CPU/GPU. Changing this doesn\u2019t retroactively touch settings you\u2019ve already customised by hand.', [field, noteField]);
+    return groupWrap('Performance Mode', 'Controls how aggressively engines use this device\u2019s CPU/GPU. Values you set explicitly per engine still win.', [field, noteField]);
+  }
+
+  // ── Effective execution profile ─────────────────────────────────
+  // Shows what will actually run this session, not just the preferences.
+  // This is the diagnostic the audit asked for: backend/path per engine,
+  // including the places where a broad "GPU" label used to overstate things.
+  function executionGroup(st: AppSettings): HTMLElement {
+    const profile = resolveExecutionProfile(st);
+    const runtime = getAiRuntimeInfo();
+    const aiBackend = runtime
+      ? `${runtime.backend === 'webgpu' ? 'WebGPU' : 'WASM (CPU)'} · loaded`
+      : st.ai.backend === 'wasm'
+        ? 'WASM (CPU) · forced in Settings'
+        : profile.aiBackendPreference === 'webgpu'
+          ? 'WebGPU preferred · WASM fallback (feature-tested on first use)'
+          : hasWebGpuApi()
+            ? 'WASM (CPU) · WebGPU adapter not confirmed yet'
+            : 'WASM (CPU) · WebGPU unavailable';
+    const imagePath = st.gpu.images && hasWebGL2()
+      ? 'Canvas/OffscreenCanvas + WebGL2 resize'
+      : hasOffscreenCanvas()
+        ? 'Canvas/OffscreenCanvas only (no WebGL2 resize)'
+        : 'DOM canvas only';
+    const ffmpeg = profile.ffmpegThreaded
+      ? 'Multi-threaded (cross-origin isolated)'
+      : 'Single-threaded (COOP/COEP isolation unavailable)';
+    const dimCap = profile.maxDecodedImageDimension
+      ? `${profile.maxDecodedImageDimension}px on the longer edge`
+      : 'No extra cap';
+
+    const card = document.createElement('div');
+    card.className = 'settings-card device-info-card';
+    const rows: [string, string][] = [
+      ['Active profile', `${tierLabel(profile.mode)} · ${profile.modeSource === 'auto' ? 'Auto' : 'manual'}`],
+      ['Image path', imagePath],
+      ['AI backend', aiBackend],
+      ['AI model', `${profile.aiModelTier === 'powerful' ? 'Powerful' : 'Efficient'} · ${aiModelId(profile.aiModelTier)}`],
+      ['Video path', 'FFmpeg.wasm → MediaRecorder fallback (no WebCodecs/muxer path)'],
+      ['FFmpeg core', ffmpeg],
+      ['Batch concurrency', `${profile.maxConcurrentImages} file${profile.maxConcurrentImages === 1 ? '' : 's'} at once`],
+      ['Image dimension cap', dimCap],
+      ['OCR default', `${st.engines.ocr.engine === 'paddle' ? 'PaddleOCR PP-OCRv3' : 'Tesseract.js 5'} · ${st.engines.ocr.lang}`],
+      ['First-use assets', 'Downloaded on demand and cached by the browser (no offline pack yet)'],
+    ];
+    card.innerHTML = rows.map(([k, v]) => `
+      <div class="s-field full device-info-row">
+        <span class="s-label">${k}</span>
+        <span class="device-info-val">${escHtml(v)}</span>
+      </div>`).join('');
+
+    const wrap = document.createElement('div');
+    const title = document.createElement('div');
+    title.className = 'settings-group-title';
+    title.textContent = 'Execution — Effective This Session';
+    const hint = document.createElement('div');
+    hint.className = 'settings-group-hint';
+    hint.textContent = 'What the engines will actually use, including fallbacks. Each accelerator path is reported separately instead of under one broad "GPU" badge.';
+    wrap.append(title, hint, card);
+    return wrap;
   }
 
   // ── Resource Limits (manual RAM/CPU override) ────────────────────
   function resourceGroup(st: AppSettings): HTMLElement {
     const rl = st.resourceLimits;
-    const autoConcurrency = recommend(detectPlatform()).batchConcurrency;
+    const autoConcurrency = resolveExecutionProfile({ ...st, resourceLimits: { ...rl, concurrency: 'auto' } }).maxConcurrentImages;
     const autoDim = resolvedMaxImageDim({ ...st, resourceLimits: { ...rl, maxImageDim: 'auto' } });
 
     const concField = segRow('Files processed at once (batches)', [
@@ -217,6 +291,25 @@ export function mountSettings(root: HTMLElement) {
         render();
       }));
 
+      fields.push(segRow('Inference backend', [
+        { id: 'auto', label: `Auto${hasWebGpuApi() ? ' (WebGPU preferred)' : ' (WASM)'}` },
+        { id: 'webgpu', label: 'WebGPU first' },
+        { id: 'wasm', label: 'CPU (WASM)' },
+      ], st.ai.backend, id => {
+        updateSettings(s => { s.ai.backend = id as AppSettings['ai']['backend']; });
+        unloadModels();
+        render();
+      }));
+
+      const runtime = getAiRuntimeInfo();
+      const backendField = document.createElement('div');
+      backendField.className = 's-field full';
+      const backendNow = runtime
+        ? `This session loaded on <strong>${runtime.backend === 'webgpu' ? 'WebGPU' : 'WASM (CPU)'}</strong>.`
+        : 'No model has loaded this session yet.';
+      backendField.innerHTML = `<span class="s-field-sub">${backendNow} WebGPU is used only after a real adapter/device probe succeeds; <strong>WebGPU first</strong> still falls back to WASM, and <strong>CPU (WASM)</strong> skips the GPU entirely. Changing this releases the loaded model so the next Smart action uses the new path — downloaded weights stay cached by the browser.</span>`;
+      fields.push(backendField);
+
       const applyField = document.createElement('div');
       applyField.className = 's-field full';
       const on = st.ai.autoApplySuggestions;
@@ -262,7 +355,7 @@ export function mountSettings(root: HTMLElement) {
       const capable = GPU_CAPABLE.includes(eng.id);
       const on = st.gpu[eng.id];
       const field = document.createElement('div');
-      field.className = 's-field full' + (capable && gpuAvailable() ? '' : ' disabled');
+      field.className = 's-field full' + (capable && canvasPathAvailable() ? '' : ' disabled');
       field.innerHTML = `
         <div class="s-field-row">
           <div class="s-field-icon">${eng.icon}</div>
@@ -407,7 +500,7 @@ export function mountSettings(root: HTMLElement) {
     const e = st.engines.ocr;
     return groupWrap('OCR — Defaults', 'Applied the next time you open PDF OCR.', [
       segRow('Engine', [
-        { id: 'paddle', label: 'PaddleOCR-VL' }, { id: 'tesseract', label: 'Tesseract.js' },
+        { id: 'tesseract', label: 'Tesseract.js (default)' }, { id: 'paddle', label: 'PaddleOCR PP-OCRv3 (experimental)' },
       ], e.engine, id => { updateSettings(s => { s.engines.ocr.engine = id as typeof e.engine; }); render(); }),
       (() => {
         const field = document.createElement('div');

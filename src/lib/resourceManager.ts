@@ -482,7 +482,7 @@ const ENGINE_HINT: Partial<Record<JobKind, string>> = {
   pdf: 'PDF.js + pdf-lib',
   ocr: 'Tesseract.js / PaddleOCR',
   ai: 'Transformers.js (local)',
-  video: 'FFmpeg.wasm',
+  video: 'WebCodecs / Mediabunny → FFmpeg.wasm',
   audio: 'FFmpeg.wasm',
   gif: 'FFmpeg.wasm',
   convert: 'FFmpeg.wasm / document engines',

@@ -1,8 +1,8 @@
 # Privacy Policy
 
-_Last updated: July 2026_
+_Last updated: October 2026_
 
-This is the same privacy policy shown at [/privacy](https://compressly26.pages.dev/privacy)
+This is the same privacy policy shown at [/privacy](https://compressz.pages.dev/privacy)
 inside the app. It's mirrored here so it's readable directly from the
 repo without running the site.
 
@@ -29,11 +29,11 @@ GitHub.
 
 ## 3. How file processing works
 
-All compression and OCR operations run entirely inside your browser
-using WebAssembly, the Canvas API, and Web platform APIs. Your files
-are read from your device into browser memory (RAM), processed
-locally, and the output is written back to your device. At no point do
-your files traverse a network connection to our infrastructure.
+All compression, conversion, OCR and local-AI operations run entirely
+inside your browser using WebAssembly, the Canvas API, and Web platform
+APIs. Your files are read from your device into browser memory (RAM),
+processed locally, and the output is written back to your device. At no
+point do your files traverse a network connection to our infrastructure.
 
 You can verify this yourself by opening your browser's Network tab
 while using CompressZ — you will see no requests containing your file
@@ -41,41 +41,74 @@ data.
 
 ## 4. Third-party libraries loaded at runtime
 
-Some compression and OCR engines are loaded from a CDN on first use and
-cached by your browser thereafter. Full attribution and licenses for
-all of these are in [CREDITS.md](CREDITS.md); the privacy-relevant
-summary is:
+Some processing engines and model weights are loaded from a CDN on
+first use and cached by your browser thereafter. Full attribution and
+licenses for all of these are in [CREDITS.md](CREDITS.md); the
+privacy-relevant summary is:
 
-- **FFmpeg.wasm** — loaded from `esm.sh` (video/audio/GIF). WebAssembly
-  binaries only; no file data is sent to esm.sh.
-- **PDF.js** and **pdf-lib** — loaded from `cdn.jsdelivr.net` (PDF
-  rendering and generation).
-- **Tesseract.js** and its trained-language data — loaded from
-  `cdn.jsdelivr.net` and `tessdata.projectnaptha.com` (OCR).
-- **PaddleOCR (PP-OCRv3)** — loaded from `cdn.jsdelivr.net` and
-  `paddlejs.bj.bcebos.com` (OCR model weights).
+- **FFmpeg.wasm** — loaded from `esm.sh` (video/audio/GIF). The CDN serves
+  the JavaScript wrapper, core scripts, worker, and WebAssembly binaries; no
+  file data is sent to esm.sh.
+- **Mediabunny** — loaded from `esm.sh` only when the browser supports
+  WebCodecs and the requested output codec configuration is encodable
+  (video fast path). It demuxes and muxes media in-memory; no file data is
+  sent to esm.sh.
+- **PDF.js** — loaded from `cdn.jsdelivr.net` (PDF rendering).
+- **pdf-lib** — loaded from `cdn.jsdelivr.net` (PDF generation).
+- **Tesseract.js** — loaded from `cdn.jsdelivr.net` and
+  `tessdata.projectnaptha.com` (OCR engine and trained language data).
+- **🤗 Transformers.js** — bundled at build time; model weights are
+  downloaded from Hugging Face's CDN the first time you use Settings →
+  AI Engine, then cached by your browser. Images are classified
+  on-device — nothing is uploaded to Hugging Face or anywhere else.
+- **PaddleOCR / PP-OCRv3** — loaded from `cdn.jsdelivr.net` and
+  `paddlejs.bj.bcebos.com` (optional OCR runtime and model weights).
 - **mammoth.js** and **html2canvas** — loaded from `cdn.jsdelivr.net`
   (Word document conversion).
+- **heic2any** — loaded from `esm.sh` only when a HEIC/HEIF file can't
+  be decoded natively.
+- **onnxruntime-web** — loaded from `cdn.jsdelivr.net` for local AI
+  inference.
 
-These CDN requests are for static assets (JavaScript and model weights)
-only. Your file content is never included in these requests. Standard
-CDN access logs (IP address, timestamp, asset requested) may be
-retained by the CDN providers per their own privacy policies.
+These CDN requests are for static assets (JavaScript, WebAssembly and
+model weights) only. Your file content is never included in these
+requests. Standard CDN access logs (IP address, timestamp, asset
+requested) may be retained by the CDN providers per their own privacy
+policies.
 
 Google Fonts is used for typography and is loaded from
 `fonts.googleapis.com`. This may log your IP address per
-[Google's privacy policy](https://policies.google.com/privacy). To
-avoid this entirely, you can use CompressZ offline after caching.
+[Google's privacy policy](https://policies.google.com/privacy). Heavy
+engines are downloaded on first use and cached; there is no full
+offline pack yet.
 
 ## 5. Local storage
 
-CompressZ stores two items in your browser's `localStorage`:
+CompressZ stores these keys in your browser's `localStorage`:
 
-- `theme` — your light/dark mode preference.
-- `sb-collapsed` — whether the sidebar is collapsed.
+- `theme` — your appearance preference: `light`, `dark`, or `system`
+  (follow the operating system).
+- `cz-settings-v2` — engine defaults, GPU toggles, the Adaptive Resource
+  Guard mode and limits, local-AI options, and whether contextual
+  suggestions are enabled.
+- `cz-settings-v1` — a legacy settings blob, only read once to migrate an
+  older install.
+- `cz-recommendations-v1` — the small set of suggestions you have dismissed,
+  stored as rule/action ids (no file names).
+- `cz-recent-tools` — the route names of tools you opened recently, used for
+  the "Pinned & recent" panel on the home page.
+- `cz-favourite-tools` — the route names you pinned on the home page.
 
-These values never leave your device. No file metadata, file names, or
-any other information is stored in localStorage.
+These values never leave your device. Contextual suggestions are evaluated
+locally from metadata that is already in the page (file names, byte sizes,
+MIME types and the options you picked); the rules have no network access and
+never run a model unless you explicitly allow local AI for suggestions. No
+file metadata, file contents, or file paths are stored in localStorage. The
+home page's "Pinned & recent" panel stores tool route names only.
+
+Model/binary caches are managed by the browser's own HTTP/IndexedDB cache and
+can be cleared through browser settings, or through
+Settings → AI engine → Clear model cache.
 
 ## 6. Hosting and infrastructure
 

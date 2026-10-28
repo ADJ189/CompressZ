@@ -5,10 +5,10 @@
 # CompressZ
 
 **Private, browser-native file compression and OCR.**  
-Nothing ever leaves your device.
+Your files never leave your device.
 
 [![Cloudflare Pages](https://img.shields.io/badge/Cloudflare_Pages-deployed-F38020?logo=cloudflare&logoColor=white)](https://compressz.pages.dev)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-22c55e.svg)](LICENSE)
 
@@ -18,10 +18,10 @@ Nothing ever leaves your device.
 
 ## Overview
 
-CompressZ compresses images, PDFs, video, audio, and GIFs; converts between video, audio, image, PDF, DOCX, and PPTX formats; and runs OCR on scanned PDFs — entirely inside your browser using WebAssembly, Canvas API, WebCodecs, and two neural OCR engines. No backend. No uploads. No tracking.
+CompressZ compresses images, PDFs, video, audio, and GIFs; converts between video, audio, image, PDF, DOCX, and PPTX formats; and runs OCR on scanned PDFs — entirely inside your browser using WebAssembly, the Canvas API, and Web platform APIs. No backend. No uploads. No tracking.
 
 CompressZ is forked from [CompressF](https://github.com/ADJ189/CompressF).
-CompressF is still maintained as its own project .
+CompressF is still maintained as its own project.
 
 ---
 
@@ -29,52 +29,69 @@ CompressF is still maintained as its own project .
 
 | Tool             | Formats                                                                                             | Engine                                                                   |
 | ---------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| **Images**       | JPEG · PNG · WebP · AVIF · HEIC · BMP                                                               | OffscreenCanvas (GPU)                                                    |
+| **Images**       | JPEG · PNG · WebP · AVIF · HEIC · BMP                                                               | Canvas/OffscreenCanvas · optional WebGL2 resize                          |
 | **PDF Compress** | PDF                                                                                                 | PDF.js + pdf-lib (structural image resampling)                           |
-| **Video**        | MP4 · WebM · MOV · AVI · MKV                                                                        | FFmpeg.wasm → WebCodecs → MediaRecorder                                  |
+| **Video**        | MP4 · WebM · MOV · AVI · MKV                                                                        | WebCodecs + Mediabunny → FFmpeg.wasm → MediaRecorder                    |
 | **Audio**        | MP3 · AAC · OGG · Opus · FLAC · WAV                                                                 | FFmpeg.wasm                                                              |
 | **GIF**          | GIF → GIF or WebM VP9                                                                               | FFmpeg.wasm (two-pass palettegen)                                        |
 | **SVG**          | SVG                                                                                                 | Pure TypeScript, zero dependencies                                       |
-| **PDF OCR**      | Scanned PDF → searchable PDF + TXT                                                                  | PaddleOCR-VL 1.5 (primary) + Tesseract.js 5, optional Greek/math symbols |
+| **PDF OCR**      | Scanned PDF → searchable PDF + TXT                                                                  | Tesseract.js 5 (default) + optional PaddleOCR PP-OCRv3, Greek/math symbols |
 | **Convert**      | Video ⇄ video · Audio ⇄ audio · Image ⇄ image · PDF ⇄ Images · DOCX → PDF/TXT/HTML · PPTX → PDF/TXT | FFmpeg.wasm, pdf-lib, mammoth.js, html2canvas, zero-dep ZIP              |
-| **Images → PDF** | Images → single PDF, one page each                                                                  | pdf-lib, with an optional local AI sort pass                             |
+| **Images → PDF** | Images → single PDF, one page each                                                                  | pdf-lib, with an optional local AI sort-by-label pass                    |
 
 ---
 
-## Device-Aware Performance & Local AI
+## Device-Aware Performance, Workbench &amp; Local AI
 
-Settings now includes three sections beyond the per-engine defaults:
+Settings is a dialog split into eight sections: **General**, **Appearance**, **Performance**, **AI engine**,
+**Suggestions**, **Compression**, **Privacy &amp; data**, and **Diagnostics**.
 
-- **This Device** — a read-only snapshot of what your browser exposes locally (OS, CPU cores, memory,
-  GPU/WebGL2/WebGPU, cross-origin isolation, network type) and the performance tier CompressZ derived from it.
-  Nothing here is sent anywhere; it's computed by `src/lib/platform.ts` on load.
-- **Performance Mode** — `Auto` (follows the device's tier) or a manual `Efficient` / `Balanced` / `Powerful`
-  override, controlling GPU-acceleration defaults, the video encode preset, and batch concurrency.
-- **AI Engine — Local** — an on/off switch for **Smart Analyze / Smart Sort** on the Images and Images → PDF
-  pages. When enabled, a small image-classification model (`Xenova/mobilenet_v2_1.0_224` on `Efficient`,
-  `Xenova/vit-base-patch16-224` on `Powerful`, both via [`@huggingface/transformers`](https://github.com/huggingface/transformers.js))
-  runs entirely in your browser — WASM, or WebGPU where available — to tag what's in each image and group
-  similar ones together. A second, model-free heuristic looks at edge density and palette size to guess
-  "photo" vs. "graphic/document" and can optionally auto-apply a matching format/quality. No image or file
-  ever leaves your device; model weights are cached by the browser after the first download, the same way
-  PaddleOCR and Tesseract already work.
+- **Appearance** — `Light`, `Dark`, or `System` (follow the operating system). The header button remains a quick
+  light/dark flip; picking a side there opts out of `System`. The resolved value is always written to
+  `data-theme`, so the whole stylesheet keeps working unchanged.
+- **This Device / Diagnostics** — a read-only snapshot of what your browser exposes locally (OS, CPU cores,
+  memory, GPU/WebGL2/WebGPU, cross-origin isolation, network type) plus the execution profile CompressZ derived
+  from it. Nothing here is sent anywhere; it is computed by `src/lib/platform.ts`. **Copy diagnostics** writes a
+  JSON report containing capability and preference data only — never file names or contents.
+- **Resource mode** — `Auto` (follows the device tier), `Memory Saver`, `Balanced`, or `Maximum`. It is a
+  *resource* mode, not a quality goal: it controls how many heavyweight jobs the **Adaptive Resource Guard**
+  admits at once, the automatic image-dimension cap, FFmpeg threading and which AI model tier `Auto` uses.
+  Explicit per-engine overrides (including `resourceLimits.concurrency`, `resourceLimits.maxImageDim` and the
+  video preset) still win, and output quality/resolution is never silently lowered.
+- **Adaptive Resource Guard** — every heavy engine asks the guard for a slot before it starts. Heavy jobs
+  (FFmpeg, OCR, PDF rasterisation, AI inference) and light jobs (Canvas image work) use separate pools, and job
+  weight is estimated from file size, pixel count and page count. Browsers do not expose free RAM, so this is a
+  scheduling boundary — **not a memory meter**; Settings and the home queue panel say so explicitly. Video,
+  audio, GIF and OCR still run one file at a time end to end because they share a single FFmpeg/OCR engine.
+- **AI engine — local** — an on/off switch for **Smart Analyze** and **sort by predicted label** on the Images
+  and Images → PDF pages. When enabled, a small image-classification model (`Xenova/mobilenet_v2_1.0_224` on
+  `Efficient`, `Xenova/vit-base-patch16-224` on `Powerful`, both via
+  [`@huggingface/transformers`](https://github.com/huggingface/transformers.js)) runs entirely in your browser.
+  WebGPU is attempted only after a real adapter/device probe; unsupported or failed loads fall back to WASM
+  (q8). **Inference backend** lets you choose `Auto`, `WebGPU first`, or `CPU (WASM)`; the CPU choice skips the
+  GPU probe entirely, and `WebGPU first` still falls back to WASM if the adapter cannot be created. The
+  classifier produces an ImageNet-style label, so the sort orders by that predicted label — it does
+  **not** compute embeddings or visual-similarity groups. A second, model-free heuristic looks at edge density
+  and palette size to guess "photo" vs. "graphic/document" and can optionally auto-apply a matching
+  format/quality. No image or file ever leaves your device; model weights are cached by the browser after the
+  first download, the same way PaddleOCR and Tesseract already work. **Clear model cache** releases the in-memory
+  session and deletes matching Cache Storage entries where the browser allows it.
+- **Suggestions** — compact, dismissible, one-primary-at-a-time hints inside a workflow (natural filename order,
+  photo→WebP output, Recommended instead of Extreme PDF, PaddleOCR for CJK). Rules are deterministic and read
+  only metadata already on the page; they never reorder files, change quality or start a job on their own.
+  Dismissals live in `cz-recommendations-v1` and can be forgotten here.
+
+### Home workbench
+
+The home page is a searchable workbench rather than a static hero: filter tools by name or keyword, pin
+favourites, and see recently opened tools (`cz-favourite-tools`, `cz-recent-tools` — route names only). A
+**Processing queue** panel shows the live Resource Guard state, so a long batch is visible from the home page.
 
 ---
 
 ## OCR Engines
 
-### PaddleOCR-VL 1.5 — Primary Engine ⭐
-
-| Attribute   | Detail                                                                                                                           |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Technology  | PP-OCRv3 detection + direction classification + CRNN recognition via WebGL/ONNX                                                  |
-| Model size  | ~25 MB (cached after first use)                                                                                                  |
-| Best for    | **Handwriting** (print and cursive), tables, forms, multi-column layouts, rotated text, CJK scripts, low-quality and noisy scans |
-| Strengths   | Document structure understanding, complex layout handling, Chinese/Japanese/Korean, robust to image quality                      |
-| Limitations | Heavier first load, requires WebGL, slower on large batches                                                                      |
-| Rating      | Handwriting ●●●●● · Tables ●●●●● · Print ●●●●● · Low quality ●●●●● · Speed ●●●○○                                                 |
-
-### Tesseract.js 5 — Secondary Engine
+### Tesseract.js 5 — Default Engine ⭐
 
 | Attribute   | Detail                                                                                                                        |
 | ----------- | ----------------------------------------------------------------------------------------------------------------------------- |
@@ -85,6 +102,22 @@ Settings now includes three sections beyond the per-engine defaults:
 | Limitations | Poor on handwriting, struggles with complex layouts, needs high DPI                                                           |
 | Rating      | Handwriting ●●○○○ · Tables ●●●○○ · Print ●●●●● · Low quality ●●○○○ · Speed ●●●●●                                              |
 
+### PaddleOCR PP-OCRv3 — Optional Experimental Engine
+
+| Attribute   | Detail                                                                                          |
+| ----------- | ----------------------------------------------------------------------------------------------- |
+| Technology  | PP-OCRv3 detection + direction classification + recognition via `@paddle-js-models/ocr` / WebGL |
+| Model size  | ~20–25 MB (cached after first use)                                                              |
+| Best for    | Printed Latin/CJK text where the PP-OCRv3 recognizer fits; a second opinion for CJK scans       |
+| Strengths   | Printed Chinese/Japanese/Korean, separate Latin and CJK recognition models, runs locally        |
+| Limitations | Not a vision-language model; no table/form understanding; weak on handwriting and complex layouts |
+| Rating      | Handwriting ●●○○○ · Tables ●●○○○ · Print ●●●●○ · Low quality ●●●○○ · Speed ●●●○○                |
+
+> **Naming note:** this is the lightweight PP-OCRv3 pipeline, not
+> **PaddleOCR-VL 1.5** (a ~0.9B vision-language document model). The app no
+> longer uses that name because it never loaded those weights. Evaluating the
+> official PaddleOCR.js PP-OCRv5 path is future work, not a shipped feature.
+
 An optional **Math & Greek symbols** toggle loads Tesseract's `grc` (Greek)
 and `equ` (equation layout) traineddata alongside the selected language —
 reliable for inline Greek letters (θ, π, Σ, …), best-effort for full
@@ -92,20 +125,24 @@ equations. Always runs on Tesseract regardless of the engine picked above.
 
 ### Auto Mode
 
-Auto selects PaddleOCR-VL 1.5 by default. Language/script is auto-detected from the first page render using Tesseract's OSD (Orientation & Script Detection, PSM=0), mapping detected scripts to the correct language model.
+`auto` currently resolves to Tesseract.js, the stable default. Language/script
+is auto-detected from the first page render using Tesseract's OSD
+(Orientation & Script Detection, PSM=0), mapping detected scripts to the
+correct language model. Settings → OCR defaults seed the live engine and
+language on a fresh OCR page; Eco mode starts at a lower render DPI.
 
 ### When to use which
 
-| Document type              | Recommended engine                 |
-| -------------------------- | ---------------------------------- |
-| Handwritten notes, letters | PaddleOCR-VL 1.5                   |
-| Printed books, reports     | Either (Tesseract slightly faster) |
-| Tables, invoices, forms    | PaddleOCR-VL 1.5                   |
-| CJK documents              | PaddleOCR-VL 1.5                   |
-| Arabic / Hebrew / RTL      | Tesseract.js (dedicated models)    |
-| Rare languages             | Tesseract.js (100+ lang coverage)  |
-| Low-quality / noisy scans  | PaddleOCR-VL 1.5                   |
-| Batch processing (speed)   | Tesseract.js                       |
+| Document type              | Recommended engine                    |
+| -------------------------- | ------------------------------------- |
+| Handwritten notes, letters | Tesseract.js (best available fallback) |
+| Printed books, reports     | Tesseract.js                          |
+| Tables, invoices, forms    | Tesseract.js (no layout-aware engine) |
+| CJK documents              | Try both; PaddleOCR PP-OCRv3 optional |
+| Arabic / Hebrew / RTL      | Tesseract.js (dedicated models)       |
+| Rare languages             | Tesseract.js (100+ lang coverage)     |
+| Low-quality / noisy scans  | Tesseract.js with a higher render DPI |
+| Batch processing (speed)   | Tesseract.js                          |
 
 ---
 
@@ -150,6 +187,8 @@ PDF.js renders each page to OffscreenCanvas with `colorSpace: 'srgb'` and `inten
 | Recommended | 150 | 0.72         | Structural |
 | Extreme     | 96  | 0.45         | Canvas     |
 
+**Quality guard** — after a lossy image encode, CompressZ samples a ≤96×96 luma grid and computes SSIM. If the result is below 0.90 it retries **once at a higher quality** (never lower), and otherwise reports the limitation on the file card. A max-dimension setting is always a ceiling: images are never upscaled, and target-size mode never silently lowers the quality you asked for.
+
 **Target size mode** — enter a specific MB or KB value; CompressZ binary-searches JPEG quality over 10 iterations to hit it.
 
 ---
@@ -159,10 +198,14 @@ PDF.js renders each page to OffscreenCanvas with `colorSpace: 'srgb'` and `inten
 ```
 compressz/
 ├── .github/
-│   ├── workflows/        # ci.yml (typecheck, lint, build, e2e), lighthouse.yml
+│   ├── workflows/        # ci.yml (typecheck/lint/build), e2e.yml, lighthouse.yml
 │   └── dependabot.yml    # Weekly grouped updates, major versions pinned
 ├── e2e/
-│   └── smoke.spec.ts     # Playwright smoke tests (every route, theme, settings)
+│   ├── smoke.spec.ts     # Playwright: routes, workbench, settings, responsive, privacy
+│   ├── rules.spec.ts     # Pure Node tests: recommendation rules + Resource Guard estimators
+│   ├── engines.spec.ts   # Pure Node tests: WebCodecs routing, size/bitrate planning, SSIM guard
+│   ├── bench.spec.ts     # Opt-in (BENCH=1) image-pipeline benchmark
+│   └── webcodecs.spec.ts # Opt-in (WEBCODECS_E2E=1) real MP4 encode with audio
 ├── public/
 │   ├── _headers          # COOP/COEP → SharedArrayBuffer (FFmpeg MT)
 │   ├── _redirects        # SPA fallback
@@ -170,6 +213,8 @@ compressz/
 │   ├── robots.txt
 │   └── sitemap.xml
 ├── scripts/
+│   ├── bench.mjs         # Sets BENCH=1 and runs the benchmark project
+│   ├── webcodecs-e2e.mjs # Sets WEBCODECS_E2E=1 and runs the real-encode test
 │   └── strip-oversized-assets.mjs  # Drops files over Cloudflare Pages' 25 MiB limit
 ├── src/
 │   ├── lib/              # Engines, one file per format
@@ -177,18 +222,26 @@ compressz/
 │   │   ├── compress.ts       # Type dispatcher (not imported by the app yet)
 │   │   ├── compressImage.ts
 │   │   ├── compressPdf.ts    # Two-strategy PDF compression
-│   │   ├── compressVideo.ts  # FFmpeg → WebCodecs → MediaRecorder
+│   │   ├── compressVideo.ts  # WebCodecs/Mediabunny → FFmpeg → MediaRecorder
+│   │   ├── webcodecsVideo.ts # Capability-gated routing + Mediabunny muxing
+│   │   ├── videoMeta.ts      # Shared video metadata + no-upscale size planner
+│   │   ├── qualityGuard.ts   # SSIM / scale guard for image output
 │   │   ├── compressAudio.ts
 │   │   ├── compressGif.ts
 │   │   ├── optimizeSvg.ts    # Pure TypeScript SVG optimizer
 │   │   ├── convertMedia.ts / convertOffice.ts / convertPdf.ts
 │   │   ├── imagesToPdf.ts / mergePdf.ts
 │   │   ├── imageDecode.ts / thumb.ts / aiEngine.ts
+│   │   ├── resourceManager.ts # Adaptive Resource Guard (admission + queue)
+│   │   ├── recommendations.ts # Deterministic contextual suggestions
+│   │   ├── recents.ts / workbench.ts # Home pins, recents, live queue panel
+│   │   ├── theme.ts          # light / dark / system preference
+│   │   ├── settings.ts       # cz-settings-v2 + resolveExecutionProfile()
 │   │   └── ffmpeg.ts / pdfLibs.ts / zip.ts / …
 │   ├── pages/            # One file per route
 │   │   ├── images.ts / pdf.ts / video.ts / audio.ts / gif.ts
 │   │   ├── convert.ts / imagesToPdf.ts / mergePdf.ts / settings.ts
-│   │   └── ocr.ts            # PaddleOCR-VL 1.5 + Tesseract.js 5
+│   │   └── ocr.ts            # Tesseract.js 5 + optional PaddleOCR PP-OCRv3
 │   ├── components/       # React component library (not used by the app)
 │   ├── utils/            # cn, prefersReducedMotion, canHover, assignRef
 │   ├── index.ts          # Library entry for src/components
@@ -197,32 +250,55 @@ compressz/
 │   ├── router.ts
 │   ├── store.ts
 │   ├── toast.ts
-│   ├── style.css         # App stylesheet
+│   ├── styles/workbench.css  # `.cz-*` scoped styles for new UI
+│   ├── style.css         # App stylesheet (legacy components + tokens)
 │   └── main.ts
 ├── index.html                # App shell + page templates
 ├── vite.config.ts            # Vite 8, esnext, COOP/COEP dev headers
 ├── playwright.config.ts
+├── lighthouserc.json         # Lighthouse CI config
 ├── tsconfig.json
-├── package.json
+├── package.json              # Canonical npm scripts (CI + Cloudflare Pages)
+├── AGENTS.md                 # Engine invariants + agent/contributor checklist
 ├── CHANGELOG.md
+├── CONTRIBUTING.md           # Dev setup, conventions, PR checklist
 ├── CREDITS.md                # Open-source attributions & licenses
-└── PRIVACY.md                # Standalone copy of the in-app privacy page
+├── PRIVACY.md                # Standalone copy of the in-app privacy page
+└── SECURITY.md               # Vulnerability reporting policy
 ```
 
 ---
 
 ## Local Development
 
+Requires **Node.js `^20.19.0 || ^22.13.0 || >=24`** (see `package.json`).
+npm is the canonical runner for GitHub Actions and Cloudflare Pages.
+
 ```bash
-npm install
+npm ci             # reproducible install from package-lock.json
 npm run dev        # http://localhost:5173
-npm run build      # → dist/
+npm run build      # → dist/ (also strips oversize assets)
 npm run preview    # serve dist/ locally
 npm run typecheck  # TypeScript check
 npm run lint       # ESLint
-npx playwright install chromium   # once
-npm run test:e2e   # Playwright smoke tests (builds, then serves dist/)
+npx --no-install playwright install chromium webkit firefox   # once
+npm run test:e2e   # five projects: Chromium/WebKit desktop + mobile, Firefox
+npm run test:webcodecs # opt-in real MP4 encode (esm.sh + WebCodecs)
+npm run bench      # opt-in image benchmark → bench-results/ (gitignored)
+npm run lighthouse # Lighthouse CI
 ```
+
+The Playwright matrix is `chromium-desktop`, `chromium-mobile`,
+`webkit-desktop`, `webkit-mobile`, and `firefox-desktop`. WebKit is a real
+engine but **not** real Safari or iOS — see the
+[real-device Safari checklist](docs/SAFARI_DEVICE_CHECKLIST.md) before claiming
+Safari/iOS support.
+
+Node/npm is the only supported runner. GitHub Actions, Cloudflare Pages,
+Playwright and Lighthouse all use these scripts; there is no second toolchain
+to keep in sync.
+
+See [AGENTS.md](AGENTS.md) for the engine invariants and verification checklist.
 
 ## Browser Compatibility
 
@@ -233,9 +309,17 @@ npm run test:e2e   # Playwright smoke tests (builds, then serves dist/)
 | PDF compress                  | 80+    | 80+     | 14+    | 80+  |
 | FFmpeg.wasm                   | 91+    | 91+     | 15.2+  | 91+  |
 | FFmpeg MT (SharedArrayBuffer) | 91+    | 91+     | 15.4+  | 91+  |
-| WebCodecs GPU video           | 94+    | —       | 16.4+  | 94+  |
-| PaddleOCR (WebGL)             | 91+    | 91+     | 15.2+  | 91+  |
+| WebCodecs (video fast path)   | 94+    | 130+    | 16.4+  | 94+  |
+| WebGL2 resize                 | 56+    | 51+     | 15+    | 79+  |
+| WebGPU local AI (optional)    | Feature-tested | Feature-tested | Feature-tested | Feature-tested |
+| PaddleOCR PP-OCRv3 (WebGL)    | 91+    | 91+     | 15.2+  | 91+  |
 | Tesseract.js (WASM)           | 91+    | 91+     | 15.2+  | 91+  |
+
+WebGPU AI is optional: the app probes for a real adapter/device on first use and silently uses the WASM
+classifier when the API is missing, blocked, or the model fails to load. WebCodecs is only used when the exact
+output codec configuration (`canEncodeVideo` / `canEncodeAudio`) is supported; otherwise video falls back to
+FFmpeg.wasm and then MediaRecorder. WebKit automation is not real Safari — run the
+[real-device Safari checklist](docs/SAFARI_DEVICE_CHECKLIST.md) before release.
 
 ---
 
@@ -254,7 +338,7 @@ dev setup, project conventions, and PR checklist.
 
 ## Credits & Acknowledgments
 
-CompressZ is built on PDF.js, pdf-lib, FFmpeg.wasm, Tesseract.js,
+CompressZ is built on PDF.js, pdf-lib, FFmpeg.wasm, Mediabunny, Tesseract.js,
 PaddleOCR/Paddle.js, mammoth.js, html2canvas, Hugging Face `transformers.js`,
 anime.js, Vite, and TypeScript — see [CREDITS.md](CREDITS.md) for the full
 list with licenses and links. None of those projects are affiliated with

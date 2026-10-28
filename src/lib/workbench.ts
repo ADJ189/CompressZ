@@ -101,6 +101,11 @@ function renderQueue(host: HTMLElement, snapshot: ResourceSnapshot): void {
 
 /** Wire the home workbench. Safe to call on every visit; replaces listeners. */
 export function mountWorkbench(root: HTMLElement): void {
+  // One mount per rendered host. A late dynamic-import callback must not wire
+  // the same markup twice (duplicate search/star/queue handlers).
+  if (root.dataset.wbMounted === '1') return;
+  root.dataset.wbMounted = '1';
+
   const tools = readTools(root);
   const byRoute = new Map(tools.map((tool) => [tool.route, tool]));
   const quickCards = Array.from(
