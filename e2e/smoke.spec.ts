@@ -179,17 +179,33 @@ test("system theme follows the OS and can be pinned to light/dark", async ({
   await page.goto("/");
   const html = page.locator("html");
 
+  // Playwright's Firefox build does not apply `prefers-color-scheme`
+  // emulation on all platforms (matchMedia still reports the real OS value).
+  // Detect that instead of asserting a theme the browser never received; the
+  // live-switch half of this test still runs on Chromium and WebKit.
+  const emulationWorks = await page.evaluate(
+    () => matchMedia("(prefers-color-scheme: dark)").matches,
+  );
+
   const dialog = await openSettingsSection(page, "Appearance");
   await dialog.getByRole("button", { name: /^System \(/ }).click();
 
   expect(await page.evaluate(() => localStorage.getItem("theme"))).toBe(
     "system",
   );
-  await expect(html).toHaveAttribute("data-theme", "dark");
 
-  // A live OS switch must re-resolve without a reload.
-  await page.emulateMedia({ colorScheme: "light" });
-  await expect(html).toHaveAttribute("data-theme", "light");
+  if (emulationWorks) {
+    await expect(html).toHaveAttribute("data-theme", "dark");
+
+    // A live OS switch must re-resolve without a reload.
+    await page.emulateMedia({ colorScheme: "light" });
+    await expect(html).toHaveAttribute("data-theme", "light");
+  } else {
+    const resolved = await page.evaluate(() =>
+      matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
+    );
+    await expect(html).toHaveAttribute("data-theme", resolved);
+  }
 
   // Picking a side opts out of `system` and survives a reload.
   await dialog.getByRole("button", { name: "Dark", exact: true }).click();
@@ -300,6 +316,16 @@ test("Execution diagnostics follow GPU and manual concurrency choices", async ({
       .locator(".device-info-row", { hasText: "Batch concurrency" })
       .locator(".device-info-val"),
   ).toHaveText("4 files at once");
+  await expect(
+    dialog
+      .locator(".device-info-row", { hasText: "Video path" })
+      .locator(".device-info-val"),
+  ).toContainText("WebCodecs + Mediabunny");
+  await expect(
+    dialog
+      .locator(".device-info-row", { hasText: "Image quality guard" })
+      .locator(".device-info-val"),
+  ).toContainText("never silently rescales");
 
   if (caps.webgl2) {
     dialog = await openSettingsSection(page, "Performance");
