@@ -199,7 +199,8 @@ compressz/
 │   ├── workflows/        # ci.yml (typecheck/lint/build), e2e.yml, lighthouse.yml
 │   └── dependabot.yml    # Weekly grouped updates, major versions pinned
 ├── e2e/
-│   └── smoke.spec.ts     # Playwright smoke tests (every route, theme, settings)
+│   ├── smoke.spec.ts     # Playwright: routes, workbench, settings, responsive, privacy
+│   └── rules.spec.ts     # Pure Node tests: recommendation rules + Resource Guard estimators
 ├── public/
 │   ├── _headers          # COOP/COEP → SharedArrayBuffer (FFmpeg MT)
 │   ├── _redirects        # SPA fallback

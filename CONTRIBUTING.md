@@ -88,7 +88,7 @@ src/
     gif, ocr, convert, imagesToPdf, mergePdf, settings)
   components/, utils/   # standalone React library (see Conventions)
   index.ts, styles.css  # library entry + styles
-e2e/                    # Playwright tests (npm run test:e2e)
+e2e/                    # Playwright tests + pure rule/estimator tests
 ```
 
 Heavy engines (FFmpeg.wasm, PDF.js, pdf-lib, Tesseract.js, PaddleOCR,

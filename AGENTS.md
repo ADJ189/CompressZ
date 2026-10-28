@@ -97,7 +97,8 @@ src/lib/                   engines, one file per format
 src/pages/                 one file per route: images, pdf, video, audio, gif,
                            ocr, convert, imagesToPdf, mergePdf, settings
 src/components/            standalone React component library (unused by app)
-e2e/smoke.spec.ts          Playwright tests
+e2e/smoke.spec.ts          Playwright tests (routes, workbench, settings, responsive)
+e2e/rules.spec.ts          pure Node tests: rules engine + Resource Guard estimators
 scripts/strip-oversized-assets.mjs  Cloudflare 25 MiB guard
 lighthouserc.json          Lighthouse CI config
 ```
@@ -259,6 +260,10 @@ match. Several were previously wrong; don't regress them.
 - Dismissals persist in `cz-recommendations-v1` as `scope:rule:action` keys.
 - UI: `createRecommendationNotice()` renders one primary suggestion plus a
   collapsed "Other suggestions (N)"; never a modal or repeated toast.
+- Applying a suggestion is reversible: each page snapshots the previous
+  state and passes an Undo action to `toast()`. Destructive Settings actions
+  (`Reset all settings`, `Clear local data`) use a two-step confirm button,
+  and closing Settings returns focus to its trigger.
 
 ### GPU / platform semantics
 - `gpuAvailable()` means **WebGL2 only**. OffscreenCanvas is not proof of GPU

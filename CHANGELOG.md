@@ -43,7 +43,12 @@ The suffix is dropped on the release that ships it (`1.12.0`).
   Guard status card, per-section reset buttons, model-cache clearing, a
   dismissed-suggestion counter/clear action, a local-data clear action, and
   **Copy diagnostics** (JSON containing capability/preference data only, with
-  a download fallback when the clipboard is blocked).
+  a download fallback when the clipboard is blocked). Closing the dialog with
+  Escape or the close button returns focus to the control that opened it.
+- **Undo for applied suggestions**: applying a contextual suggestion is now
+  reversible from the toast for reordering, format/quality, page size, PDF
+  preset and OCR engine changes. `Reset all settings` and `Clear local data`
+  require a second, explicit confirmation click before they run.
 - **Appearance**: light / dark / **system**, stored under the existing
   `theme` key. `data-theme` always receives the resolved value, so every
   existing dark-theme rule keeps working; the header button is still a quick
@@ -58,8 +63,11 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 - Playwright now runs four projects (`chromium-desktop`, `chromium-mobile`,
   `webkit-desktop`, `webkit-mobile`) and covers the workbench search/pins/
   recents, system-theme persistence, live Resource Guard status, suggestion
-  apply + dismissal persistence, the sectioned Settings navigation, 320–1440
-  responsive overflow, and the real app version from `package.json`.
+  apply + Undo + dismissal persistence, all eight Settings sections, the
+  legacy `performanceMode` migration, destructive-action confirmation,
+  no non-GET/upload requests during local workflows, 320–1440 responsive
+  overflow (home, tool page and Settings), and the real app version from
+  `package.json`.
 
 ### Changed — One execution profile for device performance
 
@@ -123,6 +131,9 @@ The suffix is dropped on the release that ships it (`1.12.0`).
   uses `fileURLToPath()`; production builds correctly strip that asset before
   Cloudflare Pages' 25 MiB per-file limit rejects it.
 - Default image quality is documented consistently as **82**.
+- Removed the dead `.htc` home-card CSS block left behind by the workbench
+  rewrite, so the shipped stylesheet no longer contains rules for markup that
+  no longer exists.
 
 ### Changed — AI backend is now a real Settings preference
 
@@ -166,8 +177,10 @@ The suffix is dropped on the release that ships it (`1.12.0`).
   "WebAssembly binaries only". File bytes are still never sent there.
 - Playwright coverage now also verifies that the Diagnostics panel's Image path
   follows the Images GPU toggle and that the manual batch limit does not
-  change the `Auto (n)` label. The suite runs 152 tests across four projects
-  (Chromium and WebKit, desktop and mobile).
+  change the `Auto (n)` label. `e2e/rules.spec.ts` adds pure Node tests for
+  natural ordering, every recommendation rule and the Resource Guard's
+  `estimateJob()` / `isAllocationFailure()` helpers. The suite runs 248 tests
+  across four projects (Chromium and WebKit, desktop and mobile).
 
 - Expose LogoMarquee's accessible region label and reset TiltCard when reduced
   motion is enabled during use.
