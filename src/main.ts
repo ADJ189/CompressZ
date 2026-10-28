@@ -1,38 +1,51 @@
 import "./style.css";
+import "./styles/workbench.css";
 import { on, init, navigate } from "./router";
+import { initTheme, getThemePreference, toggleTheme, resolveThemePreference, THEME_EVENT } from "./lib/theme";
+import { trackRecent } from "./lib/recents";
 
 // ── Theme ─────────────────────────────────────────────────────
-const html = document.documentElement;
 const themeIcon = document.getElementById("theme-icon")!;
 
 const SUN = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
 const MOON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
 
-function applyTheme(t: string) {
-  html.setAttribute("data-theme", t);
-  localStorage.setItem("theme", t);
-  if (themeIcon) themeIcon.innerHTML = t === "dark" ? SUN : MOON;
+/**
+ * The header button is a quick light/dark flip; Settings → Appearance offers
+ * the full three-way choice (light / dark / follow system). Both paths go
+ * through lib/theme.ts, and this listener keeps the icon/label in sync.
+ */
+function paintThemeButton() {
+  const resolved = resolveThemePreference();
+  const pref = getThemePreference();
+  if (themeIcon) themeIcon.innerHTML = resolved === "dark" ? SUN : MOON;
   const lbl = document.getElementById("theme-label");
-  if (lbl) lbl.textContent = t === "dark" ? "Light mode" : "Dark mode";
+  if (lbl) {
+    lbl.textContent =
+      pref === "system"
+        ? `System (${resolved})`
+        : resolved === "dark"
+          ? "Light mode"
+          : "Dark mode";
+  }
   document
     .getElementById("theme-btn")
     ?.setAttribute(
       "aria-label",
-      t === "dark" ? "Switch to light mode" : "Switch to dark mode",
+      resolved === "dark" ? "Switch to light mode" : "Switch to dark mode",
     );
 }
+
 document
   .getElementById("theme-btn")!
-  .addEventListener("click", () =>
-    applyTheme(html.getAttribute("data-theme") === "dark" ? "light" : "dark"),
-  );
+  .addEventListener("click", () => {
+    toggleTheme();
+    paintThemeButton();
+  });
 
-const saved =
-  localStorage.getItem("theme") ||
-  (window.matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light");
-applyTheme(saved);
+document.addEventListener(THEME_EVENT, paintThemeButton);
+initTheme();
+paintThemeButton();
 
 // ── Splash ────────────────────────────────────────────────────
 // CSS drives the fade itself (auto-plays, .8s delay + .4s duration — see
@@ -114,6 +127,7 @@ window.addEventListener("resize", () => {
 
 // ── Nav active state ──────────────────────────────────────────
 function setActiveNav(route: string) {
+  trackRecent(route);
   let active: HTMLElement | null = null;
   const tabs = document.querySelectorAll<HTMLElement>("[data-tab]");
   for (const el of Array.from(tabs)) {
@@ -148,6 +162,10 @@ const settingsBody = document.getElementById("settings-dialog-body")!;
 // Cleared on failure so a later click can retry.
 let settingsMountPromise: Promise<void> | null = null;
 let settingsHideTimer: number | undefined;
+// Where focus should land when the dialog closes. Captured before the async
+// mount so it is the control the user actually pressed, not whatever the
+// first focusable element inside the dialog becomes.
+let settingsReturnFocus: HTMLElement | null = null;
 
 function ensureSettingsMounted(): Promise<void> {
   if (!settingsMountPromise) {
@@ -163,6 +181,15 @@ function ensureSettingsMounted(): Promise<void> {
 }
 
 async function openSettings() {
+  // Safari/WebKit does not focus a button on mouse click, so `activeElement`
+  // can be <body>. Fall back to the known trigger in that case.
+  const active = document.activeElement;
+  settingsReturnFocus =
+    active instanceof HTMLElement &&
+    active !== document.body &&
+    active !== document.documentElement
+      ? active
+      : settingsBtn;
   try {
     await ensureSettingsMounted();
   } catch (err) {
@@ -182,6 +209,7 @@ async function openSettings() {
   document.body.style.overflow = "hidden";
 }
 function closeSettings() {
+  const wasOpen = !settingsDialog.hidden;
   settingsOverlay.classList.remove("open");
   settingsDialog.classList.remove("open");
   document.body.style.overflow = "";
@@ -190,6 +218,11 @@ function closeSettings() {
     settingsOverlay.hidden = true;
     settingsDialog.hidden = true;
   }, 380);
+  if (wasOpen) {
+    const target = settingsReturnFocus;
+    settingsReturnFocus = null;
+    if (target && target.isConnected) target.focus();
+  }
 }
 settingsBtn.addEventListener("click", openSettings);
 settingsClose.addEventListener("click", closeSettings);
@@ -292,6 +325,12 @@ function showStatic(id: string) {
 on("", () => {
   setActiveNav("");
   showStatic("tpl-home");
+  // Home is static markup; the workbench layers search, pins and the live
+  // queue on top. Loaded on demand so first paint stays small.
+  void import("./lib/workbench").then(({ mountWorkbench }) => {
+    const host = pageView.querySelector<HTMLElement>(".cz-workbench");
+    if (host) mountWorkbench(host);
+  });
 });
 on("compress/images", () => {
   setActiveNav("compress/images");
