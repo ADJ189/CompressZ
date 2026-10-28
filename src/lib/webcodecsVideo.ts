@@ -84,6 +84,10 @@ export function webCodecsRouteFor(
   if (options.audioPassthrough) return null;
   if (options.audioTrackMode === "all") return null;
   if (options.subtitleMode === "all") return null;
+  // Mediabunny/WebCodecs exposes no encoder-speed preset. `"fast"` is the
+  // app default, so treating it as "no preference" is honest; an explicit
+  // ultrafast/medium/slow choice must reach FFmpeg, which actually applies it.
+  if (options.videoPreset && options.videoPreset !== "fast") return null;
   return ROUTES[options.videoCodec ?? "h264"] ?? null;
 }
 
@@ -233,15 +237,9 @@ export async function videoViaWebCodecs(
 
   const meta = precomputedMeta ?? (await getVideoMeta(file));
   const size = planVideoSize(meta.width, meta.height, options.maxWidth);
-  const bitrate = videoBitrateFor(options, meta.duration, route, true);
-  // Mediabunny's encoder options take a `Quality` instance, not a raw number
-  // or a bare `{ bitrate }` object. A number is quality mode (0–1); an object
-  // is explicit bitrate mode.
-  const qualityValue = bitrate === null ? webCodecsQuality(options) : { bitrate };
 
   onProgress?.(3);
   const mb = await loadMediabunny();
-  const quality = new mb.Quality(qualityValue);
 
   const input = new mb.Input({
     formats: mb.ALL_FORMATS,
@@ -261,6 +259,16 @@ export async function videoViaWebCodecs(
     const audioTracks = await input.getAudioTracks();
     const hasAudio = audioTracks.length > 0;
     if (hasAudio && !(await audioTracks[0].canDecode())) return null;
+
+    // The input's track list — not an assumption — decides whether the
+    // target-size budget has to reserve room for an audio stream.
+    const bitrate = videoBitrateFor(options, meta.duration, route, hasAudio);
+    // Mediabunny's encoder options take a `Quality` instance, not a raw number
+    // or a bare `{ bitrate }` object. A number is quality mode (0–1); an object
+    // is explicit bitrate mode.
+    const qualityValue =
+      bitrate === null ? webCodecsQuality(options) : { bitrate };
+    const quality = new mb.Quality(qualityValue);
 
     // Probe the exact output configuration before allocating the output.
     // These are the same settings Conversion will use below.

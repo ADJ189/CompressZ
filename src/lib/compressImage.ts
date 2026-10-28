@@ -203,10 +203,16 @@ interface MeasuredImage {
 }
 
 /**
- * Decode the encoded blob once, sample both images to a ≤96×96 luma grid and
- * return global SSIM plus the *actual* encoded dimensions. Returns null when
- * the browser cannot decode its own output — the caller then treats the
- * encode as unmeasured rather than inventing a score.
+ * Decode the encoded blob into a bounded sample instead of a full-resolution
+ * bitmap, then sample source and output to a ≤96×96 luma grid and return
+ * global SSIM plus the encoded image's real dimensions. Returns null when the
+ * browser cannot decode its own output — the caller then treats the encode as
+ * unmeasured rather than inventing a score.
+ *
+ * `createImageBitmap` can downscale while decoding, so a 6000px output never
+ * has to materialise at full size just to be measured. Dimensions are read
+ * from the encoded header (`encodedDimensions`) because a resized bitmap no
+ * longer reports them.
  */
 async function measureEncoded(
   source: HTMLCanvasElement | OffscreenCanvas,
@@ -216,13 +222,128 @@ async function measureEncoded(
 ): Promise<MeasuredImage | null> {
   if (typeof createImageBitmap !== "function") return null;
   try {
-    const decoded = await createImageBitmap(blob);
+    const { width: sw, height: sh } = sampleSize(width, height);
+    let decoded: ImageBitmap;
+    try {
+      decoded = await createImageBitmap(blob, {
+        resizeWidth: sw,
+        resizeHeight: sh,
+        resizeQuality: "high",
+      });
+    } catch {
+      // Some engines reject the resize options themselves. Fall back to a
+      // plain decode rather than losing the measurement entirely.
+      decoded = await createImageBitmap(blob);
+    }
     const a = await sampleCanvasLuma(source, width, height);
-    const b = await sampleCanvasLuma(decoded, decoded.width, decoded.height);
-    const width_ = decoded.width;
-    const height_ = decoded.height;
+    const b = await sampleCanvasLuma(decoded, sw, sh);
     decoded.close();
-    return { ssim: computeSsim(a, b), width: width_, height: height_ };
+    // The planned dimensions are the encoder's own input, so they are the
+    // correct fallback when the header can't be parsed (unknown container).
+    const actual = (await encodedDimensions(blob)) ?? { width, height };
+    return { ssim: computeSsim(a, b), width: actual.width, height: actual.height };
+  } catch {
+    return null;
+  }
+}
+
+/** The ≤96px sampling grid used for both source and output. */
+function sampleSize(width: number, height: number): { width: number; height: number } {
+  const MAX_SIDE = 96;
+  const scale = Math.min(1, MAX_SIDE / Math.max(1, width, height));
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  };
+}
+
+/**
+ * Read image dimensions from the encoded header without decoding pixels.
+ * Covers the formats this app encodes (JPEG, WebP, AVIF); unknown input
+ * returns null. Only the first 64 KiB are read.
+ */
+async function encodedDimensions(
+  blob: Blob,
+): Promise<{ width: number; height: number } | null> {
+  try {
+    const head = new Uint8Array(
+      await blob.slice(0, 64 * 1024).arrayBuffer(),
+    );
+    const view = new DataView(head.buffer, head.byteOffset, head.byteLength);
+
+    // JPEG: walk the marker chain until a Start Of Frame segment.
+    if (head[0] === 0xff && head[1] === 0xd8) {
+      let off = 2;
+      while (off + 9 <= head.length) {
+        if (head[off] !== 0xff) {
+          off++;
+          continue;
+        }
+        const marker = head[off + 1];
+        if (marker === 0xd8 || marker === 0xd9) {
+          off += 2;
+          continue;
+        }
+        const len = view.getUint16(off + 2);
+        if (len < 2) return null;
+        const isSof =
+          marker >= 0xc0 &&
+          marker <= 0xcf &&
+          marker !== 0xc4 && // DHT
+          marker !== 0xc8 && // JPG extension
+          marker !== 0xcc; // DAC
+        if (isSof) {
+          return {
+            height: view.getUint16(off + 5),
+            width: view.getUint16(off + 7),
+          };
+        }
+        off += 2 + len;
+      }
+      return null;
+    }
+
+    // WebP: RIFF container, VP8 (lossy), VP8L (lossless) or VP8X (extended).
+    const riff = String.fromCharCode(...head.subarray(0, 4));
+    const webp = String.fromCharCode(...head.subarray(8, 12));
+    if (riff === "RIFF" && webp === "WEBP" && head.length >= 30) {
+      const chunk = String.fromCharCode(...head.subarray(12, 16));
+      if (chunk === "VP8 ") {
+        return {
+          width: view.getUint16(26, true) & 0x3fff,
+          height: view.getUint16(28, true) & 0x3fff,
+        };
+      }
+      if (chunk === "VP8L") {
+        return {
+          width: 1 + (((head[22] & 0x3f) << 8) | head[21]),
+          height:
+            1 +
+            (((head[24] & 0x0f) << 10) |
+              (head[23] << 2) |
+              ((head[22] & 0xc0) >> 6)),
+        };
+      }
+      if (chunk === "VP8X") {
+        return {
+          width: 1 + (head[24] | (head[25] << 8) | (head[26] << 16)),
+          height: 1 + (head[27] | (head[28] << 8) | (head[29] << 16)),
+        };
+      }
+      return null;
+    }
+
+    // AVIF: ISOBMFF — the `ispe` box carries width/height as 32-bit values
+    // after its 4-byte version/flags field.
+    const text = new TextDecoder("latin1").decode(head);
+    const idx = text.indexOf("ispe");
+    if (idx >= 0 && idx + 16 <= head.length) {
+      return {
+        width: view.getUint32(idx + 8),
+        height: view.getUint32(idx + 12),
+      };
+    }
+    return null;
   } catch {
     return null;
   }

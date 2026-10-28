@@ -123,7 +123,12 @@ export function computeSsim(
   const numerator = (2 * meanA * meanB + SSIM_C1) * (2 * cov + SSIM_C2);
   const denominator =
     (meanA * meanA + meanB * meanB + SSIM_C1) * (varA + varB + SSIM_C2);
-  if (denominator === 0) return 1;
+  // Floating-point equality on a computed denominator is unreliable: a
+  // degenerate all-zero variance pair can land just above 0, and a NaN would
+  // silently propagate into every later SSIM comparison. Treat any
+  // non-positive or non-finite denominator as identical input, which is what
+  // the SSIM constants make mathematically unreachable for real pixels.
+  if (!Number.isFinite(denominator) || denominator <= Number.EPSILON) return 1;
   const value = numerator / denominator;
   return Math.max(-1, Math.min(1, value));
 }
