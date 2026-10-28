@@ -2,6 +2,12 @@ import type { CompressOptions, CompressResult, ImageFormat } from "./types";
 import { makeCanvas, get2D, resizeViaWebGL } from "./gpu";
 import { decodeImageBitmap } from "./imageDecode";
 import { resolvedMaxImageDim } from "./settings";
+import {
+  computeSsim,
+  decideQualityGuard,
+  planOutputSize,
+  sampleLuma,
+} from "./qualityGuard";
 
 // AVIF *encoding* support varies a lot more than decoding support (notably
 // Safari can display AVIF but can't encode it via canvas, and older Firefox
@@ -49,15 +55,14 @@ export async function compressImage(
   const bitmap = await decodeImageBitmap(file);
   onProgress?.(18);
 
-  let { width: w, height: h } = bitmap;
-  const origW = w,
-    origH = h;
-  const needsResize = w > maxW || h > maxH;
-  if (needsResize) {
-    const r = Math.min(maxW / w, maxH / h);
-    w = Math.round(w * r);
-    h = Math.round(h * r);
-  }
+  const origW = bitmap.width,
+    origH = bitmap.height;
+  // planOutputSize() never upscales: a max dimension is a ceiling, so a
+  // 1200px source stays 1200px even when the cap is 4000px.
+  const size = planOutputSize(origW, origH, maxW, maxH);
+  const w = size.width,
+    h = size.height;
+  const needsResize = size.resized;
 
   // GPU path: when we're actually downscaling, run the resize as a WebGL2
   // texture draw (hardware bilinear filtering) instead of Canvas2D's
@@ -89,6 +94,7 @@ export async function compressImage(
     format === "image/avif" ? 0.7 : format === "image/jpeg" ? 0.85 : 0.82;
   const clamp = (q: number) =>
     format === "image/png" ? 1 : Math.max(0.01, Math.min(0.99, q));
+  const requestedQ = clamp(options.quality ?? defaultQ);
 
   let blob: Blob;
   if (options.targetSizeKB && options.targetSizeKB > 0) {
@@ -99,8 +105,59 @@ export async function compressImage(
       onProgress,
     );
   } else {
-    blob = await encode(canvas, format, clamp(options.quality ?? defaultQ));
+    blob = await encode(canvas, format, requestedQ);
     onProgress?.(95);
+  }
+
+  // Post-encode quality guard. It measures a ≤96×96 luma sample, so a 6000px
+  // photo costs a small fixed amount of work instead of a second full decode.
+  // The guard never lowers the requested quality or resolution: at most it
+  // retries once at a *higher* quality (when no byte target is active) and
+  // otherwise reports a short note on the result.
+  let guardNote = "";
+  let measured: MeasuredImage | null = null;
+  if (format !== "image/png") {
+    measured = await measureEncoded(canvas, w, h, blob);
+    if (measured) {
+      const base = {
+        format,
+        requestedQuality: requestedQ,
+        targetSizeKB: options.targetSizeKB,
+        planned: { width: w, height: h },
+      };
+      const first = decideQualityGuard({
+        ...base,
+        ssim: measured.ssim,
+        actual: measured,
+      });
+      if (first.action === "retry") {
+        const retried = await encode(canvas, format, clamp(first.quality));
+        const retriedMeasure = await measureEncoded(canvas, w, h, retried);
+        if (retriedMeasure && retriedMeasure.ssim > measured.ssim) {
+          const second = decideQualityGuard({
+            ...base,
+            ssim: retriedMeasure.ssim,
+            actual: retriedMeasure,
+            requestedQuality: first.quality,
+            alreadyRetried: true,
+          });
+          blob = retried;
+          measured = retriedMeasure;
+          guardNote = second.action === "warn" ? guardLabel(second.code) : "";
+        } else {
+          const second = decideQualityGuard({
+            ...base,
+            ssim: measured.ssim,
+            actual: measured,
+            requestedQuality: first.quality,
+            alreadyRetried: true,
+          });
+          guardNote = guardLabel(second.action === "warn" ? second.code : "low-ssim");
+        }
+      } else if (first.action === "warn") {
+        guardNote = guardLabel(first.code);
+      }
+    }
   }
 
   // If PNG re-encoding didn't actually shrink the file, returning the
@@ -111,8 +168,8 @@ export async function compressImage(
   // at its original dimensions/format, and metadata-stripping guarantees
   // silently don't hold.
   let outFormat: ImageFormat = format;
-  let outW = w,
-    outH = h;
+  let outW = measured?.width || w,
+    outH = measured?.height || h;
   if (
     format === "image/png" &&
     blob.size >= file.size &&
@@ -122,6 +179,7 @@ export async function compressImage(
     outFormat = "image/png";
     outW = origW;
     outH = origH;
+    guardNote = "";
   }
   onProgress?.(100);
 
@@ -130,10 +188,71 @@ export async function compressImage(
     originalSize: file.size,
     compressedSize: blob.size,
     compressionRatio: file.size / blob.size,
-    format: outFormat,
+    // `components.ts` shows everything after the "·" as the engine/note
+    // badge, so the guard note rides along without changing the MIME type.
+    format: guardNote ? `${outFormat} · ${guardNote}` : outFormat,
     width: outW,
     height: outH,
   };
+}
+
+interface MeasuredImage {
+  ssim: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Decode the encoded blob once, sample both images to a ≤96×96 luma grid and
+ * return global SSIM plus the *actual* encoded dimensions. Returns null when
+ * the browser cannot decode its own output — the caller then treats the
+ * encode as unmeasured rather than inventing a score.
+ */
+async function measureEncoded(
+  source: HTMLCanvasElement | OffscreenCanvas,
+  width: number,
+  height: number,
+  blob: Blob,
+): Promise<MeasuredImage | null> {
+  if (typeof createImageBitmap !== "function") return null;
+  try {
+    const decoded = await createImageBitmap(blob);
+    const a = await sampleCanvasLuma(source, width, height);
+    const b = await sampleCanvasLuma(decoded, decoded.width, decoded.height);
+    const width_ = decoded.width;
+    const height_ = decoded.height;
+    decoded.close();
+    return { ssim: computeSsim(a, b), width: width_, height: height_ };
+  } catch {
+    return null;
+  }
+}
+
+async function sampleCanvasLuma(
+  source: CanvasImageSource,
+  width: number,
+  height: number,
+): Promise<Float32Array> {
+  const MAX_SIDE = 96;
+  const scale = Math.min(1, MAX_SIDE / Math.max(width, height));
+  const sw = Math.max(1, Math.round(width * scale));
+  const sh = Math.max(1, Math.round(height * scale));
+  const small = makeCanvas(sw, sh);
+  const ctx = get2D(small, "images");
+  ctx.drawImage(source, 0, 0, sw, sh);
+  const data = ctx.getImageData(0, 0, sw, sh).data;
+  return sampleLuma(data, sw, sh, MAX_SIDE);
+}
+
+function guardLabel(code: string): string {
+  switch (code) {
+    case "resolution-lost":
+      return "⚠ output smaller than planned";
+    case "target-size-quality":
+      return "⚠ target size limits quality";
+    default:
+      return "⚠ low SSIM at requested quality";
+  }
 }
 
 // Browsers often leave File.type empty (e.g. some drag-and-drop sources, or

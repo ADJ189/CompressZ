@@ -11,23 +11,39 @@ import {
   setProgressHandler,
 } from "./ffmpeg";
 import { get2D } from "./gpu";
+import { getVideoMeta, planVideoSize } from "./videoMeta";
+import { videoViaWebCodecs } from "./webcodecsVideo";
 
 export async function compressVideo(
   file: File,
   options: CompressOptions,
   onProgress?: (pct: number) => void,
 ): Promise<CompressResult> {
-  // Primary: FFmpeg.wasm — best quality, all codecs, proper MP4 container.
+  // Fast path: browser-native WebCodecs encode/decode muxed by Mediabunny.
+  // It only runs for simple, verified codec configurations; every other
+  // request — and every failed probe — falls through to FFmpeg.wasm below.
+  try {
+    const native = await videoViaWebCodecs(file, options, onProgress);
+    if (native) return native;
+  } catch (e) {
+    console.warn(
+      "[video] WebCodecs/Mediabunny route failed, falling back to FFmpeg:",
+      e,
+    );
+  }
+
+  // Compatibility path: FFmpeg.wasm — filters, 10-bit, multi-track audio,
+  // subtitle passthrough, two-pass and every codec the browser can't encode.
   try {
     return await ffJob(() => videoViaFFmpeg(file, options, onProgress));
   } catch (e) {
     console.warn("[video] FFmpeg failed, falling back to MediaRecorder:", e);
   }
 
-  // Fallback: MediaRecorder — browser-native, always produces a valid container.
-  // The WebCodecs path has been removed: it encoded raw H.264 NAL units with no
-  // container muxer, producing blobs that no player can open. Re-enable it only
-  // after integrating mp4box.js or webm-muxer for proper muxing.
+  // Last resort: MediaRecorder — browser-native recording of a canvas + the
+  // source video's audio track. Produces a valid container on every browser
+  // that still supports MediaRecorder, but cannot honour codec/container
+  // choices beyond what the recorder supports.
   return videoViaMediaRecorder(file, options, onProgress);
 }
 
@@ -309,6 +325,10 @@ async function videoViaMediaRecorder(
       )
     : (opts.videoBitrate ?? 1_500_000);
 
+  const size = planVideoSize(ow, oh, opts.maxWidth);
+  const w = size.width;
+  const h = size.height;
+
   const ua = navigator.userAgent;
   const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
   const isFirefox = ua.includes("Firefox/");
@@ -339,8 +359,6 @@ async function videoViaMediaRecorder(
     vid.onloadedmetadata = () => r();
   });
 
-  const w = opts.maxWidth ? Math.min(ow, opts.maxWidth) : ow;
-  const h = opts.maxWidth ? Math.round(oh * (w / ow)) : oh;
   const canvas = document.createElement("canvas");
   canvas.width = w;
   canvas.height = h;
@@ -452,25 +470,4 @@ async function videoViaMediaRecorder(
   };
 }
 
-// ── Utility ───────────────────────────────────────────────────
-function getVideoMeta(
-  file: File,
-): Promise<{ width: number; height: number; duration: number }> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const v = document.createElement("video");
-    v.src = url;
-    v.onloadedmetadata = () => {
-      URL.revokeObjectURL(url);
-      resolve({
-        width: v.videoWidth || 1280,
-        height: v.videoHeight || 720,
-        duration: v.duration || 30,
-      });
-    };
-    v.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("Cannot read video metadata"));
-    };
-  });
-}
+
