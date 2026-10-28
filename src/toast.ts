@@ -46,7 +46,10 @@ export function toast(
   // anime.js pop-in/out is a progressive enhancement — the CSS class still
   // gives the toast its base styling either way, so a failed/slow dynamic
   // import just means an instant show/hide instead of a broken toast.
-  import('./lib/motion').then(({ toastIn, toastOut }) => {
+  // Deliberately fire-and-forget (the toast is synchronous API); `void` marks
+  // the floating promise so neither the linter nor a reviewer mistakes it for
+  // an accidentally unawaited operation.
+  void import('./lib/motion').then(({ toastIn, toastOut }) => {
     toastIn(el);
     timer = window.setTimeout(() => { toastOut(el).then(() => el.remove()); }, lifetime);
   }).catch(() => {

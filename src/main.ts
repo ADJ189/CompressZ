@@ -327,9 +327,17 @@ on("", () => {
   showStatic("tpl-home");
   // Home is static markup; the workbench layers search, pins and the live
   // queue on top. Loaded on demand so first paint stays small.
+  // Capture the host this visit created: the chunk can resolve after the user
+  // has already navigated away (or returned home again, replacing the markup).
+  // Mounting the stale callback into a newer host would attach every handler
+  // twice, so bail unless this is still the live workbench.
+  const host = pageView.querySelector<HTMLElement>(".cz-workbench");
+  if (!host) return;
   void import("./lib/workbench").then(({ mountWorkbench }) => {
-    const host = pageView.querySelector<HTMLElement>(".cz-workbench");
-    if (host) mountWorkbench(host);
+    if (!host.isConnected || host !== pageView.querySelector(".cz-workbench")) {
+      return;
+    }
+    mountWorkbench(host);
   });
 });
 on("compress/images", () => {
