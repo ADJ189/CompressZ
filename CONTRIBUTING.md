@@ -10,8 +10,9 @@ set up, the project's conventions, and how to submit changes.
 ## Ground rules
 
 - **No backend, ever.** No feature should require a server round-trip for
-  user files. Everything is Canvas/WebAssembly/Web platform APIs in-browser
-  (there is no WebCodecs/muxer video path today — don't claim one). If a
+  user files. Everything is Canvas/WebAssembly/Web platform APIs in-browser.
+  Video may use WebCodecs with Mediabunny muxing only when the exact codec
+  configuration is supported, and must always fall back to FFmpeg.wasm. If a
   feature seems to need a backend, it's probably out of scope — open an
   issue to discuss first.
 - **No telemetry, analytics, or third-party trackers.** See
@@ -44,14 +45,21 @@ npm run build      # production build → dist/ (+ oversized-asset strip)
 npm run preview    # serve the production build locally
 npm run typecheck  # tsc --noEmit
 npm run lint       # ESLint
-npm run test:e2e   # Playwright matrix (Chromium + WebKit, desktop + mobile)
+npm run test:e2e   # Playwright matrix (Chromium + WebKit + Firefox)
+npm run test:webcodecs # opt-in real MP4 encode (esm.sh + WebCodecs)
+npm run bench      # opt-in benchmark → bench-results/ (not CI)
 npm run lighthouse # Lighthouse CI (optional)
 ```
 
 Run `npm run typecheck` and `npm run lint` before opening a PR — CI runs both.
 `npm run test:e2e` builds and serves `dist/` automatically, and needs the
 Playwright browsers once:
-`npx --no-install playwright install chromium webkit`.
+`npx --no-install playwright install chromium webkit firefox`.
+
+The matrix covers `chromium-desktop`, `chromium-mobile`, `webkit-desktop`,
+`webkit-mobile`, and `firefox-desktop`. Playwright's WebKit is not real Safari
+or iOS; changes that affect Safari behaviour need the manual
+[real-device checklist](docs/SAFARI_DEVICE_CHECKLIST.md).
 
 npm is the only supported runner. CI and Cloudflare Pages use these scripts.
 
@@ -73,6 +81,8 @@ src/
   styles/workbench.css # new UI only; every selector is prefixed `.cz-`
   lib/                  # compression/conversion engines, one file per format
     compressImage.ts, compressPdf.ts, compressVideo.ts, compressAudio.ts,
+    webcodecsVideo.ts (capability-gated WebCodecs + Mediabunny route),
+    videoMeta.ts, qualityGuard.ts (SSIM / no-upscale guard),
     compressGif.ts, optimizeSvg.ts, convertMedia.ts, convertOffice.ts,
     convertPdf.ts, ffmpeg.ts (FFmpeg.wasm singleton), zip.ts, types.ts
     settings.ts         # cz-settings-v2 + resolveExecutionProfile()
@@ -91,10 +101,10 @@ src/
 e2e/                    # Playwright tests + pure rule/estimator tests
 ```
 
-Heavy engines (FFmpeg.wasm, PDF.js, pdf-lib, Tesseract.js, PaddleOCR,
-mammoth.js, html2canvas, heic2any) are **not** npm dependencies — they're
-loaded lazily from jsDelivr/esm.sh at the point of use, inside the relevant
-`lib/*.ts` file. This keeps the initial bundle small and means a user who only
+Heavy engines (FFmpeg.wasm, Mediabunny, PDF.js, pdf-lib, Tesseract.js,
+PaddleOCR, mammoth.js, html2canvas, heic2any) are **not** npm dependencies —
+they're loaded lazily from jsDelivr/esm.sh at the point of use, inside the
+relevant `lib/*.ts` file. This keeps the initial bundle small and means a user who only
 ever compresses images never downloads the OCR or video stack. Keep this
 pattern for any new heavy library rather than adding it to `package.json`.
 The exceptions are `@huggingface/transformers` (bundled, with
@@ -166,8 +176,12 @@ real npm dependencies.
 2. `npm run lint` passes (warnings are currently tolerated; new errors are not).
 3. `npm run build` succeeds with no new warnings, and the build log shows
    the oversized onnxruntime WASM asset being stripped.
-4. `npm run test:e2e` passes for all four projects (`chromium-desktop`,
-   `chromium-mobile`, `webkit-desktop`, `webkit-mobile`).
+4. `npm run test:e2e` passes for all five projects (`chromium-desktop`,
+   `chromium-mobile`, `webkit-desktop`, `webkit-mobile`, `firefox-desktop`).
+5. If you touched `src/lib/webcodecsVideo.ts`, run `npm run test:webcodecs`
+   (opt-in: needs network access to `esm.sh` and a browser with a WebCodecs
+   encoder). It records a real clip, transcodes it, and asserts the output MP4
+   is readable with decodable video **and** audio.
 5. New third-party code (npm or CDN) is credited in `CREDITS.md` with its
    license.
 6. If you touched `PRIVACY.md`-relevant behavior (anything involving data

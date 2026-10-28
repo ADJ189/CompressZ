@@ -49,6 +49,10 @@ privacy-relevant summary is:
 - **FFmpeg.wasm** — loaded from `esm.sh` (video/audio/GIF). The CDN serves
   the JavaScript wrapper, core scripts, worker, and WebAssembly binaries; no
   file data is sent to esm.sh.
+- **Mediabunny** — loaded from `esm.sh` only when the browser supports
+  WebCodecs and the requested output codec configuration is encodable
+  (video fast path). It demuxes and muxes media in-memory; no file data is
+  sent to esm.sh.
 - **PDF.js** — loaded from `cdn.jsdelivr.net` (PDF rendering).
 - **pdf-lib** — loaded from `cdn.jsdelivr.net` (PDF generation).
 - **Tesseract.js** — loaded from `cdn.jsdelivr.net` and

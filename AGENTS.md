@@ -31,14 +31,16 @@ npm run build                # dist/ + strip >25 MiB assets
 npm run preview              # serve dist/
 npm run typecheck            # tsc --noEmit
 npm run lint                 # ESLint (0 errors expected; warnings tolerated)
-npm run test:e2e             # Playwright, Chromium + WebKit, desktop + mobile
+npm run test:e2e             # Playwright, Chromium + WebKit + Firefox, desktop + mobile
+npm run test:webcodecs       # opt-in real Mediabunny encode (needs esm.sh + WebCodecs)
+npm run bench                # opt-in image benchmark → bench-results/ (not CI)
 npm run lighthouse           # optional Lighthouse CI
 ```
 
 One-time browser install for e2e:
 
 ```bash
-npx --no-install playwright install chromium webkit
+npx --no-install playwright install chromium webkit firefox
 ```
 
 There is no second toolchain to keep in sync: `package.json` is the canonical
@@ -55,14 +57,35 @@ manifest for CI, Cloudflare Pages, Playwright and Lighthouse.
    `dist/assets` must contain **no file ≥ 24 MiB** (Cloudflare Pages rejects
    any single file over 25 MiB).
 4. `npm run test:e2e` — the `chromium-desktop`, `chromium-mobile`,
-   `webkit-desktop` and `webkit-mobile` projects must pass. The config caps
-   workers at 2 locally / 4 in CI because 8 Chromium workers caused timeout
-   flakes on constrained machines. It builds and serves `dist/` itself.
+   `webkit-desktop`, `webkit-mobile` and `firefox-desktop` projects must pass.
+   The config caps workers at 2 locally / 4 in CI because 8 Chromium workers
+   caused timeout flakes on constrained machines. It builds and serves `dist/`
+   itself. Benchmarks are excluded unless `BENCH=1`; `npm run bench` also
+   switches the server to `vite dev` so they can import engine modules.
 
 Optional local extra: `npm run lighthouse`.
 
+`npm run test:webcodecs` is the real-encode proof for the fast path: it records
+a VP8/Opus clip with MediaRecorder, runs the shipped `videoViaWebCodecs()`, and
+re-opens the result with Mediabunny to assert a readable MP4 with decodable
+video **and** audio. It is opt-in (`WEBCODECS_E2E=1`, `vite dev`, network to
+`esm.sh`) and excluded from normal runs and CI, because encoder availability
+and CDN access vary by machine. Run it when changing `webcodecsVideo.ts`.
+
 If a change affects only docs, 1–2 are still required; run e2e when routed UI,
 settings, routing, or privacy copy changes.
+
+### Benchmarks (opt-in, never CI)
+
+`npm run bench` sets `BENCH=1`, switches the Playwright web server to
+`vite dev` (so the spec can import the real `compressImage()` module) and runs
+`e2e/bench.spec.ts` on Chromium desktop. Pass `-- --project=webkit-desktop` to
+compare engines. Output JSON is written to `bench-results/` (gitignored) and a
+table is printed. Timings are machine-dependent; the benchmark is a
+repeatability harness, not a pass/fail gate. Normal `npm run test:e2e` ignores
+the file entirely. Both opt-in suites refuse to reuse a running production
+preview; `PW_REUSE_SERVER=1` is only for npm-less environments that started
+`vite dev` manually.
 
 ## Repository map
 
@@ -92,6 +115,9 @@ src/lib/                   engines, one file per format
   pdfLibs.ts               cached pdf.js / pdf-lib loaders
   motion.ts                anime.js wrappers honoring reduced motion
   compressImage.ts / compressPdf.ts / compressVideo.ts / compressAudio.ts
+  webcodecsVideo.ts        capability-gated WebCodecs + Mediabunny route
+  videoMeta.ts             shared video metadata + no-upscale size planner
+  qualityGuard.ts          SSIM / scale guard for lossy image output
   compressGif.ts / optimizeSvg.ts / convertMedia.ts / convertOffice.ts
   convertPdf.ts / imagesToPdf.ts / mergePdf.ts / zip.ts / types.ts
 src/pages/                 one file per route: images, pdf, video, audio, gif,
@@ -99,8 +125,14 @@ src/pages/                 one file per route: images, pdf, video, audio, gif,
 src/components/            standalone React component library (unused by app)
 e2e/smoke.spec.ts          Playwright tests (routes, workbench, settings, responsive)
 e2e/rules.spec.ts          pure Node tests: rules engine + Resource Guard estimators
+e2e/engines.spec.ts        pure Node tests: video routing/planning + SSIM guard
+e2e/bench.spec.ts          opt-in (BENCH=1) image-pipeline benchmark
+e2e/webcodecs.spec.ts      opt-in (WEBCODECS_E2E=1) real MP4 encode with audio
+scripts/bench.mjs          benchmark runner (sets BENCH=1, picks Chromium)
+scripts/webcodecs-e2e.mjs  real-encode runner (sets WEBCODECS_E2E=1)
 scripts/strip-oversized-assets.mjs  Cloudflare 25 MiB guard
 lighthouserc.json          Lighthouse CI config
+docs/SAFARI_DEVICE_CHECKLIST.md  manual real-device Safari release gate
 ```
 
 Heavy runtime engines (FFmpeg.wasm, PDF.js, pdf-lib, Tesseract.js,
@@ -124,6 +156,14 @@ match. Several were previously wrong; don't regress them.
   decode fails.
 - Default output is WebP at quality **82** (`settings.ts`), not 92.
 - EXIF/GPS is stripped as a side effect of canvas re-encoding; say so.
+- `planOutputSize()` in `qualityGuard.ts` is the only scale planner: a max
+  dimension is a ceiling and images are **never upscaled**.
+- After a lossy encode, `measureEncoded()` samples source and output to a
+  ≤96×96 luma grid and computes global SSIM. Below `SSIM_FLOOR` (0.90) the
+  guard retries **once at a higher quality** — never lower — unless a byte
+  target is active (then it warns) or the user explicitly requested quality
+  <0.70 (an intentional soft look). It never rescales to chase a score, and a
+  remaining warning is shown on the file card via the result `format` note.
 
 ### PDF
 - Structural strategy (Low/Recommended): walk XObjects, downscale embedded
@@ -135,9 +175,20 @@ match. Several were previously wrong; don't regress them.
 - Merge PDF uses `copyPages()` — no rasterisation, text stays selectable.
 
 ### Video / Audio / GIF
-- Video: **FFmpeg.wasm primary → MediaRecorder fallback**. There is **no
-  WebCodecs/muxer path**; the Settings diagnostic reports WebCodecs presence
-  for information only. Do not describe a three-tier GPU pipeline.
+- Video: **WebCodecs + Mediabunny fast path → FFmpeg.wasm → MediaRecorder**.
+  Only simple request shapes take the fast path: H.264/HEVC/AV1 in MP4,
+  VP8/VP9 in WebM, AAC (MP4) or Opus (WebM), and **no** 10-bit, edit proxy,
+  two-pass, audio passthrough, multi-audio or subtitle passthrough.
+- The fast path is capability-gated per run: `canEncodeVideo` and
+  `canEncodeAudio` must accept the exact output configuration, the input and
+  its tracks must decode, and any discarded video/audio track aborts back to
+  FFmpeg. Audio is never silently dropped.
+- Mediabunny always writes a real container (`Mp4OutputFormat` /
+  `WebMOutputFormat` + `BufferTarget`). Never concatenate raw NAL units.
+  It is a lazy `esm.sh` import, not an npm dependency.
+- WebCodecs is **not** "GPU acceleration": the browser picks hardware or
+  software encoding. The Settings Video GPU toggle still only affects the
+  MediaRecorder fallback's per-frame canvas.
 - Audio and GIF: FFmpeg.wasm only, CPU/WASM. Their GPU toggles are documented
   no-ops, shown for layout consistency.
 - VP8/VP9 mux to `.webm`; H.264/H.265/AV1 to `.mp4`; multi-track audio or
@@ -145,9 +196,9 @@ match. Several were previously wrong; don't regress them.
   in sync in `types.ts`.
 - Multi-track/subtitle handling uses ffmpeg stream wildcards; subtitle burn-in
   is not implemented (no libass guarantee in the CDN core).
-- Audio/GIF/Video queues are intentionally sequential (shared FFmpeg
-  singleton). Canvas-only Images/PDF batches use `runBatch()`, and every
-  batch item still passes through `runScheduled()` for global admission.
+- Video/Audio/GIF queues are intentionally sequential. Canvas-only
+  Images/PDF batches use `runBatch()`, and every batch item still passes
+  through `runScheduled()` for global admission.
 
 ### OCR
 - **Tesseract.js 5 is the stable default.** `auto` resolves to Tesseract.
@@ -279,7 +330,8 @@ match. Several were previously wrong; don't regress them.
   feature that sends file bytes to a server.
 - CDN hosts currently used at runtime: `cdn.jsdelivr.net` (PDF.js, pdf-lib,
   Tesseract.js, PaddleOCR, mammoth.js, html2canvas, heic2any,
-  onnxruntime-web), `esm.sh` (FFmpeg.wasm, heic2any), `tessdata.projectnaptha.com`
+  onnxruntime-web), `esm.sh` (FFmpeg.wasm, Mediabunny, heic2any),
+  `tessdata.projectnaptha.com`
   (Tesseract language data), `paddlejs.bj.bcebos.com` (PaddleOCR weights),
   `fonts.googleapis.com` (typography), and Hugging Face for model weights.
 - Only static assets/model weights leave the device; never file content.
@@ -331,8 +383,9 @@ match. Several were previously wrong; don't regress them.
 
 Do not claim these ship until they do:
 
-- WebCodecs/Mediabunny video path (prototype only, not implemented).
-- SSIM/quality guard after image compression.
+- Real-device Safari/iOS parity. Playwright's WebKit projects are not Safari;
+  run `docs/SAFARI_DEVICE_CHECKLIST.md` on physical hardware before release
+  claims.
 - AST-aware SVG optimisation (current optimiser is regex/token based).
 - Embedding-based visual-similarity grouping for Smart Analyze.
 - Pinned model revisions / offline model packs.

@@ -35,6 +35,7 @@ for your data).
 |---|---|---|---|
 | **FFmpeg.wasm** | WebAssembly build of FFmpeg powering video, audio, and GIF compression/conversion | MIT (wasm build) | https://github.com/ffmpegwasm/ffmpeg.wasm |
 | **FFmpeg** | The underlying multimedia framework FFmpeg.wasm compiles to WASM | LGPL 2.1+ / GPL 2+ depending on build config | https://ffmpeg.org |
+| **Mediabunny** | Demuxes, muxes, and converts media for the capability-gated WebCodecs video fast path | MPL 2.0 | https://github.com/Vanilagy/mediabunny |
 
 CompressZ uses the LGPL-configured build of FFmpeg.wasm — no GPL-only
 codecs are enabled, so no source-distribution obligations beyond
@@ -81,8 +82,9 @@ FFmpeg's own are triggered by using it as a dynamically-loaded library.
 - **Cloudflare Pages** — static hosting.
 - **jsDelivr** — CDN used to serve pdf.js, pdf-lib, Tesseract.js, PaddleOCR
   model weights, mammoth.js, html2canvas and onnxruntime-web at runtime.
-- **esm.sh** — CDN used to serve FFmpeg.wasm's core and utility packages, plus
-  heic2any when a HEIC/HEIF file needs fallback decoding.
+- **esm.sh** — CDN used to serve FFmpeg.wasm's core and utility packages,
+  Mediabunny for the WebCodecs video path, plus heic2any when a HEIC/HEIF file
+  needs fallback decoding.
 - **Hugging Face** — hosts the Xenova ONNX model weights downloaded on first
   use by the local AI engine.
 

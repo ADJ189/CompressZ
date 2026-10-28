@@ -60,14 +60,48 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 - New UI styles live in `src/styles/workbench.css` and every selector is
   prefixed `.cz-`, so the new workbench, recommendation and settings layouts
   cannot restyle the legacy `.tool-wrap` / `.settings-card` markup.
-- Playwright now runs four projects (`chromium-desktop`, `chromium-mobile`,
-  `webkit-desktop`, `webkit-mobile`) and covers the workbench search/pins/
-  recents, system-theme persistence, live Resource Guard status, suggestion
-  apply + Undo + dismissal persistence, all eight Settings sections, the
-  legacy `performanceMode` migration, destructive-action confirmation,
-  no non-GET/upload requests during local workflows, 320–1440 responsive
-  overflow (home, tool page and Settings), and the real app version from
-  `package.json`.
+- Playwright now runs five projects (`chromium-desktop`, `chromium-mobile`,
+  `webkit-desktop`, `webkit-mobile`, `firefox-desktop`) and covers the
+  workbench search/pins/recents, system-theme persistence, live Resource Guard
+  status, suggestion apply + Undo + dismissal persistence, all eight Settings
+  sections, the legacy `performanceMode` migration, destructive-action
+  confirmation, no non-GET/upload requests during local workflows, 320–1440
+  responsive overflow (home, tool page and Settings), and the real app version
+  from `package.json`. Pure `e2e/engines.spec.ts` tests cover WebCodecs
+  routing, video/image size planning, bitrate budgeting and the SSIM guard.
+
+### Added — WebCodecs/Mediabunny video fast path, image quality guard, five-project CI
+
+- **WebCodecs + Mediabunny video fast path** (`src/lib/webcodecsVideo.ts`).
+  Simple, verified requests — H.264/HEVC/AV1 in MP4 and VP8/VP9 in WebM, with
+  AAC or Opus audio — encode through the browser and are muxed into a real
+  container by Mediabunny (MPL-2.0, lazy-loaded from `esm.sh`, not an npm
+  dependency). Every run probes `canEncodeVideo`/`canEncodeAudio`, input and
+  track decodability, and discarded tracks. Anything unsupported — 10-bit,
+  edit proxy, two-pass, audio passthrough, multi-audio or subtitle
+  passthrough — falls back to FFmpeg.wasm, then MediaRecorder. Audio is never
+  silently dropped and raw NAL units are never concatenated.
+- **Image quality guard** (`src/lib/qualityGuard.ts`). Lossy image output is
+  sampled to a ≤96×96 luma grid and measured with SSIM. Below 0.90 CompressZ
+  retries once at a **higher** quality (never lower) when no byte target is
+  active, and otherwise shows a short note on the file card. Max dimensions
+  never upscale, and target-size mode warns instead of silently changing the
+  requested quality.
+- **Shared video size planner** (`src/lib/videoMeta.ts`): even dimensions and
+  no upscaling for both the WebCodecs and MediaRecorder paths.
+- **Benchmark harness**: `npm run bench` (opt-in `BENCH=1`) runs the shipped
+  `compressImage()` on deterministic 1/3.1/8 MP images in Chromium, prints a
+  table and writes gitignored JSON to `bench-results/`. It is not part of CI.
+- **Real-encode proof for the video fast path**: `npm run test:webcodecs`
+  (opt-in `WEBCODECS_E2E=1`) records a real VP8/Opus clip with MediaRecorder,
+  runs the shipped `videoViaWebCodecs()`, and re-opens the output with
+  Mediabunny to assert a readable MP4 with decodable video **and** audio. It
+  is excluded from normal runs and CI because it needs `esm.sh` and a browser
+  with a WebCodecs encoder.
+- **Manual real-device Safari checklist**
+  (`docs/SAFARI_DEVICE_CHECKLIST.md`), linked from the README and contributor
+  guide. Playwright's WebKit projects are not real Safari or iOS, so this
+  remains a manual release gate.
 
 ### Changed — One execution profile for device performance
 
@@ -179,8 +213,9 @@ The suffix is dropped on the release that ships it (`1.12.0`).
   follows the Images GPU toggle and that the manual batch limit does not
   change the `Auto (n)` label. `e2e/rules.spec.ts` adds pure Node tests for
   natural ordering, every recommendation rule and the Resource Guard's
-  `estimateJob()` / `isAllocationFailure()` helpers. The suite runs 248 tests
-  across four projects (Chromium and WebKit, desktop and mobile).
+  `estimateJob()` / `isAllocationFailure()` helpers. The suite runs 445 tests
+  across five projects: Chromium and WebKit desktop + mobile, plus Firefox
+  desktop.
 
 - Expose LogoMarquee's accessible region label and reset TiltCard when reduced
   motion is enabled during use.

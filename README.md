@@ -31,7 +31,7 @@ CompressF is still maintained as its own project.
 | ---------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | **Images**       | JPEG · PNG · WebP · AVIF · HEIC · BMP                                                               | Canvas/OffscreenCanvas · optional WebGL2 resize                          |
 | **PDF Compress** | PDF                                                                                                 | PDF.js + pdf-lib (structural image resampling)                           |
-| **Video**        | MP4 · WebM · MOV · AVI · MKV                                                                        | FFmpeg.wasm → MediaRecorder fallback                                     |
+| **Video**        | MP4 · WebM · MOV · AVI · MKV                                                                        | WebCodecs + Mediabunny → FFmpeg.wasm → MediaRecorder                    |
 | **Audio**        | MP3 · AAC · OGG · Opus · FLAC · WAV                                                                 | FFmpeg.wasm                                                              |
 | **GIF**          | GIF → GIF or WebM VP9                                                                               | FFmpeg.wasm (two-pass palettegen)                                        |
 | **SVG**          | SVG                                                                                                 | Pure TypeScript, zero dependencies                                       |
@@ -187,6 +187,8 @@ PDF.js renders each page to OffscreenCanvas with `colorSpace: 'srgb'` and `inten
 | Recommended | 150 | 0.72         | Structural |
 | Extreme     | 96  | 0.45         | Canvas     |
 
+**Quality guard** — after a lossy image encode, CompressZ samples a ≤96×96 luma grid and computes SSIM. If the result is below 0.90 it retries **once at a higher quality** (never lower), and otherwise reports the limitation on the file card. A max-dimension setting is always a ceiling: images are never upscaled, and target-size mode never silently lowers the quality you asked for.
+
 **Target size mode** — enter a specific MB or KB value; CompressZ binary-searches JPEG quality over 10 iterations to hit it.
 
 ---
@@ -200,7 +202,10 @@ compressz/
 │   └── dependabot.yml    # Weekly grouped updates, major versions pinned
 ├── e2e/
 │   ├── smoke.spec.ts     # Playwright: routes, workbench, settings, responsive, privacy
-│   └── rules.spec.ts     # Pure Node tests: recommendation rules + Resource Guard estimators
+│   ├── rules.spec.ts     # Pure Node tests: recommendation rules + Resource Guard estimators
+│   ├── engines.spec.ts   # Pure Node tests: WebCodecs routing, size/bitrate planning, SSIM guard
+│   ├── bench.spec.ts     # Opt-in (BENCH=1) image-pipeline benchmark
+│   └── webcodecs.spec.ts # Opt-in (WEBCODECS_E2E=1) real MP4 encode with audio
 ├── public/
 │   ├── _headers          # COOP/COEP → SharedArrayBuffer (FFmpeg MT)
 │   ├── _redirects        # SPA fallback
@@ -208,6 +213,8 @@ compressz/
 │   ├── robots.txt
 │   └── sitemap.xml
 ├── scripts/
+│   ├── bench.mjs         # Sets BENCH=1 and runs the benchmark project
+│   ├── webcodecs-e2e.mjs # Sets WEBCODECS_E2E=1 and runs the real-encode test
 │   └── strip-oversized-assets.mjs  # Drops files over Cloudflare Pages' 25 MiB limit
 ├── src/
 │   ├── lib/              # Engines, one file per format
@@ -215,7 +222,10 @@ compressz/
 │   │   ├── compress.ts       # Type dispatcher (not imported by the app yet)
 │   │   ├── compressImage.ts
 │   │   ├── compressPdf.ts    # Two-strategy PDF compression
-│   │   ├── compressVideo.ts  # FFmpeg → MediaRecorder fallback
+│   │   ├── compressVideo.ts  # WebCodecs/Mediabunny → FFmpeg → MediaRecorder
+│   │   ├── webcodecsVideo.ts # Capability-gated routing + Mediabunny muxing
+│   │   ├── videoMeta.ts      # Shared video metadata + no-upscale size planner
+│   │   ├── qualityGuard.ts   # SSIM / scale guard for image output
 │   │   ├── compressAudio.ts
 │   │   ├── compressGif.ts
 │   │   ├── optimizeSvg.ts    # Pure TypeScript SVG optimizer
@@ -271,10 +281,18 @@ npm run build      # → dist/ (also strips oversize assets)
 npm run preview    # serve dist/ locally
 npm run typecheck  # TypeScript check
 npm run lint       # ESLint
-npx --no-install playwright install chromium webkit   # once
-npm run test:e2e   # Playwright matrix (builds, then serves dist/)
+npx --no-install playwright install chromium webkit firefox   # once
+npm run test:e2e   # five projects: Chromium/WebKit desktop + mobile, Firefox
+npm run test:webcodecs # opt-in real MP4 encode (esm.sh + WebCodecs)
+npm run bench      # opt-in image benchmark → bench-results/ (gitignored)
 npm run lighthouse # Lighthouse CI
 ```
+
+The Playwright matrix is `chromium-desktop`, `chromium-mobile`,
+`webkit-desktop`, `webkit-mobile`, and `firefox-desktop`. WebKit is a real
+engine but **not** real Safari or iOS — see the
+[real-device Safari checklist](docs/SAFARI_DEVICE_CHECKLIST.md) before claiming
+Safari/iOS support.
 
 Node/npm is the only supported runner. GitHub Actions, Cloudflare Pages,
 Playwright and Lighthouse all use these scripts; there is no second toolchain
@@ -291,14 +309,17 @@ See [AGENTS.md](AGENTS.md) for the engine invariants and verification checklist.
 | PDF compress                  | 80+    | 80+     | 14+    | 80+  |
 | FFmpeg.wasm                   | 91+    | 91+     | 15.2+  | 91+  |
 | FFmpeg MT (SharedArrayBuffer) | 91+    | 91+     | 15.4+  | 91+  |
+| WebCodecs (video fast path)   | 94+    | 130+    | 16.4+  | 94+  |
 | WebGL2 resize                 | 56+    | 51+     | 15+    | 79+  |
 | WebGPU local AI (optional)    | Feature-tested | Feature-tested | Feature-tested | Feature-tested |
 | PaddleOCR PP-OCRv3 (WebGL)    | 91+    | 91+     | 15.2+  | 91+  |
 | Tesseract.js (WASM)           | 91+    | 91+     | 15.2+  | 91+  |
 
 WebGPU AI is optional: the app probes for a real adapter/device on first use and silently uses the WASM
-classifier when the API is missing, blocked, or the model fails to load. "WebCodecs API present" is reported
-in Settings for diagnostics only; the video compressor does not currently use a WebCodecs/muxer path.
+classifier when the API is missing, blocked, or the model fails to load. WebCodecs is only used when the exact
+output codec configuration (`canEncodeVideo` / `canEncodeAudio`) is supported; otherwise video falls back to
+FFmpeg.wasm and then MediaRecorder. WebKit automation is not real Safari — run the
+[real-device Safari checklist](docs/SAFARI_DEVICE_CHECKLIST.md) before release.
 
 ---
 
@@ -317,7 +338,7 @@ dev setup, project conventions, and PR checklist.
 
 ## Credits & Acknowledgments
 
-CompressZ is built on PDF.js, pdf-lib, FFmpeg.wasm, Tesseract.js,
+CompressZ is built on PDF.js, pdf-lib, FFmpeg.wasm, Mediabunny, Tesseract.js,
 PaddleOCR/Paddle.js, mammoth.js, html2canvas, Hugging Face `transformers.js`,
 anime.js, Vite, and TypeScript — see [CREDITS.md](CREDITS.md) for the full
 list with licenses and links. None of those projects are affiliated with

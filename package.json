@@ -14,6 +14,8 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test:e2e": "playwright test",
+    "test:webcodecs": "node scripts/webcodecs-e2e.mjs",
+    "bench": "node scripts/bench.mjs",
     "lighthouse": "lhci autorun"
   },
   "dependencies": {
