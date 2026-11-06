@@ -51,7 +51,9 @@ export function toast(
   // an accidentally unawaited operation.
   void import('./lib/motion').then(({ toastIn, toastOut }) => {
     toastIn(el);
-    timer = window.setTimeout(() => { toastOut(el).then(() => el.remove()); }, lifetime);
+    timer = window.setTimeout(() => {
+      void toastOut(el).then(() => el.remove()).catch(() => el.remove());
+    }, lifetime);
   }).catch(() => {
     el.style.opacity = '1';
     timer = window.setTimeout(() => el.remove(), lifetime);

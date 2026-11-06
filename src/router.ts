@@ -5,6 +5,7 @@
  */
 
 import { currentRoute } from "./store";
+import { trackRecent } from "./lib/recents";
 
 type Handler = (params?: Record<string, string>) => void;
 const handlers = new Map<string, Handler>();
@@ -32,6 +33,7 @@ export function getRouteFromPath(path: string): string {
 export function dispatch(path: string) {
   const route = getRouteFromPath(path);
   currentRoute.set(route);
+  trackRecent(route);
   const handler = handlers.get(route) ?? handlers.get("*");
   handler?.();
 }
