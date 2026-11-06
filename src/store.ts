@@ -1,14 +1,12 @@
 /**
- * store.ts — Central state store for CompressZ.
+ * store.ts — Central reactive state store for CompressZ.
  *
- * Each tool module stores its file queue and settings here instead of in local
- * mount-function variables. Because this module is loaded once and never
- * re-executed, state survives the router destroying and recreating page DOM.
+ * Implements the standard Svelte Store contract ({ subscribe, set, update })
+ * using a pure TypeScript subscriber model that works both inside Svelte components
+ * (via auto-subscription `$store`) and inside framework-independent TypeScript
+ * controllers and unit test suites.
  *
- * Pattern:
- *   import { imageStore } from '../store';
- *   // read:  imageStore.files
- *   // write: imageStore.files = [...imageStore.files, newEntry];
+ * State survives route navigation, preserving file queues and user settings.
  */
 
 import type {
@@ -19,16 +17,53 @@ import type {
   PdfLevel,
 } from "./lib/types";
 import { getSettings } from "./lib/settings";
+import type { OcrEngine, OcrLanguage, OcrProfile } from "./lib/ocrEngines";
+import type { PdfMarkdownBundle } from "./lib/pdfToMarkdown";
 
-// Each tool's starting values come from Settings → Engine Defaults instead
-// of being hardcoded here, so editing a default on the Settings page
-// actually changes what a fresh visit to that tool starts with. Read once
-// at module load — store.ts is a session-wide singleton like the rest of
-// this file, so a mid-session settings change intentionally doesn't yank
-// the value out from under whatever the user has already configured.
+export interface Writable<T> {
+  subscribe: (fn: (value: T) => void) => () => void;
+  set: (value: T) => void;
+  update: (fn: (current: T) => T) => void;
+  get: () => T;
+}
+
+export function createStore<T>(initialValue: T): Writable<T> {
+  let value = initialValue;
+  const subscribers = new Set<(val: T) => void>();
+
+  return {
+    subscribe(fn: (val: T) => void): () => void {
+      subscribers.add(fn);
+      fn(value);
+      return () => {
+        subscribers.delete(fn);
+      };
+    },
+    set(newValue: T) {
+      value = newValue;
+      for (const fn of subscribers) {
+        try {
+          fn(value);
+        } catch (err) {
+          console.error("[store] subscriber error:", err);
+        }
+      }
+    },
+    update(updater: (current: T) => T) {
+      this.set(updater(value));
+    },
+    get() {
+      return value;
+    },
+  };
+}
+
 const engineDefaults = getSettings().engines;
 
-// ── Images ────────────────────────────────────────────────────
+// ── Active Route Store ─────────────────────────────────────────
+export const currentRoute = createStore<string>("");
+
+// ── Images Store ──────────────────────────────────────────────
 export interface ImageState {
   files: FileEntry[];
   mode: "quality" | "targetSize";
@@ -37,16 +72,16 @@ export interface ImageState {
   format: ImageFormat;
   maxDim: number;
 }
-export const imageStore: ImageState = {
+export const imageStore = createStore<ImageState>({
   files: [],
   mode: "quality",
   quality: engineDefaults.images.quality,
   targetSizeKB: 200,
   format: engineDefaults.images.format,
   maxDim: engineDefaults.images.maxDim,
-};
+});
 
-// ── Audio ─────────────────────────────────────────────────────
+// ── Audio Store ───────────────────────────────────────────────
 export interface AudioState {
   files: FileEntry[];
   fmt: AudioFormat;
@@ -55,16 +90,16 @@ export interface AudioState {
   stripMeta: boolean;
   passthrough: boolean;
 }
-export const audioStore: AudioState = {
+export const audioStore = createStore<AudioState>({
   files: [],
   fmt: engineDefaults.audio.format,
   bitrate: engineDefaults.audio.bitrate,
   sampleRate: 0,
   stripMeta: true,
   passthrough: false,
-};
+});
 
-// ── Video ─────────────────────────────────────────────────────
+// ── Video Store ───────────────────────────────────────────────
 export interface VideoState {
   files: FileEntry[];
   mode: "crf" | "bitrate" | "targetSize";
@@ -82,9 +117,9 @@ export interface VideoState {
   audioTrackMode: "first" | "all";
   audioDownmix: boolean;
   subtitleMode: "none" | "all";
-  editingId: string | null; // id of a queued file whose settings are being edited, or null
+  editingId: string | null;
 }
-export const videoStore: VideoState = {
+export const videoStore = createStore<VideoState>({
   files: [],
   mode: "crf",
   crfQuality: engineDefaults.video.crfQuality,
@@ -102,9 +137,9 @@ export const videoStore: VideoState = {
   audioDownmix: false,
   subtitleMode: "none",
   editingId: null,
-};
+});
 
-// ── GIF ───────────────────────────────────────────────────────
+// ── GIF Store ─────────────────────────────────────────────────
 export interface GifState {
   files: FileEntry[];
   quality: number;
@@ -112,62 +147,102 @@ export interface GifState {
   maxWidth: number;
   fps: number;
 }
-export const gifStore: GifState = {
+export const gifStore = createStore<GifState>({
   files: [],
   quality: engineDefaults.gif.quality,
   gifToVideo: false,
   maxWidth: 0,
   fps: 0,
-};
+});
 
-// ── PDF ───────────────────────────────────────────────────────
+// ── PDF Store ─────────────────────────────────────────────────
 export interface PdfState {
   files: FileEntry[];
   level: PdfLevel;
   targetUnit: "MB" | "KB";
   targetInput: string;
-  stripMeta: "auto" | "on" | "off"; // 'auto' defers to the preset's own default
+  stripMeta: "auto" | "on" | "off";
 }
-export const pdfStore: PdfState = {
+export const pdfStore = createStore<PdfState>({
   files: [],
   level: engineDefaults.pdf.level,
   targetUnit: "MB",
   targetInput: "",
   stripMeta: "auto",
-};
+});
 
-// ── Merge PDF ─────────────────────────────────────────────────
-// Order-sensitive, many-files → one-file operation — same shape as the
-// img2pdf "combine" flow in convert.ts, so it holds a plain File[] (the
-// merge order) rather than the FileEntry[] queue the other tools use.
+// ── Merge PDF Store ───────────────────────────────────────────
 export interface MergeState {
   files: File[];
   busy: boolean;
 }
-export const mergeStore: MergeState = {
+export const mergeStore = createStore<MergeState>({
   files: [],
   busy: false,
-};
+});
 
-// ── Images → PDF ──────────────────────────────────────────────
-// Same order-sensitive, many-files → one-file shape as MergeState, plus
-// the couple of page-layout options this tool exposes that merge-pdf
-// doesn't need.
+// ── Images → PDF Store ────────────────────────────────────────
 export interface ImagesToPdfState {
   files: File[];
   busy: boolean;
   pageSize: "auto" | "a4" | "letter";
-  quality: number; // JPEG quality used when embedding each image, 1-99
-  maxDim: number; // cap the longer edge before embedding — 0 = no cap
+  quality: number;
+  maxDim: number;
 }
-export const imagesToPdfStore: ImagesToPdfState = {
+export const imagesToPdfStore = createStore<ImagesToPdfState>({
   files: [],
   busy: false,
   pageSize: "auto",
-  // Was hardcoded to 92 regardless of the Image Compressor's configured
-  // default quality/max-dimension (Settings → Images), unlike every other
-  // tool's store here, which all seed from `engineDefaults` — meaning a
-  // quality/maxDim set in Settings silently didn't apply to Images → PDF.
   quality: engineDefaults.images.quality,
   maxDim: engineDefaults.images.maxDim,
-};
+});
+
+// ── OCR Store ─────────────────────────────────────────────────
+export interface OcrState {
+  files: FileEntry[];
+  engine: OcrEngine;
+  profile: OcrProfile;
+  language: OcrLanguage;
+  renderDpi: number;
+  overlayMode: boolean;
+  extractText: boolean;
+  symbolMode: boolean;
+  busy: boolean;
+}
+export const ocrStore = createStore<OcrState>({
+  files: [],
+  engine: "auto",
+  profile: "printed",
+  language: "auto",
+  renderDpi: 200,
+  overlayMode: true,
+  extractText: true,
+  symbolMode: false,
+  busy: false,
+});
+
+// ── PDF → Markdown Workspace Store ────────────────────────────
+export interface PdfMarkdownState {
+  file: File | null;
+  bundle: PdfMarkdownBundle | null;
+  processing: boolean;
+  progress: number;
+  statusMessage: string;
+  profile: "auto" | "printed" | "handwriting" | "mixed";
+  language: OcrLanguage;
+  includeVisuals: boolean;
+  activePageIndex: number;
+  editedMarkdown: string;
+}
+export const pdfMarkdownStore = createStore<PdfMarkdownState>({
+  file: null,
+  bundle: null,
+  processing: false,
+  progress: 0,
+  statusMessage: "",
+  profile: "auto",
+  language: "eng",
+  includeVisuals: true,
+  activePageIndex: 0,
+  editedMarkdown: "",
+});
