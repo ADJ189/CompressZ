@@ -48,13 +48,14 @@ FFmpeg's own are triggered by using it as a dynamically-loaded library.
 | **mammoth.js** | Converts `.docx` to HTML for the Word → PDF/TXT/HTML tool | BSD 2-Clause | https://github.com/mwilliamson/mammoth.js |
 | **html2canvas** | Rasterizes the converted HTML to produce the DOCX → PDF output | MIT | https://github.com/niklasvh/html2canvas |
 
-## Local AI
+## Local AI & Vision Models
 
 | Project | What it does here | License | Link |
 |---|---|---|---|
-| **🤗 Transformers.js** | Runs the on-device image-classification model (Settings → AI Engine) entirely in-browser via WASM, with an optional WebGPU backend when a real adapter/device is available — no upload | Apache 2.0 | https://github.com/huggingface/transformers.js |
+| **🤗 Transformers.js** | Runs on-device image-classification and handwriting recognition models entirely in-browser via WASM, with an optional WebGPU backend when a real adapter/device is available — no upload | Apache 2.0 | https://github.com/huggingface/transformers.js |
 | **onnxruntime-web** | WASM/WebGPU inference runtime used by Transformers.js; its binaries are loaded from jsDelivr | MIT | https://github.com/microsoft/onnxruntime |
 | **MobileNetV2 / ViT-Base (Xenova ONNX conversions)** | The two selectable model tiers (`Efficient`/`Powerful`) that back Smart Analyze and sort-by-predicted-label | Apache 2.0 | https://huggingface.co/Xenova |
+| **TrOCR Small Handwritten (Xenova ONNX conversion)** | Line-oriented candidate model powering client-side English handwriting recognition | Apache 2.0 | https://huggingface.co/Xenova/trocr-small-handwritten |
 
 ## Image decoding
 
@@ -62,18 +63,19 @@ FFmpeg's own are triggered by using it as a dynamically-loaded library.
 |---|---|---|---|
 | **heic2any** | Lazy-loaded WASM fallback for decoding HEIC/HEIF photos in browsers without native support | MIT | https://github.com/alexcorvi/heic2any |
 
-## Animation
+## Frontend Framework & UI
 
 | Project | What it does here | License | Link |
 |---|---|---|---|
-| **anime.js** | Entrance/reveal animations for the Settings page's new sections and Smart Analyze's re-sorted file cards | MIT | https://github.com/juliangarnier/anime |
+| **Svelte 5** | Reactive UI framework powering application shell, routes, and UI components | MIT | https://github.com/sveltejs/svelte |
 
-## Build tooling
+## Build & Test Tooling
 
 | Project | What it does here | License | Link |
 |---|---|---|---|
 | **Vite** | Dev server and production bundler | MIT | https://github.com/vitejs/vite |
 | **TypeScript** | Language and type checking | Apache 2.0 | https://github.com/microsoft/TypeScript |
+| **Deno** | Fast headless test runner executing offline unit & Hallmark compliance test suites | MIT | https://github.com/denoland/deno |
 
 ## Fonts & hosting
 

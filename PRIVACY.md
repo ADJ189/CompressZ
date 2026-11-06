@@ -29,11 +29,18 @@ GitHub.
 
 ## 3. How file processing works
 
-All compression, conversion, OCR and local-AI operations run entirely
+All compression, conversion, PDF to Markdown extraction, OCR (printed and
+English handwriting recognition), and local-AI operations run entirely
 inside your browser using WebAssembly, the Canvas API, and Web platform
 APIs. Your files are read from your device into browser memory (RAM),
 processed locally, and the output is written back to your device. At no
 point do your files traverse a network connection to our infrastructure.
+
+When extracting Markdown from a PDF, document layout analysis, reading order
+reconstruction, figure crop generation, and ZIP packaging run entirely client-side.
+When using the English handwriting recognition engine, line segmentation and
+TrOCR neural inference occur completely within your browser's WebGPU or WASM runtime.
+Zero text or visual crop data leaves your device.
 
 You can verify this yourself by opening your browser's Network tab
 while using CompressZ — you will see no requests containing your file
@@ -57,10 +64,11 @@ privacy-relevant summary is:
 - **pdf-lib** — loaded from `cdn.jsdelivr.net` (PDF generation).
 - **Tesseract.js** — loaded from `cdn.jsdelivr.net` and
   `tessdata.projectnaptha.com` (OCR engine and trained language data).
-- **🤗 Transformers.js** — bundled at build time; model weights are
-  downloaded from Hugging Face's CDN the first time you use Settings →
-  AI Engine, then cached by your browser. Images are classified
-  on-device — nothing is uploaded to Hugging Face or anywhere else.
+- **🤗 Transformers.js** — bundled at build time; model weights for image
+  classification (`Xenova/mobilenet_v2_1.0_224`, `Xenova/vit-base-patch16-224`)
+  and English handwriting recognition (`Xenova/trocr-small-handwritten`) are
+  downloaded from Hugging Face's CDN on first use, then cached by your browser.
+  Inference is executed on-device — nothing is uploaded to Hugging Face or anywhere else.
 - **PaddleOCR / PP-OCRv3** — loaded from `cdn.jsdelivr.net` and
   `paddlejs.bj.bcebos.com` (optional OCR runtime and model weights).
 - **mammoth.js** and **html2canvas** — loaded from `cdn.jsdelivr.net`

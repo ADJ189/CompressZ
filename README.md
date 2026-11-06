@@ -35,7 +35,8 @@ CompressF is still maintained as its own project.
 | **Audio**        | MP3 · AAC · OGG · Opus · FLAC · WAV                                                                 | FFmpeg.wasm                                                              |
 | **GIF**          | GIF → GIF or WebM VP9                                                                               | FFmpeg.wasm (two-pass palettegen)                                        |
 | **SVG**          | SVG                                                                                                 | Pure TypeScript, zero dependencies                                       |
-| **PDF OCR**      | Scanned PDF → searchable PDF + TXT                                                                  | Tesseract.js 5 (default) + optional PaddleOCR PP-OCRv3, Greek/math symbols |
+| **PDF OCR**      | Scanned PDF / Image → Searchable PDF + TXT / Handwriting TXT                                       | Tesseract.js 5 + optional PaddleOCR PP-OCRv3 + TrOCR English handwriting  |
+| **PDF → Markdown** | PDF → Markdown (`document.md`) + structured figures/manifest ZIP                                 | Column-aware layout parser, PDF.js, pure TypeScript ZIP engine           |
 | **Convert**      | Video ⇄ video · Audio ⇄ audio · Image ⇄ image · PDF ⇄ Images · DOCX → PDF/TXT/HTML · PPTX → PDF/TXT | FFmpeg.wasm, pdf-lib, mammoth.js, html2canvas, zero-dep ZIP              |
 | **Images → PDF** | Images → single PDF, one page each                                                                  | pdf-lib, with an optional local AI sort-by-label pass                    |
 
@@ -123,6 +124,17 @@ and `equ` (equation layout) traineddata alongside the selected language —
 reliable for inline Greek letters (θ, π, Σ, …), best-effort for full
 equations. Always runs on Tesseract regardless of the engine picked above.
 
+### TrOCR Small Handwritten — English Handwriting Candidate
+
+| Attribute   | Detail                                                                                          |
+| ----------- | ----------------------------------------------------------------------------------------------- |
+| Technology  | Transformer encoder-decoder via Transformers.js (`Xenova/trocr-small-handwritten`)              |
+| Model size  | ~60 MB weights (downloaded on demand, cached after first use)                                   |
+| Best for    | English handwritten cursive, personal notes, handwritten forms                                  |
+| Strengths   | Cursive English recognition, line-by-line projection segmentation, WebGPU acceleration fallback |
+| Limitations | English-only; not trained on mathematical notation; requires clean line segmentation            |
+| Guarantee   | **Zero LaTeX Hallucination**: equations are preserved as visual image crops, never fake LaTeX   |
+
 ### Auto Mode
 
 `auto` currently resolves to Tesseract.js, the stable default. Language/script
@@ -135,9 +147,9 @@ language on a fresh OCR page; Eco mode starts at a lower render DPI.
 
 | Document type              | Recommended engine                    |
 | -------------------------- | ------------------------------------- |
-| Handwritten notes, letters | Tesseract.js (best available fallback) |
+| Handwritten notes (English)| TrOCR Small Handwritten               |
 | Printed books, reports     | Tesseract.js                          |
-| Tables, invoices, forms    | Tesseract.js (no layout-aware engine) |
+| Tables, invoices, forms    | Tesseract.js (or PDF → Markdown tool) |
 | CJK documents              | Try both; PaddleOCR PP-OCRv3 optional |
 | Arabic / Hebrew / RTL      | Tesseract.js (dedicated models)       |
 | Rare languages             | Tesseract.js (100+ lang coverage)     |
@@ -206,6 +218,16 @@ compressz/
 │   ├── engines.spec.ts   # Pure Node tests: WebCodecs routing, size/bitrate planning, SSIM guard
 │   ├── bench.spec.ts     # Opt-in (BENCH=1) image-pipeline benchmark
 │   └── webcodecs.spec.ts # Opt-in (WEBCODECS_E2E=1) real MP4 encode with audio
+├── test/                 # Deno test suite (fast offline unit & compliance tests)
+│   ├── assert.ts
+│   ├── hallmark.test.ts  # Anti-slop and CSS floor compliance tests
+│   ├── ocr.test.ts       # Language matrix & handwriting candidate disclosure
+│   ├── pdfToMarkdown.test.ts # Layout parser, reading order & ZIP packaging
+│   ├── qualityGuard.test.ts  # Image scale ceiling tests
+│   ├── recommendations.test.ts # Natural file ordering & suggestions
+│   ├── resourceManager.test.ts # Heavy/medium/light job estimators
+│   ├── settings.test.ts  # Execution profile resolver tests
+│   └── zip.test.ts       # Path traversal security & round-trip tests
 ├── public/
 │   ├── _headers          # COOP/COEP → SharedArrayBuffer (FFmpeg MT)
 │   ├── _redirects        # SPA fallback
@@ -217,45 +239,69 @@ compressz/
 │   ├── webcodecs-e2e.mjs # Sets WEBCODECS_E2E=1 and runs the real-encode test
 │   └── strip-oversized-assets.mjs  # Drops files over Cloudflare Pages' 25 MiB limit
 ├── src/
-│   ├── lib/              # Engines, one file per format
-│   │   ├── types.ts
-│   │   ├── compress.ts       # Type dispatcher (not imported by the app yet)
-│   │   ├── compressImage.ts
-│   │   ├── compressPdf.ts    # Two-strategy PDF compression
-│   │   ├── compressVideo.ts  # WebCodecs/Mediabunny → FFmpeg → MediaRecorder
-│   │   ├── webcodecsVideo.ts # Capability-gated routing + Mediabunny muxing
-│   │   ├── videoMeta.ts      # Shared video metadata + no-upscale size planner
-│   │   ├── qualityGuard.ts   # SSIM / scale guard for image output
-│   │   ├── compressAudio.ts
-│   │   ├── compressGif.ts
-│   │   ├── optimizeSvg.ts    # Pure TypeScript SVG optimizer
-│   │   ├── convertMedia.ts / convertOffice.ts / convertPdf.ts
-│   │   ├── imagesToPdf.ts / mergePdf.ts
-│   │   ├── imageDecode.ts / thumb.ts / aiEngine.ts
-│   │   ├── resourceManager.ts # Adaptive Resource Guard (admission + queue)
-│   │   ├── recommendations.ts # Deterministic contextual suggestions
-│   │   ├── recents.ts / workbench.ts # Home pins, recents, live queue panel
-│   │   ├── theme.ts          # light / dark / system preference
-│   │   ├── settings.ts       # cz-settings-v2 + resolveExecutionProfile()
-│   │   └── ffmpeg.ts / pdfLibs.ts / zip.ts / …
-│   ├── pages/            # One file per route
-│   │   ├── images.ts / pdf.ts / video.ts / audio.ts / gif.ts
-│   │   ├── convert.ts / imagesToPdf.ts / mergePdf.ts / settings.ts
-│   │   └── ocr.ts            # Tesseract.js 5 + optional PaddleOCR PP-OCRv3
-│   ├── components/       # React component library (not used by the app)
-│   ├── utils/            # cn, prefersReducedMotion, canHover, assignRef
-│   ├── index.ts          # Library entry for src/components
-│   ├── styles.css        # Library styles (imported by index.ts)
-│   ├── components.ts     # Shared DOM helpers for the app
-│   ├── router.ts
-│   ├── store.ts
-│   ├── toast.ts
-│   ├── styles/workbench.css  # `.cz-*` scoped styles for new UI
-│   ├── style.css         # App stylesheet (legacy components + tokens)
-│   └── main.ts
-├── index.html                # App shell + page templates
-├── vite.config.ts            # Vite 8, esnext, COOP/COEP dev headers
+│   ├── App.svelte        # Svelte 5 root coordinator (AppShell + views)
+│   ├── main.ts           # Svelte 5 mount bootstrap
+│   ├── router.ts         # History API page router
+│   ├── store.ts          # Pure TypeScript reactive store
+│   ├── toast.ts          # Toasts
+│   ├── style.css         # Design tokens + CSS floor rules
+│   ├── styles/workbench.css # `.cz-*` scoped utility classes
+│   ├── app/              # Svelte 5 Application Shell
+│   │   ├── AppShell.svelte
+│   │   ├── Header.svelte
+│   │   ├── Navigation.svelte
+│   │   ├── ToolsDialog.svelte
+│   │   └── SettingsDialog.svelte
+│   ├── routes/           # Svelte 5 Page Routes
+│   │   ├── Home.svelte
+│   │   ├── Images.svelte
+│   │   ├── Pdf.svelte
+│   │   ├── Video.svelte
+│   │   ├── Audio.svelte
+│   │   ├── Gif.svelte
+│   │   ├── Ocr.svelte
+│   │   ├── MergePdf.svelte
+│   │   ├── ImagesToPdf.svelte
+│   │   ├── Convert.svelte
+│   │   ├── PdfMarkdown.svelte
+│   │   ├── About.svelte
+│   │   ├── Docs.svelte
+│   │   ├── Privacy.svelte
+│   │   └── Settings.svelte
+│   ├── components/       # Reusable Svelte 5 UI Atoms
+│   │   ├── FileDropzone.svelte
+│   │   ├── FileCard.svelte
+│   │   ├── FileQueue.svelte
+│   │   └── ProgressStatus.svelte
+│   └── lib/              # Pure framework-independent TypeScript engines
+│       ├── types.ts
+│       ├── pdfToMarkdown.ts  # Column-aware PDF to Markdown + ZIP bundle
+│       ├── ocrEngines.ts     # Unified OCR engine interfaces (Tesseract + Paddle)
+│       ├── ocrHandwriting.ts # English handwriting recognition (TrOCR candidate)
+│       ├── motion.ts         # Native Web Animations API (animejs removed)
+│       ├── zip.ts            # Traversal-safe zero-dep ZIP engine
+│       ├── compressImage.ts
+│       ├── compressPdf.ts    # Two-strategy PDF compression
+│       ├── compressVideo.ts  # WebCodecs/Mediabunny → FFmpeg → MediaRecorder
+│       ├── webcodecsVideo.ts # Capability-gated routing + Mediabunny muxing
+│       ├── videoMeta.ts      # Shared video metadata + no-upscale size planner
+│       ├── qualityGuard.ts   # SSIM / scale guard for image output
+│       ├── compressAudio.ts
+│       ├── compressGif.ts
+│       ├── optimizeSvg.ts    # Pure TypeScript SVG optimizer
+│       ├── convertMedia.ts / convertOffice.ts / convertPdf.ts
+│       ├── imagesToPdf.ts / mergePdf.ts
+│       ├── imageDecode.ts / thumb.ts / aiEngine.ts
+│       ├── resourceManager.ts # Adaptive Resource Guard (admission + queue)
+│       ├── recommendations.ts # Deterministic contextual suggestions
+│       ├── recents.ts / workbench.ts # Home pins, recents, live queue panel
+│       ├── theme.ts          # light / dark / system preference
+│       ├── settings.ts       # cz-settings-v2 + resolveExecutionProfile()
+│       └── ffmpeg.ts / pdfLibs.ts / …
+├── index.html                # Minimal host with #app mount point
+├── vite.config.ts            # Vite 8 + Svelte plugin, esnext, COOP/COEP
 ├── playwright.config.ts
+├── deno.json                 # Deno test runner configuration
 ├── lighthouserc.json         # Lighthouse CI config
 ├── tsconfig.json
 ├── package.json              # Canonical npm scripts (CI + Cloudflare Pages)
@@ -269,10 +315,9 @@ compressz/
 
 ---
 
-## Local Development
+## Local Development & Testing
 
-Requires **Node.js `^20.19.0 || ^22.13.0 || >=24`** (see `package.json`).
-npm is the canonical runner for GitHub Actions and Cloudflare Pages.
+Requires **Node.js `^20.19.0 || ^22.13.0 || >=24`** or **Deno** for running automated checks.
 
 ```bash
 npm ci             # reproducible install from package-lock.json
@@ -281,6 +326,10 @@ npm run build      # → dist/ (also strips oversize assets)
 npm run preview    # serve dist/ locally
 npm run typecheck  # TypeScript check
 npm run lint       # ESLint
+
+# Run unit & anti-slop compliance checks offline via Deno:
+deno test --allow-read --unstable-sloppy-imports
+
 npx --no-install playwright install chromium webkit firefox   # once
 npm run test:e2e   # five projects: Chromium/WebKit desktop + mobile, Firefox
 npm run test:webcodecs # opt-in real MP4 encode (esm.sh + WebCodecs)

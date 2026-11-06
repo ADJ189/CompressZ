@@ -46,17 +46,18 @@ npx --no-install playwright install chromium webkit firefox
 There is no second toolchain to keep in sync: `package.json` is the canonical
 manifest for CI, Cloudflare Pages, Playwright and Lighthouse.
 
-### Verification checklist (run all four before calling work done)
+### Verification checklist (run all before calling work done)
 
-1. `npm run typecheck` — must be clean.
-2. `npm run lint` — must be **0 errors**. The repo currently has ~100
+1. `deno test --allow-read --unstable-sloppy-imports` — runs all 25 unit/compliance tests offline (quality guard, recommendations, resource manager, zip security, settings, OCR engines, PDF to Markdown, and Hallmark anti-slop rules).
+2. `npm run typecheck` — must be clean.
+3. `npm run lint` — must be **0 errors**. The repo currently has ~100
    pre-existing `@typescript-eslint/no-explicit-any` warnings; do not add new
    ones, but do not treat the existing count as failure.
-3. `npm run build` — must succeed. The log should show
+4. `npm run build` — must succeed. The log should show
    `[strip-oversized-assets] Removing ort-wasm-simd-threaded.asyncify-*.wasm`;
    `dist/assets` must contain **no file ≥ 24 MiB** (Cloudflare Pages rejects
    any single file over 25 MiB).
-4. `npm run test:e2e` — the `chromium-desktop`, `chromium-mobile`,
+5. `npm run test:e2e` — the `chromium-desktop`, `chromium-mobile`,
    `webkit-desktop`, `webkit-mobile` and `firefox-desktop` projects must pass.
    The config caps workers at 2 locally / 4 in CI because 8 Chromium workers
    caused timeout flakes on constrained machines. It builds and serves `dist/`
@@ -90,15 +91,44 @@ preview; `PW_REUSE_SERVER=1` is only for npm-less environments that started
 ## Repository map
 
 ```
-index.html                 app shell + all page templates + in-app docs/privacy
-src/main.ts                bootstrap, router mount, header/tabbar/settings wiring
-src/router.ts              History API router
-src/store.ts               persisted per-tool state (localStorage-backed)
-src/components.ts          shared DOM helpers (file cards, tags, progress)
-src/toast.ts               toasts
-src/style.css              app stylesheet: tokens + legacy `.tool-*`/`.settings-*`
-src/styles/workbench.css   new UI only, every selector `.cz-*`
-src/lib/                   engines, one file per format
+index.html                 minimal HTML host with mount element (#app)
+src/main.ts                Svelte 5 bootstrap (mounts App to #app)
+src/App.svelte             root coordinator: AppShell + routed views
+src/app/                   application shell components (Svelte 5)
+  AppShell.svelte          two-pane desktop / drawer mobile layout
+  Header.svelte           status, theme toggle, settings/tools triggers
+  Navigation.svelte       vertical navigation with active route state
+  ToolsDialog.svelte      compact modal selector for tools
+  SettingsDialog.svelte   sectioned preferences modal
+src/routes/                route components (Svelte 5)
+  Home.svelte             workbench: search, filter, pins, queue panel
+  Images.svelte           image compression with format and quality controls
+  Pdf.svelte              PDF compression (structural & raster)
+  Video.svelte            video compression (WebCodecs & FFmpeg)
+  Audio.svelte            audio compression & bitrate selection
+  Gif.svelte              GIF optimization & WebM conversion
+  Ocr.svelte              printed & handwriting OCR engine workbench
+  MergePdf.svelte         PDF merger with reordering
+  ImagesToPdf.svelte      images to PDF with optional local AI sort
+  Convert.svelte          multi-format converter
+  PdfMarkdown.svelte      PDF → Markdown extraction & ZIP export
+  About.svelte, Docs.svelte, Privacy.svelte, Settings.svelte
+src/components/            reusable UI atoms (Svelte 5)
+  FileDropzone.svelte     drag & drop file ingestion area
+  FileCard.svelte         compact job item with status, size & action
+  FileQueue.svelte        ordered list of jobs with batch actions
+  ProgressStatus.svelte   real-time progress bar and status line
+src/router.ts              History API router, dispatches to store
+src/store.ts               pure TypeScript reactive store (Svelte 5 contract)
+src/toast.ts               toast notifications
+src/style.css              app stylesheet: tokens + floor rules
+src/styles/workbench.css   scoped utility styles (`.cz-*`)
+src/lib/                   pure framework-independent TypeScript engines
+  pdfToMarkdown.ts         column-aware PDF to Markdown + ZIP bundle
+  ocrEngines.ts            unified OCR engines (Tesseract.js 5 + PaddleOCR)
+  ocrHandwriting.ts        English handwriting recognition (TrOCR candidate)
+  motion.ts                native Web Animations API (zero dependencies)
+  zip.ts                   secure ZIP read/write with path sanitization
   settings.ts              cz-settings-v2 + resolveExecutionProfile()
   resourceManager.ts       Adaptive Resource Guard (admission, queue, snapshot)
   recommendations.ts       deterministic contextual suggestions + dismissals
@@ -113,34 +143,31 @@ src/lib/                   engines, one file per format
   thumb.ts                 cached preview thumbnails
   ffmpeg.ts                FFmpeg.wasm singleton + single progress handler
   pdfLibs.ts               cached pdf.js / pdf-lib loaders
-  motion.ts                anime.js wrappers honoring reduced motion
   compressImage.ts / compressPdf.ts / compressVideo.ts / compressAudio.ts
   webcodecsVideo.ts        capability-gated WebCodecs + Mediabunny route
   videoMeta.ts             shared video metadata + no-upscale size planner
   qualityGuard.ts          SSIM / scale guard for lossy image output
   compressGif.ts / optimizeSvg.ts / convertMedia.ts / convertOffice.ts
-  convertPdf.ts / imagesToPdf.ts / mergePdf.ts / zip.ts / types.ts
-src/pages/                 one file per route: images, pdf, video, audio, gif,
-                           ocr, convert, imagesToPdf, mergePdf, settings
-src/components/            standalone React component library (unused by app)
-e2e/smoke.spec.ts          Playwright tests (routes, workbench, settings, responsive)
-e2e/rules.spec.ts          pure Node tests: rules engine + Resource Guard estimators
-e2e/engines.spec.ts        pure Node tests: video routing/planning + SSIM guard
-e2e/bench.spec.ts          opt-in (BENCH=1) image-pipeline benchmark
-e2e/webcodecs.spec.ts      opt-in (WEBCODECS_E2E=1) real MP4 encode with audio
-scripts/bench.mjs          benchmark runner (sets BENCH=1, picks Chromium)
-scripts/webcodecs-e2e.mjs  real-encode runner (sets WEBCODECS_E2E=1)
-scripts/strip-oversized-assets.mjs  Cloudflare 25 MiB guard
-lighthouserc.json          Lighthouse CI config
-docs/SAFARI_DEVICE_CHECKLIST.md  manual real-device Safari release gate
+  convertPdf.ts / imagesToPdf.ts / mergePdf.ts / types.ts
+test/                      Deno test suite (verified 100% passing)
+  assert.ts                zero-dependency test assertions
+  hallmark.test.ts         anti-slop and CSS floor compliance tests
+  ocr.test.ts              OCR engine & handwriting disclosure tests
+  pdfToMarkdown.test.ts    PDF reading order and Markdown export tests
+  qualityGuard.test.ts     image scaling ceiling tests
+  recommendations.test.ts  natural ordering and format recommendation tests
+  resourceManager.test.ts  workload estimation and allocation failure tests
+  settings.test.ts         default settings and profile resolution tests
+  zip.test.ts              ZIP path traversal and round-trip tests
 ```
 
 Heavy runtime engines (FFmpeg.wasm, PDF.js, pdf-lib, Tesseract.js,
 PaddleOCR/Paddle.js, mammoth.js, html2canvas, heic2any) are **not** npm
 dependencies. They are dynamically loaded from CDNs at first use, inside the
-relevant `lib/*.ts` file, so the initial bundle stays small. Keep that
-pattern for new heavy libraries. Real npm dependencies are intentionally few:
-`@huggingface/transformers`, `animejs`, plus build/test tooling.
+relevant `lib/*.ts` file, so the initial bundle stays small. Real npm
+dependencies are intentionally minimal: `@huggingface/transformers`, `svelte`,
+plus build/test tooling. React, `@types/react`, and `animejs` have been
+completely removed.
 
 ## Engine truths (do not overstate these)
 
@@ -166,7 +193,7 @@ match. Several were previously wrong; don't regress them.
   <0.70 (an intentional soft look). It never rescales to chase a score, and a
   remaining warning is shown on the file card via the result `format` note.
 
-### PDF
+### PDF & PDF → Markdown
 - Structural strategy (Low/Recommended): walk XObjects, downscale embedded
   images, re-encode JPEG in place; text/vectors untouched.
 - Canvas strategy (Extreme, encrypted-PDF fallback): render pages with PDF.js
@@ -174,6 +201,18 @@ match. Several were previously wrong; don't regress them.
 - Presets: Low 220 DPI/0.85, Recommended 150/0.72, Extreme 96/0.45.
 - Target-size mode binary-searches JPEG quality over **10 iterations**.
 - Merge PDF uses `copyPages()` — no rasterisation, text stays selectable.
+- **PDF → Markdown** (`src/lib/pdfToMarkdown.ts`, route `/convert/pdf-markdown`):
+  - SHA-256 digest of original PDF input computed via `crypto.subtle.digest`.
+  - Column-aware reading order reconstruction: clusters text items into lines,
+    detects multi-column splits, classifies headings by relative font scale,
+    identifies bullet/numbered lists and Markdown pipe tables.
+  - Crop generation for equations and diagram figures: equations are rendered
+    to high-resolution visual crops (`assets/figures/*.png`); never hallucinated
+    into invented or syntactically invalid LaTeX.
+  - Full-page previews rendered to `assets/pages/page-*.png`.
+  - Portable, self-contained ZIP bundle download containing:
+    `document.md`, `manifest.json`, `extraction.json`, `source/original.pdf`,
+    `assets/pages/*.png`, and `assets/figures/*.png`.
 
 ### Video / Audio / GIF
 - Video: **WebCodecs + Mediabunny fast path → FFmpeg.wasm → MediaRecorder**.
@@ -203,22 +242,36 @@ match. Several were previously wrong; don't regress them.
   Images/PDF batches use `runBatch()`, and every batch item still passes
   through `runScheduled()` for global admission.
 
-### OCR
-- **Tesseract.js 5 is the stable default.** `auto` resolves to Tesseract.
-- **PaddleOCR PP-OCRv3 is optional and experimental.** It is the lightweight
-  PP-OCRv3 detection/classification/recognition pipeline via Paddle.js/WebGL,
-  *not* PaddleOCR-VL 1.5 (a ~0.9B vision-language model the app never loads).
-  Never label it as a VLM or as layout/table-aware.
-- Math/Greek symbol mode always runs on Tesseract (`grc` + `equ`), regardless
-  of the selected engine.
-- OCR page seeds engine/language from Settings → Compression → OCR defaults
-  and render DPI from the resolved resource mode: Memory Saver 200, Balanced
-  250, Maximum 300.
-- OCR renders and embeds one page at a time (`openPageRenderer()` +
-  incremental `createSearchablePdfBuilder()`), releasing each page blob after
-  recognition. Don't go back to rendering every page up front.
-- Batch OCR is sequential and awaits each file; a bare `forEach()` here was a
-  real crash bug.
+### OCR (Printed Text & Handwriting Recognition)
+- **Printed Text OCR:**
+  - **Tesseract.js 5 is the stable default.** `auto` resolves to Tesseract.
+  - **PaddleOCR PP-OCRv3 is optional and experimental.** It is the lightweight
+    PP-OCRv3 detection/classification/recognition pipeline via Paddle.js/WebGL,
+    *not* PaddleOCR-VL 1.5 (a ~0.9B vision-language model the app never loads).
+    Never label it as a VLM or as layout/table-aware.
+  - Math/Greek symbol mode always runs on Tesseract (`grc` + `equ`), regardless
+    of the selected engine.
+  - OCR page seeds engine/language from Settings → Compression → OCR defaults
+    and render DPI from the resolved resource mode: Memory Saver 200, Balanced
+    250, Maximum 300.
+  - OCR renders and embeds one page at a time (`openPageRenderer()` +
+    incremental `createSearchablePdfBuilder()`), releasing each page blob after
+    recognition. Don't go back to rendering every page up front.
+  - Batch OCR is sequential and awaits each file; a bare `forEach()` here was a
+    real crash bug.
+- **English Handwriting Recognition:**
+  - Dedicated mode in `src/lib/ocrHandwriting.ts`, distinct from printed OCR.
+  - Candidate model: `Xenova/trocr-small-handwritten` (~60 MB weights).
+  - Explicitly scoped to English handwriting only; surfaces a clear disclaimer
+    and size disclosure before download.
+  - Operates on cropped, line-segmented text crops (`detectTextLines`) via
+    horizontal projection profiling; never attempts full-page arbitrary scans
+    in a single unsegmented pass.
+  - Hardware probing: verifies WebGPU device creation before inference; falls
+    back gracefully to WASM CPU inference.
+  - **Zero LaTeX Hallucination:** Never attempts to hallucinate handwritten math
+    or formulas into fake LaTeX code. Handwritten equations and diagrams are
+    preserved as visual crops.
 
 ### Local AI / Smart Analyze
 - `@huggingface/transformers` with ImageNet-style classification:
@@ -350,17 +403,30 @@ match. Several were previously wrong; don't regress them.
 ## Code conventions
 
 - TypeScript, no new `any` where avoidable; shared types in `src/lib/types.ts`.
-- Vanilla DOM for the app. Don't introduce React/Svelte/etc. into
-  `src/main.ts` or `src/pages/*`; the React library under `src/components` is
-  standalone and unused by the app.
-- CSS lives in two files: `src/style.css` (tokens + the legacy
-  `.tool-wrap`/`.settings-card` component styles, section banners with ═══)
-  and `src/styles/workbench.css` (every selector prefixed `.cz-`). New UI
-  goes in the second file so it cannot restyle legacy markup. Reuse existing
-  custom properties (`--accent`, `--text-3`, `--r`, `--t`, …) rather than
-  hardcoding colours/radii/timings.
-- Respect `prefers-reduced-motion`; motion helpers apply the end state
-  instantly instead of skipping the state change.
+- **UI Architecture:** Svelte 5 with runes (`$state`, `$derived`, `$props`) for
+  all UI layers (`src/App.svelte`, `src/app/`, `src/routes/`, `src/components/`).
+- **Processing Architecture:** Pure, framework-independent TypeScript in
+  `src/lib/`. Zero Svelte imports in `src/lib/`. Any engine module can be
+  exercised headlessly in unit test runners (e.g. Deno) without DOM or component
+  lifecycles.
+- **Removed Libraries:** React and `animejs` have been completely removed.
+  Motion uses native Web Animations API (`Element.prototype.animate`) in
+  `src/lib/motion.ts` with zero external dependencies and instant reduction on
+  `prefers-reduced-motion`.
+- **Anti-Slop & Four-Skill UI Design Rules:**
+  - `design-taste-frontend`: Dense, compact, tool-first layouts. Verb + noun
+    action buttons ("Extract Markdown", "Process Document", "Download ZIP").
+    No lavender/violet in technical utilities.
+  - `frontend-design`: Zero AI tells (no single-word colored accents, no
+    all-caps tracked labels, no em-dash fragments, no glued arrows `→`).
+  - `hallmark`: The Floor compliance (tokens for colors/radii, instant
+    `:focus-visible`, `overflow-x: clip`, reduced-motion compliance, zero
+    `transition: all`).
+  - `impeccable`: Scannable tabular density, clear state transitions, resilient
+    empty/error views.
+- CSS lives in `src/style.css` (tokens + floor rules) and `src/styles/workbench.css`
+  (scoped `.cz-*` components). Reuse existing custom properties (`--accent`,
+  `--text-3`, `--r`, `--t`, …) rather than hardcoding colours/radii/timings.
 - Canvas-based engines use `makeCanvas`/`get2D` from `gpu.ts`; don't add local
   copies.
 - Loaders (`ffmpeg.ts`, `pdfLibs.ts`, Tesseract/Paddle, imageDecode) must

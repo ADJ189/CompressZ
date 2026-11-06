@@ -9,6 +9,54 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 
 ## [Unreleased]
 
+### Added — Svelte 5 UI Migration, Anti-Slop Compact Design, PDF → Markdown & Dual OCR
+
+- **Svelte 5 Full UI Migration**: Migrated the entire user interface to Svelte 5
+  with reactive runes (`$state`, `$derived`, `$props`). Includes `AppShell`,
+  `Navigation`, `Header`, `ToolsDialog`, `SettingsDialog`, and all 14 tool and
+  information views (`Home`, `Images`, `Pdf`, `Video`, `Audio`, `Gif`, `Ocr`,
+  `MergePdf`, `ImagesToPdf`, `Convert`, `PdfMarkdown`, `About`, `Docs`, `Privacy`,
+  `Settings`).
+- **Framework-Independent Processing Architecture**: The entire processing core
+  in `src/lib/` remains pure, framework-independent TypeScript (zero Svelte imports),
+  allowing headless execution, strict type safety, and testability across runtimes.
+- **PDF → Markdown & Structured ZIP Export** (`src/lib/pdfToMarkdown.ts`, `/convert/pdf-markdown`):
+  - Deterministic SHA-256 computation over original PDF content.
+  - Column-aware reading order extraction, grouping headings by font-size scale,
+    paragraphs, lists, and Markdown pipe tables.
+  - Equation and figure crop extraction (`assets/figures/*.png`) — mathematical
+    formulas and complex diagrams are preserved as visual crops rather than
+    hallucinated into fake LaTeX code.
+  - Full-page previews rendered to `assets/pages/page-*.png`.
+  - Self-contained portable ZIP export containing `document.md`, `manifest.json`,
+    `extraction.json`, `source/original.pdf`, and visual asset folders.
+- **Distinct OCR Modes (Printed vs Handwriting Recognition)**:
+  - Printed Text OCR: Tesseract.js 5 baseline + optional PaddleOCR PP-OCRv3.
+  - English Handwriting Recognition (`src/lib/ocrHandwriting.ts`): Candidate model
+    `Xenova/trocr-small-handwritten` (~60 MB weights) with horizontal projection
+    line segmentation (`detectTextLines`), WebGPU device verification with WASM
+    fallback, and explicit English-only scoping.
+  - **Zero LaTeX Hallucination**: Hand-drawn equations and formulas are preserved
+    as image crops and never hallucinated into invented LaTeX.
+- **Anti-Slop Design System**:
+  - Implemented principles from all 4 Antigravity design skills: `design-taste-frontend`,
+    `frontend-design`, `hallmark`, and `impeccable`.
+  - Compact density with scannable tables and queues; verb + noun button labels
+    ("Extract Markdown", "Process Document", "Download ZIP"); strict CSS tokenization;
+    instant `:focus-visible` rings; `overflow-x: clip` on `html` and `body`; full
+    reduced-motion bypass (`prefers-reduced-motion`).
+  - Completely eliminated AI design tells: no isolated purple accent words, no
+    all-caps letter-tracked eyebrows, no em-dash fragments, and no glued arrows (`→`).
+- **Dependency & Performance Cleanups**:
+  - Completely removed React (`react`, `react-dom`, `@types/react`, `@types/react-dom`,
+    and all legacy `src/components/*.tsx` files).
+  - Completely removed `animejs`; replaced with native Web Animations API
+    (`Element.prototype.animate`) in `src/lib/motion.ts`.
+  - Path traversal and 4 GiB size checks added to ZIP engine (`src/lib/zip.ts`).
+  - Added comprehensive offline Deno test suite (`deno test --allow-read --unstable-sloppy-imports`)
+    covering Hallmark rules, OCR candidates, PDF reading order, quality guard scaling,
+    recommendations, resource manager, and zip security (25/25 tests passing).
+
 ### Added — Adaptive Resource Guard, home workbench, contextual suggestions
 
 - **Adaptive Resource Guard** (`src/lib/resourceManager.ts`). Every heavy

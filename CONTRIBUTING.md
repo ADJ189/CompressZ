@@ -45,13 +45,14 @@ npm run build      # production build → dist/ (+ oversized-asset strip)
 npm run preview    # serve the production build locally
 npm run typecheck  # tsc --noEmit
 npm run lint       # ESLint
+deno test --allow-read --unstable-sloppy-imports # fast offline unit & floor test suite
 npm run test:e2e   # Playwright matrix (Chromium + WebKit + Firefox)
 npm run test:webcodecs # opt-in real MP4 encode (esm.sh + WebCodecs)
 npm run bench      # opt-in benchmark → bench-results/ (not CI)
 npm run lighthouse # Lighthouse CI (optional)
 ```
 
-Run `npm run typecheck` and `npm run lint` before opening a PR — CI runs both.
+Run `npm run typecheck`, `npm run lint`, and `deno test --allow-read --unstable-sloppy-imports` before opening a PR.
 `npm run test:e2e` builds and serves `dist/` automatically, and needs the
 Playwright browsers once:
 `npx --no-install playwright install chromium webkit firefox`.
@@ -72,33 +73,36 @@ dev server only exercises the parts you have already cached.
 
 ```
 src/
-  main.ts            # app bootstrap, router mount, header/tabbar/dialog wiring
-  router.ts           # History API page router
-  store.ts             # persisted app/tool state (localStorage-backed)
-  components.ts        # shared DOM component helpers (file cards, notices)
-  toast.ts             # toast notifications
-  style.css            # tokens + legacy `.tool-*`/`.settings-*` component styles
-  styles/workbench.css # new UI only; every selector is prefixed `.cz-`
-  lib/                  # compression/conversion engines, one file per format
+  main.ts            # Svelte 5 app bootstrap (mounts App to #app)
+  App.svelte         # root coordinator: AppShell + routed views
+  app/               # application shell components (Svelte 5)
+    AppShell.svelte, Header.svelte, Navigation.svelte,
+    ToolsDialog.svelte, SettingsDialog.svelte
+  routes/            # route components (Svelte 5)
+    Home.svelte, Images.svelte, Pdf.svelte, Video.svelte, Audio.svelte,
+    Gif.svelte, Ocr.svelte, MergePdf.svelte, ImagesToPdf.svelte,
+    Convert.svelte, PdfMarkdown.svelte, About.svelte, Docs.svelte,
+    Privacy.svelte, Settings.svelte
+  components/        # UI atoms: FileDropzone, FileCard, FileQueue, ProgressStatus
+  router.ts          # History API page router
+  store.ts           # reactive pure TypeScript store (Svelte 5 subscribe contract)
+  toast.ts           # toast notifications
+  style.css          # tokens + CSS floor rules
+  styles/workbench.css # scoped utility styles (`.cz-*`)
+  lib/               # pure framework-independent TypeScript engines
     compressImage.ts, compressPdf.ts, compressVideo.ts, compressAudio.ts,
-    webcodecsVideo.ts (capability-gated WebCodecs + Mediabunny route),
-    videoMeta.ts, qualityGuard.ts (SSIM / no-upscale guard),
+    webcodecsVideo.ts, videoMeta.ts, qualityGuard.ts,
     compressGif.ts, optimizeSvg.ts, convertMedia.ts, convertOffice.ts,
-    convertPdf.ts, ffmpeg.ts (FFmpeg.wasm singleton), zip.ts, types.ts
-    settings.ts         # cz-settings-v2 + resolveExecutionProfile()
-    resourceManager.ts  # Adaptive Resource Guard (admission, queue, snapshot)
-    recommendations.ts  # deterministic contextual suggestions + dismissals
-    recents.ts / workbench.ts  # home pins, recents, live queue panel
-    theme.ts            # light / dark / system preference
-    platform.ts         # device detection + performance-tier recommendation
-    aiEngine.ts         # local image classifier (WebGPU→WASM fallback)
-    gpu.ts / webgl.ts   # canvas + WebGL2 helpers, one shared GL context
-    batch.ts, imageDecode.ts, thumb.ts, motion.ts, pdfLibs.ts
-  pages/                # one file per route (images, pdf, video, audio,
-    gif, ocr, convert, imagesToPdf, mergePdf, settings)
-  components/, utils/   # standalone React library (see Conventions)
-  index.ts, styles.css  # library entry + styles
-e2e/                    # Playwright tests + pure rule/estimator tests
+    convertPdf.ts, pdfToMarkdown.ts, ocrEngines.ts, ocrHandwriting.ts,
+    motion.ts (native Web Animations API), ffmpeg.ts, zip.ts, types.ts,
+    settings.ts, resourceManager.ts, recommendations.ts,
+    recents.ts, workbench.ts, theme.ts, platform.ts, aiEngine.ts,
+    gpu.ts, webgl.ts, batch.ts, imageDecode.ts, thumb.ts, pdfLibs.ts
+test/                # Deno test suite (verified 100% passing)
+  assert.ts, hallmark.test.ts, ocr.test.ts, pdfToMarkdown.test.ts,
+  qualityGuard.test.ts, recommendations.test.ts, resourceManager.test.ts,
+  settings.test.ts, zip.test.ts
+e2e/                 # Playwright tests + pure rule/estimator tests
 ```
 
 Heavy engines (FFmpeg.wasm, Mediabunny, PDF.js, pdf-lib, Tesseract.js,
@@ -107,9 +111,8 @@ they're loaded lazily from jsDelivr/esm.sh at the point of use, inside the
 relevant `lib/*.ts` file. This keeps the initial bundle small and means a user who only
 ever compresses images never downloads the OCR or video stack. Keep this
 pattern for any new heavy library rather than adding it to `package.json`.
-The exceptions are `@huggingface/transformers` (bundled, with
-`onnxruntime-web` WASM loaded from jsDelivr) and `animejs`, both of which are
-real npm dependencies.
+Real npm dependencies are intentionally minimal: `@huggingface/transformers`
+and `svelte`. React and `animejs` have been completely removed.
 
 ---
 
@@ -117,20 +120,29 @@ real npm dependencies.
 
 - **TypeScript, no `any` where avoidable.** Shared types live in
   `src/lib/types.ts`.
-- **Vanilla DOM, no framework.** Pages build DOM nodes directly or via the
-  helpers in `components.ts`. Don't introduce React/Svelte/etc. into this
-  codebase — if you want a framework-based rewrite, open an issue to discuss
-  first, since it's a much bigger conversation than a single PR.
-  The one exception is the standalone React library entry (`src/index.ts`,
-  `src/components/*.tsx`, `src/styles.css`): React is a devDependency there
-  and the app (`src/main.ts`) never imports it, so it stays out of the bundle.
+- **Svelte 5 for UI, Pure TypeScript for Engines.** The user interface is built
+  with Svelte 5 runes (`$state`, `$derived`, `$props`). The core engines in
+  `src/lib/` remain strictly framework-independent TypeScript with **zero**
+  Svelte imports, ensuring they can be imported and verified in headless runners
+  (like Deno).
+- **Anti-Slop & Four-Skill UI Design:** All user interface work must follow the
+  antigravity design skills:
+  - `design-taste-frontend`: Compact density, verb + noun actions ("Extract Markdown",
+    "Process Document", "Download ZIP"), zero tech violet/lavender.
+  - `frontend-design`: No AI tells (no isolated colored accent words, no all-caps
+    tracked labels, no em-dash fragments, no glued arrows `→`).
+  - `hallmark`: The Floor compliance (design tokens for colors/radii, instant
+    `:focus-visible`, `overflow-x: clip`, reduced-motion compliance, zero
+    `transition: all`).
+  - `impeccable`: High scanability, dense layout, robust empty/error states.
+- **Motion:** Built using the native Web Animations API (`el.animate`) in
+  `src/lib/motion.ts`. No external animation libraries. Respects
+  `prefers-reduced-motion` with instant bypass.
 - **CSS lives in two files.** `src/style.css` holds the design tokens and the
-  legacy `.tool-wrap` / `.settings-card` component styles, split by `═══`
-  section banners. New UI (workbench, recommendation notice, sectioned
-  Settings) goes in `src/styles/workbench.css`, and every selector there must
-  be prefixed `.cz-` so it cannot restyle legacy markup. Both use the existing
-  custom properties (`--accent`, `--text-3`, `--r`, `--t`, etc.) instead of
-  hardcoded colors, radii, or transition timings.
+  floor rules (`overflow-x: clip`, `:focus-visible`, reduced motion). New UI
+  goes in `src/styles/workbench.css`, and every selector there is prefixed `.cz-`.
+  Both use the existing custom properties (`--accent`, `--text-3`, `--r`, `--t`, etc.)
+  instead of hardcoded colors, radii, or transition timings.
 - **Font stack:** headings/branding use `var(--display)`, the wordmark next
   to the logo uses `var(--brand)`, body/UI text uses `var(--sans)`, code/meta
   text uses `var(--mono)`. Don't add a new `@font-face`/Google Fonts family
