@@ -97,6 +97,18 @@ export interface ZipEntryIn {
   data: Uint8Array;
 }
 
+/**
+ * Sanitize a ZIP entry path to prevent directory traversal or absolute path injection.
+ */
+export function sanitizeZipPath(raw: string): string {
+  let safe = raw.replace(/^[a-zA-Z]:[\\/]/, "").replace(/^[\\/]+/, "");
+  safe = safe
+    .split(/[\\/]/)
+    .filter((part) => part !== ".." && part !== "." && part.length > 0)
+    .join("/");
+  return safe || "file";
+}
+
 // ── Writer ────────────────────────────────────────────────────
 export async function writeZip(entries: ZipEntryIn[]): Promise<Uint8Array> {
   const { time, date } = dosDateTime();
@@ -104,8 +116,20 @@ export async function writeZip(entries: ZipEntryIn[]): Promise<Uint8Array> {
   const central: Uint8Array[] = [];
   let offset = 0;
 
+  // Preflight check: prevent exceeding 32-bit / 4GiB ZIP limit
+  let estimatedTotal = 0;
+  for (const e of entries) {
+    estimatedTotal += e.data.length + 100;
+  }
+  if (estimatedTotal >= 0xffffffff) {
+    throw new Error(
+      "Archive size exceeds the 32-bit (4 GiB) ZIP limit. Cannot package safely without Zip64.",
+    );
+  }
+
   for (const { name, data } of entries) {
-    const nameBytes = new TextEncoder().encode(name);
+    const safeName = sanitizeZipPath(name);
+    const nameBytes = new TextEncoder().encode(safeName);
     const crc = crc32(data);
     const compressed = await deflateRaw(data);
     const useStore = compressed.length >= data.length;

@@ -218,6 +218,8 @@ function formatLabel(format: ImageFormat): string {
       return 'WebP';
     case 'image/avif':
       return 'AVIF';
+    default:
+      return 'Image';
   }
 }
 

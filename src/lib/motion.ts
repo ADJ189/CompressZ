@@ -1,83 +1,142 @@
 /**
- * motion.ts — Thin anime.js (v4) wrapper for the handful of places that
- * benefit from a real spring/easing animation instead of a CSS transition:
- * the new Smart Analyze results (file cards re-ordering + AI tag chips
- * popping in) and the new Settings sections (Device, Performance, AI
- * Engine) revealing themselves. Everything else in the app already has a
- * tuned CSS-transition system (see --t2/--t3/--ease-fluid in style.css) —
- * this is additive, not a replacement for it, and is dynamically imported
- * so idle page-loads never pay for it.
+ * motion.ts — Native Web Animations API (WAAPI) and CSS transition helpers.
  *
- * `respectsMotionPreference` is checked on every call: prefers-reduced-motion
- * users get an instant, no-animation apply instead of being skipped
- * silently — the value still changes, just without motion.
+ * Replaces external animation libraries with native browser primitives
+ * (Element.animate), zero external dependencies, zero bundle weight,
+ * and instant fallback when prefers-reduced-motion is active.
+ *
+ * Rules:
+ *   - Only animate transform and opacity. Never animate width, height, top, or left.
+ *   - Respect prefers-reduced-motion: reduce on every call: apply end-state instantly.
+ *   - Animations cancel cleanly when elements or components are unmounted.
  */
-import { animate, stagger } from 'animejs';
 
 function reduced(): boolean {
-  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  return (
+    typeof window !== "undefined" &&
+    Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches)
+  );
 }
 
-/** Fade+rise a group of elements in with a slight stagger — used when a settings section or a batch of file cards first appears. */
-export function revealStagger(els: Element[] | NodeListOf<Element>, opts: { delay?: number } = {}) {
+/** Fade and rise a group of elements in with a slight stagger. */
+export function revealStagger(
+  els: Element[] | NodeListOf<Element>,
+  opts: { delay?: number } = {},
+): void {
   const list = Array.from(els);
   if (!list.length) return;
-  if (reduced()) { list.forEach(el => ((el as HTMLElement).style.opacity = '1')); return; }
-  animate(list, {
-    opacity: [0, 1],
-    translateY: [10, 0],
-    duration: 420,
-    delay: stagger(45, { start: opts.delay ?? 0 }),
-    ease: 'outQuint',
+  if (reduced()) {
+    for (const el of list) {
+      (el as HTMLElement).style.opacity = "1";
+      (el as HTMLElement).style.transform = "none";
+    }
+    return;
+  }
+
+  const baseDelay = opts.delay ?? 0;
+  list.forEach((el, index) => {
+    el.animate(
+      [
+        { opacity: "0", transform: "translateY(8px)" },
+        { opacity: "1", transform: "translateY(0)" },
+      ],
+      {
+        duration: 320,
+        delay: baseDelay + index * 40,
+        easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+        fill: "forwards",
+      },
+    );
   });
 }
 
-/** Single-element pop-in — used for a newly-applied AI tag chip. */
-export function popIn(el: Element) {
+/** Single-element pop-in for badges and chips. */
+export function popIn(el: Element): void {
+  if (reduced()) {
+    (el as HTMLElement).style.opacity = "1";
+    (el as HTMLElement).style.transform = "none";
+    return;
+  }
+  el.animate(
+    [
+      { opacity: "0", transform: "scale(0.85)" },
+      { opacity: "1", transform: "scale(1)" },
+    ],
+    {
+      duration: 280,
+      easing: "cubic-bezier(0.34, 1.56, 0.64, 1)",
+      fill: "forwards",
+    },
+  );
+}
+
+/** Subtle pulse to draw attention to a card or status without jarring motion. */
+export function pulse(el: Element): void {
   if (reduced()) return;
-  animate(el, {
-    scale: [0.6, 1],
-    opacity: [0, 1],
-    duration: 360,
-    ease: 'outElastic(1, .6)',
-  });
+  el.animate(
+    [
+      { transform: "scale(1)" },
+      { transform: "scale(1.02)" },
+      { transform: "scale(1)" },
+    ],
+    {
+      duration: 340,
+      easing: "ease-in-out",
+    },
+  );
 }
 
-/** Pulse an element once — used to draw the eye to a card whose settings/order just changed. */
-export function pulse(el: Element) {
-  if (reduced()) return;
-  animate(el, {
-    scale: [1, 1.015, 1],
-    duration: 420,
-    ease: 'outQuad',
-  });
+/** Smoothly update progress percentage on a bar element. */
+export function progressTo(el: Element, pct: number): void {
+  const clamped = Math.max(0, Math.min(100, pct));
+  const htmlEl = el as HTMLElement;
+  if (reduced()) {
+    htmlEl.style.width = `${clamped}%`;
+    return;
+  }
+  htmlEl.style.transition = "width 240ms cubic-bezier(0.2, 0, 0, 1)";
+  htmlEl.style.width = `${clamped}%`;
 }
 
-/** Smoothly animate a progress bar's width to a new percentage (0-100). */
-export function progressTo(el: Element, pct: number) {
-  if (reduced()) { (el as HTMLElement).style.width = `${pct}%`; return; }
-  animate(el, { width: `${pct}%`, duration: 260, ease: 'outCubic' });
+/** Pop a toast notice into view. */
+export function toastIn(el: Element): void {
+  if (reduced()) {
+    (el as HTMLElement).style.opacity = "1";
+    (el as HTMLElement).style.transform = "none";
+    return;
+  }
+  el.animate(
+    [
+      { opacity: "0", transform: "translateY(12px) scale(0.96)" },
+      { opacity: "1", transform: "translateY(0) scale(1)" },
+    ],
+    {
+      duration: 260,
+      easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+      fill: "forwards",
+    },
+  );
 }
 
-/** Pop a toast in with a slight overshoot — replaces the plain CSS @keyframes entrance. */
-export function toastIn(el: Element) {
-  if (reduced()) { (el as HTMLElement).style.opacity = '1'; return; }
-  animate(el, {
-    opacity: [0, 1],
-    translateY: [10, 0],
-    scale: [0.94, 1],
-    duration: 320,
-    ease: 'outBack(1.4)',
-  });
-}
-
-/** Fade+drop a toast out — resolves once the animation finishes so the caller can safely remove the element. */
+/** Fade out and dismiss a toast notice. Resolves when the animation completes. */
 export function toastOut(el: Element): Promise<void> {
-  if (reduced()) { (el as HTMLElement).style.opacity = '0'; return Promise.resolve(); }
-  return animate(el, {
-    opacity: [1, 0],
-    translateY: [0, 8],
-    duration: 260,
-    ease: 'inQuad',
-  }).then(() => {});
+  if (reduced()) {
+    (el as HTMLElement).style.opacity = "0";
+    return Promise.resolve();
+  }
+  const anim = el.animate(
+    [
+      { opacity: "1", transform: "translateY(0)" },
+      { opacity: "0", transform: "translateY(6px)" },
+    ],
+    {
+      duration: 200,
+      easing: "ease-in",
+      fill: "forwards",
+    },
+  );
+  return new Promise<void>((resolve) => {
+    anim.onfinish = () => resolve();
+    anim.oncancel = () => resolve();
+  });
 }
