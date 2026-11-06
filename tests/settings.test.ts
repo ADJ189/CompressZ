@@ -1,4 +1,4 @@
-import { assert, assertEquals } from "./assert.ts";
+import { assertEquals } from "./assert.ts";
 import {
   defaultSettings,
   resolveExecutionProfile,

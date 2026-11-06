@@ -10,6 +10,9 @@ import {
 } from "../src/lib/ocrHandwriting.ts";
 
 Deno.test("ocrEngines: validates language support correctly per engine", () => {
+  assert(TESSERACT_LANGUAGES.size > 20);
+  assert(PADDLE_LANGUAGES.size > 0);
+
   // Tesseract supports broad range
   assertEquals(isLanguageSupported("tesseract", "eng"), true);
   assertEquals(isLanguageSupported("tesseract", "hin"), true);

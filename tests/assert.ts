@@ -36,7 +36,7 @@ export function assertMatch(actual: string, pattern: RegExp, msg?: string): void
   }
 }
 
-export function assertThrows(fn: () => void, errorClassOrMsg?: string | Function): void {
+export function assertThrows(fn: () => void, errorClassOrMsg?: string | (new (...args: any[]) => Error)): void {
   let thrown = false;
   try {
     fn();
