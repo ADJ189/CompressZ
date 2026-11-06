@@ -1,4 +1,4 @@
-<div class="cz-content-page">
+<div class="page-enter cz-content-page">
   <div class="cz-content-header">
     <span class="cz-content-badge" aria-hidden="true">🔒</span>
     <h1 class="cz-content-title">Privacy Policy</h1>

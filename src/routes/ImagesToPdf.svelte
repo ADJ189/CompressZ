@@ -4,10 +4,16 @@
   import { imagesToPdf } from "../lib/imagesToPdf";
   import { formatBytes } from "../lib/types";
   import { toast } from "../toast";
+  import {
+    recommendFor,
+    dismissRecommendation,
+    type Recommendation,
+  } from "../lib/recommendations";
 
   let state = $state<ImagesToPdfState>(imagesToPdfStore.get());
   let isConverting = $state(false);
   let convertedBlob = $state<Blob | null>(null);
+  let dismissTrigger = $state(0);
 
   $effect(() => {
     const unsub = imagesToPdfStore.subscribe((val) => {
@@ -15,6 +21,47 @@
     });
     return unsub;
   });
+
+  const recommendations = $derived.by(() => {
+    void dismissTrigger;
+    return recommendFor({
+      scope: "images-to-pdf",
+      files: state.files.map((f) => ({ name: f.name, size: f.size })),
+      pageSize: state.pageSize,
+    });
+  });
+
+  const activeRec = $derived(recommendations.length > 0 ? recommendations[0] : null);
+
+  function applyRecommendation(rec: Recommendation) {
+    if (rec.action.type === "reorder") {
+      const prevFiles = [...state.files];
+      const sorted = rec.action.order.map((i) => prevFiles[i]);
+      updateStore({ files: sorted });
+      toast("Sorted files by filename", "success", {
+        label: "Undo",
+        onClick: () => {
+          updateStore({ files: prevFiles });
+          dismissTrigger++;
+        },
+      });
+    } else if (rec.action.type === "page-size") {
+      const prevSize = state.pageSize;
+      updateStore({ pageSize: rec.action.pageSize });
+      toast("Applied Auto page size", "success", {
+        label: "Undo",
+        onClick: () => {
+          updateStore({ pageSize: prevSize });
+          dismissTrigger++;
+        },
+      });
+    }
+  }
+
+  function dismiss(rec: Recommendation) {
+    dismissRecommendation(rec);
+    dismissTrigger++;
+  }
 
   function updateStore(patch: Partial<ImagesToPdfState>) {
     imagesToPdfStore.update((curr) => ({ ...curr, ...patch }));
@@ -69,7 +116,7 @@
   }
 </script>
 
-<div class="cz-tool-view">
+<div class="tool-wrap cz-tool-view">
   <div class="cz-tool-header">
     <h1 class="cz-tool-title">Images to PDF</h1>
     <p class="cz-tool-desc">
@@ -78,18 +125,37 @@
   </div>
 
   <div class="cz-tool-settings-bar">
-    <div class="cz-setting-item">
-      <label class="cz-setting-label" for="page-size">Page Size</label>
-      <select
-        id="page-size"
-        class="cz-select"
-        value={state.pageSize}
-        onchange={(e) => updateStore({ pageSize: (e.target as HTMLSelectElement).value as any })}
-      >
-        <option value="auto">Auto (Match image dimensions)</option>
-        <option value="a4">A4 Portrait</option>
-        <option value="letter">US Letter</option>
-      </select>
+    <div id="itp-sizes" class="cz-setting-item">
+      <span class="cz-setting-label">Page Size</span>
+      <div class="cz-btn-group" role="radiogroup" aria-label="Page size selection">
+        <button
+          type="button"
+          role="radio"
+          class="cz-btn cz-btn-sm pdf-preset {state.pageSize === 'auto' ? 'is-active' : ''}"
+          aria-checked={state.pageSize === 'auto' ? 'true' : 'false'}
+          onclick={() => updateStore({ pageSize: 'auto' })}
+        >
+          Auto
+        </button>
+        <button
+          type="button"
+          role="radio"
+          class="cz-btn cz-btn-sm pdf-preset {state.pageSize === 'a4' ? 'is-active' : ''}"
+          aria-checked={state.pageSize === 'a4' ? 'true' : 'false'}
+          onclick={() => updateStore({ pageSize: 'a4' })}
+        >
+          A4
+        </button>
+        <button
+          type="button"
+          role="radio"
+          class="cz-btn cz-btn-sm pdf-preset {state.pageSize === 'letter' ? 'is-active' : ''}"
+          aria-checked={state.pageSize === 'letter' ? 'true' : 'false'}
+          onclick={() => updateStore({ pageSize: 'letter' })}
+        >
+          Letter
+        </button>
+      </div>
     </div>
 
     <div class="cz-setting-item">
@@ -104,6 +170,35 @@
         oninput={(e) => updateStore({ quality: Number((e.target as HTMLInputElement).value) })}
       />
     </div>
+  </div>
+
+  <div id="itp-rec">
+    {#if activeRec}
+      <div class="cz-recommendation cz-recommendation--primary">
+        <div class="cz-recommendation__row">
+          <div class="cz-recommendation__body">
+            <div class="cz-recommendation__title">{activeRec.title}</div>
+            <div class="cz-recommendation__reason">{activeRec.reason}</div>
+          </div>
+          <div class="cz-recommendation__actions">
+            <button
+              type="button"
+              class="cz-btn cz-btn-primary cz-btn-sm"
+              onclick={() => applyRecommendation(activeRec)}
+            >
+              {activeRec.actionLabel}
+            </button>
+            <button
+              type="button"
+              class="cz-btn cz-btn-ghost cz-btn-sm"
+              onclick={() => dismiss(activeRec)}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      </div>
+    {/if}
   </div>
 
   <FileDropzone
@@ -148,12 +243,12 @@
         </div>
       </div>
 
-      <div class="cz-merge-list">
+      <div id="itp-list" class="cz-merge-list">
         {#each state.files as file, idx (file.name + idx)}
-          <div class="cz-merge-item">
+          <div class="cz-merge-item file-card">
             <div class="cz-merge-item-info">
               <span class="cz-merge-index">{idx + 1}</span>
-              <span class="cz-merge-name" title={file.name}>{file.name}</span>
+              <span class="cz-merge-name fc-name" title={file.name}>{file.name}</span>
               <span class="cz-merge-size">{formatBytes(file.size)}</span>
             </div>
             <button

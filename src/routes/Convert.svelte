@@ -165,7 +165,7 @@
   }
 </script>
 
-<div class="cz-tool-view">
+<div class="tool-wrap cz-tool-view">
   <div class="cz-tool-header">
     <h1 class="cz-tool-title">Format Converter</h1>
     <p class="cz-tool-desc">
