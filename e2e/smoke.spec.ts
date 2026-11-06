@@ -30,7 +30,7 @@ const ROUTES: { path: string; ready: string }[] = [
  */
 async function watch(page: Page) {
   const problems: string[] = [];
-  await page.route(/^https?:\/\/(?!localhost)/, (r) => r.abort());
+  await page.route(/^https?:\/\/(?!localhost|127\.0\.0\.1)/, (r) => r.abort());
   page.on("pageerror", (e) => problems.push(`pageerror: ${e.message}`));
   page.on("console", (m) => {
     if (m.type() !== "error") return;
@@ -574,7 +574,7 @@ test("destructive Settings actions need a second, explicit click", async ({
 test("local-first: interactions never send file data or non-GET requests", async ({
   page,
 }) => {
-  await page.route(/^https?:\/\/(?!localhost)/, (r) => r.abort());
+  await page.route(/^https?:\/\/(?!localhost|127\.0\.0\.1)/, (r) => r.abort());
   const writes: string[] = [];
   const externalBodies: string[] = [];
 
@@ -584,7 +584,7 @@ test("local-first: interactions never send file data or non-GET requests", async
     if (method !== "GET" && method !== "HEAD" && method !== "OPTIONS") {
       writes.push(`${method} ${url}`);
     }
-    if (!url.startsWith(BASE_URL)) {
+    if (!url.startsWith("http://localhost:4173") && !url.startsWith("http://127.0.0.1:4173")) {
       const body = request.postData();
       if (body && body.length) externalBodies.push(`${url} (${body.length} bytes)`);
     }
