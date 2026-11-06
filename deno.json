@@ -3,6 +3,6 @@
     "lib": ["deno.ns", "dom", "esnext"]
   },
   "test": {
-    "include": ["test/"]
+    "include": ["CompressZ-NEW-PATCHES-AND-UPDATES/test/", "test/"]
   }
 }
