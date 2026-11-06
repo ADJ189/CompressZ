@@ -1,7 +1,16 @@
 import { defineConfig, devices } from "@playwright/test";
+import { execSync } from "node:child_process";
 
 const PORT = 4173;
-const BASE_URL = `http://localhost:${PORT}`;
+const BASE_URL = process.env.BASE_URL || `http://127.0.0.1:${PORT}`;
+
+let hasNpm = false;
+try {
+  execSync(process.platform === "win32" ? "where npm" : "which npm", { stdio: "ignore" });
+  hasNpm = true;
+} catch {
+  hasNpm = false;
+}
 
 // Optional: point at a pre-installed Chromium (e.g. offline CI / sandboxes
 // where `npx --no-install playwright install chromium` can't download a
@@ -9,9 +18,11 @@ const BASE_URL = `http://localhost:${PORT}`;
 const executablePath = process.env.PW_CHROMIUM_PATH || undefined;
 const chromiumLaunch = executablePath ? { executablePath } : {};
 
-// Node/npm is the only supported runtime for the build, preview, and tests.
-// CI and Cloudflare Pages both use the npm scripts in package.json.
-const buildAndPreview = `npm run build && npm run preview -- --port ${PORT} --strictPort`;
+// Node/npm is the default runtime for CI and Cloudflare Pages.
+// When npm is absent (e.g. running under Deno), fallback to Deno running Vite directly.
+const buildAndPreview = hasNpm
+  ? `npm run build && npm run preview -- --host 127.0.0.1 --port ${PORT} --strictPort`
+  : `deno run -A node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port ${PORT} --strictPort`;
 
 // Two opt-in suites import the real TypeScript engine modules, so they need
 // Vite's dev server instead of the production preview build:
@@ -22,9 +33,9 @@ const buildAndPreview = `npm run build && npm run preview -- --port ${PORT} --st
 const isBench = !!process.env.BENCH;
 const isWebCodecsE2E = !!process.env.WEBCODECS_E2E;
 const usesDevServer = isBench || isWebCodecsE2E;
-const webServerCommand = usesDevServer
-  ? `npm run dev -- --port ${PORT} --strictPort`
-  : buildAndPreview;
+const webServerCommand = process.env.PW_WEB_SERVER_CMD || (usesDevServer
+  ? (hasNpm ? `npm run dev -- --host 127.0.0.1 --port ${PORT} --strictPort` : `deno run -A node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${PORT} --strictPort`)
+  : buildAndPreview);
 
 const ignored = [
   ...(isBench ? [] : ["**/bench.spec.ts"]),

@@ -2,7 +2,18 @@
   "compilerOptions": {
     "lib": ["deno.ns", "dom", "esnext"]
   },
+  "lint": {
+    "include": ["src/", "test/"],
+    "rules": {
+      "exclude": [
+        "no-explicit-any",
+        "no-window",
+        "no-window-prefix",
+        "require-await"
+      ]
+    }
+  },
   "test": {
-    "include": ["CompressZ-NEW-PATCHES-AND-UPDATES/test/", "test/"]
+    "include": ["test/"]
   }
 }
