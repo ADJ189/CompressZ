@@ -65,7 +65,7 @@
   });
 </script>
 
-<nav class="cz-tabbar" aria-label="Tool navigation">
+<nav id="tabbar" class="cz-tabbar" aria-label="Tool navigation">
   <div class="cz-tabbar-scroll" bind:this={scrollContainer}>
     <span class="cz-tabbar-thumb" bind:this={thumbEl} aria-hidden="true"></span>
 
@@ -73,7 +73,8 @@
       {@const isActive = activeRoute === tab.route || (tab.route !== "" && activeRoute.startsWith(tab.route + "/"))}
       <a
         href="/{tab.route}"
-        class="cz-tab {isActive ? 'is-active' : ''}"
+        class="cz-tab {isActive ? 'is-active active' : ''}"
+        data-tab
         data-nav={tab.route}
         aria-label={tab.label}
         onclick={(e) => handleTabClick(tab.route, e)}

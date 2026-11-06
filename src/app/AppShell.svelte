@@ -28,6 +28,12 @@
 
   $effect(() => {
     const unsub = currentRoute.subscribe((r) => {
+      if (r === "settings") {
+        settingsOpen = true;
+        history.replaceState({}, "", "/");
+        activeRoute = "";
+        return;
+      }
       activeRoute = r;
       window.scrollTo(0, 0);
     });
@@ -43,7 +49,7 @@
 
   <Navigation />
 
-  <main class="cz-main-outlet">
+  <main id="page-view" class="cz-main-outlet">
     {#if activeRoute === "" || activeRoute === "home"}
       <Home />
     {:else if activeRoute === "compress/images"}
