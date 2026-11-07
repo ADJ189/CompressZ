@@ -4,7 +4,8 @@
   "version": "1.13.0-a1",
   "type": "module",
   "engines": {
-    "node": "^20.19.0 || ^22.13.0 || >=24"
+    "node": "^20.19.0 || ^22.13.0 || >=24",
+    "npm": ">=10.0.0"
   },
   "scripts": {
     "dev": "vite dev",
@@ -13,7 +14,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test": "deno test --allow-read",
+    "test": "node scripts/test.mjs",
     "test:e2e": "playwright test",
     "test:webcodecs": "node scripts/webcodecs-e2e.mjs",
     "bench": "node scripts/bench.mjs",

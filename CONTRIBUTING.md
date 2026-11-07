@@ -23,6 +23,9 @@ set up, the project's conventions, and how to submit changes.
   compatible with that — Apache 2.0, MIT, BSD, and OFL are all fine; GPL and
   AGPL are not. Add new third-party code to [CREDITS.md](CREDITS.md) in the
   same PR.
+- **Review & Deployment Standards.** See [STANDARDS.md](STANDARDS.md) for
+  the manual re-review checklist, toolchain isolation standards, Cloudflare Pages
+  build limits, and GitHub Actions specifications.
 
 ---
 
@@ -45,14 +48,15 @@ npm run build      # production build → dist/ (+ oversized-asset strip)
 npm run preview    # serve the production build locally
 npm run typecheck  # tsc --noEmit
 npm run lint       # ESLint
-deno test --allow-read --unstable-sloppy-imports # fast offline unit & floor test suite
+npm test           # unit & compliance test suite (node scripts/test.mjs)
+deno test --allow-read # optional local offline Deno runner
 npm run test:e2e   # Playwright matrix (Chromium + WebKit + Firefox)
 npm run test:webcodecs # opt-in real MP4 encode (esm.sh + WebCodecs)
 npm run bench      # opt-in benchmark → bench-results/ (not CI)
 npm run lighthouse # Lighthouse CI (optional)
 ```
 
-Run `npm run typecheck`, `npm run lint`, and `deno test --allow-read --unstable-sloppy-imports` before opening a PR.
+Run `npm run typecheck`, `npm run lint`, and `npm test` before opening a PR.
 `npm run test:e2e` builds and serves `dist/` automatically, and needs the
 Playwright browsers once:
 `npx --no-install playwright install chromium webkit firefox`.
@@ -184,26 +188,27 @@ and `svelte`. React and `animejs` have been completely removed.
 
 ## Commit / PR checklist
 
-1. `npm run typecheck` passes.
-2. `npm run lint` passes (warnings are currently tolerated; new errors are not).
-3. `npm run build` succeeds with no new warnings, and the build log shows
+1. `npm run typecheck` passes (0 errors).
+2. `npm run lint` passes (0 errors; warnings tolerated).
+3. `npm test` passes all unit and floor compliance tests (29/29).
+4. `npm run build` succeeds with no errors, and the build log shows
    the oversized onnxruntime WASM asset being stripped.
-4. `npm run test:e2e` passes for all five projects (`chromium-desktop`,
+5. `npm run test:e2e` passes for all five projects (`chromium-desktop`,
    `chromium-mobile`, `webkit-desktop`, `webkit-mobile`, `firefox-desktop`).
-5. If you touched `src/lib/webcodecsVideo.ts`, run `npm run test:webcodecs`
+6. If you touched `src/lib/webcodecsVideo.ts`, run `npm run test:webcodecs`
    (opt-in: needs network access to `esm.sh` and a browser with a WebCodecs
    encoder). It records a real clip, transcodes it, and asserts the output MP4
    is readable with decodable video **and** audio.
-5. New third-party code (npm or CDN) is credited in `CREDITS.md` with its
+7. New third-party code (npm or CDN) is credited in `CREDITS.md` with its
    license.
-6. If you touched `PRIVACY.md`-relevant behavior (anything involving data
+8. If you touched `PRIVACY.md`-relevant behavior (anything involving data
    leaving the browser, new CDN hosts, or localStorage keys), update
    `PRIVACY.md` and the in-app `/privacy` template in the same PR.
-7. Update `CHANGELOG.md` under an `## [Unreleased]` heading (add one if it
+9. Update `CHANGELOG.md` under an `## [Unreleased]` heading (add one if it
    doesn't exist) — a short bullet describing the change is enough.
-8. Keep PRs scoped to one feature/fix. Large refactors are welcome but
-   should be discussed in an issue first so they don't collide with other
-   work in flight.
+10. Keep PRs scoped to one feature/fix. Large refactors are welcome but
+    should be discussed in an issue first so they don't collide with other
+    work in flight.
 
 Optional local extra: `npm run lighthouse` for Lighthouse CI.
 

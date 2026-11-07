@@ -44,11 +44,13 @@ npx --no-install playwright install chromium webkit firefox
 ```
 
 There is no second toolchain to keep in sync: `package.json` is the canonical
-manifest for CI, Cloudflare Pages, Playwright and Lighthouse.
+manifest for CI, Cloudflare Pages, Playwright and Lighthouse. For the full
+GitHub re-review and Cloudflare Pages deployment specification, see
+[STANDARDS.md](STANDARDS.md).
 
 ### Verification checklist (run all before calling work done)
 
-1. `deno test --allow-read --unstable-sloppy-imports` — runs all 25 unit/compliance tests offline (quality guard, recommendations, resource manager, zip security, settings, OCR engines, PDF to Markdown, and Hallmark anti-slop rules).
+1. `npm test` (or `deno test --allow-read` locally) — runs all 29 unit and compliance tests offline (quality guard, recommendations, resource manager, zip security, settings, OCR engines, PDF to Markdown, package standards, and Hallmark anti-slop rules).
 2. `npm run typecheck` — must be clean.
 3. `npm run lint` — must be **0 errors**. The repo currently has ~100
    pre-existing `@typescript-eslint/no-explicit-any` warnings; do not add new

@@ -9,6 +9,14 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 
 ## [Unreleased]
 
+### Added — Repository, Review Standards & Toolchain Isolation for GitHub & Cloudflare Pages
+
+- **Unified npm Test Runner (`scripts/test.mjs`)**: Added zero-dependency test runner executing all 29 unit and compliance test suites under Node.js / npm (`npm test`) and Deno (`deno test --allow-read`), resolving imports dynamically without build artifacts.
+- **Strict npm Purity & Zero Deno Remote Leakage**: Removed all Deno mentions from `package.json` and `package-lock.json`. Isolated `deno.json`, `deno.lock`, and `.deno/` in `.gitignore` so local developer testing never leaks to remote repositories.
+- **Cloudflare Pages Runtime Pinning**: Pinned `.node-version` (`22.14.0`) and `.nvmrc` (`22.14.0`) to prevent Cloudflare Pages runtime auto-detection confusion and ensure builds run on Node 22+.
+- **GitHub Actions Workflow Modernization**: Fixed all workflow actions in `ci.yml`, `e2e.yml`, and `lighthouse.yml` from non-existent `@v7` tags to official `@v4` tags (`actions/checkout@v4`, `actions/setup-node@v4`, `actions/upload-artifact@v4`), and added automated `npm test` gate to CI.
+- **GitHub Review Standards Specification (`STANDARDS.md`)**: Created comprehensive pre-upload manual re-review checklist, toolchain isolation standards, Cloudflare Pages build limits, and architectural invariants.
+
 ### Added — Svelte 5 UI Migration, Anti-Slop Compact Design, PDF → Markdown & Dual OCR
 
 - **Svelte 5 Full UI Migration**: Migrated the entire user interface to Svelte 5

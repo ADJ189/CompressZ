@@ -11,3 +11,12 @@ playwright-report/
 blob-report/
 .lighthouseci/
 bench-results/
+.test-dist/
+
+# Deno local-only development files
+# Excluded from git repository so Deno never interferes with GitHub Actions or Cloudflare Pages
+deno.json
+deno.jsonc
+deno.lock
+.deno/
+

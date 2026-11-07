@@ -327,8 +327,11 @@ npm run preview    # serve dist/ locally
 npm run typecheck  # TypeScript check
 npm run lint       # ESLint
 
-# Run unit & anti-slop compliance checks offline via Deno:
-deno test --allow-read --unstable-sloppy-imports
+# Run unit & anti-slop compliance checks (canonical Node/npm runner):
+npm test
+
+# Optional offline local Deno runner:
+deno test --allow-read
 
 npx --no-install playwright install chromium webkit firefox   # once
 npm run test:e2e   # five projects: Chromium/WebKit desktop + mobile, Firefox
@@ -378,10 +381,12 @@ CompressZ has no backend. Files never leave your browser. See [PRIVACY.md](PRIVA
 
 ---
 
-## Contributing
+## Contributing & Standards
 
 Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for the
-dev setup, project conventions, and PR checklist.
+dev setup, project conventions, and PR checklist. Before uploading to GitHub
+or deploying to Cloudflare Pages, verify the pre-upload checklist in
+[STANDARDS.md](STANDARDS.md).
 
 ---
 
@@ -389,7 +394,7 @@ dev setup, project conventions, and PR checklist.
 
 CompressZ is built on PDF.js, pdf-lib, FFmpeg.wasm, Mediabunny, Tesseract.js,
 PaddleOCR/Paddle.js, mammoth.js, html2canvas, Hugging Face `transformers.js`,
-anime.js, Vite, and TypeScript — see [CREDITS.md](CREDITS.md) for the full
+native Web Animations API (WAAPI), Vite, and TypeScript — see [CREDITS.md](CREDITS.md) for the full
 list with licenses and links. None of those projects are affiliated with
 or endorse CompressZ.
 

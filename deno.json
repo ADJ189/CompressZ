@@ -9,11 +9,13 @@
         "no-explicit-any",
         "no-window",
         "no-window-prefix",
-        "require-await"
+        "require-await",
+        "no-sloppy-imports"
       ]
     }
   },
   "test": {
     "include": ["test/"]
-  }
+  },
+  "unstable": ["sloppy-imports"]
 }
