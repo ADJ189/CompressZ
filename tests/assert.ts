@@ -1,7 +1,8 @@
 /**
- * assert.ts — Zero-dependency assertions for Deno tests.
+ * assert.ts — Zero-dependency assertions for unit and compliance tests.
  *
  * Runs offline with zero external packages or network requests.
+ * Compatible with Node.js and Deno test runners.
  */
 
 export function assert(condition: unknown, msg = "Assertion failed"): asserts condition {
