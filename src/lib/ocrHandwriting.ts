@@ -65,7 +65,7 @@ export async function loadHandwritingPipeline(
     onProgress?.(0.05, "Initializing handwriting model runtime...");
 
     // Dynamically import @huggingface/transformers to keep initial chunk lean
-    const { pipeline, env } = await import("@huggingface/transformers");
+    const { pipeline } = await import("@huggingface/transformers");
 
     // Probe WebGPU availability
     let device: "webgpu" | "wasm" = "wasm";

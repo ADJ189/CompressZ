@@ -221,8 +221,8 @@ export async function readZip(
     throw new Error("Multi-disk/spanned ZIP archives are not supported");
   }
 
-  let entryCount = dv.getUint16(eocdOffset + 10, true);
-  let centralStart = dv.getUint32(eocdOffset + 16, true);
+  const entryCount = dv.getUint16(eocdOffset + 10, true);
+  const centralStart = dv.getUint32(eocdOffset + 16, true);
 
   // 0xFFFFFFFF/0xFFFF sentinel values mean the real values live in a
   // Zip64 end-of-central-directory record, which this reader doesn't

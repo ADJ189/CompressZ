@@ -22,18 +22,16 @@ export interface PlannedVideoSize {
   scale: number;
 }
 
-/** Round to an even dimension; most 4:2:0 video encoders require it. */
+/** Round down to an even dimension; most 4:2:0 video encoders require it and we must never enlarge or exceed caps. */
 function even(n: number): number {
-  return Math.max(2, Math.round(n / 2) * 2);
+  return Math.max(2, Math.floor(n / 2) * 2);
 }
 
 /**
  * Plan a video output size from an optional maximum width.
  *
- * The old MediaRecorder path used `Math.min(sourceWidth, maxWidth)` and then
- * rounded the height, which could produce odd dimensions and never explicitly
- * guarded against upscaling. This helper is the single source of truth for
- * both the MediaRecorder fallback and the WebCodecs/Mediabunny route.
+ * Ensures dimensions are even numbers without upscaling or exceeding maxWidth caps.
+ * An unscaled source with odd dimensions is safely rounded down with resized=true.
  */
 export function planVideoSize(
   sourceWidth: number,
@@ -42,13 +40,23 @@ export function planVideoSize(
 ): PlannedVideoSize {
   const w = Math.max(1, Math.round(sourceWidth));
   const h = Math.max(1, Math.round(sourceHeight));
-  if (!maxWidth || maxWidth <= 0 || maxWidth >= w) {
-    return { width: even(w), height: even(h), resized: false, scale: 1 };
+
+  const cap = maxWidth && maxWidth > 0 ? even(maxWidth) : undefined;
+
+  if (!cap || cap >= w) {
+    const targetW = even(w);
+    const targetH = even(h);
+    const resized = targetW !== w || targetH !== h;
+    const scale = resized ? targetW / w : 1;
+    return { width: targetW, height: targetH, resized, scale };
   }
-  const scale = maxWidth / w;
+
+  const scale = cap / w;
+  const targetW = cap;
+  const targetH = even(h * scale);
   return {
-    width: even(maxWidth),
-    height: even(h * scale),
+    width: targetW,
+    height: targetH,
     resized: true,
     scale,
   };

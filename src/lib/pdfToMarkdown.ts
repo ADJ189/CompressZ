@@ -120,7 +120,7 @@ interface RawTextItem {
 export function reconstructReadingOrder(
   items: RawTextItem[],
   pageWidth: number,
-  pageHeight: number,
+  _pageHeight: number,
 ): ExtractedBlock[] {
   if (!items.length) return [];
 
@@ -250,8 +250,8 @@ export function reconstructReadingOrder(
       }
 
       // List detection
-      const listMatch = text.match(/^([\*\-\•]|\d+\.)\s+(.+)$/);
-      if (listMatch) {
+      const isListItem = /^([*•-]|\d+\.)\s+/.test(text);
+      if (isListItem) {
         flushParagraph();
         blocks.push({
           type: "list-item",
@@ -494,6 +494,11 @@ export async function convertPdfToMarkdown(
             confidence: 100,
           });
         }
+      }
+
+      for (const b of pageBlocks) {
+        if (!b.source) b.source = pageEngine as any;
+        if (!b.confidence) b.confidence = pageConfidence;
       }
 
       const pageMd = blocksToMarkdown(pageBlocks, pageNum);
