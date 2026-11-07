@@ -37,9 +37,13 @@ CompressZ is deployed as a static Single Page Application (SPA) on Cloudflare Pa
 | **Build output directory** | `dist` |
 | **Root directory** | `/` |
 
-### 2.2 Node Version Pinning
-- `.node-version` (`22.14.0`) and `.nvmrc` (`22.14.0`) are pinned in the repository root.
-- Cloudflare Pages automatically detects `.node-version` to build using the pinned modern Node 22 runtime.
+### 2.2 Node Version & Package Installation Pinning
+- `.node-version` (`22.20.0`) and `.nvmrc` (`22.20.0`) are pinned in the repository root.
+- Cloudflare Pages automatically detects `.node-version` to build using the pinned modern Node 22 runtime, satisfying dependencies requiring Node `>=22.19.0` (such as `@lhci/cli` and `lighthouse`).
+- **`.npmrc` Configuration:**
+  - `legacy-peer-deps=true` ensures `npm clean-install` (`npm ci`) succeeds deterministically without conflicting transitive peer dependencies (such as `@puppeteer/browsers`'s optional `proxy-agent` peer).
+  - `engine-strict=false` prevents non-critical engine mismatches from halting deployments.
+  - `wrangler.toml` defines `pages_build_output_dir = "dist"` and `compatibility_date = "2024-11-01"`.
 
 ### 2.3 Asset Size Ceiling (≤ 24 MiB)
 - Cloudflare Pages enforces a hard **25 MiB per-file limit** (`"Pages only supports files up to 25 MiB in size"`).
@@ -122,8 +126,8 @@ All frontend styles and interactions must comply with the Hallmark floor:
 Before pushing this codebase to GitHub:
 
 - [ ] **1. Deno Isolation:** Confirm `deno.json` and `deno.lock` are ignored by git (`git status` should not track them).
-- [ ] **2. Package Manifest:** Inspect `package.json` and confirm zero mentions of `deno` in `scripts`, `dependencies`, and `devDependencies`.
-- [ ] **3. Runtime Pinning:** Confirm `.node-version` and `.nvmrc` exist and specify `22.14.0`.
+- [ ] **2. Package Manifest & Lockfile:** Inspect `package.json` and confirm zero mentions of `deno` in `scripts`, `dependencies`, and `devDependencies`. Confirm `package.json` and `package-lock.json` overrides match.
+- [ ] **3. Runtime Pinning & .npmrc:** Confirm `.node-version` and `.nvmrc` exist and specify `22.20.0`, and `.npmrc` contains `legacy-peer-deps=true`.
 - [ ] **4. GitHub Workflows:** Confirm all GitHub Action steps use `@v4` (`actions/checkout@v4`, `actions/setup-node@v4`, `actions/upload-artifact@v4`).
 - [ ] **5. Unit Tests:** Run `npm test` (or `node scripts/test.mjs`). All 29 unit and compliance tests must pass.
 - [ ] **6. Typecheck:** Run `npm run typecheck`. Must exit with code 0.
