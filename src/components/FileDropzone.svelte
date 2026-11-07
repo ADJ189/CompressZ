@@ -55,6 +55,7 @@
 </script>
 
 <div
+  id="dz-mount"
   class="cz-dropzone {isDragActive ? 'is-drag-active' : ''} {hasFiles ? 'is-compact' : ''}"
   ondragover={handleDragOver}
   ondragleave={handleDragLeave}

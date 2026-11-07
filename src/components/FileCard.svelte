@@ -23,7 +23,7 @@
 </script>
 
 <div
-  class="cz-card {entry.status === 'done' ? 'is-done' : ''} {entry.status === 'error' ? 'is-error' : ''} {entry.status === 'compressing' ? 'is-compressing' : ''}"
+  class="cz-card file-card {entry.status === 'done' ? 'is-done' : ''} {entry.status === 'error' ? 'is-error' : ''} {entry.status === 'compressing' ? 'is-compressing' : ''}"
   id="card-{entry.id}"
 >
   <div class="cz-card-left">
@@ -36,7 +36,7 @@
     {/if}
 
     <div class="cz-card-meta">
-      <span class="cz-card-name" title={entry.name}>{entry.name}</span>
+      <span class="cz-card-name fc-name" title={entry.name}>{entry.name}</span>
       <div class="cz-card-sizes">
         <span class="cz-card-orig">{formatBytes(entry.originalSize)}</span>
         {#if entry.status === "done" && entry.compressedSize}

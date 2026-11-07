@@ -78,7 +78,7 @@
     </div>
   </div>
 
-  <div class="cz-queue-list">
+  <div id="file-list" class="cz-queue-list">
     {#each files as entry (entry.id)}
       <FileCard
         {entry}
