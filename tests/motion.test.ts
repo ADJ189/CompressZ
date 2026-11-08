@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "./assert.ts";
-import { revealStagger, popIn, pulse, progressTo, toastIn } from "../src/lib/motion.ts";
+import { revealStagger, popIn, pulse, progressTo } from "../src/lib/motion.ts";
 
 Deno.test("motion: handles empty array and headless calls safely", () => {
   revealStagger([]);

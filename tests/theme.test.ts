@@ -1,5 +1,5 @@
 import { assertEquals } from "./assert.ts";
-import { resolveThemePreference, type ThemePreference } from "../src/lib/theme.ts";
+import { resolveThemePreference } from "../src/lib/theme.ts";
 
 Deno.test("theme: resolves explicit light and dark preferences", () => {
   assertEquals(resolveThemePreference("light"), "light");

@@ -1,4 +1,4 @@
-import { assert, assertEquals } from "./assert.ts";
+import { assert } from "./assert.ts";
 import { optimizeSvg } from "../src/lib/optimizeSvg.ts";
 
 Deno.test("optimizeSvg: strips scripts and XSS inline handlers", async () => {
