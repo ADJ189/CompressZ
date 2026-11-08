@@ -371,7 +371,7 @@ export async function convertPdfToMarkdown(
   const pdfDoc = await openPdfDocument(pdfBytes);
   const pageCount = pdfDoc.numPages;
 
-  const cleanBaseName = filename.replace(/\.pdf$/i, "").replace(/[^a-zA-Z0-9_\-\.]/g, "_");
+  const cleanBaseName = filename.replace(/\.pdf$/i, "").replace(/[^a-zA-Z0-9_.-]/g, "_");
   const assets: Array<{ path: string; bytes: Uint8Array }> = [];
   const warnings: string[] = [];
   const allBlocks: ExtractedBlock[] = [];
