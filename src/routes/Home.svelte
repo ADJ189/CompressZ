@@ -14,10 +14,9 @@
 <div class="cz-workbench cz-workbench-view" bind:this={rootEl}>
   <section class="cz-wb-head">
     <div class="cz-wb-head__text">
-      <p class="cz-wb-eyebrow">Local-first browser suite</p>
-      <h1 class="cz-wb-title">Compress and convert files locally.</h1>
+      <h1 class="cz-wb-title">Compress and convert files.</h1>
       <p class="cz-wb-sub">
-        Fast, private document and media processing running inside your browser. No server uploads, no data transmission, and zero telemetry.
+        Fast document and media processing with clean, comfortable controls.
       </p>
     </div>
     <div class="cz-wb-search">
