@@ -28,24 +28,22 @@
   --border:       #e0e0da;
   --border-mid:   #ccccc5;
   --border-strong:#b0b0a8;
-  --accent:       #5b5fc7;
-  --accent-2:     #7b7fd4;
-  --accent-soft:  #eeeffe;
-  --accent-glow:  rgba(91,95,199,0.14);
-  --violet:       #8b5cf6;
-  --violet-soft:  #f3effe;
+  --accent:       #059669;
+  --accent-2:     #10b981;
+  --accent-soft:  rgba(16, 185, 129, 0.09);
+  --accent-glow:  rgba(5, 150, 105, 0.18);
+  --violet:       #0d9488;
+  --violet-soft:  rgba(13, 148, 136, 0.08);
   --rose:         #f43f5e;
   --amber:        #f59e0b;
   --emerald:      #10b981;
   --sky:          #0ea5e9;
-  --green:        #22c55e;
-  --green-soft:   rgba(34,197,94,.10);
-  --green-border: rgba(34,197,94,.22);
+  --green:        #10b981;
+  --green-soft:   rgba(16, 185, 129, 0.10);
+  --green-border: rgba(16, 185, 129, 0.24);
   --text:         #18181b;
   --text-2:       #3f3f46;
-  --text-3:       #68686f; /* was #71717a — 4.39:1 against --bg (#f4f4f2),
-    just under WCAG AA's 4.5:1 for normal-size text (this powers .home-sub
-    and .trust-chip among others, both normal-size). Darkened to 5.02:1. */
+  --text-3:       #68686f;
   --text-4:       #a1a1aa;
   --text-5:       #d4d4d8;
   --shadow-xs:    0 1px 2px rgba(0,0,0,.04);
@@ -53,8 +51,8 @@
   --shadow-md:    0 4px 16px rgba(0,0,0,.07),0 2px 4px rgba(0,0,0,.04);
   --shadow-lg:    0 8px 32px rgba(0,0,0,.09),0 4px 8px rgba(0,0,0,.05);
   --shadow-xl:    0 20px 60px rgba(0,0,0,.12),0 8px 20px rgba(0,0,0,.06);
-  --shadow-acc:   0 6px 24px rgba(91,95,199,.25);
-  --r-xs: 6px; --r-sm: 8px; --r: 12px; --r-lg: 16px; --r-xl: 20px; --r-2xl: 28px;
+  --shadow-acc:   0 6px 24px rgba(5, 150, 105, 0.22);
+  --r-xs: 6px; --r-sm: 10px; --r: 16px; --r-lg: 20px; --r-xl: 24px; --r-2xl: 32px;
   --sans: 'Inter', system-ui, -apple-system, sans-serif;
   /* Headers/branding and mono text now match CompressF's exact pair. */
   --mono: 'DM Mono', 'JetBrains Mono', ui-monospace, 'Fira Mono', monospace;
@@ -92,12 +90,12 @@
   --border:       #21212a;
   --border-mid:   #2c2c38;
   --border-strong:#3a3a48;
-  --accent:       #6366f1;
-  --accent-2:     #818cf8;
-  --accent-soft:  #12121f;
-  --accent-glow:  rgba(99,102,241,.18);
-  --violet:       #a78bfa;
-  --violet-soft:  #160f25;
+  --accent:       #10b981;
+  --accent-2:     #34d399;
+  --accent-soft:  rgba(16, 185, 129, 0.14);
+  --accent-glow:  rgba(16, 185, 129, 0.24);
+  --violet:       #2dd4bf;
+  --violet-soft:  rgba(45, 212, 191, 0.12);
   --rose:         #fb7185;
   --amber:        #fbbf24;
   --emerald:      #34d399;
@@ -1333,14 +1331,222 @@ input[type="range"].slider::-webkit-slider-thumb:hover {
    spacing further for narrow phones (iPhone SE class and similar)
    so grouped cards, sliders, and the tab bar don't feel cramped.
 ════════════════════════════════════════════════════════════ */
-@media (max-width: 420px) {
-  .home-wrap, .tool-wrap { padding: 1.25rem 1rem 4rem; }
-  .home-title  { font-size: 1.85rem; }
-  .page-title  { font-size: 1.35rem; }
-  .s-field-icon { width: 26px; height: 26px; font-size: .82rem; }
-  .device-info-row { flex-direction: column; align-items: flex-start; gap: .2rem; }
-  .device-info-val { text-align: left; }
-  .em-grid { grid-template-columns: 64px 1fr 1fr; }
-  .dialog { width: calc(100vw - 1.2rem); }
-  .btn-ai, .btn-sm { font-size: .72rem; padding: .5rem .7rem; }
+/* ════════════════════════════════════════════════════════════
+   APPLE-STYLE WORKBENCH, INSET TABLES & SEGMENTED CONTROLS
+════════════════════════════════════════════════════════════ */
+.cz-apple-workbench {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 1rem 1rem 3rem;
 }
+@media (min-width: 1024px) {
+  .cz-apple-workbench {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+}
+
+.cz-card-main {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.cz-card-side {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* Apple Segmented Track & Pill Controls */
+.cz-segmented-track {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg2);
+  border-radius: 9999px;
+  padding: 3px;
+  gap: 2px;
+}
+.cz-segmented-item {
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  font-family: var(--sans);
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 0.35rem 0.75rem;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: background var(--t), color var(--t), box-shadow var(--t);
+  white-space: nowrap;
+}
+.cz-segmented-item:hover {
+  color: var(--text);
+}
+.cz-segmented-item.is-active {
+  background: var(--surface);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: var(--shadow-xs);
+}
+[data-theme="dark"] .cz-segmented-item.is-active {
+  background: var(--surface2);
+  color: var(--accent-2);
+}
+
+/* Apple Inset Grouped Table (matching Image 2) */
+.cz-inset-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+}
+.cz-inset-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  transition: border-color var(--t), box-shadow var(--t);
+  font-size: 0.82rem;
+}
+.cz-inset-row:hover {
+  border-color: var(--border-mid);
+  box-shadow: var(--shadow-xs);
+}
+.cz-inset-row-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+.cz-file-badge {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--green-border);
+}
+.cz-inset-row-name {
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cz-inset-row-meta {
+  font-size: 0.75rem;
+  color: var(--text-3);
+  font-family: var(--mono);
+}
+.cz-inset-row-right {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-shrink: 0;
+}
+
+/* Apple Status Pill */
+.cz-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  font-size: 0.76rem;
+  font-weight: 500;
+}
+.cz-status-pill.is-done {
+  background: var(--green-soft);
+  color: var(--accent);
+}
+.cz-status-pill.is-busy {
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+}
+[data-theme="dark"] .cz-status-pill.is-busy {
+  color: #fbbf24;
+}
+
+/* Bottom summary bar */
+.cz-summary-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 0.5rem;
+  font-size: 0.82rem;
+  color: var(--text-3);
+}
+.cz-btn-download-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--text);
+  color: var(--surface);
+  border: none;
+  border-radius: 9999px;
+  padding: 0.55rem 1.25rem;
+  font-family: var(--sans);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: opacity var(--t), transform var(--t);
+}
+.cz-btn-download-all:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+[data-theme="dark"] .cz-btn-download-all {
+  background: var(--surface2);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+}
+
+/* Apple Inset Settings Group */
+.cz-settings-group {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+.cz-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1.15rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.84rem;
+}
+.cz-settings-row:last-child {
+  border-bottom: none;
+}
+.cz-settings-label {
+  font-weight: 600;
+  color: var(--text);
+}
+.cz-settings-desc {
+  font-size: 0.76rem;
+  color: var(--text-3);
+  margin-top: 0.1rem;
+}
+
