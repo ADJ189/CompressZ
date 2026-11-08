@@ -12,6 +12,11 @@
 
   let { entry, onCompress, onDownload, onRemove, onEdit }: Props = $props();
 
+  const fileExt = $derived.by(() => {
+    const parts = entry.name.split(".");
+    return parts.length > 1 ? parts.pop()!.toUpperCase().slice(0, 4) : "FILE";
+  });
+
   const savingsPercent = $derived.by(() => {
     if (entry.status !== "done" || !entry.compressedSize || !entry.originalSize) {
       return null;
@@ -23,25 +28,25 @@
 </script>
 
 <div
-  class="cz-card file-card {entry.status === 'done' ? 'is-done' : ''} {entry.status === 'error' ? 'is-error' : ''} {entry.status === 'compressing' ? 'is-compressing' : ''}"
+  class="cz-inset-row file-card {entry.status === 'done' ? 'is-done' : ''} {entry.status === 'error' ? 'is-error' : ''} {entry.status === 'compressing' ? 'is-compressing' : ''}"
   id="card-{entry.id}"
 >
-  <div class="cz-card-left">
+  <div class="cz-inset-row-left">
     {#if entry.thumbUrl}
       <img src={entry.thumbUrl} alt="" class="cz-card-thumb" />
     {:else}
-      <div class="cz-card-thumb cz-card-thumb-placeholder">
-        {entry.type === "image" ? "🖼️" : entry.type === "pdf" ? "📄" : entry.type === "video" ? "🎬" : "📁"}
+      <div class="cz-file-badge">
+        {fileExt}
       </div>
     {/if}
 
     <div class="cz-card-meta">
-      <span class="cz-card-name fc-name" title={entry.name}>{entry.name}</span>
-      <div class="cz-card-sizes">
-        <span class="cz-card-orig">{formatBytes(entry.originalSize)}</span>
+      <span class="cz-inset-row-name fc-name" title={entry.name}>{entry.name}</span>
+      <div class="cz-inset-row-meta">
+        <span>{formatBytes(entry.originalSize)}</span>
         {#if entry.status === "done" && entry.compressedSize}
           <span class="cz-card-arrow" aria-hidden="true">→</span>
-          <span class="cz-card-comp">{formatBytes(entry.compressedSize)}</span>
+          <span class="cz-comp-bold font-semibold text-emerald-600">{formatBytes(entry.compressedSize)}</span>
           {#if savingsPercent !== null && savingsPercent > 0}
             <span class="cz-card-badge">-{savingsPercent}%</span>
           {/if}
@@ -54,12 +59,12 @@
     </div>
   </div>
 
-  <div class="cz-card-actions">
+  <div class="cz-inset-row-right">
     {#if entry.status === "idle"}
       {#if onEdit}
         <button
           type="button"
-          class="cz-btn cz-btn-secondary cz-btn-sm"
+          class="cz-btn cz-btn-secondary cz-btn-sm cz-btn-pill"
           onclick={() => onEdit(entry)}
         >
           Options
@@ -67,48 +72,64 @@
       {/if}
       <button
         type="button"
-        class="cz-btn cz-btn-primary cz-btn-sm"
+        class="cz-btn cz-btn-primary cz-btn-sm cz-btn-pill"
         onclick={() => onCompress(entry)}
       >
         Compress
       </button>
       <button
         type="button"
-        class="cz-btn cz-btn-ghost cz-btn-sm"
+        class="cz-icon-btn"
         aria-label="Remove file"
+        title="Remove"
         onclick={() => onRemove(entry.id)}
       >
         ✕
       </button>
     {:else if entry.status === "compressing"}
-      <div class="cz-card-spinner" aria-label="Processing file"></div>
+      <div class="cz-status-pill is-busy">
+        <span class="cz-spin-dot" aria-hidden="true"></span>
+        <span>Converting...</span>
+      </div>
     {:else if entry.status === "done"}
+      <div class="cz-status-pill is-done">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <span>Converted</span>
+      </div>
       <button
         type="button"
-        class="cz-btn cz-btn-primary cz-btn-sm"
+        class="cz-icon-btn-download"
+        title="Download converted file"
+        aria-label="Download"
         onclick={() => onDownload(entry)}
       >
-        Download
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
       </button>
       <button
         type="button"
-        class="cz-btn cz-btn-ghost cz-btn-sm"
+        class="cz-icon-btn"
         aria-label="Remove file"
+        title="Remove"
         onclick={() => onRemove(entry.id)}
       >
         ✕
       </button>
     {:else if entry.status === "error"}
+      <div class="cz-status-pill is-err">Failed</div>
       <button
         type="button"
-        class="cz-btn cz-btn-secondary cz-btn-sm"
+        class="cz-btn cz-btn-secondary cz-btn-sm cz-btn-pill"
         onclick={() => onCompress(entry)}
       >
         Retry
       </button>
       <button
         type="button"
-        class="cz-btn cz-btn-ghost cz-btn-sm"
+        class="cz-icon-btn"
         aria-label="Remove file"
         onclick={() => onRemove(entry.id)}
       >
@@ -119,107 +140,81 @@
 </div>
 
 <style>
-  .cz-card {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.75rem 1rem;
-    border: 1px solid var(--border);
-    border-radius: var(--r-sm);
-    background: var(--surface);
-    gap: 1rem;
-    transition: transform var(--t), box-shadow var(--t), border-color var(--t);
-  }
-  .cz-card:hover {
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-sm);
-    border-color: var(--border-mid);
-  }
-  .cz-card.is-done {
-    border-color: var(--green-border);
-  }
-  .cz-card.is-error {
-    border-color: var(--rose);
-  }
-  .cz-card-left {
-    display: flex;
-    align-items: center;
-    gap: 0.85rem;
-    min-width: 0;
-    flex: 1;
-  }
   .cz-card-thumb {
-    width: 42px;
-    height: 42px;
-    border-radius: var(--r-xs);
+    width: 32px;
+    height: 32px;
+    border-radius: var(--r-sm);
     object-fit: cover;
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    flex-shrink: 0;
   }
-  .cz-card-thumb-placeholder {
+  .cz-card-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+  }
+  .cz-card-badge {
+    display: inline-block;
+    padding: 0.1rem 0.35rem;
+    border-radius: 9999px;
+    background: var(--green-soft);
+    color: var(--accent);
+    font-size: 0.7rem;
+    font-weight: 700;
+    margin-left: 0.25rem;
+  }
+  .cz-card-error-msg {
+    color: var(--rose);
+    font-size: 0.72rem;
+  }
+  .cz-btn-pill {
+    border-radius: 9999px;
+    padding: 0.25rem 0.75rem;
+  }
+  .cz-icon-btn {
+    border: none;
+    background: transparent;
+    color: var(--text-3);
+    cursor: pointer;
+    padding: 0.25rem 0.4rem;
+    border-radius: 9999px;
+    font-size: 0.85rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.25rem;
+    transition: color var(--t), background var(--t);
   }
-  .cz-card-meta {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
-  }
-  .cz-card-name {
-    font-size: 0.92rem;
-    font-weight: 600;
+  .cz-icon-btn:hover {
     color: var(--text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    background: var(--bg2);
   }
-  .cz-card-sizes {
+  .cz-icon-btn-download {
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--accent);
+    cursor: pointer;
+    width: 28px;
+    height: 28px;
+    border-radius: 9999px;
     display: flex;
     align-items: center;
-    gap: 0.45rem;
-    font-size: 0.82rem;
-    font-family: var(--mono);
-    color: var(--text-3);
+    justify-content: center;
+    transition: background var(--t), border-color var(--t), transform var(--t);
   }
-  .cz-card-comp {
-    color: var(--text);
-    font-weight: 500;
+  .cz-icon-btn-download:hover {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+    transform: scale(1.05);
   }
-  .cz-card-badge {
-    padding: 0.1rem 0.35rem;
-    border-radius: 4px;
-    font-size: 0.76rem;
-    font-weight: 600;
-    background: var(--green-soft);
-    color: var(--green);
-    border: 1px solid var(--green-border);
+  .cz-spin-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: currentColor;
+    animation: cz-pulse 1s infinite alternate;
   }
-  .cz-card-error-msg {
-    font-size: 0.8rem;
-    color: var(--rose);
-    margin-top: 0.2rem;
-  }
-  .cz-card-actions {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-shrink: 0;
-  }
-  .cz-card-spinner {
-    width: 22px;
-    height: 22px;
-    border: 2px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: cz-spin 0.7s linear infinite;
-  }
-  @keyframes cz-spin {
-    to {
-      transform: rotate(360deg);
-    }
+  @keyframes cz-pulse {
+    from { opacity: 0.3; }
+    to { opacity: 1; }
   }
 </style>

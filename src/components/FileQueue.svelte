@@ -36,12 +36,13 @@
 </script>
 
 <div class="cz-queue">
+  <!-- Top Quick Actions / Reorder Bar -->
   <div class="cz-queue-toolbar">
     <div class="cz-queue-summary">
       <span class="cz-queue-count">{files.length} {files.length === 1 ? "file" : "files"}</span>
       <span class="cz-queue-size">({formatBytes(totalOriginalBytes)})</span>
       {#if doneCount > 0}
-        <span class="cz-queue-done">{doneCount} completed</span>
+        <span class="cz-queue-done">{doneCount} ready</span>
       {/if}
     </div>
 
@@ -49,21 +50,11 @@
       {#if pendingCount > 0}
         <button
           type="button"
-          class="cz-btn cz-btn-primary cz-btn-sm"
+          class="cz-btn cz-btn-primary cz-btn-sm cz-btn-pill"
           disabled={isBusy}
           onclick={onCompressAll}
         >
           Compress all
-        </button>
-      {/if}
-
-      {#if doneCount > 0}
-        <button
-          type="button"
-          class="cz-btn cz-btn-secondary cz-btn-sm"
-          onclick={onDownloadAll}
-        >
-          Download all
         </button>
       {/if}
 
@@ -78,7 +69,8 @@
     </div>
   </div>
 
-  <div id="file-list" class="cz-queue-list">
+  <!-- Inset File List -->
+  <div id="file-list" class="cz-inset-table">
     {#each files as entry (entry.id)}
       <FileCard
         {entry}
@@ -89,45 +81,61 @@
       />
     {/each}
   </div>
+
+  <!-- Bottom Summary & Download Bar (Matching Image 2) -->
+  {#if files.length > 0}
+    <div class="cz-summary-bar">
+      <span>Total {files.length} {files.length === 1 ? "file" : "files"}</span>
+
+      {#if doneCount > 0}
+        <button
+          type="button"
+          class="cz-btn-download-all"
+          onclick={onDownloadAll}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          <span>Download All</span>
+        </button>
+      {/if}
+    </div>
+  {/if}
 </div>
 
 <style>
   .cz-queue {
     display: flex;
     flex-direction: column;
-    gap: 0.85rem;
+    gap: 0.75rem;
+    width: 100%;
   }
   .cz-queue-toolbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 1rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid var(--border);
-    flex-wrap: wrap;
+    font-size: 0.82rem;
   }
   .cz-queue-summary {
     display: flex;
-    align-items: baseline;
-    gap: 0.45rem;
-    font-size: 0.92rem;
+    align-items: center;
+    gap: 0.4rem;
+    font-weight: 500;
   }
   .cz-queue-count {
-    font-weight: 600;
     color: var(--text);
   }
   .cz-queue-size {
-    font-family: var(--mono);
     color: var(--text-3);
-    font-size: 0.82rem;
+    font-family: var(--mono);
+    font-size: 0.78rem;
   }
   .cz-queue-done {
-    margin-left: 0.4rem;
     padding: 0.1rem 0.4rem;
-    border-radius: 4px;
+    border-radius: 9999px;
     background: var(--green-soft);
-    color: var(--green);
-    font-size: 0.78rem;
+    color: var(--accent);
+    font-size: 0.72rem;
     font-weight: 600;
   }
   .cz-queue-actions {
@@ -135,9 +143,8 @@
     align-items: center;
     gap: 0.5rem;
   }
-  .cz-queue-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
+  .cz-btn-pill {
+    border-radius: 9999px;
+    padding: 0.35rem 0.9rem;
   }
 </style>
