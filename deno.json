@@ -10,7 +10,8 @@
         "no-window",
         "no-window-prefix",
         "require-await",
-        "no-sloppy-imports"
+        "no-sloppy-imports",
+        "prefer-const"
       ]
     }
   },
