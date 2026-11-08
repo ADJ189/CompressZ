@@ -10,7 +10,7 @@ import { trackRecent } from "./lib/recents";
 type Handler = (params?: Record<string, string>) => void;
 const handlers = new Map<string, Handler>();
 
-const BASE: string = import.meta.env.BASE_URL ?? "/";
+const BASE: string = (import.meta as any).env?.BASE_URL ?? "/";
 const BASE_NORM = BASE.endsWith("/") ? BASE : BASE + "/";
 
 export function on(route: string, fn: Handler) {
