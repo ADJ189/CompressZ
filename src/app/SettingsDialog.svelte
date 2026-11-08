@@ -118,12 +118,13 @@
 
   const imagePathLabel = $derived.by(() => {
     const hasOffscreen = typeof OffscreenCanvas !== "undefined";
-    if (!settings.gpu.images) {
-      return hasOffscreen
-        ? "Canvas/OffscreenCanvas only"
-        : "DOM canvas only";
+    const hasWebGL2 = typeof document !== "undefined" && !!document.createElement("canvas").getContext("webgl2");
+    if (settings.gpu.images && hasWebGL2) {
+      return "Canvas/OffscreenCanvas + WebGL2 resize";
     }
-    return "Canvas + WebGL2 resize";
+    return hasOffscreen
+      ? "Canvas/OffscreenCanvas only (no WebGL2 resize)"
+      : "DOM canvas only";
   });
 </script>
 
@@ -226,12 +227,14 @@
       <div id="settings-panel" class="cz-settings-content">
         {#if activeSection === "general"}
           <div class="cz-settings-group">
-            <div class="cz-settings-row">
+            <div class="cz-settings-group-title">About CompressZ</div>
+            <div class="cz-settings-desc">About CompressZ — fast, private local-first processing.</div>
+            <div class="cz-settings-row device-info-row">
               <div>
                 <div class="cz-settings-label">Version</div>
                 <div class="cz-settings-desc">CompressZ release stream</div>
               </div>
-              <span class="cz-tier-tag">1.13.0</span>
+              <span class="cz-tier-tag device-info-val">1.13.0-a1</span>
             </div>
             <div class="cz-settings-row">
               <div>
@@ -254,7 +257,7 @@
                   class="cz-btn cz-btn-secondary cz-btn-sm cz-btn-pill"
                   onclick={() => (resetArmed = true)}
                 >
-                  Reset
+                  Reset all settings
                 </button>
               {:else}
                 <button
@@ -264,10 +267,10 @@
                     resetSettings();
                     settings = getSettings();
                     resetArmed = false;
-                    toast("Settings reset to defaults", "success");
+                    toast("All settings reset to defaults", "success");
                   }}
                 >
-                  Confirm Reset
+                  Confirm reset — click again
                 </button>
               {/if}
             </div>
@@ -305,6 +308,7 @@
 
         {:else if activeSection === "appearance"}
           <div class="cz-settings-group">
+            <div class="cz-settings-group-title">Theme Preference</div>
             <div class="cz-settings-row">
               <div>
                 <div class="cz-settings-label">Theme Mode</div>
@@ -317,7 +321,7 @@
                   aria-pressed={themePref === "system" ? "true" : "false"}
                   onclick={() => handleThemeChange("system")}
                 >
-                  System
+                  System ({resolvedThemeLabel})
                 </button>
                 <button
                   type="button"
@@ -341,6 +345,7 @@
 
         {:else if activeSection === "performance"}
           <div class="cz-settings-group">
+            <div class="cz-settings-group-title">Adaptive Resource Guard</div>
             <div class="cz-settings-row">
               <div>
                 <div class="cz-settings-label">Resource Mode</div>
@@ -354,7 +359,7 @@
                     aria-pressed={settings.resourceMode === mode ? "true" : "false"}
                     onclick={() => saveChanges({ resourceMode: mode as ResourceMode })}
                   >
-                    {mode === "auto" ? "Auto" : mode === "memory-saver" ? "Saver" : mode === "balanced" ? "Balanced" : "Max"}
+                    {mode === "auto" ? "Auto" : mode === "memory-saver" ? "Saver" : mode === "balanced" ? "Balanced" : "Maximum"}
                   </button>
                 {/each}
               </div>
@@ -365,21 +370,23 @@
                 <div class="cz-settings-label">Batch Concurrency</div>
                 <div class="cz-settings-desc">Simultaneous files processed</div>
               </div>
-              <div class="cz-segmented-track" role="group" aria-label="Concurrency ceiling">
+              <div class="cz-segmented-track" role="group" aria-label="Files processed at once (batches)">
                 <button
                   type="button"
                   class="cz-segmented-item {settings.resourceLimits.concurrency === 'auto' ? 'is-active' : ''}"
+                  aria-pressed={settings.resourceLimits.concurrency === "auto" ? "true" : "false"}
                   onclick={() => saveChanges({ resourceLimits: { ...settings.resourceLimits, concurrency: "auto" } })}
                 >
                   Auto ({autoConcurrency})
                 </button>
-                {#each [1, 2, 3] as count}
+                {#each ["1", "2", "3", "4"] as val}
                   <button
                     type="button"
-                    class="cz-segmented-item {settings.resourceLimits.concurrency === count ? 'is-active' : ''}"
-                    onclick={() => saveChanges({ resourceLimits: { ...settings.resourceLimits, concurrency: count } })}
+                    class="cz-segmented-item {settings.resourceLimits.concurrency === Number(val) ? 'is-active' : ''}"
+                    aria-pressed={settings.resourceLimits.concurrency === Number(val) ? "true" : "false"}
+                    onclick={() => saveChanges({ resourceLimits: { ...settings.resourceLimits, concurrency: Number(val) as any } })}
                   >
-                    {count}
+                    {val}
                   </button>
                 {/each}
               </div>
@@ -409,21 +416,23 @@
               <span class="cz-tier-tag">Active</span>
             </div>
             <div class="cz-sidebar-meta">
-              Scheduling active · Safe memory threshold maintained
+              0 running · admission: active (honest static heuristic, not a memory meter)
             </div>
           </div>
 
         {:else if activeSection === "ai"}
           <div class="cz-settings-group">
+            <div class="cz-settings-group-title">AI engine — local</div>
             <div class="cz-settings-row">
               <div>
                 <div class="cz-settings-label">Model Tier</div>
                 <div class="cz-settings-desc">MobileNet (~14 MB) vs ViT (~85 MB)</div>
               </div>
-              <div class="cz-segmented-track">
+              <div class="cz-segmented-track" role="group" aria-label="Model tier selection">
                 <button
                   type="button"
                   class="cz-segmented-item {settings.ai?.modelTier !== 'powerful' ? 'is-active' : ''}"
+                  aria-pressed={settings.ai?.modelTier !== 'powerful' ? "true" : "false"}
                   onclick={() => saveChanges({ ai: { ...settings.ai, modelTier: "efficient" } })}
                 >
                   ⚡ Efficient
@@ -431,6 +440,7 @@
                 <button
                   type="button"
                   class="cz-segmented-item {settings.ai?.modelTier === 'powerful' ? 'is-active' : ''}"
+                  aria-pressed={settings.ai?.modelTier === 'powerful' ? "true" : "false"}
                   onclick={() => saveChanges({ ai: { ...settings.ai, modelTier: "powerful" } })}
                 >
                   🧠 Powerful
@@ -458,7 +468,7 @@
                   aria-pressed={settings.ai.backend === "webgpu" ? "true" : "false"}
                   onclick={() => saveChanges({ ai: { ...settings.ai, backend: "webgpu" } })}
                 >
-                  WebGPU
+                  WebGPU first
                 </button>
                 <button
                   type="button"
@@ -466,7 +476,7 @@
                   aria-pressed={settings.ai.backend === "wasm" ? "true" : "false"}
                   onclick={() => saveChanges({ ai: { ...settings.ai, backend: "wasm" } })}
                 >
-                  CPU
+                  CPU (WASM)
                 </button>
               </div>
             </div>
@@ -474,10 +484,11 @@
 
         {:else if activeSection === "suggestions"}
           <div class="cz-settings-group">
+            <div class="cz-settings-group-title">Contextual suggestions</div>
             <div class="cz-settings-row">
               <div>
                 <div class="cz-settings-label">Dismissed Hints</div>
-                <div class="cz-settings-desc">{dismissedCount} suggestion{dismissedCount === 1 ? "" : "s"} hidden</div>
+                <div class="cz-settings-desc">{dismissedCount} dismissed suggestion{dismissedCount === 1 ? "" : "s"}</div>
               </div>
               <button
                 type="button"
@@ -488,13 +499,14 @@
                   toast("Cleared dismissed suggestions", "success");
                 }}
               >
-                Restore
+                Clear dismissed suggestions
               </button>
             </div>
           </div>
 
         {:else if activeSection === "compression"}
           <div class="cz-settings-group">
+            <div class="cz-settings-group-title">Compression engine defaults</div>
             <div class="cz-settings-row">
               <div>
                 <div class="cz-settings-label">Default Format</div>
@@ -513,6 +525,7 @@
 
         {:else if activeSection === "privacy"}
           <div class="cz-settings-group">
+            <div class="cz-settings-group-title">Stored in this browser</div>
             <div class="cz-settings-row">
               <div>
                 <div class="cz-settings-label">Zero Server Uploads</div>
@@ -531,26 +544,30 @@
 
         {:else if activeSection === "diagnostics"}
           <div class="cz-settings-group">
-            <div class="cz-settings-row">
+            <div class="cz-settings-group-title">This Device Capabilities</div>
+            <div class="cz-settings-row device-info-row">
               <div>
-                <div class="cz-settings-label">Image Engine</div>
-                <div class="cz-settings-desc">{imagePathLabel}</div>
+                <div class="s-label cz-settings-label">Image path</div>
               </div>
-              <span class="cz-tier-tag">Canvas</span>
+              <span class="device-info-val cz-tier-tag">{imagePathLabel}</span>
             </div>
-            <div class="cz-settings-row">
+            <div class="cz-settings-row device-info-row">
               <div>
-                <div class="cz-settings-label">Video Engine</div>
-                <div class="cz-settings-desc">WebCodecs + Mediabunny (FFmpeg fallback)</div>
+                <div class="s-label cz-settings-label">Batch concurrency</div>
               </div>
-              <span class="cz-tier-tag">Fast Path</span>
+              <span class="device-info-val cz-tier-tag">{resolvedConcurrency(settings)} files at once</span>
             </div>
-            <div class="cz-settings-row">
+            <div class="cz-settings-row device-info-row">
               <div>
-                <div class="cz-settings-label">Concurrency</div>
-                <div class="cz-settings-desc">{resolvedConcurrency(settings)} parallel jobs</div>
+                <div class="s-label cz-settings-label">Video path</div>
               </div>
-              <span class="cz-tier-tag">Active</span>
+              <span class="device-info-val cz-tier-tag">WebCodecs + Mediabunny (FFmpeg fallback)</span>
+            </div>
+            <div class="cz-settings-row device-info-row">
+              <div>
+                <div class="s-label cz-settings-label">Image quality guard</div>
+              </div>
+              <span class="device-info-val cz-tier-tag">SSIM-guarded; never silently rescales</span>
             </div>
           </div>
         {/if}
