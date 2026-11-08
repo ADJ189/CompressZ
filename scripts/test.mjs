@@ -13,10 +13,10 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT_DIR = fileURLToPath(new URL("..", import.meta.url));
-const TEST_DIR = join(ROOT_DIR, "test");
+const TEST_DIR = join(ROOT_DIR, "tests");
 
 // If running directly inside Deno CLI, delegate to native `deno test`
-if (typeof Deno !== "undefined" && !process.env.FORCE_NODE_RUNNER) {
+if (typeof Deno !== "undefined" && !(typeof process !== "undefined" && process?.env?.FORCE_NODE_RUNNER)) {
   const cmd = new Deno.Command(Deno.execPath(), {
     args: ["test", "--allow-read", "--unstable-sloppy-imports", TEST_DIR],
     cwd: ROOT_DIR,
