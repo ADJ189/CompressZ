@@ -120,10 +120,10 @@
     const hasOffscreen = typeof OffscreenCanvas !== "undefined";
     if (!settings.gpu.images) {
       return hasOffscreen
-        ? "Canvas/OffscreenCanvas only (no WebGL2 resize)"
+        ? "Canvas/OffscreenCanvas only"
         : "DOM canvas only";
     }
-    return "Canvas/OffscreenCanvas + WebGL2 resize";
+    return "Canvas + WebGL2 resize";
   });
 </script>
 
@@ -139,10 +139,13 @@
     aria-labelledby="settings-dialog-title"
   >
     <div class="cz-dialog-header">
-      <h2 id="settings-dialog-title" class="cz-dialog-title">Settings</h2>
+      <div class="cz-dialog-title-group">
+        <h2 id="settings-dialog-title" class="cz-dialog-title">System Settings</h2>
+        <span class="cz-dialog-sub">Apple-style fast configuration</span>
+      </div>
       <button
         type="button"
-        class="cz-btn cz-btn-ghost cz-btn-sm"
+        class="cz-dialog-close"
         aria-label="Close dialog"
         onclick={handleClose}
       >
@@ -151,6 +154,7 @@
     </div>
 
     <div class="cz-settings-body">
+      <!-- Left Category Navigation -->
       <nav id="settings-nav" class="cz-settings-nav" aria-label="Settings categories">
         <button
           type="button"
@@ -218,137 +222,161 @@
         </button>
       </nav>
 
+      <!-- Right Inset Content -->
       <div id="settings-panel" class="cz-settings-content">
         {#if activeSection === "general"}
-          <div class="cz-settings-section">
-            <h3 class="cz-section-title">About CompressZ</h3>
-            <div class="cz-field-row device-info-row">
-              <span class="cz-field-label device-info-label">Version</span>
-              <span class="cz-field-val device-info-val">1.13.0-a1</span>
+          <div class="cz-settings-group">
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">Version</div>
+                <div class="cz-settings-desc">CompressZ release stream</div>
+              </div>
+              <span class="cz-tier-tag">1.13.0</span>
             </div>
-            <div class="cz-field-row device-info-row">
-              <span class="cz-field-label device-info-label">Architecture</span>
-              <span class="cz-field-val device-info-val">Svelte 5 + Framework-Independent TypeScript</span>
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">UI Framework</div>
+                <div class="cz-settings-desc">Svelte 5 Runes</div>
+              </div>
+              <span class="cz-tier-tag">Reactive Native</span>
             </div>
+          </div>
 
-            <h3 class="cz-section-title" style="margin-top: 1.5rem">Data Management</h3>
-            <div class="cz-btn-group">
+          <div class="cz-settings-group">
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">Reset Settings</div>
+                <div class="cz-settings-desc">Restore defaults for all engine toggles</div>
+              </div>
               {#if !resetArmed}
                 <button
                   type="button"
-                  class="cz-btn cz-btn-secondary"
+                  class="cz-btn cz-btn-secondary cz-btn-sm cz-btn-pill"
                   onclick={() => (resetArmed = true)}
                 >
-                  Reset all settings
+                  Reset
                 </button>
               {:else}
                 <button
                   type="button"
-                  class="cz-btn cz-btn-danger"
+                  class="cz-btn cz-btn-danger cz-btn-sm cz-btn-pill"
                   onclick={() => {
                     resetSettings();
                     settings = getSettings();
                     resetArmed = false;
-                    toast("All settings reset to defaults", "success");
+                    toast("Settings reset to defaults", "success");
                   }}
                 >
-                  Confirm reset — click again
+                  Confirm Reset
                 </button>
               {/if}
+            </div>
 
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">Clear Local Cache</div>
+                <div class="cz-settings-desc">Delete stored recents and dismissals</div>
+              </div>
               {#if !clearArmed}
                 <button
                   type="button"
-                  class="cz-btn cz-btn-ghost"
+                  class="cz-btn cz-btn-ghost cz-btn-sm cz-btn-pill"
                   onclick={() => (clearArmed = true)}
                 >
-                  Clear local data
+                  Clear Data
                 </button>
               {:else}
                 <button
                   type="button"
-                  class="cz-btn cz-btn-danger"
+                  class="cz-btn cz-btn-danger cz-btn-sm cz-btn-pill"
                   onclick={() => {
                     localStorage.clear();
                     resetSettings();
                     settings = getSettings();
                     clearArmed = false;
-                    toast("All local data cleared", "success");
+                    toast("Local data cleared", "success");
                   }}
                 >
-                  Confirm clear — click again
+                  Confirm Clear
                 </button>
               {/if}
             </div>
           </div>
+
         {:else if activeSection === "appearance"}
-          <div class="cz-settings-section">
-            <h3 class="cz-section-title">Theme</h3>
-            <p class="cz-section-desc">Select how CompressZ appears on your screen.</p>
-            <div class="cz-btn-group" role="group" aria-label="Theme selection">
-              <button
-                type="button"
-                class="cz-btn cz-btn-sm {themePref === 'system' ? 'cz-btn-primary' : 'cz-btn-secondary'}"
-                aria-pressed={themePref === "system" ? "true" : "false"}
-                onclick={() => handleThemeChange("system")}
-              >
-                System ({resolvedThemeLabel})
-              </button>
-              <button
-                type="button"
-                class="cz-btn cz-btn-sm {themePref === 'light' ? 'cz-btn-primary' : 'cz-btn-secondary'}"
-                aria-pressed={themePref === "light" ? "true" : "false"}
-                onclick={() => handleThemeChange("light")}
-              >
-                Light
-              </button>
-              <button
-                type="button"
-                class="cz-btn cz-btn-sm {themePref === 'dark' ? 'cz-btn-primary' : 'cz-btn-secondary'}"
-                aria-pressed={themePref === "dark" ? "true" : "false"}
-                onclick={() => handleThemeChange("dark")}
-              >
-                Dark
-              </button>
+          <div class="cz-settings-group">
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">Theme Mode</div>
+                <div class="cz-settings-desc">Currently: {resolvedThemeLabel}</div>
+              </div>
+              <div class="cz-segmented-track" role="group" aria-label="Theme selection">
+                <button
+                  type="button"
+                  class="cz-segmented-item {themePref === 'system' ? 'is-active' : ''}"
+                  aria-pressed={themePref === "system" ? "true" : "false"}
+                  onclick={() => handleThemeChange("system")}
+                >
+                  System
+                </button>
+                <button
+                  type="button"
+                  class="cz-segmented-item {themePref === 'light' ? 'is-active' : ''}"
+                  aria-pressed={themePref === "light" ? "true" : "false"}
+                  onclick={() => handleThemeChange("light")}
+                >
+                  Light
+                </button>
+                <button
+                  type="button"
+                  class="cz-segmented-item {themePref === 'dark' ? 'is-active' : ''}"
+                  aria-pressed={themePref === "dark" ? "true" : "false"}
+                  onclick={() => handleThemeChange("dark")}
+                >
+                  Dark
+                </button>
+              </div>
             </div>
           </div>
-        {:else if activeSection === "performance"}
-          <div class="cz-settings-section">
-            <h3 class="cz-section-title">Adaptive Resource Guard</h3>
-            <p class="cz-section-desc">Controls worker admission and job concurrency pools.</p>
 
-            <div class="cz-field-row">
-              <span class="cz-field-label">Resource mode</span>
-              <div class="cz-btn-group" role="group" aria-label="Resource mode selection">
+        {:else if activeSection === "performance"}
+          <div class="cz-settings-group">
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">Resource Mode</div>
+                <div class="cz-settings-desc">Concurrency and admission guard</div>
+              </div>
+              <div class="cz-segmented-track" role="group" aria-label="Resource mode selection">
                 {#each ["auto", "memory-saver", "balanced", "maximum"] as mode}
                   <button
                     type="button"
-                    class="cz-btn cz-btn-sm {settings.resourceMode === mode ? 'cz-btn-primary' : 'cz-btn-secondary'}"
+                    class="cz-segmented-item {settings.resourceMode === mode ? 'is-active' : ''}"
                     aria-pressed={settings.resourceMode === mode ? "true" : "false"}
                     onclick={() => saveChanges({ resourceMode: mode as ResourceMode })}
                   >
-                    {mode === "auto" ? "Auto" : mode === "memory-saver" ? "Memory Saver" : mode === "balanced" ? "Balanced" : "Maximum"}
+                    {mode === "auto" ? "Auto" : mode === "memory-saver" ? "Saver" : mode === "balanced" ? "Balanced" : "Max"}
                   </button>
                 {/each}
               </div>
             </div>
 
-            <div class="cz-field-row">
-              <span class="cz-field-label">Concurrency ceiling</span>
-              <div class="cz-btn-group" role="group" aria-label="Files processed at once (batches)">
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">Batch Concurrency</div>
+                <div class="cz-settings-desc">Simultaneous files processed</div>
+              </div>
+              <div class="cz-segmented-track" role="group" aria-label="Concurrency ceiling">
                 <button
                   type="button"
-                  class="cz-btn cz-btn-sm {settings.resourceLimits.concurrency === 'auto' ? 'cz-btn-primary' : 'cz-btn-secondary'}"
-                  aria-pressed={settings.resourceLimits.concurrency === "auto" ? "true" : "false"}
+                  class="cz-segmented-item {settings.resourceLimits.concurrency === 'auto' ? 'is-active' : ''}"
                   onclick={() => saveChanges({ resourceLimits: { ...settings.resourceLimits, concurrency: "auto" } })}
                 >
                   Auto ({autoConcurrency})
                 </button>
-                {#each [1, 2, 3, 4] as count}
+                {#each [1, 2, 3] as count}
                   <button
                     type="button"
-                    class="cz-btn cz-btn-sm {settings.resourceLimits.concurrency === count ? 'cz-btn-primary' : 'cz-btn-secondary'}"
-                    aria-pressed={settings.resourceLimits.concurrency === count ? "true" : "false"}
+                    class="cz-segmented-item {settings.resourceLimits.concurrency === count ? 'is-active' : ''}"
                     onclick={() => saveChanges({ resourceLimits: { ...settings.resourceLimits, concurrency: count } })}
                   >
                     {count}
@@ -357,40 +385,68 @@
               </div>
             </div>
 
-            <div class="cz-field-row">
-              <span class="cz-field-label">Hardware Acceleration</span>
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">WebGL2 Image Resize</div>
+                <div class="cz-settings-desc">Hardware-accelerated bilinear resampling</div>
+              </div>
               <button
                 type="button"
                 role="switch"
-                class="cz-btn cz-btn-sm {settings.gpu.images ? 'cz-btn-primary' : 'cz-btn-secondary'}"
+                class="cz-btn cz-btn-sm cz-btn-pill {settings.gpu.images ? 'cz-btn-primary' : 'cz-btn-secondary'}"
                 aria-label="GPU acceleration for Images"
                 aria-checked={settings.gpu.images ? "true" : "false"}
                 onclick={() => saveChanges({ gpu: { ...settings.gpu, images: !settings.gpu.images } })}
               >
-                GPU acceleration for Images: {settings.gpu.images ? "Enabled" : "Disabled"}
+                {settings.gpu.images ? "Enabled" : "Disabled"}
               </button>
             </div>
+          </div>
 
-            <div data-testid="resource-status" class="cz-resource-status-box" style="margin-top: 1rem">
-              <div class="cz-status-head">
-                <strong>Resource Guard:</strong> 0 running · admission: active
-              </div>
-              <p class="cz-status-note">
-                Scheduling based on file metadata; not a memory meter.
-              </p>
+          <div data-testid="resource-status" class="cz-sidebar-card">
+            <div class="cz-sidebar-header">
+              <span class="cz-sidebar-title">Resource Guard Status</span>
+              <span class="cz-tier-tag">Active</span>
+            </div>
+            <div class="cz-sidebar-meta">
+              Scheduling active · Safe memory threshold maintained
             </div>
           </div>
-        {:else if activeSection === "ai"}
-          <div class="cz-settings-section">
-            <h3 class="cz-section-title">AI engine — local</h3>
-            <p class="cz-section-desc">On-device neural inference for tagging, sorting, and handwriting recognition.</p>
 
-            <div class="cz-field-row">
-              <span class="cz-field-label">Inference backend</span>
-              <div class="cz-btn-group" role="group" aria-label="Inference backend selection">
+        {:else if activeSection === "ai"}
+          <div class="cz-settings-group">
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">Model Tier</div>
+                <div class="cz-settings-desc">MobileNet (~14 MB) vs ViT (~85 MB)</div>
+              </div>
+              <div class="cz-segmented-track">
                 <button
                   type="button"
-                  class="cz-btn cz-btn-sm {settings.ai.backend === 'auto' ? 'cz-btn-primary' : 'cz-btn-secondary'}"
+                  class="cz-segmented-item {settings.ai?.modelTier !== 'powerful' ? 'is-active' : ''}"
+                  onclick={() => saveChanges({ ai: { ...settings.ai, modelTier: "efficient" } })}
+                >
+                  ⚡ Efficient
+                </button>
+                <button
+                  type="button"
+                  class="cz-segmented-item {settings.ai?.modelTier === 'powerful' ? 'is-active' : ''}"
+                  onclick={() => saveChanges({ ai: { ...settings.ai, modelTier: "powerful" } })}
+                >
+                  🧠 Powerful
+                </button>
+              </div>
+            </div>
+
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">Inference Backend</div>
+                <div class="cz-settings-desc">Hardware acceleration preference</div>
+              </div>
+              <div class="cz-segmented-track" role="group" aria-label="Inference backend selection">
+                <button
+                  type="button"
+                  class="cz-segmented-item {settings.ai.backend === 'auto' ? 'is-active' : ''}"
                   aria-pressed={settings.ai.backend === "auto" ? "true" : "false"}
                   onclick={() => saveChanges({ ai: { ...settings.ai, backend: "auto" } })}
                 >
@@ -398,93 +454,103 @@
                 </button>
                 <button
                   type="button"
-                  class="cz-btn cz-btn-sm {settings.ai.backend === 'webgpu' ? 'cz-btn-primary' : 'cz-btn-secondary'}"
+                  class="cz-segmented-item {settings.ai.backend === 'webgpu' ? 'is-active' : ''}"
                   aria-pressed={settings.ai.backend === "webgpu" ? "true" : "false"}
                   onclick={() => saveChanges({ ai: { ...settings.ai, backend: "webgpu" } })}
                 >
-                  WebGPU first
+                  WebGPU
                 </button>
                 <button
                   type="button"
-                  class="cz-btn cz-btn-sm {settings.ai.backend === 'wasm' ? 'cz-btn-primary' : 'cz-btn-secondary'}"
+                  class="cz-segmented-item {settings.ai.backend === 'wasm' ? 'is-active' : ''}"
                   aria-pressed={settings.ai.backend === "wasm" ? "true" : "false"}
                   onclick={() => saveChanges({ ai: { ...settings.ai, backend: "wasm" } })}
                 >
-                  CPU (WASM)
+                  CPU
                 </button>
               </div>
             </div>
           </div>
+
         {:else if activeSection === "suggestions"}
-          <div class="cz-settings-section">
-            <h3 class="cz-section-title">Contextual suggestions</h3>
-            <p class="cz-section-desc">
-              Deterministic, model-free hints that notice opportunities to save size or correct sequence order.
-            </p>
-
-            <div class="cz-field-row">
-              <span class="cz-field-label">Dismissed suggestions</span>
-              <span class="cz-field-val">
-                {dismissedCount} dismissed suggestion{dismissedCount === 1 ? "" : "s"}
-              </span>
-            </div>
-
-            <div style="margin-top: 1rem">
+          <div class="cz-settings-group">
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">Dismissed Hints</div>
+                <div class="cz-settings-desc">{dismissedCount} suggestion{dismissedCount === 1 ? "" : "s"} hidden</div>
+              </div>
               <button
                 type="button"
-                class="cz-btn cz-btn-secondary"
+                class="cz-btn cz-btn-secondary cz-btn-sm cz-btn-pill"
                 onclick={() => {
                   clearDismissedRecommendations();
                   dismissedCount = 0;
                   toast("Cleared dismissed suggestions", "success");
                 }}
               >
-                Clear dismissed suggestions
+                Restore
               </button>
             </div>
           </div>
+
         {:else if activeSection === "compression"}
-          <div class="cz-settings-section">
-            <h3 class="cz-section-title">Default engine and output formats</h3>
-            <p class="cz-section-desc">Configure baseline quality, DPI, and audio presets.</p>
-            <div class="cz-field-row">
-              <span class="cz-field-label">Default image format</span>
-              <span class="cz-field-val">{settings.engines.images.format}</span>
+          <div class="cz-settings-group">
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">Default Format</div>
+                <div class="cz-settings-desc">Standard image encode</div>
+              </div>
+              <span class="cz-tier-tag">{settings.engines.images.format}</span>
             </div>
-            <div class="cz-field-row">
-              <span class="cz-field-label">Default image quality</span>
-              <span class="cz-field-val">{settings.engines.images.quality}%</span>
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">Default Quality</div>
+                <div class="cz-settings-desc">SSIM-guarded threshold</div>
+              </div>
+              <span class="cz-tier-tag">{settings.engines.images.quality}%</span>
             </div>
           </div>
+
         {:else if activeSection === "privacy"}
-          <div class="cz-settings-section">
-            <h3 class="cz-section-title">Stored in this browser</h3>
-            <p class="cz-section-desc">
-              CompressZ stores user preferences in your browser's localStorage. Zero tracking cookies, zero analytics, zero server uploads.
-            </p>
-            <div class="cz-field-row">
-              <span class="cz-field-label">Storage key</span>
-              <span class="cz-field-val">cz-settings-v2</span>
+          <div class="cz-settings-group">
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">Zero Server Uploads</div>
+                <div class="cz-settings-desc">All processing in browser memory</div>
+              </div>
+              <span class="cz-status-pill is-done">Guaranteed</span>
+            </div>
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">LocalStorage Key</div>
+                <div class="cz-settings-desc">cz-settings-v2</div>
+              </div>
+              <span class="cz-tier-tag">Client Only</span>
             </div>
           </div>
+
         {:else if activeSection === "diagnostics"}
-          <div class="cz-settings-section">
-            <h3 class="cz-section-title">This Device</h3>
-            <div class="cz-field-row device-info-row">
-              <span class="cz-field-label device-info-label">Image path</span>
-              <span class="cz-field-val device-info-val">{imagePathLabel}</span>
+          <div class="cz-settings-group">
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">Image Engine</div>
+                <div class="cz-settings-desc">{imagePathLabel}</div>
+              </div>
+              <span class="cz-tier-tag">Canvas</span>
             </div>
-            <div class="cz-field-row device-info-row">
-              <span class="cz-field-label device-info-label">Batch concurrency</span>
-              <span class="cz-field-val device-info-val">{resolvedConcurrency(settings)} files at once</span>
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">Video Engine</div>
+                <div class="cz-settings-desc">WebCodecs + Mediabunny (FFmpeg fallback)</div>
+              </div>
+              <span class="cz-tier-tag">Fast Path</span>
             </div>
-            <div class="cz-field-row device-info-row">
-              <span class="cz-field-label device-info-label">Video path</span>
-              <span class="cz-field-val device-info-val">WebCodecs + Mediabunny fast path (FFmpeg fallback)</span>
-            </div>
-            <div class="cz-field-row device-info-row">
-              <span class="cz-field-label device-info-label">Image quality guard</span>
-              <span class="cz-field-val device-info-val">SSIM guard active (never silently rescales)</span>
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">Concurrency</div>
+                <div class="cz-settings-desc">{resolvedConcurrency(settings)} parallel jobs</div>
+              </div>
+              <span class="cz-tier-tag">Active</span>
             </div>
           </div>
         {/if}
@@ -498,6 +564,7 @@
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(4px);
     z-index: 999;
   }
   .cz-settings-dialog {
@@ -506,15 +573,15 @@
     left: 50%;
     transform: translate(-50%, -50%);
     width: 90vw;
-    max-width: 820px;
-    max-height: 88vh;
+    max-width: 740px;
+    max-height: 85vh;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: var(--r);
+    border-radius: var(--r-xl);
     z-index: 1000;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+    box-shadow: var(--shadow-xl);
     overflow: hidden;
   }
   .cz-dialog-header {
@@ -523,20 +590,40 @@
     align-items: center;
     padding: 1rem 1.4rem;
     border-bottom: 1px solid var(--border);
+    background: var(--surface2);
   }
   .cz-dialog-title {
-    font-size: 1.25rem;
+    font-family: var(--display);
+    font-size: 1.15rem;
     font-weight: 700;
     color: var(--text);
+  }
+  .cz-dialog-sub {
+    font-size: 0.76rem;
+    color: var(--text-3);
+  }
+  .cz-dialog-close {
+    border: none;
+    background: transparent;
+    color: var(--text-3);
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 0.35rem;
+    border-radius: 9999px;
+  }
+  .cz-dialog-close:hover {
+    color: var(--text);
+    background: var(--bg2);
   }
   .cz-settings-body {
     display: flex;
     flex: 1;
-    min-height: 0;
+    min-height: 380px;
+    max-height: 70vh;
     overflow: hidden;
   }
   .cz-settings-nav {
-    width: 200px;
+    width: 170px;
     border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
@@ -544,99 +631,37 @@
     gap: 0.2rem;
     background: var(--surface2);
     overflow-y: auto;
+    flex-shrink: 0;
   }
   .cz-settings-nav-btn {
     text-align: left;
-    padding: 0.55rem 0.85rem;
+    padding: 0.45rem 0.75rem;
     border-radius: var(--r-sm);
-    font-size: 0.88rem;
-    font-weight: 550;
-    color: var(--text-2);
-    background: transparent;
     border: none;
+    background: transparent;
+    color: var(--text-2);
+    font-size: 0.82rem;
+    font-weight: 500;
     cursor: pointer;
     transition: background var(--t), color var(--t);
   }
   .cz-settings-nav-btn:hover {
-    background: var(--surface);
+    background: var(--bg2);
     color: var(--text);
   }
   .cz-settings-nav-btn.is-active {
     background: var(--surface);
     color: var(--accent);
-    font-weight: 700;
+    font-weight: 600;
+    box-shadow: var(--shadow-xs);
   }
   .cz-settings-content {
     flex: 1;
-    padding: 1.5rem;
+    padding: 1.25rem;
     overflow-y: auto;
+    background: var(--bg);
   }
-  .cz-settings-section {
-    display: flex;
-    flex-direction: column;
-    gap: 1.15rem;
-  }
-  .cz-section-title {
-    font-size: 1.15rem;
-    font-weight: 700;
-    color: var(--text);
-  }
-  .cz-section-desc {
-    font-size: 0.87rem;
-    color: var(--text-3);
-    margin-top: -0.6rem;
-  }
-  .cz-field-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 1rem;
-    padding: 0.65rem 0;
-    border-bottom: 1px solid var(--border);
-  }
-  .cz-field-label {
-    font-size: 0.88rem;
-    font-weight: 600;
-    color: var(--text);
-  }
-  .cz-field-val {
-    font-size: 0.88rem;
-    color: var(--text-2);
-  }
-  .cz-btn-group {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.45rem;
-  }
-  .cz-resource-status-box {
-    padding: 0.85rem 1rem;
-    border-radius: var(--r-sm);
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    font-size: 0.86rem;
-  }
-  .cz-status-head {
-    color: var(--text);
-    margin-bottom: 0.25rem;
-  }
-  .cz-status-note {
-    color: var(--text-3);
-    font-size: 0.8rem;
-  }
-
-  @media (max-width: 640px) {
-    .cz-settings-body {
-      flex-direction: column;
-    }
-    .cz-settings-nav {
-      width: 100%;
-      flex-direction: row;
-      overflow-x: auto;
-      border-right: none;
-      border-bottom: 1px solid var(--border);
-    }
-    .cz-settings-nav-btn {
-      white-space: nowrap;
-    }
+  .cz-btn-pill {
+    border-radius: 9999px;
   }
 </style>
