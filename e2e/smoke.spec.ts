@@ -467,8 +467,6 @@ test("dismissed suggestions stay dismissed and can be cleared", async ({
   expect(problems).toEqual([]);
 });
 
-const BASE_URL = "http://localhost:4173";
-
 test("every Settings section opens with its own content", async ({ page }) => {
   await page.goto("/");
   await page.locator("#settings-btn").click();
