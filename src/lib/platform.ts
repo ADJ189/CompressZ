@@ -170,7 +170,9 @@ export function detectPlatform(): PlatformInfo {
     engine,
     cores: navigator.hardwareConcurrency || 0,
     memoryGB: (navigator as any).deviceMemory ?? null,
-    touch: navigator.maxTouchPoints > 0 || "ontouchstart" in window,
+    touch:
+      navigator.maxTouchPoints > 0 ||
+      (typeof window !== "undefined" && "ontouchstart" in window),
     gpuRenderer: renderer,
     webgl2,
     webgpu: "gpu" in navigator,
@@ -178,11 +180,15 @@ export function detectPlatform(): PlatformInfo {
     webCodecs:
       typeof VideoEncoder !== "undefined" &&
       typeof VideoDecoder !== "undefined",
-    crossOriginIsolated: !!(window as any).crossOriginIsolated,
+    crossOriginIsolated:
+      typeof globalThis !== "undefined"
+        ? !!(globalThis as any).crossOriginIsolated
+        : false,
     connection: conn?.effectiveType ?? null,
     saveData: !!conn?.saveData,
     reducedMotion:
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
+      typeof window !== "undefined" &&
+      Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches),
   };
 
   _cached = { ...base, tier: computeTier(base) };

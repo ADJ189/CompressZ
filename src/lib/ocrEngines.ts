@@ -14,7 +14,8 @@
  */
 
 export type OcrProfile = "auto" | "printed" | "handwriting" | "mixed";
-export type OcrEngineId = "tesseract" | "paddle" | "trocr";
+export type OcrEngineId = "auto" | "tesseract" | "paddle" | "trocr";
+export type OcrEngine = OcrEngineId;
 
 export type OcrLanguage =
   | "auto"
