@@ -3,7 +3,7 @@
     "lib": ["deno.ns", "dom", "esnext"]
   },
   "lint": {
-    "include": ["src/", "test/"],
+    "include": ["src/", "tests/"],
     "rules": {
       "exclude": [
         "no-explicit-any",
@@ -15,7 +15,7 @@
     }
   },
   "test": {
-    "include": ["test/"]
+    "include": ["tests/"]
   },
   "unstable": ["sloppy-imports"]
 }
