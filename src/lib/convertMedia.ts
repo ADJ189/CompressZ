@@ -14,6 +14,16 @@ import { getFFmpeg, ffFetch, ffJob, setProgressHandler } from "./ffmpeg";
 
 export type VideoContainer = "mp4" | "webm" | "mov" | "mkv" | "avi" | "gif";
 
+export interface ConvertVideoOptions {
+  crf?: number; // 18 (visually lossless), 23 (balanced), 28 (small file)
+  resolution?: "original" | "1080p" | "720p" | "480p";
+  fps?: number; // 0 (original), 60, 30, 24
+  muteAudio?: boolean;
+  fastStart?: boolean;
+  stripMetadata?: boolean;
+  audioBitrate?: string; // "320k", "192k", "128k", "96k"
+}
+
 const VIDEO_MIME: Record<VideoContainer, string> = {
   mp4: "video/mp4",
   webm: "video/webm",
@@ -33,14 +43,16 @@ export interface ConvertResult {
 export function convertVideo(
   file: File,
   target: VideoContainer,
+  options?: ConvertVideoOptions,
   onProgress?: (pct: number) => void,
 ): Promise<ConvertResult> {
-  return ffJob(() => runConvertVideo(file, target, onProgress));
+  return ffJob(() => runConvertVideo(file, target, options, onProgress));
 }
 
 async function runConvertVideo(
   file: File,
   target: VideoContainer,
+  options?: ConvertVideoOptions,
   onProgress?: (pct: number) => void,
 ): Promise<ConvertResult> {
   const ff = (await getFFmpeg()) as any;
@@ -58,16 +70,14 @@ async function runConvertVideo(
 
   try {
     if (target === "gif") {
-      // Two-pass palettegen + paletteuse, same "gold standard" approach used
-      // for GIF compression elsewhere in the app. Capped to a sane width/fps
-      // by default since arbitrary-resolution video → GIF produces enormous
-      // files — GIF has no real compression for video-like content.
       outN = "cvout.gif";
+      const fps = options?.fps && options.fps > 0 ? options.fps : 12;
+      const scale = options?.resolution === "480p" ? 480 : 720;
       await ff.exec([
         "-i",
         inN,
         "-vf",
-        "fps=12,scale=720:-1:flags=lanczos,palettegen=max_colors=192:stats_mode=diff",
+        `fps=${fps},scale=${scale}:-1:flags=lanczos,palettegen=max_colors=192:stats_mode=diff`,
         "-y",
         "cvpalette.png",
       ]);
@@ -77,59 +87,83 @@ async function runConvertVideo(
         "-i",
         "cvpalette.png",
         "-lavfi",
-        "fps=12,scale=720:-1:flags=lanczos,paletteuse=dither=bayer:bayer_scale=5",
+        `fps=${fps},scale=${scale}:-1:flags=lanczos,paletteuse=dither=bayer:bayer_scale=5`,
         "-y",
         outN,
       ]);
       await ff.deleteFile("cvpalette.png").catch(() => {});
-      fmtLabel = "GIF · 12fps/720px (capped for file size)";
+      fmtLabel = `GIF · ${fps}fps/${scale}px`;
     } else {
       outN = `cvout.${target}`;
       const args: string[] = ["-i", inN];
+
+      // Video filters: scaling and fps
+      const vf: string[] = [];
+      if (options?.resolution === "1080p") vf.push("scale=-2:'min(1080,ih)'");
+      else if (options?.resolution === "720p") vf.push("scale=-2:'min(720,ih)'");
+      else if (options?.resolution === "480p") vf.push("scale=-2:'min(480,ih)'");
+
+      if (options?.fps && options.fps > 0) {
+        args.push("-r", String(options.fps));
+      }
+
+      if (vf.length > 0) {
+        args.push("-vf", vf.join(","));
+      }
+
+      if (options?.stripMetadata) {
+        args.push("-map_metadata", "-1");
+      }
+
+      const crfVal = String(options?.crf ?? (target === "webm" ? 24 : 18));
+      const aBitrate = options?.audioBitrate ?? "192k";
 
       if (target === "webm") {
         args.push(
           "-c:v",
           "libvpx-vp9",
           "-crf",
-          "24",
+          crfVal,
           "-b:v",
           "0",
-          "-c:a",
-          "libopus",
-          "-b:a",
-          "160k",
         );
+        if (options?.muteAudio) {
+          args.push("-an");
+        } else {
+          args.push("-c:a", "libopus", "-b:a", aBitrate === "320k" ? "192k" : aBitrate);
+        }
       } else if (target === "avi") {
-        // AVI is old-container-compatibility territory — mpeg4/mp3 plays
-        // everywhere that still opens .avi files at all.
         args.push(
           "-c:v",
           "mpeg4",
           "-qscale:v",
           "3",
-          "-c:a",
-          "libmp3lame",
-          "-b:a",
-          "192k",
         );
+        if (options?.muteAudio) {
+          args.push("-an");
+        } else {
+          args.push("-c:a", "libmp3lame", "-b:a", aBitrate);
+        }
       } else {
-        // mp4 / mov / mkv all happily carry H.264 + AAC.
+        // mp4 / mov / mkv
         args.push(
           "-c:v",
           "libx264",
           "-crf",
-          "18",
+          crfVal,
           "-preset",
           "medium",
           "-pix_fmt",
           "yuv420p",
-          "-c:a",
-          "aac",
-          "-b:a",
-          "192k",
         );
-        if (target === "mp4") args.push("-movflags", "+faststart");
+        if (options?.muteAudio) {
+          args.push("-an");
+        } else {
+          args.push("-c:a", "aac", "-b:a", aBitrate);
+        }
+        if (target === "mp4" && options?.fastStart !== false) {
+          args.push("-movflags", "+faststart");
+        }
       }
       args.push("-y", outN);
       await ff.exec(args);

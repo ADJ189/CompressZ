@@ -153,8 +153,6 @@ function computeTier(p: Omit<PlatformInfo, "tier">): PerformanceTier {
   return "powerful";
 }
 
-export const getPlatformInfo = detectPlatform;
-
 export function detectPlatform(): PlatformInfo {
   if (_cached) return _cached;
 
@@ -251,3 +249,7 @@ export function tierLabel(t: PerformanceTier): string {
       ? "Powerful"
       : "Balanced";
 }
+
+/** Alias for detectPlatform() used by workbench pages. */
+export const getPlatformInfo = detectPlatform;
+
