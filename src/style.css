@@ -18,6 +18,7 @@
 
 /* ── Tokens ───────────────────────────────────────────────── */
 :root {
+  color-scheme:   light;
   --bg:           #f4f4f2;
   --bg2:          #ebebe8;
   --bg3:          #e2e2de;
@@ -80,6 +81,7 @@
   --tabbar-h: 46px;
 }
 [data-theme="dark"] {
+  color-scheme:   dark;
   --bg:           #0c0c0f;
   --bg2:          #111115;
   --bg3:          #18181d;
@@ -576,6 +578,99 @@ img, svg { display: block; }
   font-family: var(--mono); font-size: .78rem; color: var(--text-3);
 }
 .trust-chip svg { color: var(--emerald); flex-shrink: 0; }
+
+/* Home Tools Title & Grid */
+.home-tools-title {
+  font-family: var(--feature); font-size: .72rem; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--text-4);
+  margin-bottom: 1rem;
+}
+.home-tools-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1px; background: var(--border);
+  border-radius: var(--r-xl); overflow: hidden;
+  box-shadow: var(--shadow-md);
+  margin-bottom: 3rem;
+}
+.htc {
+  background: var(--surface); padding: 1.5rem;
+  cursor: pointer; transition: var(--t2), transform .12s var(--ease-fluid); position: relative; overflow: hidden;
+  text-decoration: none; color: inherit; display: block;
+}
+.htc::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(135deg, var(--accent-glow), transparent);
+  opacity: 0; transition: opacity var(--t2); pointer-events: none;
+}
+.htc:hover { background: var(--bg); }
+.htc:hover::after { opacity: 1; }
+.htc:hover .htc-arrow { transform: translate(3px,-3px); opacity: 1; }
+.htc:active { transform: scale(.98); }
+.htc-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: .85rem; }
+.cz-wb-all__fav {
+  background: transparent;
+  border: none;
+  font-size: 1rem;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 0.1rem 0.3rem;
+  border-radius: var(--r-sm);
+  margin-left: auto;
+  line-height: 1;
+  transition: color var(--t);
+}
+.cz-wb-all__fav:hover,
+.cz-wb-all__fav.is-on {
+  color: #f59e0b;
+}
+.home-tools-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+.cz-wb-search input {
+  padding: 0.45rem 0.85rem;
+  border-radius: 9999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color var(--t), box-shadow var(--t);
+}
+.cz-wb-search input:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.htc-icon {
+  width: 40px; height: 40px; border-radius: var(--r);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.15rem; background: var(--bg2); border: 1px solid var(--border);
+}
+.htc-arrow { color: var(--text-4); opacity: 0; transition: var(--t2); }
+.htc-name  { font-size: .95rem; font-weight: 700; color: var(--text); margin-bottom: .3rem; }
+.htc-desc  { font-size: .8rem; color: var(--text-3); line-height: 1.6; margin-bottom: .7rem; }
+.htc-tags  { display: flex; flex-wrap: wrap; gap: .3rem; }
+.htc-tag   {
+  padding: .15rem .45rem; border-radius: 5px;
+  font-size: .66rem; font-weight: 700; letter-spacing: .02em;
+  background: var(--bg2); border: 1px solid var(--border); color: var(--text-4);
+}
+/* per-tool accent on icon */
+.htc[data-t="images"] .htc-icon { background:rgba(14,165,233,.08); border-color:rgba(14,165,233,.2); }
+.htc[data-t="pdf"]    .htc-icon { background:rgba(244,63,94,.08);  border-color:rgba(244,63,94,.2); }
+.htc[data-t="merge"]  .htc-icon { background:rgba(16,185,129,.08); border-color:rgba(16,185,129,.2); }
+.htc[data-t="images-to-pdf"] .htc-icon { background:rgba(20,184,166,.08); border-color:rgba(20,184,166,.2); }
+.htc[data-t="video"]  .htc-icon { background:rgba(245,158,11,.08); border-color:rgba(245,158,11,.2); }
+.htc[data-t="audio"]  .htc-icon { background:rgba(139,92,246,.08); border-color:rgba(139,92,246,.2); }
+.htc[data-t="gif"]    .htc-icon { background:rgba(16,185,129,.08); border-color:rgba(16,185,129,.2); }
+.htc[data-t="ocr"]    .htc-icon { background:rgba(99,102,241,.08); border-color:rgba(99,102,241,.2); }
+.htc[data-t="convert"] .htc-icon { background:rgba(217,70,239,.08); border-color:rgba(217,70,239,.2); }
+.htc[data-t="pdf-markdown"] .htc-icon { background:rgba(59,130,246,.08); border-color:rgba(59,130,246,.2); }
 
 /* How it works */
 .how-row {
