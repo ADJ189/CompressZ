@@ -4,6 +4,7 @@
   import ToolsDialog from "./ToolsDialog.svelte";
   import SettingsDialog from "./SettingsDialog.svelte";
   import { currentRoute } from "../store";
+  import { navigate } from "../router";
 
   // Route components
   import Home from "../routes/Home.svelte";
@@ -92,9 +93,9 @@
         <span class="cz-footer-copy">All file processing remains local to your browser.</span>
       </div>
       <div class="cz-footer-links">
-        <a href="/about" data-nav="about">About</a>
-        <a href="/docs" data-nav="docs">Docs</a>
-        <a href="/privacy" data-nav="privacy">Privacy</a>
+        <a href="/about" data-nav="about" onclick={(e) => { e.preventDefault(); navigate("about"); }}>About</a>
+        <a href="/docs" data-nav="docs" onclick={(e) => { e.preventDefault(); navigate("docs"); }}>Docs</a>
+        <a href="/privacy" data-nav="privacy" onclick={(e) => { e.preventDefault(); navigate("privacy"); }}>Privacy</a>
         <a href="https://github.com/ADJ189/compressz" target="_blank" rel="noopener">GitHub</a>
       </div>
     </div>

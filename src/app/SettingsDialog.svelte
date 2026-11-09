@@ -1,4 +1,7 @@
 <script lang="ts">
+  declare const __APP_VERSION__: string;
+  const appVersion = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.13.0-a1";
+
   import {
     getSettings,
     updateSettings,
@@ -118,13 +121,12 @@
 
   const imagePathLabel = $derived.by(() => {
     const hasOffscreen = typeof OffscreenCanvas !== "undefined";
-    const hasWebGL2 = typeof document !== "undefined" && !!document.createElement("canvas").getContext("webgl2");
-    if (settings.gpu.images && hasWebGL2) {
-      return "Canvas/OffscreenCanvas + WebGL2 resize";
+    if (!settings.gpu.images) {
+      return hasOffscreen
+        ? "Canvas/OffscreenCanvas only (no WebGL2 resize)"
+        : "DOM canvas only";
     }
-    return hasOffscreen
-      ? "Canvas/OffscreenCanvas only (no WebGL2 resize)"
-      : "DOM canvas only";
+    return "Canvas/OffscreenCanvas + WebGL2 resize";
   });
 </script>
 
@@ -227,21 +229,26 @@
       <div id="settings-panel" class="cz-settings-content">
         {#if activeSection === "general"}
           <div class="cz-settings-group">
-            <div class="cz-settings-group-title">About CompressZ</div>
-            <div class="cz-settings-desc">About CompressZ — fast, private local-first processing.</div>
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">About CompressZ</div>
+                <div class="cz-settings-desc">Client-side document and media suite</div>
+              </div>
+              <span class="cz-tier-tag">v{appVersion}</span>
+            </div>
             <div class="cz-settings-row device-info-row">
               <div>
                 <div class="cz-settings-label">Version</div>
                 <div class="cz-settings-desc">CompressZ release stream</div>
               </div>
-              <span class="cz-tier-tag device-info-val">1.13.0-a1</span>
+              <span class="cz-tier-tag device-info-val">{appVersion}</span>
             </div>
-            <div class="cz-settings-row">
+            <div class="cz-settings-row device-info-row">
               <div>
                 <div class="cz-settings-label">UI Framework</div>
                 <div class="cz-settings-desc">Svelte 5 Runes</div>
               </div>
-              <span class="cz-tier-tag">Reactive Native</span>
+              <span class="cz-tier-tag device-info-val">Reactive Native</span>
             </div>
           </div>
 
@@ -308,7 +315,6 @@
 
         {:else if activeSection === "appearance"}
           <div class="cz-settings-group">
-            <div class="cz-settings-group-title">Theme Preference</div>
             <div class="cz-settings-row">
               <div>
                 <div class="cz-settings-label">Theme Mode</div>
@@ -345,10 +351,9 @@
 
         {:else if activeSection === "performance"}
           <div class="cz-settings-group">
-            <div class="cz-settings-group-title">Adaptive Resource Guard</div>
             <div class="cz-settings-row">
               <div>
-                <div class="cz-settings-label">Resource Mode</div>
+                <div class="cz-settings-label">Adaptive Resource Guard</div>
                 <div class="cz-settings-desc">Concurrency and admission guard</div>
               </div>
               <div class="cz-segmented-track" role="group" aria-label="Resource mode selection">
@@ -374,19 +379,17 @@
                 <button
                   type="button"
                   class="cz-segmented-item {settings.resourceLimits.concurrency === 'auto' ? 'is-active' : ''}"
-                  aria-pressed={settings.resourceLimits.concurrency === "auto" ? "true" : "false"}
                   onclick={() => saveChanges({ resourceLimits: { ...settings.resourceLimits, concurrency: "auto" } })}
                 >
                   Auto ({autoConcurrency})
                 </button>
-                {#each ["1", "2", "3", "4"] as val}
+                {#each [1, 2, 4] as count}
                   <button
                     type="button"
-                    class="cz-segmented-item {settings.resourceLimits.concurrency === Number(val) ? 'is-active' : ''}"
-                    aria-pressed={settings.resourceLimits.concurrency === Number(val) ? "true" : "false"}
-                    onclick={() => saveChanges({ resourceLimits: { ...settings.resourceLimits, concurrency: Number(val) as any } })}
+                    class="cz-segmented-item {settings.resourceLimits.concurrency === count ? 'is-active' : ''}"
+                    onclick={() => saveChanges({ resourceLimits: { ...settings.resourceLimits, concurrency: count } })}
                   >
-                    {val}
+                    {count}
                   </button>
                 {/each}
               </div>
@@ -416,13 +419,19 @@
               <span class="cz-tier-tag">Active</span>
             </div>
             <div class="cz-sidebar-meta">
-              0 running · admission: active (honest static heuristic, not a memory meter)
+              0 running · 0 queued · admission: safe heuristics · not a memory meter
             </div>
           </div>
 
         {:else if activeSection === "ai"}
           <div class="cz-settings-group">
-            <div class="cz-settings-group-title">AI engine — local</div>
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">AI engine — local</div>
+                <div class="cz-settings-desc">Client-side neural processing with ONNX Runtime Web</div>
+              </div>
+            </div>
+
             <div class="cz-settings-row">
               <div>
                 <div class="cz-settings-label">Model Tier</div>
@@ -432,7 +441,6 @@
                 <button
                   type="button"
                   class="cz-segmented-item {settings.ai?.modelTier !== 'powerful' ? 'is-active' : ''}"
-                  aria-pressed={settings.ai?.modelTier !== 'powerful' ? "true" : "false"}
                   onclick={() => saveChanges({ ai: { ...settings.ai, modelTier: "efficient" } })}
                 >
                   ⚡ Efficient
@@ -440,7 +448,6 @@
                 <button
                   type="button"
                   class="cz-segmented-item {settings.ai?.modelTier === 'powerful' ? 'is-active' : ''}"
-                  aria-pressed={settings.ai?.modelTier === 'powerful' ? "true" : "false"}
                   onclick={() => saveChanges({ ai: { ...settings.ai, modelTier: "powerful" } })}
                 >
                   🧠 Powerful
@@ -484,7 +491,12 @@
 
         {:else if activeSection === "suggestions"}
           <div class="cz-settings-group">
-            <div class="cz-settings-group-title">Contextual suggestions</div>
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">Contextual suggestions</div>
+                <div class="cz-settings-desc">Workflow hints and smart format optimizations</div>
+              </div>
+            </div>
             <div class="cz-settings-row">
               <div>
                 <div class="cz-settings-label">Dismissed Hints</div>
@@ -506,7 +518,12 @@
 
         {:else if activeSection === "compression"}
           <div class="cz-settings-group">
-            <div class="cz-settings-group-title">Compression engine defaults</div>
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">Compression Engine</div>
+                <div class="cz-settings-desc">Default image format and SSIM quality presets</div>
+              </div>
+            </div>
             <div class="cz-settings-row">
               <div>
                 <div class="cz-settings-label">Default Format</div>
@@ -525,11 +542,10 @@
 
         {:else if activeSection === "privacy"}
           <div class="cz-settings-group">
-            <div class="cz-settings-group-title">Stored in this browser</div>
             <div class="cz-settings-row">
               <div>
                 <div class="cz-settings-label">Zero Server Uploads</div>
-                <div class="cz-settings-desc">All processing in browser memory</div>
+                <div class="cz-settings-desc">All processing in browser memory · Stored in this browser</div>
               </div>
               <span class="cz-status-pill is-done">Guaranteed</span>
             </div>
@@ -544,30 +560,39 @@
 
         {:else if activeSection === "diagnostics"}
           <div class="cz-settings-group">
-            <div class="cz-settings-group-title">This Device Capabilities</div>
-            <div class="cz-settings-row device-info-row">
+            <div class="cz-settings-row">
               <div>
-                <div class="s-label cz-settings-label">Image path</div>
+                <div class="cz-settings-label">This Device & Capabilities</div>
+                <div class="cz-settings-desc">Hardware, memory, and engine diagnostics</div>
               </div>
-              <span class="device-info-val cz-tier-tag">{imagePathLabel}</span>
             </div>
             <div class="cz-settings-row device-info-row">
               <div>
-                <div class="s-label cz-settings-label">Batch concurrency</div>
+                <div class="cz-settings-label">Image path</div>
+                <div class="cz-settings-desc">OffscreenCanvas & WebGL2 pipeline</div>
               </div>
-              <span class="device-info-val cz-tier-tag">{resolvedConcurrency(settings)} files at once</span>
+              <span class="cz-tier-tag device-info-val">{imagePathLabel}</span>
             </div>
             <div class="cz-settings-row device-info-row">
               <div>
-                <div class="s-label cz-settings-label">Video path</div>
+                <div class="cz-settings-label">Batch concurrency</div>
+                <div class="cz-settings-desc">Parallel worker execution</div>
               </div>
-              <span class="device-info-val cz-tier-tag">WebCodecs + Mediabunny (FFmpeg fallback)</span>
+              <span class="cz-tier-tag device-info-val">{resolvedConcurrency(settings)} files at once</span>
             </div>
             <div class="cz-settings-row device-info-row">
               <div>
-                <div class="s-label cz-settings-label">Image quality guard</div>
+                <div class="cz-settings-label">Video path</div>
+                <div class="cz-settings-desc">WebCodecs hardware acceleration</div>
               </div>
-              <span class="device-info-val cz-tier-tag">SSIM-guarded; never silently rescales</span>
+              <span class="cz-tier-tag device-info-val">WebCodecs + Mediabunny (FFmpeg fallback)</span>
+            </div>
+            <div class="cz-settings-row device-info-row">
+              <div>
+                <div class="cz-settings-label">Image quality guard</div>
+                <div class="cz-settings-desc">SSIM quality protection</div>
+              </div>
+              <span class="cz-tier-tag device-info-val">Active (never silently rescales)</span>
             </div>
           </div>
         {/if}
@@ -678,7 +703,187 @@
     overflow-y: auto;
     background: var(--bg);
   }
+  .cz-settings-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 1rem 1.15rem;
+    margin-bottom: 1rem;
+  }
+  .cz-settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+  .cz-settings-row > div:first-child {
+    flex: 1 1 200px;
+    min-width: 0;
+  }
+  .cz-settings-label {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.3;
+    overflow-wrap: break-word;
+  }
+  .cz-settings-desc {
+    font-size: 0.8rem;
+    color: var(--text-3);
+    margin-top: 0.2rem;
+    line-height: 1.4;
+    overflow-wrap: break-word;
+  }
+  .cz-segmented-track {
+    display: inline-flex;
+    align-items: center;
+    background: var(--bg2);
+    padding: 3px;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--border);
+    gap: 2px;
+    flex-shrink: 0;
+  }
+  .cz-segmented-item {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-3);
+    border-radius: calc(var(--r-sm) - 2px);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: background var(--t), color var(--t);
+    white-space: nowrap;
+  }
+  .cz-segmented-item:hover {
+    color: var(--text);
+  }
+  .cz-segmented-item.is-active {
+    background: var(--surface);
+    color: var(--accent);
+    font-weight: 600;
+    box-shadow: var(--shadow-xs);
+  }
+  .cz-tier-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.65rem;
+    border-radius: 100px;
+    font-size: 0.75rem;
+    font-family: var(--mono);
+    font-weight: 600;
+    background: var(--surface2);
+    color: var(--text-2);
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .cz-status-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.65rem;
+    border-radius: 100px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .cz-status-pill.is-done {
+    background: var(--green-soft);
+    color: var(--green);
+    border: 1px solid var(--green-border);
+  }
+  .cz-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 0.4rem 0.85rem;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    transition: background var(--t), color var(--t), border-color var(--t);
+    flex-shrink: 0;
+  }
+  .cz-btn-secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .cz-btn-secondary:hover {
+    background: var(--bg2);
+    border-color: var(--border-mid);
+  }
+  .cz-btn-danger {
+    background: rgba(244, 63, 94, 0.12);
+    color: var(--rose);
+    border: 1px solid rgba(244, 63, 94, 0.25);
+  }
+  .cz-btn-danger:hover {
+    background: rgba(244, 63, 94, 0.2);
+  }
+  .cz-btn-ghost {
+    background: transparent;
+    color: var(--text-3);
+    border: 1px solid var(--border);
+  }
+  .cz-btn-ghost:hover {
+    color: var(--text);
+    background: var(--surface2);
+  }
   .cz-btn-pill {
     border-radius: 9999px;
+  }
+
+  @media (max-width: 680px) {
+    .cz-settings-dialog {
+      width: 95vw;
+      max-height: 90vh;
+    }
+    .cz-settings-body {
+      flex-direction: column;
+      min-height: auto;
+    }
+    .cz-settings-nav {
+      width: 100%;
+      flex-direction: row;
+      overflow-x: auto;
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+      padding: 0.5rem;
+      gap: 0.35rem;
+      scrollbar-width: none;
+    }
+    .cz-settings-nav::-webkit-scrollbar {
+      display: none;
+    }
+    .cz-settings-nav-btn {
+      white-space: nowrap;
+      padding: 0.35rem 0.75rem;
+      border-radius: 100px;
+    }
+    .cz-settings-content {
+      padding: 1rem;
+    }
+    .cz-settings-row {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.6rem;
+    }
+    .cz-settings-row > div:first-child {
+      width: 100%;
+    }
+    .cz-segmented-track {
+      width: 100%;
+      justify-content: stretch;
+    }
+    .cz-segmented-item {
+      flex: 1;
+      text-align: center;
+    }
   }
 </style>

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { currentRoute } from "../store";
   import { navigate } from "../router";
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
 
   let activeRoute = $state("");
   let scrollContainer: HTMLElement;
@@ -10,7 +10,7 @@
   $effect(() => {
     const unsub = currentRoute.subscribe((r) => {
       activeRoute = r;
-      updateThumb();
+      tick().then(updateThumb);
     });
     return unsub;
   });
@@ -27,16 +27,23 @@
     { route: "compress/ocr", label: "PDF OCR", icon: "🔍" },
     { route: "convert", label: "Convert", icon: "🔁" },
     { route: "convert/pdf-markdown", label: "PDF to Markdown", icon: "📝", isNew: true },
-    { route: "about", label: "About", icon: "ℹ️" },
     { route: "docs", label: "Docs", icon: "📖" },
     { route: "privacy", label: "Privacy", icon: "🔒" },
   ];
 
-  function updateThumb() {
+  function isRouteActive(tabRoute: string, current: string): boolean {
+    const norm = (current === "" || current === "home") ? "" : current;
+    if (tabRoute === "") return norm === "";
+    return norm === tabRoute || norm.startsWith(tabRoute + "/");
+  }
+
+  async function updateThumb() {
+    await tick();
     if (!scrollContainer || !thumbEl) return;
     const activeLink = scrollContainer.querySelector<HTMLElement>(".cz-tab.is-active");
     if (!activeLink) {
       thumbEl.style.width = "0px";
+      thumbEl.style.opacity = "0";
       return;
     }
     const scrollRect = scrollContainer.getBoundingClientRect();
@@ -44,6 +51,7 @@
     const left = linkRect.left - scrollRect.left + scrollContainer.scrollLeft;
     thumbEl.style.transform = `translateX(${left}px)`;
     thumbEl.style.width = `${linkRect.width}px`;
+    thumbEl.style.opacity = "1";
 
     activeLink.scrollIntoView({
       block: "nearest",
@@ -70,10 +78,10 @@
     <span class="cz-tabbar-thumb" bind:this={thumbEl} aria-hidden="true"></span>
 
     {#each TABS as tab}
-      {@const isActive = activeRoute === tab.route || (tab.route !== "" && activeRoute.startsWith(tab.route + "/"))}
+      {@const active = isRouteActive(tab.route, activeRoute)}
       <a
         href="/{tab.route}"
-        class="cz-tab {isActive ? 'is-active active' : ''}"
+        class="cz-tab {active ? 'is-active active' : ''}"
         data-tab
         data-nav={tab.route}
         aria-label={tab.label}
@@ -104,7 +112,7 @@
     position: relative;
     display: flex;
     align-items: center;
-    gap: 0.25rem;
+    gap: 0.35rem;
     padding: 0 1rem;
     overflow-x: auto;
     overflow-y: hidden;
@@ -120,32 +128,39 @@
     position: absolute;
     bottom: 0;
     left: 0;
-    height: 2.5px;
-    background: var(--accent);
-    border-radius: 2px 2px 0 0;
-    transition: transform var(--t2), width var(--t2);
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    border-radius: 3px 3px 0 0;
+    box-shadow: 0 0 10px var(--accent-glow);
+    transition: transform var(--t2), width var(--t2), opacity var(--t);
     pointer-events: none;
+    z-index: 2;
   }
   .cz-tab {
     display: inline-flex;
     align-items: center;
     gap: 0.45rem;
-    padding: 0 0.75rem;
-    height: 100%;
-    font-size: 0.86rem;
+    padding: 0.35rem 0.8rem;
+    height: 33px;
+    font-size: 0.85rem;
     font-weight: 500;
     color: var(--text-2);
     white-space: nowrap;
-    border-radius: var(--r-xs);
-    transition: color var(--t);
+    border-radius: 100px;
+    transition: color var(--t), background var(--t), border-color var(--t), box-shadow var(--t);
     text-decoration: none;
+    border: 1px solid transparent;
   }
   .cz-tab:hover {
     color: var(--text);
+    background: var(--bg2);
   }
   .cz-tab.is-active {
     color: var(--accent);
+    background: var(--accent-soft);
+    border-color: var(--accent-glow);
     font-weight: 600;
+    box-shadow: 0 1px 6px var(--accent-glow);
   }
   .cz-tab-icon {
     font-size: 0.95rem;
@@ -155,7 +170,7 @@
     border-radius: 4px;
     font-size: 0.7rem;
     font-weight: 600;
-    background: var(--accent-soft);
-    color: var(--accent);
+    background: var(--accent);
+    color: #ffffff;
   }
 </style>
