@@ -97,6 +97,19 @@
     toast("Downloaded complete bundle", "success");
   }
 
+  function handleDownloadMarkdown() {
+    if (!editableMarkdown || !selectedFile) return;
+    const blob = new Blob([editableMarkdown], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const baseName = selectedFile.name.replace(/\.pdf$/i, "");
+    a.href = url;
+    a.download = `${baseName}.md`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    toast("Downloaded Markdown (.md)", "success");
+  }
+
   async function handleCopyMarkdown() {
     if (!editableMarkdown) return;
     try {
@@ -259,22 +272,49 @@
             type="button"
             class="cz-btn cz-btn-secondary cz-btn-sm"
             onclick={handleCopyMarkdown}
+            title="Copy markdown text to clipboard"
           >
-            Copy Markdown
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
+            <span>Copy Markdown</span>
+          </button>
+          <button
+            type="button"
+            class="cz-btn cz-btn-secondary-accent cz-btn-sm"
+            onclick={handleDownloadMarkdown}
+            title="Download pure Markdown file (.md)"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="12" y1="18" x2="12" y2="12"/>
+              <line x1="9" y1="15" x2="12" y2="18"/>
+              <line x1="15" y1="15" x2="12" y2="18"/>
+            </svg>
+            <span>Download .md</span>
           </button>
           <button
             type="button"
             class="cz-btn cz-btn-primary cz-btn-sm"
             onclick={handleDownloadBundle}
+            title="Download full bundle with Markdown, extracted images, and assets in a ZIP archive"
           >
-            Download complete bundle (.zip)
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            <span>Download Bundle (.zip)</span>
           </button>
           <button
             type="button"
             class="cz-btn cz-btn-ghost cz-btn-sm"
             onclick={handleClear}
+            title="Clear and process another PDF"
           >
-            New document
+            <span>New document</span>
           </button>
         </div>
       </div>
@@ -558,5 +598,91 @@
   .cz-markdown-editor:focus-visible {
     outline: none;
     border-color: var(--accent);
+  }
+
+  /* Button hierarchy & theme differentiation */
+  .cz-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    font-family: var(--sans);
+    font-weight: 600;
+    line-height: 1;
+    border-radius: var(--r-xs);
+    cursor: pointer;
+    transition: background var(--t), color var(--t), border-color var(--t), box-shadow var(--t), transform var(--t);
+    text-decoration: none;
+    border: 1px solid transparent;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .cz-btn-sm {
+    padding: 0.45rem 0.85rem;
+    font-size: 0.82rem;
+    height: 34px;
+  }
+  .cz-btn-lg {
+    padding: 0.75rem 1.75rem;
+    font-size: 0.98rem;
+    border-radius: var(--r-sm);
+    height: 44px;
+  }
+  .cz-btn-primary {
+    background: var(--accent);
+    color: #ffffff;
+    box-shadow: 0 1px 4px var(--accent-glow);
+  }
+  .cz-btn-primary:hover:not(:disabled) {
+    background: var(--accent-2);
+    box-shadow: 0 2px 8px var(--accent-glow);
+    transform: translateY(-1px);
+  }
+  .cz-btn-primary:active:not(:disabled) {
+    transform: translateY(0);
+  }
+  .cz-btn-secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .cz-btn-secondary:hover:not(:disabled) {
+    background: var(--bg2);
+    border-color: var(--border-mid);
+    color: var(--text);
+    transform: translateY(-1px);
+  }
+  .cz-btn-secondary:active:not(:disabled) {
+    transform: translateY(0);
+  }
+  .cz-btn-secondary-accent {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: 1px solid var(--accent-glow);
+  }
+  .cz-btn-secondary-accent:hover:not(:disabled) {
+    background: var(--accent);
+    color: #ffffff;
+    border-color: var(--accent);
+    box-shadow: 0 2px 8px var(--accent-glow);
+    transform: translateY(-1px);
+  }
+  .cz-btn-secondary-accent:active:not(:disabled) {
+    transform: translateY(0);
+  }
+  .cz-btn-ghost {
+    background: transparent;
+    color: var(--text-3);
+    border: 1px solid var(--border);
+  }
+  .cz-btn-ghost:hover:not(:disabled) {
+    background: var(--surface2);
+    color: var(--text);
+    border-color: var(--border-mid);
+  }
+  .cz-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none !important;
   }
 </style>

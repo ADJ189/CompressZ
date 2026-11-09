@@ -60,6 +60,64 @@
     <p>
       CompressZ executes 100% locally on your machine with zero server communication. Operating strictly inside the browser sandbox introduces specific platform constraints:
     </p>
+
+    <div class="cz-table-wrap">
+      <table class="cz-matrix-table">
+        <thead>
+          <tr>
+            <th>Workload</th>
+            <th>Browser Boundary</th>
+            <th>Safe Operating Ceiling</th>
+            <th>Processing Engine</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Video Transcoding</strong></td>
+            <td>2 GiB WASM address space</td>
+            <td>1.5 GiB per file (1080p / 4K)</td>
+            <td>WebCodecs (GPU) / FFmpeg.wasm</td>
+          </tr>
+          <tr>
+            <td><strong>Audio Processing</strong></td>
+            <td>Uncompressed frame memory</td>
+            <td>500 MB per batch</td>
+            <td>FFmpeg.wasm pipeline</td>
+          </tr>
+          <tr>
+            <td><strong>Image Compression</strong></td>
+            <td>Canvas dimensions (16384px)</td>
+            <td>100 MB / 150 images batch</td>
+            <td>OffscreenCanvas + WASM SSIM</td>
+          </tr>
+          <tr>
+            <td><strong>PDF Merging & Shrink</strong></td>
+            <td>In-memory document objects</td>
+            <td>200 MB / 500 pages per merge</td>
+            <td>pdf-lib + PDF.js</td>
+          </tr>
+          <tr>
+            <td><strong>PDF to Markdown & OCR</strong></td>
+            <td>Working RAM during figure crops</td>
+            <td>100 pages per document</td>
+            <td>Tesseract.js WASM + layout engine</td>
+          </tr>
+          <tr>
+            <td><strong>Multi-threading</strong></td>
+            <td>COOP/COEP isolation required</td>
+            <td>4 to 8 Web Workers</td>
+            <td>SharedArrayBuffer</td>
+          </tr>
+          <tr>
+            <td><strong>Mobile & Battery</strong></td>
+            <td>Background tab sleep by OS</td>
+            <td>Keep tab in foreground</td>
+            <td>Efficient Mode governor</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
     <ul>
       <li><strong>WASM 32-bit Memory Ceiling:</strong> WebAssembly engines operate within 32-bit address spaces (maximum 2 GiB safe allocation). Video files over 1.5 GiB may exceed browser buffer limits during intensive multi-pass transcoding.</li>
       <li><strong>Hardware Video Codecs:</strong> WebCodecs hardware encoding availability depends on your OS and GPU driver. Unsupported codecs (or platforms without WebCodecs) seamlessly fall back to multithreaded WASM software encoding.</li>
@@ -119,5 +177,37 @@
     display: flex;
     flex-direction: column;
     gap: 0.45rem;
+  }
+  .cz-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface);
+    margin: 0.5rem 0;
+  }
+  .cz-matrix-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.84rem;
+    text-align: left;
+  }
+  .cz-matrix-table th {
+    background: var(--surface2);
+    color: var(--text-2);
+    font-weight: 600;
+    padding: 0.65rem 0.85rem;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .cz-matrix-table td {
+    padding: 0.6rem 0.85rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-2);
+  }
+  .cz-matrix-table tr:last-child td {
+    border-bottom: none;
+  }
+  .cz-matrix-table td strong {
+    color: var(--text);
   }
 </style>
