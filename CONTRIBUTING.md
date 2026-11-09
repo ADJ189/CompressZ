@@ -31,7 +31,7 @@ set up, the project's conventions, and how to submit changes.
 
 ## Getting set up
 
-CompressZ requires **Node.js `^20.19.0 || ^22.13.0 || >=24`**. npm is the
+CompressZ requires **Node.js `>=24.0.0` (latest Node 24 or better)**. npm is the
 canonical runner for GitHub Actions and Cloudflare Pages.
 
 ```bash

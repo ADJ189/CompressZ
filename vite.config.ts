@@ -18,7 +18,7 @@ try {
 }
 
 // App version for Settings → General.
-let appVersion = "1.13.0-a1";
+let appVersion = "1.14.0";
 try {
   appVersion =
     (JSON.parse(

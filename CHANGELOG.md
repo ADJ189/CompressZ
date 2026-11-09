@@ -7,7 +7,16 @@ carry an `-a`/`-b` prerelease suffix (`-a` = early/alpha, `-b` = beta,
 close to ready) with a trailing counter, e.g. `1.12.0-b1`, `1.12.0-b2`.
 The suffix is dropped on the release that ships it (`1.12.0`).
 
-## [Unreleased]
+## [1.14.0] - 2026-11-09
+
+### Changed & Fixed — Node 24+, Desktop Tools Layout, Navigation & Limitations Overhaul
+
+- **Node 24 Upgrade & Pinning**: Updated minimum runtime requirements to Node.js 24 (`>=24.0.0`) in `package.json`, `package-lock.json`, `.node-version` (`24`), `.nvmrc` (`24`), CI workflows, and documentation.
+- **Desktop Tools Grid Resolution**: Resolved squished single-row 6-column card layout on desktop viewports by updating `.cz-wb-quick` to a responsive 3-column layout on desktop (>860px) while maintaining 2-column rendering on mobile viewports (<560px).
+- **Hero Title Descender Separation**: Increased `.home-title` line height to `1.2` and added vertical separation on `.ht-plain` and `.ht-grad`, completely eliminating descender collisions between "Compress anything." and "Stay private.".
+- **PDF to Markdown Navigation Highlighting**: Fixed multi-tab active conflict where both `Convert` and `PDF to Markdown` tabs matched `/convert/pdf-markdown`, ensuring the gliding navigation thumb accurately locks onto the PDF to Markdown tab.
+- **Inherent Limitations Matrix Overhaul (`LIMITATIONS.md` & `Docs.svelte`)**: Promoted the operational limitations matrix to the top of `LIMITATIONS.md` directly under the introduction, focused exclusively on browser workload boundaries without extraneous comparison columns, and removed all emojis for clean professional readability. Synchronized the shortened matrix directly into the in-app documentation.
+- **Export Actions Differentiation & Contrast**: Refined export buttons in `PdfMarkdown.svelte` with clear visual hierarchy (Primary Bundle ZIP, Secondary Accent Markdown Download, Secondary Copy Markdown, Ghost New Document) and verified high-contrast styling across both Light Mode and Dark Mode.
 
 ### Added — Original Home Design, Zen/macOS Inspector UI, WebAssembly Acceleration & Visual Reordering
 

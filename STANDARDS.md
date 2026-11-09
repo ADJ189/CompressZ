@@ -11,8 +11,8 @@ This document specifies the technical standards, toolchain invariants, and deplo
    - Zero mentions of `deno` are permitted inside `package.json` scripts or dependencies (enforced by `tests/hallmark.test.ts`).
    - `.gitignore` must strictly isolate local developer tooling (`deno.json`, `deno.lock`, `.deno/`).
 2. **Runtime Engine Versions**:
-   - Pinned `.node-version` (`22.14.0`) and `.nvmrc` (`22.14.0`) are required for Cloudflare Pages build compatibility.
-   - Node engine constraint: `^20.19.0 || ^22.13.0 || >=24`.
+   - Pinned `.node-version` (`24`) and `.nvmrc` (`24`) are required for CI workflows and Cloudflare Pages build compatibility.
+   - Node engine constraint: `>=24.0.0` (latest Node 24 or higher).
 
 ---
 
