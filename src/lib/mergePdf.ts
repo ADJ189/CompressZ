@@ -78,3 +78,6 @@ export async function mergePdfs(
     totalInputSize: files.reduce((sum, f) => sum + f.size, 0),
   };
 }
+
+export const mergePdf = mergePdfs;
+

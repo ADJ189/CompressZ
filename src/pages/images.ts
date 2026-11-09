@@ -68,7 +68,8 @@ export function mountImages(root: HTMLElement) {
           };
         }
       });
-      // Group visually/semantically similar images together instead of leaving upload order.
+      // Reorder by predicted label (same label next to same label). This is
+      // not embedding-based visual similarity — see lib/aiEngine.ts.
       s.files = s.files
         .slice()
         .sort((x, y) =>
@@ -77,7 +78,7 @@ export function mountImages(root: HTMLElement) {
 
       const tagged = analysis.filter((a) => a.tag).length;
       toast(
-        `Analyzed ${analysis.length} image${analysis.length !== 1 ? "s" : ""} · ${tagged} tagged and sorted${settings.ai.autoApplySuggestions ? " · settings applied" : ""}`,
+        `Analyzed ${analysis.length} image${analysis.length !== 1 ? "s" : ""} · ${tagged} tagged, sorted by label${settings.ai.autoApplySuggestions ? " · settings applied" : ""}`,
         "success",
       );
     } catch (e: any) {
@@ -202,7 +203,7 @@ export function mountImages(root: HTMLElement) {
           <span class="badge img">🖼️ Images</span>
           <h1 class="page-title">Image Compressor</h1>
         </div>
-        <p class="page-sub">GPU-decoded · OffscreenCanvas · JPEG · PNG · WebP · AVIF · BMP · TIFF · HEIC</p>
+        <p class="page-sub">Browser-native decode · Canvas/OffscreenCanvas · WebGL2 resize when available · JPEG · PNG · WebP · AVIF · BMP · TIFF · HEIC</p>
         <p class="page-sub" style="color:var(--text-4)">🔒 EXIF/GPS metadata is always stripped — re-encoding through canvas doesn't carry it over</p>
         <div id="fmt-warn" class="compat-warn" style="display:none"></div>
       </div>
@@ -228,10 +229,10 @@ export function mountImages(root: HTMLElement) {
     row.style.display = "flex";
     const btn = document.createElement("button");
     btn.className = "btn-sm btn-ai";
-    btn.textContent = aiBusy ? "Analyzing…" : "✨ Smart Analyze & Sort (AI)";
+    btn.textContent = aiBusy ? "Analyzing…" : "✨ Analyze & sort by label (AI)";
     btn.disabled = aiBusy;
     btn.title =
-      "Tags each image locally, groups similar ones together, and (if enabled in Settings) suggests format/quality per image";
+      "Tags each image locally, sorts by predicted label (not visual similarity), and (if enabled in Settings) suggests format/quality per image";
     btn.addEventListener("click", runSmartAnalyze);
     row.appendChild(btn);
     aiBarEl.appendChild(row);

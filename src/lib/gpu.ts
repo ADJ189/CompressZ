@@ -36,8 +36,22 @@ export function hasOffscreenCanvas(): boolean {
   return typeof OffscreenCanvas !== "undefined";
 }
 
-/** True if *any* GPU-eligible path is available in this browser. */
+/**
+ * True only when a real GPU acceleration path exists (WebGL2). OffscreenCanvas
+ * is deliberately NOT counted here: it is an off-main-thread canvas API, not
+ * proof of hardware acceleration, and reporting it as "GPU available" was
+ * overstating device capability.
+ */
 export function gpuAvailable(): boolean {
+  return hasWebGL2();
+}
+
+/**
+ * True when at least one canvas path exists. The PDF/OCR/video toggles use a
+ * `desynchronized` 2D-context hint, which works without WebGL2; only the
+ * image resize path actually needs WebGL2.
+ */
+export function canvasPathAvailable(): boolean {
   return hasWebGL2() || hasOffscreenCanvas();
 }
 

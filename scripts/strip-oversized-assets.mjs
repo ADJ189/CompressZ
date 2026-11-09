@@ -20,8 +20,12 @@
 
 import { readdir, stat, unlink } from "node:fs/promises";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const DIST_DIR = new URL("../dist/assets", import.meta.url).pathname;
+// `new URL(...).pathname` yields "/C:/..." on Windows, which fs then treats as
+// an invalid root and silently skips every oversized asset. fileURLToPath is
+// the platform-correct conversion.
+const DIST_DIR = fileURLToPath(new URL("../dist/assets", import.meta.url));
 const CLOUDFLARE_PAGES_LIMIT = 25 * 1024 * 1024; // 25 MiB, Cloudflare Pages' hard per-file cap
 const SAFETY_MARGIN = 1 * 1024 * 1024; // strip anything within 1MiB of the cap too
 const THRESHOLD = CLOUDFLARE_PAGES_LIMIT - SAFETY_MARGIN;

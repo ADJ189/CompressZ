@@ -1,23 +1,43 @@
 import { defineConfig } from "vite";
+import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-// Read the actually-installed onnxruntime-web version so aiEngine.ts can
-// point its CDN-hosted WASM binaries at the exact matching build (see
-// aiEngine.ts and scripts/strip-oversized-assets.mjs for why). A plain fs
-// read of the package.json — not a module import — because onnxruntime-web's
-// "exports" map doesn't expose package.json as an importable subpath.
-const onnxPkgPath = fileURLToPath(
-  new URL("./node_modules/onnxruntime-web/package.json", import.meta.url),
-);
-const ortVersion = JSON.parse(readFileSync(onnxPkgPath, "utf8"))
-  .version as string;
+// Read the installed onnxruntime-web version so aiEngine.ts can
+// point its CDN-hosted WASM binaries at the exact matching build.
+let ortVersion = "1.18.0";
+try {
+  const onnxPkgPath = fileURLToPath(
+    new URL("./node_modules/onnxruntime-web/package.json", import.meta.url),
+  );
+  ortVersion =
+    (JSON.parse(readFileSync(onnxPkgPath, "utf8")).version as string) ||
+    ortVersion;
+} catch {
+  // Fallback if node_modules is not present
+}
+
+// App version for Settings → General.
+let appVersion = "1.14.0";
+try {
+  appVersion =
+    (JSON.parse(
+      readFileSync(
+        fileURLToPath(new URL("./package.json", import.meta.url)),
+        "utf8",
+      ),
+    ).version as string) || appVersion;
+} catch {
+  // Fallback if package.json read fails
+}
 
 export default defineConfig({
   root: ".",
   publicDir: "public",
+  plugins: [svelte()],
   define: {
     __ORT_VERSION__: JSON.stringify(ortVersion),
+    __APP_VERSION__: JSON.stringify(appVersion),
   },
   build: {
     outDir: "dist",

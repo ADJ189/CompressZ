@@ -37,8 +37,10 @@ export interface PlatformInfo {
   memoryGB: number | null; // navigator.deviceMemory (Chromium-only), null elsewhere
   touch: boolean;
   gpuRenderer: string | null; // WEBGL_debug_renderer_info UNMASKED_RENDERER_WEBGL, if permitted
-  webgl2: boolean;
-  webgpu: boolean;
+  webgl2: boolean; // actual WebGL2 context — the only signal used for the GPU resize path
+  webgpu: boolean; // `navigator.gpu` exists; adapter/device are tested only on first AI use
+  offscreenCanvas: boolean; // off-main-thread canvas API — NOT proof of GPU acceleration
+  webCodecs: boolean; // VideoEncoder/VideoDecoder API presence; no hardware support implied
   crossOriginIsolated: boolean; // gates SharedArrayBuffer → multi-threaded ffmpeg.wasm/OCR
   connection: string | null; // effectiveType: '4g' | '3g' | ... (Chromium-only)
   saveData: boolean;
@@ -168,27 +170,48 @@ export function detectPlatform(): PlatformInfo {
     engine,
     cores: navigator.hardwareConcurrency || 0,
     memoryGB: (navigator as any).deviceMemory ?? null,
-    touch: navigator.maxTouchPoints > 0 || "ontouchstart" in window,
+    touch:
+      navigator.maxTouchPoints > 0 ||
+      (typeof window !== "undefined" && "ontouchstart" in window),
     gpuRenderer: renderer,
     webgl2,
     webgpu: "gpu" in navigator,
-    crossOriginIsolated: !!(window as any).crossOriginIsolated,
+    offscreenCanvas: typeof OffscreenCanvas !== "undefined",
+    webCodecs:
+      typeof VideoEncoder !== "undefined" &&
+      typeof VideoDecoder !== "undefined",
+    crossOriginIsolated:
+      typeof globalThis !== "undefined"
+        ? !!(globalThis as any).crossOriginIsolated
+        : false,
     connection: conn?.effectiveType ?? null,
     saveData: !!conn?.saveData,
     reducedMotion:
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
+      typeof window !== "undefined" &&
+      Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches),
   };
 
   _cached = { ...base, tier: computeTier(base) };
   return _cached;
 }
 
-/** Concrete per-engine recommendations for the detected device. Pure function of the tier + a few raw signals, so it's easy to reason about and to show a "why" string in Settings. */
+/**
+ * Concrete per-engine recommendations for the detected device. Pure function
+ * of the tier + a few raw signals, so it's easy to reason about and to show a
+ * "why" string in Settings.
+ *
+ * `tierOverride` is the user's manual Performance Mode choice. Passing it here
+ * is what makes the mode a real execution profile instead of a label: AI model
+ * tier, concurrency and FFmpeg threading are all derived from the same tier
+ * the rest of the app is using, not from the hardware-detected one.
+ */
 export function recommend(
   info: PlatformInfo = detectPlatform(),
+  tierOverride?: PerformanceTier,
 ): EngineRecommendation {
-  const gpuOn = info.webgl2; // GPU toggles are only meaningful if a canvas GPU path exists at all
-  switch (info.tier) {
+  const tier = tierOverride ?? info.tier;
+  const gpuOn = info.webgl2; // GPU resize needs WebGL2; OffscreenCanvas alone is not GPU proof
+  switch (tier) {
     case "efficient":
       return {
         gpu: { images: gpuOn, pdf: false, ocr: false, video: false },
@@ -226,3 +249,7 @@ export function tierLabel(t: PerformanceTier): string {
       ? "Powerful"
       : "Balanced";
 }
+
+/** Alias for detectPlatform() used by workbench pages. */
+export const getPlatformInfo = detectPlatform;
+

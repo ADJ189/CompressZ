@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "lib": ["deno.ns", "dom", "esnext"]
+  },
+  "lint": {
+    "include": ["src/", "tests/"],
+    "rules": {
+      "exclude": [
+        "no-explicit-any",
+        "no-window",
+        "no-window-prefix",
+        "require-await",
+        "no-sloppy-imports",
+        "prefer-const"
+      ]
+    }
+  },
+  "test": {
+    "include": ["tests/"]
+  },
+  "unstable": ["sloppy-imports"]
+}

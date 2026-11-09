@@ -2,6 +2,12 @@ import type { CompressOptions, CompressResult, ImageFormat } from "./types";
 import { makeCanvas, get2D, resizeViaWebGL } from "./gpu";
 import { decodeImageBitmap } from "./imageDecode";
 import { resolvedMaxImageDim } from "./settings";
+import {
+  computeSsim,
+  decideQualityGuard,
+  planOutputSize,
+  sampleLuma,
+} from "./qualityGuard";
 
 // AVIF *encoding* support varies a lot more than decoding support (notably
 // Safari can display AVIF but can't encode it via canvas, and older Firefox
@@ -49,15 +55,14 @@ export async function compressImage(
   const bitmap = await decodeImageBitmap(file);
   onProgress?.(18);
 
-  let { width: w, height: h } = bitmap;
-  const origW = w,
-    origH = h;
-  const needsResize = w > maxW || h > maxH;
-  if (needsResize) {
-    const r = Math.min(maxW / w, maxH / h);
-    w = Math.round(w * r);
-    h = Math.round(h * r);
-  }
+  const origW = bitmap.width,
+    origH = bitmap.height;
+  // planOutputSize() never upscales: a max dimension is a ceiling, so a
+  // 1200px source stays 1200px even when the cap is 4000px.
+  const size = planOutputSize(origW, origH, maxW, maxH);
+  const w = size.width,
+    h = size.height;
+  const needsResize = size.resized;
 
   // GPU path: when we're actually downscaling, run the resize as a WebGL2
   // texture draw (hardware bilinear filtering) instead of Canvas2D's
@@ -89,6 +94,7 @@ export async function compressImage(
     format === "image/avif" ? 0.7 : format === "image/jpeg" ? 0.85 : 0.82;
   const clamp = (q: number) =>
     format === "image/png" ? 1 : Math.max(0.01, Math.min(0.99, q));
+  const requestedQ = clamp(options.quality ?? defaultQ);
 
   let blob: Blob;
   if (options.targetSizeKB && options.targetSizeKB > 0) {
@@ -99,8 +105,59 @@ export async function compressImage(
       onProgress,
     );
   } else {
-    blob = await encode(canvas, format, clamp(options.quality ?? defaultQ));
+    blob = await encode(canvas, format, requestedQ);
     onProgress?.(95);
+  }
+
+  // Post-encode quality guard. It measures a ≤96×96 luma sample, so a 6000px
+  // photo costs a small fixed amount of work instead of a second full decode.
+  // The guard never lowers the requested quality or resolution: at most it
+  // retries once at a *higher* quality (when no byte target is active) and
+  // otherwise reports a short note on the result.
+  let guardNote = "";
+  let measured: MeasuredImage | null = null;
+  if (format !== "image/png") {
+    measured = await measureEncoded(canvas, w, h, blob);
+    if (measured) {
+      const base = {
+        format,
+        requestedQuality: requestedQ,
+        targetSizeKB: options.targetSizeKB,
+        planned: { width: w, height: h },
+      };
+      const first = decideQualityGuard({
+        ...base,
+        ssim: measured.ssim,
+        actual: measured,
+      });
+      if (first.action === "retry") {
+        const retried = await encode(canvas, format, clamp(first.quality));
+        const retriedMeasure = await measureEncoded(canvas, w, h, retried);
+        if (retriedMeasure && retriedMeasure.ssim > measured.ssim) {
+          const second = decideQualityGuard({
+            ...base,
+            ssim: retriedMeasure.ssim,
+            actual: retriedMeasure,
+            requestedQuality: first.quality,
+            alreadyRetried: true,
+          });
+          blob = retried;
+          measured = retriedMeasure;
+          guardNote = second.action === "warn" ? guardLabel(second.code) : "";
+        } else {
+          const second = decideQualityGuard({
+            ...base,
+            ssim: measured.ssim,
+            actual: measured,
+            requestedQuality: first.quality,
+            alreadyRetried: true,
+          });
+          guardNote = guardLabel(second.action === "warn" ? second.code : "low-ssim");
+        }
+      } else if (first.action === "warn") {
+        guardNote = guardLabel(first.code);
+      }
+    }
   }
 
   // If PNG re-encoding didn't actually shrink the file, returning the
@@ -111,8 +168,8 @@ export async function compressImage(
   // at its original dimensions/format, and metadata-stripping guarantees
   // silently don't hold.
   let outFormat: ImageFormat = format;
-  let outW = w,
-    outH = h;
+  let outW = measured?.width || w,
+    outH = measured?.height || h;
   if (
     format === "image/png" &&
     blob.size >= file.size &&
@@ -122,6 +179,7 @@ export async function compressImage(
     outFormat = "image/png";
     outW = origW;
     outH = origH;
+    guardNote = "";
   }
   onProgress?.(100);
 
@@ -130,10 +188,192 @@ export async function compressImage(
     originalSize: file.size,
     compressedSize: blob.size,
     compressionRatio: file.size / blob.size,
-    format: outFormat,
+    // `components.ts` shows everything after the "·" as the engine/note
+    // badge, so the guard note rides along without changing the MIME type.
+    format: guardNote ? `${outFormat} · ${guardNote}` : outFormat,
     width: outW,
     height: outH,
   };
+}
+
+interface MeasuredImage {
+  ssim: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Decode the encoded blob into a bounded sample instead of a full-resolution
+ * bitmap, then sample source and output to a ≤96×96 luma grid and return
+ * global SSIM plus the encoded image's real dimensions. Returns null when the
+ * browser cannot decode its own output — the caller then treats the encode as
+ * unmeasured rather than inventing a score.
+ *
+ * `createImageBitmap` can downscale while decoding, so a 6000px output never
+ * has to materialise at full size just to be measured. Dimensions are read
+ * from the encoded header (`encodedDimensions`) because a resized bitmap no
+ * longer reports them.
+ */
+async function measureEncoded(
+  source: HTMLCanvasElement | OffscreenCanvas,
+  width: number,
+  height: number,
+  blob: Blob,
+): Promise<MeasuredImage | null> {
+  if (typeof createImageBitmap !== "function") return null;
+  try {
+    const { width: sw, height: sh } = sampleSize(width, height);
+    let decoded: ImageBitmap;
+    try {
+      decoded = await createImageBitmap(blob, {
+        resizeWidth: sw,
+        resizeHeight: sh,
+        resizeQuality: "high",
+      });
+    } catch {
+      // Some engines reject the resize options themselves. Fall back to a
+      // plain decode rather than losing the measurement entirely.
+      decoded = await createImageBitmap(blob);
+    }
+    const a = await sampleCanvasLuma(source, width, height);
+    const b = await sampleCanvasLuma(decoded, sw, sh);
+    decoded.close();
+    // The planned dimensions are the encoder's own input, so they are the
+    // correct fallback when the header can't be parsed (unknown container).
+    const actual = (await encodedDimensions(blob)) ?? { width, height };
+    return { ssim: computeSsim(a, b), width: actual.width, height: actual.height };
+  } catch {
+    return null;
+  }
+}
+
+/** The ≤96px sampling grid used for both source and output. */
+function sampleSize(width: number, height: number): { width: number; height: number } {
+  const MAX_SIDE = 96;
+  const scale = Math.min(1, MAX_SIDE / Math.max(1, width, height));
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  };
+}
+
+/**
+ * Read image dimensions from the encoded header without decoding pixels.
+ * Covers the formats this app encodes (JPEG, WebP, AVIF); unknown input
+ * returns null. Only the first 64 KiB are read.
+ */
+async function encodedDimensions(
+  blob: Blob,
+): Promise<{ width: number; height: number } | null> {
+  try {
+    const head = new Uint8Array(
+      await blob.slice(0, 64 * 1024).arrayBuffer(),
+    );
+    const view = new DataView(head.buffer, head.byteOffset, head.byteLength);
+
+    // JPEG: walk the marker chain until a Start Of Frame segment.
+    if (head[0] === 0xff && head[1] === 0xd8) {
+      let off = 2;
+      while (off + 9 <= head.length) {
+        if (head[off] !== 0xff) {
+          off++;
+          continue;
+        }
+        const marker = head[off + 1];
+        if (marker === 0xd8 || marker === 0xd9) {
+          off += 2;
+          continue;
+        }
+        const len = view.getUint16(off + 2);
+        if (len < 2) return null;
+        const isSof =
+          marker >= 0xc0 &&
+          marker <= 0xcf &&
+          marker !== 0xc4 && // DHT
+          marker !== 0xc8 && // JPG extension
+          marker !== 0xcc; // DAC
+        if (isSof) {
+          return {
+            height: view.getUint16(off + 5),
+            width: view.getUint16(off + 7),
+          };
+        }
+        off += 2 + len;
+      }
+      return null;
+    }
+
+    // WebP: RIFF container, VP8 (lossy), VP8L (lossless) or VP8X (extended).
+    const riff = String.fromCharCode(...head.subarray(0, 4));
+    const webp = String.fromCharCode(...head.subarray(8, 12));
+    if (riff === "RIFF" && webp === "WEBP" && head.length >= 30) {
+      const chunk = String.fromCharCode(...head.subarray(12, 16));
+      if (chunk === "VP8 ") {
+        return {
+          width: view.getUint16(26, true) & 0x3fff,
+          height: view.getUint16(28, true) & 0x3fff,
+        };
+      }
+      if (chunk === "VP8L") {
+        return {
+          width: 1 + (((head[22] & 0x3f) << 8) | head[21]),
+          height:
+            1 +
+            (((head[24] & 0x0f) << 10) |
+              (head[23] << 2) |
+              ((head[22] & 0xc0) >> 6)),
+        };
+      }
+      if (chunk === "VP8X") {
+        return {
+          width: 1 + (head[24] | (head[25] << 8) | (head[26] << 16)),
+          height: 1 + (head[27] | (head[28] << 8) | (head[29] << 16)),
+        };
+      }
+      return null;
+    }
+
+    // AVIF: ISOBMFF — the `ispe` box carries width/height as 32-bit values
+    // after its 4-byte version/flags field.
+    const text = new TextDecoder("latin1").decode(head);
+    const idx = text.indexOf("ispe");
+    if (idx >= 0 && idx + 16 <= head.length) {
+      return {
+        width: view.getUint32(idx + 8),
+        height: view.getUint32(idx + 12),
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function sampleCanvasLuma(
+  source: CanvasImageSource,
+  width: number,
+  height: number,
+): Promise<Float32Array> {
+  const MAX_SIDE = 96;
+  const scale = Math.min(1, MAX_SIDE / Math.max(width, height));
+  const sw = Math.max(1, Math.round(width * scale));
+  const sh = Math.max(1, Math.round(height * scale));
+  const small = makeCanvas(sw, sh);
+  const ctx = get2D(small, "images");
+  ctx.drawImage(source, 0, 0, sw, sh);
+  const data = ctx.getImageData(0, 0, sw, sh).data;
+  return sampleLuma(data, sw, sh, MAX_SIDE);
+}
+
+function guardLabel(code: string): string {
+  switch (code) {
+    case "resolution-lost":
+      return "⚠ output smaller than planned";
+    case "target-size-quality":
+      return "⚠ target size limits quality";
+    default:
+      return "⚠ low SSIM at requested quality";
+  }
 }
 
 // Browsers often leave File.type empty (e.g. some drag-and-drop sources, or

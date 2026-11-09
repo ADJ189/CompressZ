@@ -13,8 +13,8 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "esModuleInterop": true,
-    "sourceMap": true,
-    "jsx": "react-jsx"
+    "sourceMap": true
   },
-  "include": ["src", "e2e"]
+  "include": ["src", "e2e", "tests"],
+  "exclude": ["src/pages"]
 }

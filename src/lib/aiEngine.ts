@@ -2,17 +2,25 @@
  * aiEngine.ts — Local, in-browser image understanding.
  *
  * Uses transformers.js (`@huggingface/transformers`) to run a real image-
- * classification model entirely on-device (WASM, or WebGPU when the
- * browser supports it) — no upload, no API call, consistent with every
- * other engine in this app. The package is dynamically imported so it
- * never touches the main bundle: it's only fetched the first time someone
- * actually uses a "Smart" feature, exactly like FFmpeg.wasm/PaddleOCR
- * already are.
+ * classification model entirely on-device — no upload, no API call,
+ * consistent with every other engine in this app. The package is
+ * dynamically imported so it never touches the main bundle: it's only
+ * fetched the first time someone actually uses a "Smart" feature, exactly
+ * like FFmpeg.wasm/PaddleOCR already are.
+ *
+ * Backend selection is explicit, not assumed:
+ *   - WebGPU is attempted only after `navigator.gpu.requestAdapter()` and a
+ *     real `requestDevice()` succeed. Transformers.js defaults to WASM, so
+ *     passing `device: "webgpu"` is required to actually use the GPU.
+ *   - If WebGPU load fails for any reason (adapter, unsupported dtype,
+ *     memory), the loader retries the same model on WASM with q8 weights.
+ *     The backend that actually succeeded is reported by `getAiRuntimeInfo`.
  *
  * What it's used for (see pages/images.ts and pages/imagesToPdf.ts):
  *   - Auto-tag: label each image with what's actually in it.
- *   - Smart Sort: group/reorder a batch by visual similarity of those
- *     labels instead of upload order.
+ *   - Sort by predicted label: reorder a batch alphabetically by those
+ *     labels. This is NOT embedding-based visual similarity grouping — a
+ *     classifier label alone can't measure visual distance.
  *   - Smart Preset: a lightweight local heuristic (no model needed) reads
  *     each image's edge density / colour palette to guess "photo" vs.
  *     "graphic-or-document" and suggests the compression settings that
@@ -30,6 +38,7 @@
  */
 
 import { decodeImageBitmap } from "./imageDecode";
+import { getSettings } from "./settings";
 // The exact onnxruntime-web version bundled with @huggingface/transformers —
 // injected at build time (see vite.config.ts) by reading the installed
 // package directly, since onnxruntime-web's package.json isn't exposed
@@ -37,11 +46,17 @@ import { decodeImageBitmap } from "./imageDecode";
 declare const __ORT_VERSION__: string;
 
 export type AiModelTier = "efficient" | "powerful";
+export type AiBackend = "webgpu" | "wasm";
 
 const MODEL_IDS: Record<AiModelTier, string> = {
   efficient: "Xenova/mobilenet_v2_1.0_224",
   powerful: "Xenova/vit-base-patch16-224",
 };
+
+/** Model ID shown in diagnostics — keep this in sync with MODEL_IDS. */
+export function aiModelId(tier: AiModelTier): string {
+  return MODEL_IDS[tier];
+}
 
 export interface AiTag {
   label: string;
@@ -67,6 +82,37 @@ export function aiSupported(): boolean {
   return typeof WebAssembly !== "undefined";
 }
 
+/**
+ * True when the WebGPU API exists. This is only a cheap gate — it does not
+ * prove an adapter/device can actually be created. `canUseWebGpu()` does the
+ * real feature test below.
+ */
+export function hasWebGpuApi(): boolean {
+  return typeof navigator !== "undefined" && !!(navigator as any).gpu;
+}
+
+let _webgpuProbe: Promise<boolean> | null = null;
+
+async function canUseWebGpu(): Promise<boolean> {
+  if (!hasWebGpuApi()) return false;
+  if (!_webgpuProbe) {
+    _webgpuProbe = (async () => {
+      try {
+        const adapter = await (navigator as any).gpu.requestAdapter();
+        if (!adapter) return false;
+        // Adapter presence alone isn't enough: some browsers expose it but
+        // fail to create a device (software blocklist, exhausted budget).
+        const device = await adapter.requestDevice?.();
+        device?.destroy?.();
+        return true;
+      } catch {
+        return false;
+      }
+    })();
+  }
+  return _webgpuProbe;
+}
+
 // ── Model loading (lazy, cached per tier) ────────────────────
 
 type Classifier = (
@@ -74,6 +120,100 @@ type Classifier = (
   opts?: any,
 ) => Promise<{ label: string; score: number }[]>;
 const pipelines = new Map<AiModelTier, Promise<Classifier>>();
+const loadedBackends = new Map<AiModelTier, AiBackend>();
+let _lastLoaded: { tier: AiModelTier; backend: AiBackend } | null = null;
+
+/**
+ * What the last successful model load actually used. Null until a model has
+ * loaded in this session; useful for Settings diagnostics and for not
+ * claiming "WebGPU" when the WASM fallback ran.
+ */
+export function getAiRuntimeInfo(): {
+  tier: AiModelTier;
+  model: string;
+  backend: AiBackend;
+} | null {
+  if (!_lastLoaded) return null;
+  return {
+    tier: _lastLoaded.tier,
+    model: MODEL_IDS[_lastLoaded.tier],
+    backend: _lastLoaded.backend,
+  };
+}
+
+interface LoadAttempt {
+  backend: AiBackend;
+  dtype?: "q8" | "fp16" | "fp32";
+}
+
+async function configureTransformersEnv(): Promise<any> {
+  const { pipeline, env } = await import("@huggingface/transformers");
+  // Keep everything local: don't let transformers.js probe for a local
+  // model server, and cache fetched model weights in the browser (IndexedDB)
+  // so it's only downloaded once, same trade-off as PaddleOCR/Tesseract.
+  env.allowLocalModels = false;
+  env.useBrowserCache = true;
+
+  // onnxruntime-web's WASM binaries (the actual inference runtime, not the
+  // model weights) are ~15-30MB each. The threaded+SIMD+asyncify build in
+  // particular is a *build-time* asset Vite bundles locally by default
+  // (via a `new URL(...)` reference inside onnxruntime-web's loader) —
+  // and at ~26MB it exceeds Cloudflare Pages' 25MiB per-file limit,
+  // failing deployment outright. Pointing wasmPaths at the exact
+  // published onnxruntime-web version on a CDN makes the runtime fetch
+  // these binaries remotely instead, so the (still Vite-bundled, but now
+  // unused) local copy can be stripped from the build output — see
+  // scripts/strip-oversized-assets.mjs, run as part of `npm run build`.
+  if (env.backends.onnx?.wasm) {
+    env.backends.onnx.wasm.wasmPaths = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${__ORT_VERSION__}/dist/`;
+  }
+  return pipeline;
+}
+
+async function loadClassifier(
+  tier: AiModelTier,
+  attempts: LoadAttempt[],
+  onProgress?: (pct: number, note: string) => void,
+): Promise<Classifier> {
+  const pipeline = await configureTransformersEnv();
+  let lastError: unknown = null;
+
+  for (const attempt of attempts) {
+    try {
+      onProgress?.(
+        0,
+        attempt.backend === "webgpu"
+          ? "Loading model on WebGPU…"
+          : "Loading model on WASM…",
+      );
+      const clf = await pipeline("image-classification", MODEL_IDS[tier], {
+        ...(attempt.backend === "webgpu"
+          ? { device: "webgpu" }
+          : { device: "wasm" }),
+        ...(attempt.dtype ? { dtype: attempt.dtype } : {}),
+        progress_callback: (e: any) => {
+          if (e?.status === "progress" && typeof e.progress === "number") {
+            onProgress?.(
+              Math.round(e.progress),
+              `Downloading ${e.file ?? "model"}…`,
+            );
+          }
+        },
+      });
+      loadedBackends.set(tier, attempt.backend);
+      _lastLoaded = { tier, backend: attempt.backend };
+      onProgress?.(100, "Ready");
+      return ((input: any, opts?: any) => clf(input, opts)) as Classifier;
+    } catch (err) {
+      lastError = err;
+      console.warn(
+        `[ai] ${tier} model failed on ${attempt.backend}${attempt.dtype ? ` (${attempt.dtype})` : ""}, trying next backend:`,
+        err,
+      );
+    }
+  }
+  throw lastError ?? new Error("No usable AI backend");
+}
 
 async function getClassifier(
   tier: AiModelTier,
@@ -83,46 +223,42 @@ async function getClassifier(
   if (p) return p;
 
   p = (async () => {
-    const { pipeline, env } = await import("@huggingface/transformers");
-    // Keep everything local: don't let transformers.js probe for a local
-    // model server, and cache fetched model weights in the browser (IndexedDB)
-    // so it's only downloaded once, same trade-off as PaddleOCR/Tesseract.
-    env.allowLocalModels = false;
-    env.useBrowserCache = true;
-
-    // onnxruntime-web's WASM binaries (the actual inference runtime, not the
-    // model weights) are ~15-30MB each. The threaded+SIMD+asyncify build in
-    // particular is a *build-time* asset Vite bundles locally by default
-    // (via a `new URL(...)` reference inside onnxruntime-web's loader) —
-    // and at ~26MB it exceeds Cloudflare Pages' 25MiB per-file limit,
-    // failing deployment outright. Pointing wasmPaths at the exact
-    // published onnxruntime-web version on a CDN makes the runtime fetch
-    // these binaries remotely instead, so the (still Vite-bundled, but now
-    // unused) local copy can be stripped from the build output — see
-    // scripts/strip-oversized-assets.mjs, run as part of `npm run build`.
-    if (env.backends.onnx?.wasm) {
-      env.backends.onnx.wasm.wasmPaths = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${__ORT_VERSION__}/dist/`;
+    // Settings → AI Engine → Inference backend. 'wasm' is an explicit
+    // opt-out: never probe or attempt WebGPU in that case. 'auto' and
+    // 'webgpu' both feature-test the adapter, and every path still falls
+    // back to WASM rather than making Smart features unavailable.
+    let preference: "auto" | "webgpu" | "wasm" = "auto";
+    try {
+      preference = getSettings().ai.backend ?? "auto";
+    } catch {
+      /* settings unavailable (test/SSR) — use the auto path */
     }
-
-    onProgress?.(0, "Downloading model…");
-    const clf = await pipeline("image-classification", MODEL_IDS[tier], {
-      progress_callback: (e: any) => {
-        if (e?.status === "progress" && typeof e.progress === "number") {
-          onProgress?.(
-            Math.round(e.progress),
-            `Downloading ${e.file ?? "model"}…`,
-          );
-        }
-      },
-    });
-    onProgress?.(100, "Ready");
-    return ((input: any, opts?: any) => clf(input, opts)) as Classifier;
+    const preferWebGpu =
+      preference !== "wasm" && (await canUseWebGpu());
+    // Dtype matters per backend: q8 is the small, tested WASM export; WebGPU
+    // tries fp16 first (smaller/faster on supported GPUs) then fp32 for
+    // exports that don't publish an fp16 variant. WASM is always the final
+    // fallback, so a WebGPU failure never makes Smart features unavailable.
+    const attempts: LoadAttempt[] = preferWebGpu
+      ? [
+          { backend: "webgpu", dtype: "fp16" },
+          { backend: "webgpu", dtype: "fp32" },
+          { backend: "wasm", dtype: "q8" },
+          { backend: "wasm" },
+        ]
+      : [
+          { backend: "wasm", dtype: "q8" },
+          { backend: "wasm" },
+        ];
+    return loadClassifier(tier, attempts, onProgress);
   })();
 
   // Don't cache a failed load — otherwise one offline/transient failure
   // makes every later "Smart" action fail until the page is reloaded.
   p.catch(() => {
     if (pipelines.get(tier) === p) pipelines.delete(tier);
+    loadedBackends.delete(tier);
+    if (_lastLoaded?.tier === tier) _lastLoaded = null;
   });
   pipelines.set(tier, p);
   return p;
@@ -131,6 +267,8 @@ async function getClassifier(
 /** Drop cached pipelines (e.g. if the user switches AI Engine tier mid-session and wants to free memory). Cached model *weights* stay in the browser cache — only the in-memory session is released. */
 export function unloadModels() {
   pipelines.clear();
+  loadedBackends.clear();
+  _lastLoaded = null;
 }
 
 // ── Classification ────────────────────────────────────────────
@@ -257,17 +395,30 @@ export async function smartAnalyze(
   return out;
 }
 
-/** Stable sort of a file list by AI label (falls back to filename for files whose label lookup failed), grouping visually/semantically similar images together instead of leaving them in drop order. */
-export function sortBySmartAnalysis(
+/**
+ * Stable sort of a file list by predicted AI label (falls back to filename
+ * for files whose label lookup failed). This groups images with the same
+ * predicted class next to each other; it is not embedding-based visual
+ * similarity. The name says exactly what it does so the UI can too.
+ */
+export function sortByPredictedLabel(
   files: File[],
   analysis: SmartAnalysis[],
 ): File[] {
-  const byFile = new Map(
-    analysis.map((a) => [a.file, a.tag?.label ?? "~" + a.file.name]),
+  const labelOf = new Map(
+    analysis.map((a) => [a.file, a.tag?.label ?? null]),
   );
   return files
     .slice()
-    .sort((a, b) =>
-      (byFile.get(a) ?? a.name).localeCompare(byFile.get(b) ?? b.name),
-    );
+    .sort((a, b) => {
+      const la = labelOf.get(a) ?? null;
+      const lb = labelOf.get(b) ?? null;
+      // Files whose classification failed sort after every labelled file,
+      // ordered by filename among themselves. A "~" prefix used to be used
+      // here, but localeCompare treats punctuation as near-zero weight, so
+      // unlabelled files could sort first instead of last.
+      if (la === null && lb !== null) return 1;
+      if (la !== null && lb === null) return -1;
+      return (la ?? a.name).localeCompare(lb ?? b.name);
+    });
 }

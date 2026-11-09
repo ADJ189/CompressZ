@@ -7,7 +7,312 @@ carry an `-a`/`-b` prerelease suffix (`-a` = early/alpha, `-b` = beta,
 close to ready) with a trailing counter, e.g. `1.12.0-b1`, `1.12.0-b2`.
 The suffix is dropped on the release that ships it (`1.12.0`).
 
-## [Unreleased]
+## [1.14.0] - 2026-11-09
+
+### Changed & Fixed — Node 24+, Desktop Tools Layout, Navigation & Limitations Overhaul
+
+- **Node 24 Upgrade & Pinning**: Updated minimum runtime requirements to Node.js 24 (`>=24.0.0`) in `package.json`, `package-lock.json`, `.node-version` (`24`), `.nvmrc` (`24`), CI workflows, and documentation.
+- **Desktop Tools Grid Resolution**: Resolved squished single-row 6-column card layout on desktop viewports by updating `.cz-wb-quick` to a responsive 3-column layout on desktop (>860px) while maintaining 2-column rendering on mobile viewports (<560px).
+- **Hero Title Descender Separation**: Increased `.home-title` line height to `1.2` and added vertical separation on `.ht-plain` and `.ht-grad`, completely eliminating descender collisions between "Compress anything." and "Stay private.".
+- **PDF to Markdown Navigation Highlighting**: Fixed multi-tab active conflict where both `Convert` and `PDF to Markdown` tabs matched `/convert/pdf-markdown`, ensuring the gliding navigation thumb accurately locks onto the PDF to Markdown tab.
+- **Inherent Limitations Matrix Overhaul (`LIMITATIONS.md` & `Docs.svelte`)**: Promoted the operational limitations matrix to the top of `LIMITATIONS.md` directly under the introduction, focused exclusively on browser workload boundaries without extraneous comparison columns, and removed all emojis for clean professional readability. Synchronized the shortened matrix directly into the in-app documentation.
+- **Export Actions Differentiation & Contrast**: Refined export buttons in `PdfMarkdown.svelte` with clear visual hierarchy (Primary Bundle ZIP, Secondary Accent Markdown Download, Secondary Copy Markdown, Ghost New Document) and verified high-contrast styling across both Light Mode and Dark Mode.
+
+### Added — Original Home Design, Zen/macOS Inspector UI, WebAssembly Acceleration & Visual Reordering
+
+- **Original Home Page Design Port**: Restored the complete original Home design from `CompressZ-main` (`home-hero`, `ey-pill`, `home-title` with `ht-grad`, 4 trust chips, 10 `.htc` tool cards with hover glide arrows, 01–04 "How it works" step cards, and the full `priv-highlight` banner) implemented as a clean, reactive Svelte 5 component.
+- **Zen Browser Floating Active Capsule & Gliding Navigation**: Fixed tab highlighting desync with Svelte 5 `tick()`, implemented Zen Browser / iOS floating active pill styling with animated glowing gliding thumb indicator, normalized route matching (`""` vs `"home"`), and relocated "About" to the persistent bottom footer.
+- **Visual Reordering & Live Previews (`Merge PDF` & `Images to PDF`)**: Added live image thumbnails and PDF document cover cards, smooth Svelte FLIP transitions (`animate:flip`), native drag-and-drop reordering, explicit Move Up `▲` / Move Down `▼` buttons, and Natural 1-9 numeric sorting.
+- **Apple macOS Sonoma/Sequoia Conversion Inspector (`Convert.svelte`)**: Added an Inspector panel with SF-style iconography and iOS `.mac-toggle` switches for CRF quality levels (HQ/Balanced/Small), resolution downscaling (Native/1080p/720p/480p), framerate capping, audio bitrate selection, audio muting (`-an`), FastStart streaming (`-movflags +faststart`), and EXIF privacy stripping.
+- **Hardware-Speed WebAssembly Acceleration (`src/lib/wasmMath.ts`)**: Built an inline zero-dependency 146-byte compiled WebAssembly module for IEEE 802.3 CRC-32 checksum calculation in ZIP creation and validation, with seamless pure-JS fallback for restricted environments.
+- **Browser & Engine Limitations Documentation (`LIMITATIONS.md` & `/docs`)**: Authored comprehensive architectural boundary documentation covering 32-bit WASM 2 GiB memory limits, WebCodecs GPU support matrices, mobile background tab throttling, and high-DPI PDF memory footprints.
+- **SonarCloud Duplication Fix (`e2e/engines.spec.ts`)**: Streamlined quality guard assertions and parameterized route fixtures, eliminating duplicate line warnings (down to 0%).
+- **Theme Contrast & Text Overlap Resolution**: Added native `color-scheme: light / dark` to root styles, removed hardcoded `#fff` in `PdfMarkdown.svelte`, and redesigned settings dialog layout with flex wrapping and mobile column stacking.
+
+### Added — Repository, Review Standards & Toolchain Isolation for GitHub & Cloudflare Pages
+
+- **Unified npm Test Runner (`scripts/test.mjs`)**: Added zero-dependency test runner executing all 29 unit and compliance test suites under Node.js / npm (`npm test`) and Deno (`deno test --allow-read`), resolving imports dynamically without build artifacts.
+- **Strict npm Purity & Zero Deno Remote Leakage**: Removed all Deno mentions from `package.json` and `package-lock.json`. Isolated `deno.json`, `deno.lock`, and `.deno/` in `.gitignore` so local developer testing never leaks to remote repositories.
+- **Cloudflare Pages Runtime Pinning**: Pinned `.node-version` (`22.14.0`) and `.nvmrc` (`22.14.0`) to prevent Cloudflare Pages runtime auto-detection confusion and ensure builds run on Node 22+.
+- **GitHub Actions Workflow Modernization**: Fixed all workflow actions in `ci.yml`, `e2e.yml`, and `lighthouse.yml` from non-existent `@v7` tags to official `@v4` tags (`actions/checkout@v4`, `actions/setup-node@v4`, `actions/upload-artifact@v4`), and added automated `npm test` gate to CI.
+- **GitHub Review Standards Specification (`STANDARDS.md`)**: Created comprehensive pre-upload manual re-review checklist, toolchain isolation standards, Cloudflare Pages build limits, and architectural invariants.
+
+### Added — Svelte 5 UI Migration, Anti-Slop Compact Design, PDF → Markdown & Dual OCR
+
+- **Svelte 5 Full UI Migration**: Migrated the entire user interface to Svelte 5
+  with reactive runes (`$state`, `$derived`, `$props`). Includes `AppShell`,
+  `Navigation`, `Header`, `ToolsDialog`, `SettingsDialog`, and all 14 tool and
+  information views (`Home`, `Images`, `Pdf`, `Video`, `Audio`, `Gif`, `Ocr`,
+  `MergePdf`, `ImagesToPdf`, `Convert`, `PdfMarkdown`, `About`, `Docs`, `Privacy`,
+  `Settings`).
+- **Framework-Independent Processing Architecture**: The entire processing core
+  in `src/lib/` remains pure, framework-independent TypeScript (zero Svelte imports),
+  allowing headless execution, strict type safety, and testability across runtimes.
+- **PDF → Markdown & Structured ZIP Export** (`src/lib/pdfToMarkdown.ts`, `/convert/pdf-markdown`):
+  - Deterministic SHA-256 computation over original PDF content.
+  - Column-aware reading order extraction, grouping headings by font-size scale,
+    paragraphs, lists, and Markdown pipe tables.
+  - Equation and figure crop extraction (`assets/figures/*.png`) — mathematical
+    formulas and complex diagrams are preserved as visual crops rather than
+    hallucinated into fake LaTeX code.
+  - Full-page previews rendered to `assets/pages/page-*.png`.
+  - Self-contained portable ZIP export containing `document.md`, `manifest.json`,
+    `extraction.json`, `source/original.pdf`, and visual asset folders.
+- **Distinct OCR Modes (Printed vs Handwriting Recognition)**:
+  - Printed Text OCR: Tesseract.js 5 baseline + optional PaddleOCR PP-OCRv3.
+  - English Handwriting Recognition (`src/lib/ocrHandwriting.ts`): Candidate model
+    `Xenova/trocr-small-handwritten` (~60 MB weights) with horizontal projection
+    line segmentation (`detectTextLines`), WebGPU device verification with WASM
+    fallback, and explicit English-only scoping.
+  - **Zero LaTeX Hallucination**: Hand-drawn equations and formulas are preserved
+    as image crops and never hallucinated into invented LaTeX.
+- **Anti-Slop Design System**:
+  - Implemented principles from all 4 Antigravity design skills: `design-taste-frontend`,
+    `frontend-design`, `hallmark`, and `impeccable`.
+  - Compact density with scannable tables and queues; verb + noun button labels
+    ("Extract Markdown", "Process Document", "Download ZIP"); strict CSS tokenization;
+    instant `:focus-visible` rings; `overflow-x: clip` on `html` and `body`; full
+    reduced-motion bypass (`prefers-reduced-motion`).
+  - Completely eliminated AI design tells: no isolated purple accent words, no
+    all-caps letter-tracked eyebrows, no em-dash fragments, and no glued arrows (`→`).
+- **Dependency & Performance Cleanups**:
+  - Completely removed React (`react`, `react-dom`, `@types/react`, `@types/react-dom`,
+    and all legacy `src/components/*.tsx` files).
+  - Completely removed `animejs`; replaced with native Web Animations API
+    (`Element.prototype.animate`) in `src/lib/motion.ts`.
+  - Path traversal and 4 GiB size checks added to ZIP engine (`src/lib/zip.ts`).
+  - Added comprehensive offline Deno test suite (`deno test --allow-read --unstable-sloppy-imports`)
+    covering Hallmark rules, OCR candidates, PDF reading order, quality guard scaling,
+    recommendations, resource manager, and zip security (25/25 tests passing).
+
+### Added — Adaptive Resource Guard, home workbench, contextual suggestions
+
+- **Adaptive Resource Guard** (`src/lib/resourceManager.ts`). Every heavy
+  engine now asks for a slot through `runScheduled()` before it starts, with
+  separate heavy (FFmpeg, OCR, PDF rasterisation, AI) and light (Canvas
+  image/PDF encode) pools. Job weight is estimated from file size, pixel count
+  and page count. Batches can no longer flood the tab by starting every file
+  at once, and a long batch no longer starves a video encode.
+- `getResourceSnapshot()` exposes an honest, estimate-only view: mode label,
+  running/queued counts, admission limit, engine hint and any automatic
+  pressure reduction. It deliberately does not pretend to read free RAM —
+  browsers don't expose it — and both the UI and docs say so.
+- **`resourceMode`** (`auto` / `memory-saver` / `balanced` / `maximum`)
+  replaces the old Performance Mode (`efficient`/`balanced`/`powerful`) as the
+  single resource control. Existing installs are migrated on first read; the
+  legacy value is no longer rendered as a second overlapping control. It
+  remains a resource mode — format, quality and resolution are never lowered
+  behind your back, and per-engine overrides still win.
+- **Home workbench**: tool search/filter, quick actions, pin favourites,
+  recently opened tools, and a live **Processing queue** panel fed by the
+  Resource Guard. The home page is useful before JavaScript runs and the
+  workbench is loaded on demand.
+- **Contextual suggestions** (`src/lib/recommendations.ts`): one compact,
+  dismissible notice per workflow. Rules are deterministic and local —
+  natural filename ordering, photo input → WebP instead of PNG, very high
+  quality → 82, fixed page size → Auto, PDF Extreme/large Low →
+  Recommended, and OCR engine choice by script. They never reorder files,
+  change quality or start a job on their own; dismissals persist in
+  `cz-recommendations-v1`.
+- **Sectioned Settings dialog**: General, Appearance, Performance, AI engine,
+  Suggestions, Compression, Privacy & data, Diagnostics. Adds a live Resource
+  Guard status card, per-section reset buttons, model-cache clearing, a
+  dismissed-suggestion counter/clear action, a local-data clear action, and
+  **Copy diagnostics** (JSON containing capability/preference data only, with
+  a download fallback when the clipboard is blocked). Closing the dialog with
+  Escape or the close button returns focus to the control that opened it.
+- **Undo for applied suggestions**: applying a contextual suggestion is now
+  reversible from the toast for reordering, format/quality, page size, PDF
+  preset and OCR engine changes. `Reset all settings` and `Clear local data`
+  require a second, explicit confirmation click before they run.
+- **Appearance**: light / dark / **system**, stored under the existing
+  `theme` key. `data-theme` always receives the resolved value, so every
+  existing dark-theme rule keeps working; the header button is still a quick
+  light/dark flip.
+- **Incremental OCR**: pages are now rendered, recognised and embedded one at
+  a time (`openPageRenderer()` + incremental `createSearchablePdfBuilder()`),
+  releasing each page bitmap before the next is decoded. A 200-page scan no
+  longer pins every rendered page in memory before OCR starts.
+- New UI styles live in `src/styles/workbench.css` and every selector is
+  prefixed `.cz-`, so the new workbench, recommendation and settings layouts
+  cannot restyle the legacy `.tool-wrap` / `.settings-card` markup.
+- Playwright now runs five projects (`chromium-desktop`, `chromium-mobile`,
+  `webkit-desktop`, `webkit-mobile`, `firefox-desktop`) and covers the
+  workbench search/pins/recents, system-theme persistence, live Resource Guard
+  status, suggestion apply + Undo + dismissal persistence, all eight Settings
+  sections, the legacy `performanceMode` migration, destructive-action
+  confirmation, no non-GET/upload requests during local workflows, 320–1440
+  responsive overflow (home, tool page and Settings), and the real app version
+  from `package.json`. Pure `e2e/engines.spec.ts` tests cover WebCodecs
+  routing, video/image size planning, bitrate budgeting and the SSIM guard.
+
+### Fixed — review follow-ups
+
+- **Video preset is no longer ignored by the fast path.** Mediabunny exposes
+  no encoder-speed preset, so only the app-default `fast` may take the
+  WebCodecs route; an explicit `ultrafast`/`medium`/`slow` choice now falls
+  through to FFmpeg, which actually applies it.
+- **Target-size budgets reserve audio only when the input has audio.** The
+  WebCodecs route now reads the input's track list before computing the video
+  bitrate instead of assuming an audio track exists.
+- **Image SSIM measurement decodes a bounded sample**, using
+  `createImageBitmap(..., { resizeWidth, resizeHeight })` and header-only
+  dimension reads (JPEG/WebP/AVIF). A 6000px output is no longer materialised
+  at full resolution just to compare it.
+- The SSIM zero-denominator check now treats non-finite/near-zero values as
+  identical input instead of comparing a computed float to `0`.
+- The home workbench mounts once per rendered host, so a late chunk load after
+  navigation cannot attach duplicate search/star/queue handlers.
+- The opt-in WebCodecs test probes the H.264/AAC encoders separately and now
+  **fails** (instead of skipping) when the encoders exist but the route drops
+  audio or returns no file.
+
+### Added — WebCodecs/Mediabunny video fast path, image quality guard, five-project CI
+
+- **WebCodecs + Mediabunny video fast path** (`src/lib/webcodecsVideo.ts`).
+  Simple, verified requests — H.264/HEVC/AV1 in MP4 and VP8/VP9 in WebM, with
+  AAC or Opus audio — encode through the browser and are muxed into a real
+  container by Mediabunny (MPL-2.0, lazy-loaded from `esm.sh`, not an npm
+  dependency). Every run probes `canEncodeVideo`/`canEncodeAudio`, input and
+  track decodability, and discarded tracks. Anything unsupported — 10-bit,
+  edit proxy, two-pass, audio passthrough, multi-audio or subtitle
+  passthrough — falls back to FFmpeg.wasm, then MediaRecorder. Audio is never
+  silently dropped and raw NAL units are never concatenated.
+- **Image quality guard** (`src/lib/qualityGuard.ts`). Lossy image output is
+  sampled to a ≤96×96 luma grid and measured with SSIM. Below 0.90 CompressZ
+  retries once at a **higher** quality (never lower) when no byte target is
+  active, and otherwise shows a short note on the file card. Max dimensions
+  never upscale, and target-size mode warns instead of silently changing the
+  requested quality.
+- **Shared video size planner** (`src/lib/videoMeta.ts`): even dimensions and
+  no upscaling for both the WebCodecs and MediaRecorder paths.
+- **Benchmark harness**: `npm run bench` (opt-in `BENCH=1`) runs the shipped
+  `compressImage()` on deterministic 1/3.1/8 MP images in Chromium, prints a
+  table and writes gitignored JSON to `bench-results/`. It is not part of CI.
+- **Real-encode proof for the video fast path**: `npm run test:webcodecs`
+  (opt-in `WEBCODECS_E2E=1`) records a real VP8/Opus clip with MediaRecorder,
+  runs the shipped `videoViaWebCodecs()`, and re-opens the output with
+  Mediabunny to assert a readable MP4 with decodable video **and** audio. It
+  is excluded from normal runs and CI because it needs `esm.sh` and a browser
+  with a WebCodecs encoder.
+- **Manual real-device Safari checklist**
+  (`docs/SAFARI_DEVICE_CHECKLIST.md`), linked from the README and contributor
+  guide. Playwright's WebKit projects are not real Safari or iOS, so this
+  remains a manual release gate.
+
+### Changed — One execution profile for device performance
+
+- Added `resolveExecutionProfile()` in `src/lib/settings.ts` as the single
+  source of truth for the session's resource profile: resolved performance
+  tier, AI model tier, preferred AI backend, batch concurrency, image-dimension
+  cap, FFmpeg threading and video preset. Previously each resolver called
+  `recommend(detectPlatform())` separately, so a manual resource mode
+  changed the label but not the AI model, concurrency or threading.
+- `resolvedAiModelTier()`, `resolvedConcurrency()` and
+  `resolvedMaxImageDim()` now read that profile. Explicit per-engine overrides
+  (`ai.modelTier`, `ai.backend`, `resourceLimits.concurrency`,
+  `resourceLimits.maxImageDim`, video preset) still win over the resource mode.
+- The resource mode remains a *resource* mode: it does not silently lower
+  output quality or resolution.
+
+### Fixed — Local AI backend selection now reflects reality
+
+- The AI loader feature-tests WebGPU with a real
+  `navigator.gpu.requestAdapter()` **and** `requestDevice()` probe, tries
+  fp16/fp32 WebGPU, then falls back to WASM (q8/default).
+- `getAiRuntimeInfo()` reports the backend and model that actually loaded, so
+  Settings no longer implies GPU acceleration for a WASM run.
+- Documented that Smart Analyze sorts by **predicted label**; it does not
+  compute embeddings or visual-similarity groups.
+
+### Changed — OCR defaults and naming
+
+- Tesseract.js is now the default OCR engine (`auto` resolves to Tesseract).
+- The optional engine is labeled **PaddleOCR PP-OCRv3 (experimental)**. It was
+  previously presented as PaddleOCR-VL 1.5, whose VLM weights the app never
+  loaded. The UI now says plainly that it is not a vision-language model and
+  has no table/layout understanding.
+- The OCR page seeds engine/language from Settings and render DPI from the
+  resolved resource mode (Memory Saver 200, Balanced 250, Maximum 300).
+- Math/Greek symbol mode remains Tesseract-only and says so.
+
+### Fixed — GPU diagnostics and Smart Sort wording
+
+- `gpuAvailable()` now means WebGL2 only; `canvasPathAvailable()` separately
+  reports WebGL2/OffscreenCanvas. OffscreenCanvas is no longer treated as proof
+  of GPU acceleration.
+- Settings → Diagnostics reports WebGL2, WebGPU, OffscreenCanvas and WebCodecs
+  separately.
+- Settings → Diagnostics → Image path now honors the Images GPU toggle, so
+  turning WebGL2 resize off is reflected immediately instead of still
+  reporting browser support.
+- Settings → Performance → the `Auto (n)` batch label now resolves a
+  temporary `concurrency: 'auto'` profile, so it keeps showing what Auto would
+  use while a manual value is selected. Previously it echoed the manual value.
+- Renamed `sortBySmartAnalysis` → `sortByPredictedLabel` and corrected Images /
+  Images → PDF copy to match what the classifier actually does.
+
+### Fixed — Build and dependency hygiene
+
+- Repaired malformed/duplicate entries in `package.json` and regenerated
+  `package-lock.json`; `npm ci` now completes cleanly.
+- Fixed `scripts/strip-oversized-assets.mjs` silently skipping every file on
+  Windows: `new URL(...).pathname` produced an invalid `/C:/…` path, so the
+  ~26 MiB `ort-wasm-simd-threaded.asyncify-*.wasm` was never removed. It now
+  uses `fileURLToPath()`; production builds correctly strip that asset before
+  Cloudflare Pages' 25 MiB per-file limit rejects it.
+- Default image quality is documented consistently as **82**.
+- Removed the dead `.htc` home-card CSS block left behind by the workbench
+  rewrite, so the shipped stylesheet no longer contains rules for markup that
+  no longer exists.
+
+### Changed — AI backend is now a real Settings preference
+
+- Settings → AI Engine adds **Inference backend** (`auto` / `webgpu` /
+  `wasm`). `wasm` is an explicit CPU opt-out that skips the WebGPU probe
+  entirely; `webgpu` still falls back to WASM if the adapter/device probe
+  fails. Changing it releases the in-memory model so the next Smart action
+  uses the new path; downloaded weights stay cached.
+- `resolveExecutionProfile()` exposes the resolved `aiBackendPreference`, and
+  AI Engine / Settings diagnostics show the backend that actually loaded.
+- Playwright coverage now opens Settings and verifies the backend control
+  persists an explicit `wasm` choice.
+
+### Changed — one Node/npm toolchain
+
+- GitHub Actions, Cloudflare Pages, Playwright and Lighthouse all use
+  **Node/npm** (`npm ci`, `npm run typecheck|lint|build|test:e2e`).
+- The repository ships a single manifest (`package.json` + `package-lock.json`)
+  and a single Lighthouse config (`lighthouserc.json`); there is no alternate
+  runtime toolchain to keep in sync.
+- e2e workers are capped at 2 locally / 4 in CI because 8 workers caused
+  timeout flakes on constrained machines.
+
+### Docs
+
+- Added `AGENTS.md` with engine invariants, the settings/execution-profile
+  model, privacy rules and the verification checklist.
+- Updated `README.md`, `PRIVACY.md`, `CREDITS.md`, `CONTRIBUTING.md` and the
+  in-app About/Docs/Privacy templates: FFmpeg → MediaRecorder only (no
+  WebCodecs tier), Tesseract default, PP-OCRv3 labeling, WebGPU/WASM backend
+  reporting, sort-by-label wording, target-size iteration count, default
+  quality 82, Node-first commands, and the
+  current localStorage/CDN lists.
+- Credited `heic2any` and `onnxruntime-web`, and corrected PaddleOCR's role.
+- Replaced the placeholder `SECURITY.md` with a real vulnerability-reporting
+  policy (private GitHub advisory, scope, safe harbor). Its security boundary
+  now states the truth: file bytes stay local, while trusted third-party
+  engine code and model weights are downloaded from the documented CDNs.
+- Corrected the FFmpeg.wasm privacy description: `esm.sh` serves its
+  JavaScript wrapper, core scripts, worker, and WebAssembly binaries — not
+  "WebAssembly binaries only". File bytes are still never sent there.
+- Playwright coverage now also verifies that the Diagnostics panel's Image path
+  follows the Images GPU toggle and that the manual batch limit does not
+  change the `Auto (n)` label. `e2e/rules.spec.ts` adds pure Node tests for
+  natural ordering, every recommendation rule and the Resource Guard's
+  `estimateJob()` / `isAllocationFailure()` helpers. The suite runs 445 tests
+  across five projects: Chromium and WebKit desktop + mobile, plus Firefox
+  desktop.
 
 - Expose LogoMarquee's accessible region label and reset TiltCard when reduced
   motion is enabled during use.
@@ -348,12 +653,13 @@ slower/colder CI runner would hit for real.
   "graphic/screenshot/document" and suggest a format + quality for that
   content type.
 - **Images page**: new "✨ Smart Analyze & Sort (AI)" action — tags every
-  queued file, groups similar ones together (replacing upload order), and
+  queued file, groups images with the same predicted label together
+  (replacing upload order), and
   — if "Auto-apply suggested settings" is on in Settings — rewrites each
   untouched file's format/quality to the content-type suggestion. Tags
   render as a chip on the file card (`components.ts`).
 - **Images → PDF page**: new "✨ Smart Sort (AI)" action — same tagging and
-  grouping, without touching per-file compression options (this tool has
+  label grouping, without touching per-file compression options (this tool has
   none) — reorders the page sequence before combining.
 - New Settings → "AI Engine — Local" section: master enable toggle
   (disabled outright if `WebAssembly` isn't available), model tier
@@ -882,8 +1188,10 @@ failing silently.
 
 - PDF compression: two-strategy (structural resample + canvas-render
   fallback) with binary-search target-size mode.
-- PDF OCR: PaddleOCR-VL 1.5 (primary) + Tesseract.js 5 (secondary), with
-  Tesseract-OSD-based auto language detection.
+- PDF OCR: Tesseract.js 5 (stable default) + optional PaddleOCR PP-OCRv3
+  (experimental). Earlier docs mislabeled that second engine as
+  "PaddleOCR-VL 1.5"; the app never loaded those vision-language weights.
+  Auto language detection uses Tesseract OSD.
 - Image, Video, Audio, GIF, and SVG compression tools, all running
   entirely client-side (OffscreenCanvas, FFmpeg.wasm, pure-TS SVG
   optimiser).

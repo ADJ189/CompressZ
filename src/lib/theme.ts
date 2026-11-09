@@ -57,6 +57,8 @@ export function applyThemePreference(
   return resolved;
 }
 
+export const setThemePreference = applyThemePreference;
+
 /** Flip between light and dark. Picking a side opts out of `system`. */
 export function toggleTheme(): ResolvedTheme {
   const current = resolveThemePreference();

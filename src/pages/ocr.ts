@@ -1,11 +1,14 @@
 /**
  * ocr.ts
  *
- * Engines (in priority order):
- *   1. PaddleOCR-VL 1.5 (PRIMARY) — vision-language model via paddle.js/WebGL
- *      Best for: handwriting, tables, mixed layouts, CJK, forms, low-quality scans
- *   2. Tesseract.js 5 LSTM         — SIMD-accelerated WASM, 100+ languages
+ * Engines:
+ *   1. Tesseract.js 5 LSTM — SIMD-accelerated WASM, 100+ languages, stable default
  *      Best for: clean typeset text, Latin/Cyrillic/Arabic scripts, batch jobs
+ *   2. PaddleOCR PP-OCRv3 — detection + direction classification + recognition
+ *      via @paddle-js-models/ocr + WebGL (optional, experimental)
+ *      Best for: printed CJK/Latin text where its recognizer happens to fit;
+ *      it is a lightweight PP-OCRv3 pipeline, NOT PaddleOCR-VL (a 0.9B
+ *      vision-language model) and not a layout/table-understanding engine.
  *
  * ArrayBuffer safety: file bytes read once into Uint8Array; every consumer
  * gets a .slice(0) copy so the original is never detached.
@@ -18,6 +21,7 @@ import { toast } from "../toast";
 
 import { PDFLIB_ESM, openPdfDocument } from "../lib/pdfLibs";
 import { get2D } from "../lib/gpu";
+import { getSettings, resolveExecutionProfile } from "../lib/settings";
 
 // ── CDN ───────────────────────────────────────────────────────
 const TESS_UMD =
@@ -27,7 +31,9 @@ const TESS_CORE =
 const TESS_LANGS = "https://tessdata.projectnaptha.com/4.0.0";
 const TESS_WKR =
   "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js";
-// PaddleOCR-VL 1.5 via paddle.js (WebGL inference)
+// PaddleOCR PP-OCRv3 via @paddle-js-models/ocr (WebGL inference).
+// These are PP-OCRv3 detection/recognition/classification assets — not the
+// PaddleOCR-VL vision-language model family.
 const PADDLE_CDN =
   "https://cdn.jsdelivr.net/npm/@paddle-js-models/ocr@0.0.11/dist/index.js";
 const PADDLE_DET =
@@ -173,34 +179,10 @@ interface EngineCapability {
 
 const ENGINE_CAPS: EngineCapability[] = [
   {
-    id: "paddle",
-    name: "PaddleOCR-VL 1.5",
-    tag: "PRIMARY",
-    badge: "Recommended",
-    size: "~25 MB",
-    tech: "PP-OCRv3 · WebGL · ONNX",
-    bestFor:
-      "Handwriting, tables, forms, mixed content, CJK, low-quality scans",
-    strengths: [
-      "Handwritten text (cursive, print)",
-      "Complex table / form layouts",
-      "Multi-column & rotated text",
-      "Chinese, Japanese, Korean",
-      "Low-quality and noisy scans",
-      "Document structure understanding",
-    ],
-    weaknesses: [
-      "Heavier model load (~25 MB)",
-      "Requires WebGL (most browsers ok)",
-      "Slower on large multi-page PDFs",
-    ],
-    rating: { handwriting: 5, print: 5, tables: 5, lowQuality: 5, speed: 3 },
-  },
-  {
     id: "tesseract",
     name: "Tesseract.js 5",
-    tag: "FAST",
-    badge: "Best for clean text",
+    tag: "DEFAULT",
+    badge: "Recommended",
     size: "~10 MB",
     tech: "LSTM WASM · SIMD · 100+ langs",
     bestFor: "Clean typeset documents, batch processing, 100+ language support",
@@ -218,6 +200,29 @@ const ENGINE_CAPS: EngineCapability[] = [
       "Needs high DPI for accuracy",
     ],
     rating: { handwriting: 2, print: 5, tables: 3, lowQuality: 2, speed: 5 },
+  },
+  {
+    id: "paddle",
+    name: "PaddleOCR PP-OCRv3",
+    tag: "OPTIONAL",
+    badge: "Experimental",
+    size: "~20–25 MB",
+    tech: "PP-OCRv3 det + cls + rec · WebGL",
+    bestFor:
+      "Printed Latin/CJK text with a lightweight PP-OCRv3 recognizer; useful as a second opinion",
+    strengths: [
+      "Printed Chinese / Japanese / Korean text",
+      "Separate Latin and CJK recognition models",
+      "Runs locally through WebGL",
+      "Useful when Tesseract struggles with a CJK scan",
+    ],
+    weaknesses: [
+      "Not a vision-language model — no table/form understanding",
+      "Weak on handwriting and complex layouts",
+      "Requires WebGL; experimental integration",
+      "Slower model load on first use (~20–25 MB)",
+    ],
+    rating: { handwriting: 2, print: 4, tables: 2, lowQuality: 3, speed: 3 },
   },
 ];
 
@@ -345,7 +350,7 @@ async function renderPages(
   return out;
 }
 
-// ── PaddleOCR-VL 1.5 engine ───────────────────────────────────
+// ── PaddleOCR PP-OCRv3 engine ───────────────────────────────────
 let paddleInstance: any = null;
 // Tracks which recognition model (Latin vs CJK) is currently loaded into
 // paddleInstance, since the two script families use different rec models.
@@ -391,7 +396,7 @@ async function runPaddle(
   onProgress?: (pct: number, label: string) => void,
 ): Promise<PageResult[]> {
   const isCJK = ["chi_sim", "chi_tra", "jpn", "kor"].includes(lang);
-  onProgress?.(27, "Loading PaddleOCR-VL 1.5 model (~25 MB first use)…");
+  onProgress?.(27, "Loading PaddleOCR PP-OCRv3 model (~25 MB first use)…");
 
   let ocr: any;
   try {
@@ -459,7 +464,7 @@ async function runPaddle(
     });
     onProgress?.(
       28 + Math.floor(((i + 1) / pages.length) * 56),
-      `PaddleOCR-VL: page ${i + 1}/${pages.length}`,
+      `PaddleOCR PP-OCRv3: page ${i + 1}/${pages.length}`,
     );
   }
   return results;
@@ -625,7 +630,7 @@ async function runOcr(
   const requestsSymbols =
     options.symbolMode &&
     (LANGUAGES[resolvedLang]?.script === "latin" || resolvedLang === "auto");
-  // PaddleOCR-VL's rec models are fixed (Latin or CJK) and can't load extra
+  // PaddleOCR PP-OCRv3's rec models are fixed (Latin or CJK) and can't load extra
   // traineddata, so symbol mode always runs on Tesseract regardless of the
   // engine selected in Settings.
   const useEngine = requestsSymbols
@@ -636,7 +641,7 @@ async function runOcr(
 
   onProgress?.(
     28,
-    `Starting ${useEngine === "paddle" ? "PaddleOCR-VL 1.5" : "Tesseract.js 5"}${requestsSymbols ? " (+ Greek/math symbols)" : ""}…`,
+    `Starting ${useEngine === "paddle" ? "PaddleOCR PP-OCRv3" : "Tesseract.js 5"}${requestsSymbols ? " (+ Greek/math symbols)" : ""}…`,
   );
 
   const pageResults =
@@ -674,7 +679,7 @@ async function runOcr(
       : undefined,
     engineUsed:
       useEngine === "paddle"
-        ? "PaddleOCR-VL 1.5"
+        ? "PaddleOCR PP-OCRv3"
         : `Tesseract.js 5 · ${LANGUAGES[resolvedLang]?.tessCode}${requestsSymbols ? "+equ+grc" : ""}`,
     pagesOcrd: pageResults.length,
     confidence: Math.round(avgConf),
@@ -716,9 +721,28 @@ function stars(n: number): string {
 // ═══════════════════════════════════════════════════════════════
 export function mountOcr(root: HTMLElement): void {
   let files: OcrEntry[] = [];
-  let engine: OcrEngine = "tesseract"; // PaddleOCR integration is experimental; use Tesseract as stable default
-  let language: OcrLanguage = "auto";
-  let renderDpi = 250;
+  // Seed the live controls from Settings → OCR defaults so a change made
+  // there actually affects a fresh OCR page (the old code always started on
+  // Tesseract/auto and silently ignored the stored defaults). Invalid or
+  // unsupported 3-letter codes fall back to auto-detect rather than
+  // producing a broken Tesseract language string.
+  const ocrDefaults = getSettings().engines.ocr;
+  let engine: OcrEngine =
+    ocrDefaults.engine === "paddle" ? "paddle" : "tesseract";
+  let language: OcrLanguage =
+    ocrDefaults.lang in LANGUAGES
+      ? (ocrDefaults.lang as OcrLanguage)
+      : "auto";
+  // Eco mode renders at a lower DPI (less RAM and faster page rasterisation);
+  // Balanced/Powerful keep the accuracy-oriented default. This is a resource
+  // hint, not a silent quality cap — the DPI control stays user-editable.
+  const performanceMode = resolveExecutionProfile().mode;
+  let renderDpi =
+    performanceMode === "efficient"
+      ? 200
+      : performanceMode === "powerful"
+        ? 300
+        : 250;
   let overlayMode = true;
   let extractText = true;
   let oem: 0 | 1 | 3 = 1;
@@ -809,7 +833,7 @@ export function mountOcr(root: HTMLElement): void {
   // from inside .forEach() without awaiting — the same "fire every job at
   // once" bug already fixed on Convert/Video/Audio/GIF's queues, but missed
   // here. OCR is the heaviest engine in the app (PDF rendering + a full
-  // PaddleOCR-VL or Tesseract.js worker per file), so running a whole batch
+  // PaddleOCR PP-OCRv3 or Tesseract.js worker per file), so running a whole batch
   // concurrently is what "engine gets overwhelmed and breaks" was actually
   // describing: N pdf.js render passes and N OCR worker/model instances all
   // competing for the same WASM heap and GPU/CPU budget at once, rather than
@@ -841,8 +865,9 @@ export function mountOcr(root: HTMLElement): void {
         </div>
         <p class="page-sub">
           Make scanned PDFs searchable — entirely in your browser.
-          <strong>PaddleOCR-VL 1.5</strong> handles handwriting, tables &amp; CJK.
-          <strong>Tesseract.js 5</strong> covers 100+ languages for clean typeset text.
+          <strong>Tesseract.js 5</strong> is the stable default, covering 100+ languages.
+          <strong>PaddleOCR PP-OCRv3</strong> is an optional experimental
+          PP-OCRv3/WebGL engine — a lightweight recognizer, not a vision-language model.
         </p>
       </div>
 

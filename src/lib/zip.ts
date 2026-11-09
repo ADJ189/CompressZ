@@ -19,6 +19,8 @@
  * silently misread.
  */
 
+import { computeCrc32 } from "./wasmMath";
+
 export function zipSupported(): boolean {
   return (
     typeof CompressionStream !== "undefined" &&
@@ -26,21 +28,9 @@ export function zipSupported(): boolean {
   );
 }
 
-// ── CRC32 ─────────────────────────────────────────────────────
-const CRC_TABLE = (() => {
-  const t = new Uint32Array(256);
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    t[n] = c >>> 0;
-  }
-  return t;
-})();
+// ── CRC32 (WASM accelerated with pure-JS fallback) ─────────────
 function crc32(data: Uint8Array): number {
-  let c = 0xffffffff;
-  for (let i = 0; i < data.length; i++)
-    c = CRC_TABLE[(c ^ data[i]) & 0xff] ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
+  return computeCrc32(data);
 }
 
 async function deflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
@@ -97,6 +87,18 @@ export interface ZipEntryIn {
   data: Uint8Array;
 }
 
+/**
+ * Sanitize a ZIP entry path to prevent directory traversal or absolute path injection.
+ */
+export function sanitizeZipPath(raw: string): string {
+  let safe = raw.replace(/^[a-zA-Z]:[\\/]/, "").replace(/^[\\/]+/, "");
+  safe = safe
+    .split(/[\\/]/)
+    .filter((part) => part !== ".." && part !== "." && part.length > 0)
+    .join("/");
+  return safe || "file";
+}
+
 // ── Writer ────────────────────────────────────────────────────
 export async function writeZip(entries: ZipEntryIn[]): Promise<Uint8Array> {
   const { time, date } = dosDateTime();
@@ -104,8 +106,20 @@ export async function writeZip(entries: ZipEntryIn[]): Promise<Uint8Array> {
   const central: Uint8Array[] = [];
   let offset = 0;
 
+  // Preflight check: prevent exceeding 32-bit / 4GiB ZIP limit
+  let estimatedTotal = 0;
+  for (const e of entries) {
+    estimatedTotal += e.data.length + 100;
+  }
+  if (estimatedTotal >= 0xffffffff) {
+    throw new Error(
+      "Archive size exceeds the 32-bit (4 GiB) ZIP limit. Cannot package safely without Zip64.",
+    );
+  }
+
   for (const { name, data } of entries) {
-    const nameBytes = new TextEncoder().encode(name);
+    const safeName = sanitizeZipPath(name);
+    const nameBytes = new TextEncoder().encode(safeName);
     const crc = crc32(data);
     const compressed = await deflateRaw(data);
     const useStore = compressed.length >= data.length;
@@ -197,8 +211,8 @@ export async function readZip(
     throw new Error("Multi-disk/spanned ZIP archives are not supported");
   }
 
-  let entryCount = dv.getUint16(eocdOffset + 10, true);
-  let centralStart = dv.getUint32(eocdOffset + 16, true);
+  const entryCount = dv.getUint16(eocdOffset + 10, true);
+  const centralStart = dv.getUint32(eocdOffset + 16, true);
 
   // 0xFFFFFFFF/0xFFFF sentinel values mean the real values live in a
   // Zip64 end-of-central-directory record, which this reader doesn't
