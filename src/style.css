@@ -549,13 +549,18 @@ img, svg { display: block; }
 .home-title {
   font-family: var(--display);
   font-size: clamp(2.4rem, 5vw, 3.8rem);
-  font-weight: 700; letter-spacing: -.02em; line-height: 1.05;
+  font-weight: 700; letter-spacing: -.02em; line-height: 1.2;
   margin-bottom: 1.25rem;
   animation: fadeUp .5s var(--ease) .1s both;
 }
-.ht-plain { color: var(--text); display: block; }
+.ht-plain {
+  color: var(--text);
+  display: block;
+  margin-bottom: 0.2rem;
+}
 .ht-grad {
   display: block;
+  padding-bottom: 0.1em;
   background: linear-gradient(135deg, var(--accent) 0%, var(--violet) 45%, var(--sky) 100%);
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
 }
@@ -1143,7 +1148,7 @@ input[type="range"].slider::-webkit-slider-thumb:hover {
 
   .home-wrap  { padding: 1.75rem 1.25rem 4rem; }
   .tool-wrap  { padding: 1.75rem 1.25rem 4rem; }
-  .home-title { font-size: 2.2rem; }
+  .home-title { font-size: 2.2rem; line-height: 1.2; }
   .home-tools-grid { grid-template-columns: 1fr; }
   .pdf-presets     { grid-template-columns: 1fr; }
   .ocr-engines     { grid-template-columns: 1fr; }
