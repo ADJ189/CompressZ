@@ -174,8 +174,8 @@
 
   <div id="itp-rec">
     {#if activeRec}
-      <div class="cz-recommendation cz-recommendation--primary">
-        <div class="cz-recommendation__row">
+      <div class="cz-recommendation">
+        <div class="cz-recommendation__row cz-recommendation--primary">
           <div class="cz-recommendation__body">
             <div class="cz-recommendation__title">{activeRec.title}</div>
             <div class="cz-recommendation__reason">{activeRec.reason}</div>

@@ -214,7 +214,7 @@
   }
 </script>
 
-<div class="cz-apple-workbench">
+<div class="tool-wrap cz-apple-workbench">
   <!-- Left Main Column: Conversion Workspace -->
   <main class="cz-card-main">
     <div class="cz-main-header">
@@ -249,39 +249,20 @@
 
     <!-- Compact Apple-Style Options Bar -->
     <div class="cz-options-pill-bar">
-      <!-- Format Segmented Control -->
+      <!-- Format Select Control -->
       <div class="cz-opt-group">
         <span class="cz-opt-label">Format</span>
-        <div class="cz-segmented-track">
-          <button
-            type="button"
-            class="cz-segmented-item {state.format === 'image/webp' ? 'is-active' : ''}"
-            onclick={() => updateStore({ format: 'image/webp' })}
-          >
-            WebP
-          </button>
-          <button
-            type="button"
-            class="cz-segmented-item {state.format === 'image/avif' ? 'is-active' : ''}"
-            onclick={() => updateStore({ format: 'image/avif' })}
-          >
-            AVIF
-          </button>
-          <button
-            type="button"
-            class="cz-segmented-item {state.format === 'image/jpeg' ? 'is-active' : ''}"
-            onclick={() => updateStore({ format: 'image/jpeg' })}
-          >
-            JPEG
-          </button>
-          <button
-            type="button"
-            class="cz-segmented-item {state.format === 'image/png' ? 'is-active' : ''}"
-            onclick={() => updateStore({ format: 'image/png' })}
-          >
-            PNG
-          </button>
-        </div>
+        <select
+          id="fmt-sel"
+          class="cz-select-pill"
+          value={state.format}
+          onchange={(e) => updateStore({ format: (e.target as HTMLSelectElement).value as any })}
+        >
+          <option value="image/webp">WebP</option>
+          <option value="image/avif">AVIF</option>
+          <option value="image/jpeg">JPEG</option>
+          <option value="image/png">PNG</option>
+        </select>
       </div>
 
       <div class="cz-opt-divider"></div>
@@ -321,30 +302,34 @@
     </div>
 
     <!-- Contextual Recommendation Banner -->
-    {#if activeRec}
-      <div class="cz-rec-card">
-        <div class="cz-rec-text">
-          <span class="cz-rec-icon">💡</span>
-          <span>{activeRec.title} — {activeRec.reason}</span>
+    <div id="rec-mount">
+      {#if activeRec}
+        <div class="cz-recommendation">
+          <div class="cz-recommendation__row cz-recommendation--primary">
+            <div class="cz-recommendation__body">
+              <div class="cz-recommendation__title">{activeRec.title}</div>
+              <div class="cz-recommendation__reason">{activeRec.reason}</div>
+            </div>
+            <div class="cz-recommendation__actions">
+              <button
+                type="button"
+                class="cz-btn cz-btn-primary cz-btn-sm"
+                onclick={() => applyRecommendation(activeRec)}
+              >
+                {activeRec.actionLabel}
+              </button>
+              <button
+                type="button"
+                class="cz-btn cz-btn-ghost cz-btn-sm"
+                onclick={() => dismiss(activeRec)}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
         </div>
-        <div class="cz-rec-btns">
-          <button
-            type="button"
-            class="cz-btn cz-btn-primary cz-btn-sm cz-btn-pill"
-            onclick={() => applyRecommendation(activeRec)}
-          >
-            {activeRec.actionLabel}
-          </button>
-          <button
-            type="button"
-            class="cz-btn cz-btn-ghost cz-btn-sm"
-            onclick={() => dismiss(activeRec)}
-          >
-            Dismiss
-          </button>
-        </div>
-      </div>
-    {/if}
+      {/if}
+    </div>
 
     <!-- Ingestion Dropzone -->
     <FileDropzone

@@ -178,7 +178,7 @@
   }
 </script>
 
-<div class="cz-apple-workbench">
+<div class="tool-wrap cz-apple-workbench">
   <!-- Left Main Column: Converter Workspace -->
   <main class="cz-card-main">
     <div class="cz-main-header">
