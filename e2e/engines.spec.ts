@@ -32,36 +32,16 @@ const MP4_AVC: WebCodecsRoute = {
 
 test.describe("WebCodecs routing", () => {
   test("routes each supported codec to a real container + audio codec", () => {
-    expect(webCodecsRouteFor({ videoCodec: "h264" })).toEqual({
-      container: "mp4",
-      mime: "video/mp4",
-      videoCodec: "avc",
-      audioCodec: "aac",
-    });
-    expect(webCodecsRouteFor({ videoCodec: "h265" })).toEqual({
-      container: "mp4",
-      mime: "video/mp4",
-      videoCodec: "hevc",
-      audioCodec: "aac",
-    });
-    expect(webCodecsRouteFor({ videoCodec: "av1" })).toEqual({
-      container: "mp4",
-      mime: "video/mp4",
-      videoCodec: "av1",
-      audioCodec: "aac",
-    });
-    expect(webCodecsRouteFor({ videoCodec: "vp9" })).toEqual({
-      container: "webm",
-      mime: "video/webm",
-      videoCodec: "vp9",
-      audioCodec: "opus",
-    });
-    expect(webCodecsRouteFor({ videoCodec: "vp8" })).toEqual({
-      container: "webm",
-      mime: "video/webm",
-      videoCodec: "vp8",
-      audioCodec: "opus",
-    });
+    const routeFixtures: Array<[{ videoCodec: any }, WebCodecsRoute]> = [
+      [{ videoCodec: "h264" }, { container: "mp4", mime: "video/mp4", videoCodec: "avc", audioCodec: "aac" }],
+      [{ videoCodec: "h265" }, { container: "mp4", mime: "video/mp4", videoCodec: "hevc", audioCodec: "aac" }],
+      [{ videoCodec: "av1" }, { container: "mp4", mime: "video/mp4", videoCodec: "av1", audioCodec: "aac" }],
+      [{ videoCodec: "vp9" }, { container: "webm", mime: "video/webm", videoCodec: "vp9", audioCodec: "opus" }],
+      [{ videoCodec: "vp8" }, { container: "webm", mime: "video/webm", videoCodec: "vp8", audioCodec: "opus" }],
+    ];
+    for (const [input, expected] of routeFixtures) {
+      expect(webCodecsRouteFor(input)).toEqual(expected);
+    }
   });
 
   test("defaults an unspecified codec to MP4/AVC", () => {
@@ -244,46 +224,35 @@ test.describe("SSIM measurement", () => {
 test.describe("quality-guard decisions", () => {
   const planned = { width: 1600, height: 1200 };
 
+  function checkDecision(overrides: Record<string, unknown> = {}) {
+    return decideQualityGuard({
+      format: "image/webp",
+      ssim: 0.95,
+      planned,
+      actual: planned,
+      ...overrides,
+    } as any);
+  }
+
   test("accepts PNG output without an SSIM pass", () => {
-    expect(
-      decideQualityGuard({
-        format: "image/png",
-        ssim: 0.2,
-        planned,
-        actual: planned,
-      }),
-    ).toEqual({ action: "ok" });
+    expect(checkDecision({ format: "image/png", ssim: 0.2 })).toEqual({ action: "ok" });
   });
 
   test("accepts a lossy encode above the SSIM floor", () => {
-    expect(
-      decideQualityGuard({
-        format: "image/webp",
-        ssim: SSIM_FLOOR + 0.01,
-        planned,
-        actual: planned,
-      }),
-    ).toEqual({ action: "ok" });
+    expect(checkDecision({ ssim: SSIM_FLOOR + 0.01 })).toEqual({ action: "ok" });
   });
 
   test("warns — never rescales — when the output is smaller than planned", () => {
-    const decision = decideQualityGuard({
-      format: "image/webp",
-      ssim: 1,
-      planned,
-      actual: { width: 800, height: 600 },
-    });
+    const decision = checkDecision({ ssim: 1, actual: { width: 800, height: 600 } });
     expect(decision.action).toBe("warn");
     if (decision.action === "warn") expect(decision.code).toBe("resolution-lost");
   });
 
   test("warns in target-size mode instead of silently raising quality", () => {
-    const decision = decideQualityGuard({
+    const decision = checkDecision({
       format: "image/jpeg",
       ssim: 0.6,
       targetSizeKB: 200,
-      planned,
-      actual: planned,
     });
     expect(decision.action).toBe("warn");
     if (decision.action === "warn") {
@@ -292,25 +261,11 @@ test.describe("quality-guard decisions", () => {
   });
 
   test("does not second-guess an explicit aggressive quality", () => {
-    expect(
-      decideQualityGuard({
-        format: "image/webp",
-        ssim: 0.55,
-        requestedQuality: 0.5,
-        planned,
-        actual: planned,
-      }),
-    ).toEqual({ action: "ok" });
+    expect(checkDecision({ ssim: 0.55, requestedQuality: 0.5 })).toEqual({ action: "ok" });
   });
 
   test("retries once at a higher quality, never lower", () => {
-    const decision = decideQualityGuard({
-      format: "image/webp",
-      ssim: 0.7,
-      requestedQuality: 0.82,
-      planned,
-      actual: planned,
-    });
+    const decision = checkDecision({ ssim: 0.7, requestedQuality: 0.82 });
     expect(decision.action).toBe("retry");
     if (decision.action === "retry") {
       expect(decision.quality).toBeGreaterThan(0.82);
@@ -319,26 +274,17 @@ test.describe("quality-guard decisions", () => {
   });
 
   test("reports a warning after the retry still measures low", () => {
-    const decision = decideQualityGuard({
-      format: "image/webp",
+    const decision = checkDecision({
       ssim: 0.7,
       requestedQuality: 0.9,
       alreadyRetried: true,
-      planned,
-      actual: planned,
     });
     expect(decision.action).toBe("warn");
     if (decision.action === "warn") expect(decision.code).toBe("low-ssim");
   });
 
   test("warns instead of retrying at or above the quality ceiling", () => {
-    const decision = decideQualityGuard({
-      format: "image/webp",
-      ssim: 0.7,
-      requestedQuality: 0.98,
-      planned,
-      actual: planned,
-    });
+    const decision = checkDecision({ ssim: 0.7, requestedQuality: 0.98 });
     expect(decision.action).toBe("warn");
   });
 });
