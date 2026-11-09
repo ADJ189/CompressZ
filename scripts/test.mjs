@@ -16,7 +16,9 @@ const ROOT_DIR = fileURLToPath(new URL("..", import.meta.url));
 const TEST_DIR = join(ROOT_DIR, "tests");
 
 // If running directly inside Deno CLI, delegate to native `deno test`
-if (typeof Deno !== "undefined" && !(typeof process !== "undefined" && process?.env?.FORCE_NODE_RUNNER)) {
+const hasEnvAccess = typeof Deno !== "undefined" && Deno.permissions?.querySync?.({ name: "env" })?.state === "granted";
+const forceNode = hasEnvAccess && typeof process !== "undefined" && Boolean(process.env?.FORCE_NODE_RUNNER);
+if (typeof Deno !== "undefined" && !forceNode) {
   const cmd = new Deno.Command(Deno.execPath(), {
     args: ["test", "--allow-read", "--unstable-sloppy-imports", TEST_DIR],
     cwd: ROOT_DIR,
