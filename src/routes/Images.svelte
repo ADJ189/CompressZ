@@ -249,14 +249,45 @@
 
     <!-- Compact Apple-Style Options Bar -->
     <div class="cz-options-pill-bar">
-      <!-- Format Select Control -->
+      <!-- Format Segmented Control -->
       <div class="cz-opt-group">
         <span class="cz-opt-label">Format</span>
+        <div class="cz-segmented-track">
+          <button
+            type="button"
+            class="cz-segmented-item {state.format === 'image/webp' ? 'is-active' : ''}"
+            onclick={() => updateStore({ format: 'image/webp' })}
+          >
+            WebP
+          </button>
+          <button
+            type="button"
+            class="cz-segmented-item {state.format === 'image/avif' ? 'is-active' : ''}"
+            onclick={() => updateStore({ format: 'image/avif' })}
+          >
+            AVIF
+          </button>
+          <button
+            type="button"
+            class="cz-segmented-item {state.format === 'image/jpeg' ? 'is-active' : ''}"
+            onclick={() => updateStore({ format: 'image/jpeg' })}
+          >
+            JPEG
+          </button>
+          <button
+            type="button"
+            class="cz-segmented-item {state.format === 'image/png' ? 'is-active' : ''}"
+            onclick={() => updateStore({ format: 'image/png' })}
+          >
+            PNG
+          </button>
+        </div>
         <select
           id="fmt-sel"
           class="cz-select-pill"
           value={state.format}
           onchange={(e) => updateStore({ format: (e.target as HTMLSelectElement).value as any })}
+          aria-label="Format selection"
         >
           <option value="image/webp">WebP</option>
           <option value="image/avif">AVIF</option>
@@ -304,16 +335,16 @@
     <!-- Contextual Recommendation Banner -->
     <div id="rec-mount">
       {#if activeRec}
-        <div class="cz-recommendation">
-          <div class="cz-recommendation__row cz-recommendation--primary">
-            <div class="cz-recommendation__body">
-              <div class="cz-recommendation__title">{activeRec.title}</div>
-              <div class="cz-recommendation__reason">{activeRec.reason}</div>
+        <div class="cz-recommendation cz-rec-card">
+          <div class="cz-recommendation--primary">
+            <div class="cz-recommendation__row cz-rec-text">
+              <span class="cz-recommendation__title cz-rec-icon">{activeRec.title}</span>
+              <span class="cz-recommendation__reason">{activeRec.reason}</span>
             </div>
-            <div class="cz-recommendation__actions">
+            <div class="cz-recommendation__actions cz-rec-btns">
               <button
                 type="button"
-                class="cz-btn cz-btn-primary cz-btn-sm"
+                class="cz-btn cz-btn-primary cz-btn-sm cz-btn-pill"
                 onclick={() => applyRecommendation(activeRec)}
               >
                 {activeRec.actionLabel}
@@ -606,5 +637,65 @@
     font-size: 0.78rem;
     color: var(--text-3);
     padding: 0.5rem 0;
+  }
+  .cz-apple-workbench {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 310px;
+    gap: 1.5rem;
+    align-items: start;
+  }
+  .cz-card-main {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    min-width: 0;
+  }
+  .cz-card-side {
+    display: flex;
+    flex-direction: column;
+    gap: 1.15rem;
+    min-width: 0;
+  }
+  .cz-segmented-track {
+    display: inline-flex;
+    align-items: center;
+    background: var(--bg2);
+    padding: 3px;
+    border-radius: 100px;
+    border: 1px solid var(--border);
+    gap: 2px;
+  }
+  .cz-segmented-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 100px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-2);
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    transition: background var(--t), color var(--t);
+    white-space: nowrap;
+  }
+  .cz-segmented-item:hover {
+    color: var(--text);
+  }
+  .cz-segmented-item.is-active {
+    background: var(--surface);
+    color: var(--accent);
+    font-weight: 600;
+    box-shadow: var(--shadow-xs);
+  }
+  @media (max-width: 960px) {
+    .cz-apple-workbench {
+      grid-template-columns: 1fr;
+      padding: 1.25rem 1rem 3.5rem;
+    }
   }
 </style>

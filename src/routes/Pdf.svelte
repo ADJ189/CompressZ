@@ -124,31 +124,57 @@
 
   <div class="cz-tool-settings-bar">
     <div class="cz-setting-item">
-      <label class="cz-setting-label" for="pdf-level">Compression Level</label>
-      <select
-        id="pdf-level"
-        class="cz-select"
-        value={state.level}
-        onchange={(e) => updateStore({ level: (e.target as HTMLSelectElement).value as PdfLevel })}
-      >
-        <option value="low">Low (220 DPI, High quality)</option>
-        <option value="recommended">Recommended (150 DPI, Balanced)</option>
-        <option value="extreme">Extreme (96 DPI, Maximum compression)</option>
-      </select>
+      <span class="cz-setting-label">Compression Level</span>
+      <div class="cz-segmented-track" role="radiogroup" aria-label="PDF Compression Level">
+        <button
+          type="button"
+          class="cz-segmented-item {state.level === 'low' ? 'is-active' : ''}"
+          onclick={() => updateStore({ level: 'low' })}
+        >
+          Low (220 DPI)
+        </button>
+        <button
+          type="button"
+          class="cz-segmented-item {state.level === 'recommended' ? 'is-active' : ''}"
+          onclick={() => updateStore({ level: 'recommended' })}
+        >
+          Balanced (150 DPI)
+        </button>
+        <button
+          type="button"
+          class="cz-segmented-item {state.level === 'extreme' ? 'is-active' : ''}"
+          onclick={() => updateStore({ level: 'extreme' })}
+        >
+          Extreme (96 DPI)
+        </button>
+      </div>
     </div>
 
     <div class="cz-setting-item">
-      <label class="cz-setting-label" for="pdf-meta">Metadata</label>
-      <select
-        id="pdf-meta"
-        class="cz-select"
-        value={state.stripMeta}
-        onchange={(e) => updateStore({ stripMeta: (e.target as HTMLSelectElement).value as any })}
-      >
-        <option value="auto">Auto</option>
-        <option value="on">Strip metadata</option>
-        <option value="off">Keep metadata</option>
-      </select>
+      <span class="cz-setting-label">Metadata</span>
+      <div class="cz-segmented-track" role="radiogroup" aria-label="PDF Metadata">
+        <button
+          type="button"
+          class="cz-segmented-item {state.stripMeta === 'auto' ? 'is-active' : ''}"
+          onclick={() => updateStore({ stripMeta: 'auto' })}
+        >
+          Auto
+        </button>
+        <button
+          type="button"
+          class="cz-segmented-item {state.stripMeta === 'on' ? 'is-active' : ''}"
+          onclick={() => updateStore({ stripMeta: 'on' })}
+        >
+          Strip Privacy Tags
+        </button>
+        <button
+          type="button"
+          class="cz-segmented-item {state.stripMeta === 'off' ? 'is-active' : ''}"
+          onclick={() => updateStore({ stripMeta: 'off' })}
+        >
+          Preserve
+        </button>
+      </div>
     </div>
   </div>
 
@@ -219,5 +245,37 @@
     font-size: 0.86rem;
     font-weight: 600;
     color: var(--text-2);
+  }
+  .cz-segmented-track {
+    display: inline-flex;
+    align-items: center;
+    background: var(--bg2);
+    padding: 3px;
+    border-radius: 100px;
+    border: 1px solid var(--border);
+    gap: 2px;
+  }
+  .cz-segmented-item {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.32rem 0.75rem;
+    border-radius: 100px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--text-2);
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    transition: background var(--t), color var(--t);
+    white-space: nowrap;
+  }
+  .cz-segmented-item:hover {
+    color: var(--text);
+  }
+  .cz-segmented-item.is-active {
+    background: var(--surface);
+    color: var(--accent);
+    font-weight: 600;
+    box-shadow: var(--shadow-xs);
   }
 </style>

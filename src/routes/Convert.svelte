@@ -1,7 +1,7 @@
 <script lang="ts">
   import FileDropzone from "../components/FileDropzone.svelte";
   import { navigate } from "../router";
-  import { convertVideo } from "../lib/convertMedia";
+  import { convertVideo, type VideoContainer } from "../lib/convertMedia";
   import { compressAudio } from "../lib/compressAudio";
   import { compressImage } from "../lib/compressImage";
   import { pdfToImages } from "../lib/convertPdf";
@@ -18,6 +18,15 @@
   let targetFormat = $state<string>("mp4");
   let isConverting = $state(false);
   let convertedResults = $state<Array<{ name: string; blob: Blob }>>([]);
+
+  // macOS Inspector Advanced State
+  let videoCrf = $state<number>(18);
+  let videoResolution = $state<"original" | "1080p" | "720p" | "480p">("original");
+  let videoFps = $state<number>(0);
+  let audioBitrate = $state<string>("192k");
+  let muteAudio = $state<boolean>(false);
+  let fastStart = $state<boolean>(true);
+  let stripMetadata = $state<boolean>(false);
 
   const platform = $derived(getPlatformInfo());
 
@@ -127,10 +136,21 @@
         let outName = file.name.replace(/\.[^/.]+$/, "") + `.${targetFormat}`;
 
         if (activeCat === "video") {
-          const res = await convertVideo(file, targetFormat as any);
+          const res = await convertVideo(file, targetFormat as VideoContainer, {
+            crf: videoCrf,
+            resolution: videoResolution,
+            fps: videoFps,
+            muteAudio,
+            fastStart,
+            stripMetadata,
+            audioBitrate,
+          });
           blob = res.blob;
         } else if (activeCat === "audio") {
-          const res = await compressAudio(file, { format: targetFormat as any });
+          const res = await compressAudio(file, {
+            format: targetFormat as any,
+            bitrate: audioBitrate === "320k" ? 320 : audioBitrate === "192k" ? 192 : audioBitrate === "128k" ? 128 : 96,
+          });
           blob = res.blob;
         } else if (activeCat === "image") {
           const mime = targetFormat === "jpeg" ? "image/jpeg" : targetFormat === "png" ? "image/png" : targetFormat === "avif" ? "image/avif" : "image/webp";
@@ -184,7 +204,7 @@
     <div class="cz-main-header">
       <div>
         <h1 class="cz-main-title">Multi-Format Converter</h1>
-        <p class="cz-main-sub">Convert video, audio, office files, and images</p>
+        <p class="cz-main-sub">Convert video, audio, office files, and images in browser memory</p>
       </div>
 
       <!-- Quick Fast Organize Reorder Action -->
@@ -325,8 +345,162 @@
     {/if}
   </main>
 
-  <!-- Right Sidebar: Shortcuts & History -->
+  <!-- Right Sidebar: macOS Inspector & Tools -->
   <aside class="cz-card-side">
+    <!-- macOS Sonoma / Sequoia Advanced Conversion Inspector -->
+    <div class="cz-sidebar-card cz-mac-inspector">
+      <div class="cz-sidebar-header">
+        <div class="cz-mac-header-title">
+          <span class="cz-mac-apple-icon">⚙️</span>
+          <span class="cz-sidebar-title">Inspector</span>
+        </div>
+        <span class="cz-tier-tag">macOS Pro</span>
+      </div>
+
+      {#if activeCat === "video"}
+        <div class="cz-mac-inspector-group">
+          <div class="cz-mac-prop-row">
+            <span class="cz-mac-prop-label">
+              <span class="cz-sf-icon">🎚️</span> Quality (CRF)
+            </span>
+            <div class="cz-segmented-track cz-segmented-mini">
+              <button
+                type="button"
+                class="cz-segmented-item {videoCrf === 18 ? 'is-active' : ''}"
+                onclick={() => (videoCrf = 18)}
+              >
+                HQ (18)
+              </button>
+              <button
+                type="button"
+                class="cz-segmented-item {videoCrf === 23 ? 'is-active' : ''}"
+                onclick={() => (videoCrf = 23)}
+              >
+                Balanced
+              </button>
+              <button
+                type="button"
+                class="cz-segmented-item {videoCrf === 28 ? 'is-active' : ''}"
+                onclick={() => (videoCrf = 28)}
+              >
+                Small
+              </button>
+            </div>
+          </div>
+
+          <div class="cz-mac-prop-row">
+            <span class="cz-mac-prop-label">
+              <span class="cz-sf-icon">📺</span> Resolution
+            </span>
+            <select class="cz-select-pill" bind:value={videoResolution}>
+              <option value="original">Native (Source)</option>
+              <option value="1080p">1080p FHD</option>
+              <option value="720p">720p HD</option>
+              <option value="480p">480p SD</option>
+            </select>
+          </div>
+
+          <div class="cz-mac-prop-row">
+            <span class="cz-mac-prop-label">
+              <span class="cz-sf-icon">⏱️</span> Frame Cap
+            </span>
+            <div class="cz-segmented-track cz-segmented-mini">
+              <button
+                type="button"
+                class="cz-segmented-item {videoFps === 0 ? 'is-active' : ''}"
+                onclick={() => (videoFps = 0)}
+              >
+                Native
+              </button>
+              <button
+                type="button"
+                class="cz-segmented-item {videoFps === 60 ? 'is-active' : ''}"
+                onclick={() => (videoFps = 60)}
+              >
+                60 fps
+              </button>
+              <button
+                type="button"
+                class="cz-segmented-item {videoFps === 30 ? 'is-active' : ''}"
+                onclick={() => (videoFps = 30)}
+              >
+                30 fps
+              </button>
+            </div>
+          </div>
+
+          <div class="cz-mac-prop-row">
+            <span class="cz-mac-prop-label">
+              <span class="cz-sf-icon">🎧</span> Audio Bitrate
+            </span>
+            <select class="cz-select-pill" bind:value={audioBitrate}>
+              <option value="320k">320 kbps (HQ)</option>
+              <option value="192k">192 kbps (Standard)</option>
+              <option value="128k">128 kbps (Voice)</option>
+              <option value="96k">96 kbps (Compact)</option>
+            </select>
+          </div>
+
+          <div class="cz-mac-toggle-row">
+            <label class="cz-mac-toggle-label" for="toggle-mute">
+              <span class="cz-sf-icon">🔇</span>
+              <span>Mute Audio Track</span>
+            </label>
+            <input
+              id="toggle-mute"
+              type="checkbox"
+              class="cz-mac-switch"
+              bind:checked={muteAudio}
+            />
+          </div>
+
+          <div class="cz-mac-toggle-row">
+            <label class="cz-mac-toggle-label" for="toggle-faststart">
+              <span class="cz-sf-icon">⚡</span>
+              <span>FastStart Web Stream</span>
+            </label>
+            <input
+              id="toggle-faststart"
+              type="checkbox"
+              class="cz-mac-switch"
+              bind:checked={fastStart}
+            />
+          </div>
+
+          <div class="cz-mac-toggle-row">
+            <label class="cz-mac-toggle-label" for="toggle-meta">
+              <span class="cz-sf-icon">🛡️</span>
+              <span>Strip Metadata / Privacy</span>
+            </label>
+            <input
+              id="toggle-meta"
+              type="checkbox"
+              class="cz-mac-switch"
+              bind:checked={stripMetadata}
+            />
+          </div>
+        </div>
+      {:else if activeCat === "audio"}
+        <div class="cz-mac-inspector-group">
+          <div class="cz-mac-prop-row">
+            <span class="cz-mac-prop-label">
+              <span class="cz-sf-icon">🎧</span> Audio Bitrate
+            </span>
+            <select class="cz-select-pill" bind:value={audioBitrate}>
+              <option value="320k">320 kbps (HQ)</option>
+              <option value="192k">192 kbps (Standard)</option>
+              <option value="128k">128 kbps (Voice)</option>
+              <option value="96k">96 kbps (Compact)</option>
+            </select>
+          </div>
+        </div>
+      {:else}
+        <div class="cz-mac-prop-info">
+          Optimal preset automatically tuned for {CATS[activeCat].label} output.
+        </div>
+      {/if}
+    </div>
+
     <!-- Quick PDF to Markdown shortcut -->
     <div class="cz-sidebar-card">
       <div class="cz-sidebar-header">
@@ -350,7 +524,7 @@
         <span class="cz-sidebar-title">Active Engines</span>
         <span class="cz-tier-tag">{platform?.tier ?? "balanced"}</span>
       </div>
-      <div class="cz-sidebar-meta flex-col gap-1">
+      <div class="cz-sidebar-meta">
         <div>Video: {platform?.webCodecs ? "WebCodecs + Mediabunny" : "FFmpeg.wasm"}</div>
         <div>Images: {platform?.webgl2 ? "WebGL2 + Canvas2D" : "Canvas2D"}</div>
       </div>
@@ -359,6 +533,27 @@
 </div>
 
 <style>
+  .cz-apple-workbench {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 1.5rem;
+    align-items: start;
+  }
+  .cz-card-main {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    min-width: 0;
+  }
+  .cz-card-side {
+    display: flex;
+    flex-direction: column;
+    gap: 1.15rem;
+    min-width: 0;
+  }
   .cz-main-header {
     display: flex;
     align-items: center;
@@ -368,13 +563,50 @@
   }
   .cz-main-title {
     font-family: var(--display);
-    font-size: 1.35rem;
+    font-size: 1.45rem;
     font-weight: 700;
     color: var(--text);
   }
   .cz-main-sub {
-    font-size: 0.8rem;
+    font-size: 0.82rem;
     color: var(--text-3);
+  }
+  .cz-segmented-track {
+    display: inline-flex;
+    align-items: center;
+    background: var(--bg2);
+    padding: 3px;
+    border-radius: 100px;
+    border: 1px solid var(--border);
+    gap: 2px;
+  }
+  .cz-segmented-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 100px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-2);
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    transition: background var(--t), color var(--t);
+    white-space: nowrap;
+  }
+  .cz-segmented-item:hover {
+    color: var(--text);
+  }
+  .cz-segmented-item.is-active {
+    background: var(--surface);
+    color: var(--accent);
+    font-weight: 600;
+    box-shadow: var(--shadow-xs);
+  }
+  .cz-segmented-mini .cz-segmented-item {
+    padding: 0.22rem 0.55rem;
+    font-size: 0.74rem;
   }
   .cz-cat-segmented {
     flex-wrap: wrap;
@@ -388,7 +620,7 @@
     padding: 0.65rem 1rem;
     border: 1px solid var(--border);
     border-radius: var(--r);
-    background: var(--surface2);
+    background: var(--surface);
   }
   .cz-opt-group {
     display: flex;
@@ -398,19 +630,23 @@
     flex-wrap: wrap;
   }
   .cz-opt-label {
-    font-weight: 500;
-    color: var(--text-3);
+    font-weight: 600;
+    color: var(--text-2);
   }
   .cz-queue {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 0.85rem;
   }
   .cz-queue-toolbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    font-size: 0.82rem;
+    font-size: 0.85rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    gap: 0.5rem;
   }
   .cz-queue-count {
     font-weight: 600;
@@ -420,6 +656,109 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
+  }
+  .cz-inset-table {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .cz-inset-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.65rem 0.9rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .cz-inset-row-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+    flex: 1 1 200px;
+  }
+  .cz-file-badge {
+    padding: 0.2rem 0.45rem;
+    border-radius: var(--r-xs);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    font-size: 0.7rem;
+    font-family: var(--mono);
+    font-weight: 700;
+    color: var(--text-2);
+  }
+  .cz-card-meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .cz-inset-row-name {
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cz-inset-row-meta {
+    font-size: 0.76rem;
+    font-family: var(--mono);
+    color: var(--text-3);
+  }
+  .cz-inset-row-right {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .cz-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 100px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  .cz-status-pill.is-busy {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: 1px solid var(--accent-glow);
+  }
+  .cz-status-pill.is-done {
+    background: var(--green-soft);
+    color: var(--green);
+    border: 1px solid var(--green-border);
+  }
+  .cz-summary-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.85rem 1rem;
+    border-radius: var(--r);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    font-size: 0.85rem;
+    color: var(--text-2);
+  }
+  .cz-btn-download-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: var(--accent);
+    color: #fff;
+    padding: 0.4rem 0.9rem;
+    border-radius: 100px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: background var(--t);
+  }
+  .cz-btn-download-all:hover {
+    background: var(--accent-2);
   }
   .cz-btn-pill {
     border-radius: 9999px;
@@ -450,7 +789,19 @@
     padding: 1.15rem;
     display: flex;
     flex-direction: column;
-    gap: 0.65rem;
+    gap: 0.75rem;
+  }
+  .cz-mac-inspector {
+    border: 1px solid var(--border-mid);
+    box-shadow: var(--shadow-sm);
+  }
+  .cz-mac-header-title {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .cz-mac-apple-icon {
+    font-size: 1rem;
   }
   .cz-sidebar-header {
     display: flex;
@@ -458,8 +809,8 @@
     justify-content: space-between;
   }
   .cz-sidebar-title {
-    font-size: 0.82rem;
-    font-weight: 600;
+    font-size: 0.85rem;
+    font-weight: 700;
     color: var(--text);
   }
   .cz-tier-tag {
@@ -467,14 +818,141 @@
     text-transform: uppercase;
     font-weight: 700;
     font-family: var(--mono);
-    padding: 0.1rem 0.4rem;
+    padding: 0.15rem 0.45rem;
     border-radius: 9999px;
-    background: var(--green-soft);
+    background: var(--accent-soft);
     color: var(--accent);
+    border: 1px solid var(--accent-glow);
   }
-  .cz-sidebar-meta {
+  .cz-mac-inspector-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .cz-mac-prop-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  .cz-mac-prop-label {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-2);
+  }
+  .cz-sf-icon {
+    font-size: 0.85rem;
+  }
+  .cz-select-pill {
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    border-radius: 100px;
+    padding: 0.25rem 0.65rem;
     font-size: 0.76rem;
+    outline: none;
+  }
+  .cz-mac-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.25rem 0;
+  }
+  .cz-mac-toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-2);
+    cursor: pointer;
+  }
+  .cz-mac-switch {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 36px;
+    height: 20px;
+    background: var(--bg3);
+    border-radius: 20px;
+    position: relative;
+    cursor: pointer;
+    outline: none;
+    border: 1px solid var(--border);
+    transition: background 0.2s var(--ease), border-color 0.2s var(--ease);
+  }
+  .cz-mac-switch::before {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.2s var(--spring);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  }
+  .cz-mac-switch:checked {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .cz-mac-switch:checked::before {
+    transform: translateX(16px);
+  }
+  .cz-mac-prop-info {
+    font-size: 0.8rem;
     color: var(--text-3);
     line-height: 1.4;
+  }
+  .cz-sidebar-meta {
+    font-size: 0.78rem;
+    color: var(--text-3);
+    line-height: 1.5;
+  }
+  .cz-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 0.4rem 0.85rem;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    transition: background var(--t), color var(--t);
+  }
+  .cz-btn-primary {
+    background: var(--accent);
+    color: #fff;
+    border: 1px solid transparent;
+  }
+  .cz-btn-primary:hover:not(:disabled) {
+    background: var(--accent-2);
+  }
+  .cz-btn-secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .cz-btn-secondary:hover {
+    background: var(--bg2);
+  }
+  .cz-btn-ghost {
+    background: transparent;
+    color: var(--text-3);
+    border: 1px solid var(--border);
+  }
+  .cz-btn-ghost:hover:not(:disabled) {
+    color: var(--text);
+    background: var(--surface2);
+  }
+
+  @media (max-width: 960px) {
+    .cz-apple-workbench {
+      grid-template-columns: 1fr;
+      padding: 1.25rem 1rem 3.5rem;
+    }
   }
 </style>

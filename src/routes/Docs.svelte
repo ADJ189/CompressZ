@@ -54,6 +54,22 @@
       <li><strong>WebGPU Acceleration:</strong> Supported browsers utilize hardware WebGPU for local Transformers.js models.</li>
     </ul>
   </section>
+
+  <section class="cz-content-section">
+    <h2 class="cz-content-heading">Browser & Engine Limitations</h2>
+    <p>
+      CompressZ executes 100% locally on your machine with zero server communication. Operating strictly inside the browser sandbox introduces specific platform constraints:
+    </p>
+    <ul>
+      <li><strong>WASM 32-bit Memory Ceiling:</strong> WebAssembly engines operate within 32-bit address spaces (maximum 2 GiB safe allocation). Video files over 1.5 GiB may exceed browser buffer limits during intensive multi-pass transcoding.</li>
+      <li><strong>Hardware Video Codecs:</strong> WebCodecs hardware encoding availability depends on your OS and GPU driver. Unsupported codecs (or platforms without WebCodecs) seamlessly fall back to multithreaded WASM software encoding.</li>
+      <li><strong>Mobile Background Tab Suspension:</strong> iOS Safari and Android Chrome aggressively throttle or sleep background tabs to conserve battery. For long transcoding or batch jobs, keep the CompressZ tab visible in the foreground.</li>
+      <li><strong>High-DPI PDF Memory Footprint:</strong> Rendering dense, multi-hundred-page PDFs at 300+ DPI requires significant working RAM. CompressZ enforces sequential rendering with proactive canvas garbage collection to prevent browser tab crashes.</li>
+    </ul>
+    <p>
+      For a complete technical breakdown of architectural ceilings and engine trade-offs, consult the project <code>LIMITATIONS.md</code> guide.
+    </p>
+  </section>
 </div>
 
 <style>

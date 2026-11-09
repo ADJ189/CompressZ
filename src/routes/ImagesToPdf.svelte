@@ -4,9 +4,12 @@
   import { imagesToPdf } from "../lib/imagesToPdf";
   import { formatBytes } from "../lib/types";
   import { toast } from "../toast";
+  import { flip } from "svelte/animate";
+  import { onDestroy } from "svelte";
   import {
     recommendFor,
     dismissRecommendation,
+    naturalCompare,
     type Recommendation,
   } from "../lib/recommendations";
 
@@ -14,6 +17,26 @@
   let isConverting = $state(false);
   let convertedBlob = $state<Blob | null>(null);
   let dismissTrigger = $state(0);
+  let draggedIndex = $state<number | null>(null);
+
+  // Thumbnail cache for files
+  const thumbnailUrls = new Map<File, string>();
+
+  function getThumbnail(file: File): string {
+    let url = thumbnailUrls.get(file);
+    if (!url) {
+      url = URL.createObjectURL(file);
+      thumbnailUrls.set(file, url);
+    }
+    return url;
+  }
+
+  onDestroy(() => {
+    for (const url of thumbnailUrls.values()) {
+      URL.revokeObjectURL(url);
+    }
+    thumbnailUrls.clear();
+  });
 
   $effect(() => {
     const unsub = imagesToPdfStore.subscribe((val) => {
@@ -73,8 +96,68 @@
 
   function handleRemove(index: number) {
     const next = [...state.files];
-    next.splice(index, 1);
+    const removed = next.splice(index, 1)[0];
+    if (removed && thumbnailUrls.has(removed)) {
+      URL.revokeObjectURL(thumbnailUrls.get(removed)!);
+      thumbnailUrls.delete(removed);
+    }
     updateStore({ files: next });
+  }
+
+  function moveUp(index: number) {
+    if (index <= 0) return;
+    const next = [...state.files];
+    const temp = next[index];
+    next[index] = next[index - 1];
+    next[index - 1] = temp;
+    updateStore({ files: next });
+  }
+
+  function moveDown(index: number) {
+    if (index >= state.files.length - 1) return;
+    const next = [...state.files];
+    const temp = next[index];
+    next[index] = next[index + 1];
+    next[index + 1] = temp;
+    updateStore({ files: next });
+  }
+
+  function sortNatural() {
+    const sorted = [...state.files].sort((a, b) => naturalCompare(a.name, b.name));
+    updateStore({ files: sorted });
+    toast("Sorted images numerically", "success");
+  }
+
+  function reverseOrder() {
+    updateStore({ files: [...state.files].reverse() });
+    toast("Reversed image order", "success");
+  }
+
+  function handleDragStart(index: number, e: DragEvent) {
+    draggedIndex = index;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", String(index));
+    }
+  }
+
+  function handleDragOver(e: DragEvent) {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+  }
+
+  function handleDrop(targetIndex: number, e: DragEvent) {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === targetIndex) return;
+    const next = [...state.files];
+    const [moved] = next.splice(draggedIndex, 1);
+    next.splice(targetIndex, 0, moved);
+    draggedIndex = null;
+    updateStore({ files: next });
+  }
+
+  function handleDragEnd() {
+    draggedIndex = null;
   }
 
   async function handleConvert() {
@@ -111,6 +194,10 @@
   }
 
   function handleClear() {
+    for (const url of thumbnailUrls.values()) {
+      URL.revokeObjectURL(url);
+    }
+    thumbnailUrls.clear();
     updateStore({ files: [] });
     convertedBlob = null;
   }
@@ -120,7 +207,7 @@
   <div class="cz-tool-header">
     <h1 class="cz-tool-title">Images to PDF</h1>
     <p class="cz-tool-desc">
-      Convert photo sequences into a single clean PDF document with configurable page layout.
+      Convert photo sequences into a single clean PDF document with configurable page layout. Drag cards or use arrow buttons to preview and reorder pages.
     </p>
   </div>
 
@@ -174,8 +261,8 @@
 
   <div id="itp-rec">
     {#if activeRec}
-      <div class="cz-recommendation">
-        <div class="cz-recommendation__row cz-recommendation--primary">
+      <div class="cz-recommendation cz-recommendation--primary">
+        <div class="cz-recommendation__row">
           <div class="cz-recommendation__body">
             <div class="cz-recommendation__title">{activeRec.title}</div>
             <div class="cz-recommendation__reason">{activeRec.reason}</div>
@@ -213,8 +300,26 @@
   {#if state.files.length > 0}
     <div class="cz-merge-queue">
       <div class="cz-merge-toolbar">
-        <span class="cz-merge-count">{state.files.length} images queued</span>
+        <div class="cz-merge-count-wrap">
+          <span class="cz-merge-count">{state.files.length} images queued for PDF pages</span>
+        </div>
         <div class="cz-merge-actions">
+          <button
+            type="button"
+            class="cz-btn cz-btn-secondary cz-btn-sm"
+            onclick={sortNatural}
+            title="Sort images numerically by filename"
+          >
+            Sort 1-9
+          </button>
+          <button
+            type="button"
+            class="cz-btn cz-btn-secondary cz-btn-sm"
+            onclick={reverseOrder}
+            title="Reverse sequence order"
+          >
+            Reverse
+          </button>
           <button
             type="button"
             class="cz-btn cz-btn-primary cz-btn-sm"
@@ -226,7 +331,7 @@
           {#if convertedBlob}
             <button
               type="button"
-              class="cz-btn cz-btn-secondary cz-btn-sm"
+              class="cz-btn cz-btn-success cz-btn-sm"
               onclick={handleDownload}
             >
               Download PDF
@@ -243,23 +348,65 @@
         </div>
       </div>
 
-      <div id="itp-list" class="cz-merge-list">
-        {#each state.files as file, idx (file.name + idx)}
-          <div class="cz-merge-item file-card">
-            <div class="cz-merge-item-info">
-              <span class="cz-merge-index">{idx + 1}</span>
-              <span class="cz-merge-name fc-name" title={file.name}>{file.name}</span>
-              <span class="cz-merge-size">{formatBytes(file.size)}</span>
+      <div id="itp-list" class="cz-merge-grid">
+        {#each state.files as file, idx (file)}
+          <div
+            class="cz-reorder-card file-card {draggedIndex === idx ? 'is-dragging' : ''}"
+            draggable="true"
+            ondragstart={(e) => handleDragStart(idx, e)}
+            ondragover={handleDragOver}
+            ondrop={(e) => handleDrop(idx, e)}
+            ondragend={handleDragEnd}
+            animate:flip={{ duration: 250 }}
+            role="listitem"
+          >
+            <div class="cz-reorder-thumb-wrap">
+              <img
+                src={getThumbnail(file)}
+                alt={file.name}
+                class="cz-reorder-thumb"
+                loading="lazy"
+              />
+              <span class="cz-reorder-badge">p.{idx + 1}</span>
             </div>
-            <button
-              type="button"
-              class="cz-btn cz-btn-ghost cz-btn-sm"
-              disabled={isConverting}
-              onclick={() => handleRemove(idx)}
-              aria-label="Remove"
-            >
-              ✕
-            </button>
+
+            <div class="cz-reorder-details">
+              <span class="cz-reorder-name fc-name" title={file.name}>{file.name}</span>
+              <span class="cz-reorder-size">{formatBytes(file.size)}</span>
+            </div>
+
+            <div class="cz-reorder-controls">
+              <button
+                type="button"
+                class="cz-icon-btn"
+                disabled={idx === 0 || isConverting}
+                onclick={() => moveUp(idx)}
+                aria-label="Move earlier"
+                title="Move earlier"
+              >
+                ▲
+              </button>
+              <button
+                type="button"
+                class="cz-icon-btn"
+                disabled={idx === state.files.length - 1 || isConverting}
+                onclick={() => moveDown(idx)}
+                aria-label="Move later"
+                title="Move later"
+              >
+                ▼
+              </button>
+              <button
+                type="button"
+                class="cz-icon-btn cz-icon-btn--remove"
+                disabled={isConverting}
+                onclick={() => handleRemove(idx)}
+                aria-label="Remove image"
+                title="Remove"
+              >
+                ✕
+              </button>
+            </div>
           </div>
         {/each}
       </div>
@@ -308,23 +455,44 @@
     gap: 0.6rem;
   }
   .cz-setting-label {
-    font-size: 0.86rem;
+    font-size: 0.85rem;
     font-weight: 600;
     color: var(--text-2);
   }
+  .cz-btn-group {
+    display: inline-flex;
+    background: var(--bg2);
+    padding: 2px;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--border);
+    gap: 2px;
+  }
+  .cz-btn-group .cz-btn {
+    padding: 0.3rem 0.75rem;
+    font-size: 0.8rem;
+    border-radius: calc(var(--r-sm) - 2px);
+    background: transparent;
+    color: var(--text-3);
+  }
+  .cz-btn-group .cz-btn.is-active {
+    background: var(--surface);
+    color: var(--accent);
+    font-weight: 600;
+    box-shadow: var(--shadow-xs);
+  }
   .cz-range {
-    width: 110px;
+    accent-color: var(--accent);
   }
   .cz-merge-queue {
     display: flex;
     flex-direction: column;
-    gap: 0.85rem;
+    gap: 1rem;
   }
   .cz-merge-toolbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding-bottom: 0.5rem;
+    padding-bottom: 0.6rem;
     border-bottom: 1px solid var(--border);
     flex-wrap: wrap;
     gap: 0.75rem;
@@ -332,60 +500,191 @@
   .cz-merge-count {
     font-size: 0.92rem;
     font-weight: 600;
-    color: var(--text);
+    color: var(--text-2);
   }
   .cz-merge-actions {
     display: flex;
-    align-items: center;
     gap: 0.5rem;
+    flex-wrap: wrap;
+    align-items: center;
   }
-  .cz-merge-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.45rem;
+  .cz-merge-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 0.85rem;
   }
-  .cz-merge-item {
+  .cz-reorder-card {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 0.65rem 0.85rem;
-    border: 1px solid var(--border);
-    border-radius: var(--r-sm);
+    gap: 0.85rem;
     background: var(--surface);
-    gap: 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 0.65rem 0.85rem;
+    transition: transform var(--t), box-shadow var(--t), border-color var(--t);
+    cursor: grab;
+    user-select: none;
   }
-  .cz-merge-item-info {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    min-width: 0;
+  .cz-reorder-card:active {
+    cursor: grabbing;
   }
-  .cz-merge-index {
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
+  .cz-reorder-card:hover {
+    border-color: var(--border-mid);
+    box-shadow: var(--shadow-sm);
+  }
+  .cz-reorder-card.is-dragging {
+    opacity: 0.45;
+    transform: scale(0.98);
+  }
+  .cz-reorder-thumb-wrap {
+    position: relative;
+    width: 62px;
+    height: 62px;
+    border-radius: var(--r-sm);
+    overflow: hidden;
     background: var(--bg2);
-    font-size: 0.76rem;
-    font-weight: 600;
-    font-family: var(--mono);
+    border: 1px solid var(--border);
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--text-2);
-    flex-shrink: 0;
   }
-  .cz-merge-name {
-    font-size: 0.9rem;
-    font-weight: 500;
+  .cz-reorder-thumb {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .cz-reorder-badge {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    background: rgba(0, 0, 0, 0.75);
+    color: #fff;
+    font-size: 0.68rem;
+    font-family: var(--mono);
+    font-weight: 600;
+    padding: 1px 4px;
+    border-radius: 4px;
+  }
+  .cz-reorder-details {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+  .cz-reorder-name {
+    font-size: 0.88rem;
+    font-weight: 600;
     color: var(--text);
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
   }
-  .cz-merge-size {
-    font-size: 0.8rem;
+  .cz-reorder-size {
+    font-size: 0.78rem;
     font-family: var(--mono);
     color: var(--text-3);
+  }
+  .cz-reorder-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
     flex-shrink: 0;
+  }
+  .cz-icon-btn {
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--r-xs);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-2);
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: background var(--t), color var(--t);
+  }
+  .cz-icon-btn:hover:not(:disabled) {
+    background: var(--bg3);
+    color: var(--text);
+  }
+  .cz-icon-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+  .cz-icon-btn--remove:hover:not(:disabled) {
+    background: rgba(244, 63, 94, 0.15);
+    color: var(--rose);
+    border-color: rgba(244, 63, 94, 0.3);
+  }
+  .cz-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 0.4rem 0.85rem;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    transition: background var(--t), color var(--t);
+  }
+  .cz-btn-primary {
+    background: var(--accent);
+    color: #fff;
+    border: 1px solid transparent;
+  }
+  .cz-btn-primary:hover:not(:disabled) {
+    background: var(--accent-2);
+  }
+  .cz-btn-secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .cz-btn-secondary:hover {
+    background: var(--bg2);
+  }
+  .cz-btn-success {
+    background: var(--green);
+    color: #fff;
+    border: 1px solid transparent;
+  }
+  .cz-btn-ghost {
+    background: transparent;
+    color: var(--text-3);
+    border: 1px solid var(--border);
+  }
+  .cz-btn-ghost:hover:not(:disabled) {
+    color: var(--text);
+    background: var(--surface2);
+  }
+  .cz-recommendation {
+    border-radius: var(--r);
+    padding: 0.85rem 1.15rem;
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-glow);
+    margin-bottom: 0.75rem;
+  }
+  .cz-recommendation__row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+  .cz-recommendation__title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .cz-recommendation__reason {
+    font-size: 0.8rem;
+    color: var(--text-2);
+  }
+  .cz-recommendation__actions {
+    display: flex;
+    gap: 0.5rem;
   }
 </style>

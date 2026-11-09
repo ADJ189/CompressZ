@@ -536,7 +536,7 @@
     max-height: 100%;
     object-fit: contain;
     box-shadow: var(--shadow-sm);
-    background: #fff;
+    background: var(--surface);
   }
   .cz-preview-empty {
     font-size: 0.85rem;
