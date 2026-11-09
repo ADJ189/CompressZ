@@ -375,6 +375,12 @@ FFmpeg.wasm and then MediaRecorder. WebKit automation is not real Safari — run
 
 ---
 
+## Architectural & Browser Limitations
+
+CompressZ runs 100% client-side. See [LIMITATIONS.md](LIMITATIONS.md) for detailed documentation on WASM 32-bit linear memory boundaries (2 GiB ceiling), mobile background tab suspension, and GPU WebCodecs constraints.
+
+---
+
 ## Privacy
 
 CompressZ has no backend. Files never leave your browser. See [PRIVACY.md](PRIVACY.md) (also live at [/privacy](https://compressz.pages.dev/privacy)) for full details.
