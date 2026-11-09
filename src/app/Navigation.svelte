@@ -34,7 +34,17 @@
   function isRouteActive(tabRoute: string, current: string): boolean {
     const norm = (current === "" || current === "home") ? "" : current;
     if (tabRoute === "") return norm === "";
-    return norm === tabRoute || norm.startsWith(tabRoute + "/");
+    if (norm === tabRoute) return true;
+    if (norm.startsWith(tabRoute + "/")) {
+      const hasCloserTab = TABS.some(
+        (t) =>
+          t.route !== tabRoute &&
+          t.route.length > tabRoute.length &&
+          (norm === t.route || norm.startsWith(t.route + "/")),
+      );
+      return !hasCloserTab;
+    }
+    return false;
   }
 
   async function updateThumb() {
