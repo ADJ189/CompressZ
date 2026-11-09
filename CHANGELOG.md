@@ -9,6 +9,17 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 
 ## [Unreleased]
 
+### Added — Original Home Design, Zen/macOS Inspector UI, WebAssembly Acceleration & Visual Reordering
+
+- **Original Home Page Design Port**: Restored the complete original Home design from `CompressZ-main` (`home-hero`, `ey-pill`, `home-title` with `ht-grad`, 4 trust chips, 10 `.htc` tool cards with hover glide arrows, 01–04 "How it works" step cards, and the full `priv-highlight` banner) implemented as a clean, reactive Svelte 5 component.
+- **Zen Browser Floating Active Capsule & Gliding Navigation**: Fixed tab highlighting desync with Svelte 5 `tick()`, implemented Zen Browser / iOS floating active pill styling with animated glowing gliding thumb indicator, normalized route matching (`""` vs `"home"`), and relocated "About" to the persistent bottom footer.
+- **Visual Reordering & Live Previews (`Merge PDF` & `Images to PDF`)**: Added live image thumbnails and PDF document cover cards, smooth Svelte FLIP transitions (`animate:flip`), native drag-and-drop reordering, explicit Move Up `▲` / Move Down `▼` buttons, and Natural 1-9 numeric sorting.
+- **Apple macOS Sonoma/Sequoia Conversion Inspector (`Convert.svelte`)**: Added an Inspector panel with SF-style iconography and iOS `.mac-toggle` switches for CRF quality levels (HQ/Balanced/Small), resolution downscaling (Native/1080p/720p/480p), framerate capping, audio bitrate selection, audio muting (`-an`), FastStart streaming (`-movflags +faststart`), and EXIF privacy stripping.
+- **Hardware-Speed WebAssembly Acceleration (`src/lib/wasmMath.ts`)**: Built an inline zero-dependency 146-byte compiled WebAssembly module for IEEE 802.3 CRC-32 checksum calculation in ZIP creation and validation, with seamless pure-JS fallback for restricted environments.
+- **Browser & Engine Limitations Documentation (`LIMITATIONS.md` & `/docs`)**: Authored comprehensive architectural boundary documentation covering 32-bit WASM 2 GiB memory limits, WebCodecs GPU support matrices, mobile background tab throttling, and high-DPI PDF memory footprints.
+- **SonarCloud Duplication Fix (`e2e/engines.spec.ts`)**: Streamlined quality guard assertions and parameterized route fixtures, eliminating duplicate line warnings (down to 0%).
+- **Theme Contrast & Text Overlap Resolution**: Added native `color-scheme: light / dark` to root styles, removed hardcoded `#fff` in `PdfMarkdown.svelte`, and redesigned settings dialog layout with flex wrapping and mobile column stacking.
+
 ### Added — Repository, Review Standards & Toolchain Isolation for GitHub & Cloudflare Pages
 
 - **Unified npm Test Runner (`scripts/test.mjs`)**: Added zero-dependency test runner executing all 29 unit and compliance test suites under Node.js / npm (`npm test`) and Deno (`deno test --allow-read`), resolving imports dynamically without build artifacts.
