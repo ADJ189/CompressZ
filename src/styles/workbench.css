@@ -119,8 +119,8 @@
 /* ── Quick actions ────────────────────────────────────────── */
 .cz-wb-quick {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: .6rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
 }
 .cz-wb-quick__card {
   display: flex;
@@ -483,6 +483,10 @@
   .cz-wb-quick { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
+@media (max-width: 860px) {
+  .cz-wb-quick { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 @media (max-width: 900px) {
   .cz-settings {
     grid-template-columns: 1fr;
@@ -523,7 +527,7 @@
 
 @media (max-width: 390px) {
   .cz-workbench { padding: 1.15rem .9rem 3rem; }
-  .cz-wb-quick { gap: .45rem; }
+  .cz-wb-quick { gap: .45rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .cz-wb-quick__card { padding: .7rem .6rem; }
   .cz-wb-quick__name { font-size: .82rem; }
 }
