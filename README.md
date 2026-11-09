@@ -317,7 +317,7 @@ compressz/
 
 ## Local Development & Testing
 
-Requires **Node.js `^20.19.0 || ^22.13.0 || >=24`** or **Deno** for running automated checks.
+Requires **Node.js `>=24.0.0` (latest Node 24 or better)** or **Deno** for running automated checks.
 
 ```bash
 npm ci             # reproducible install from package-lock.json

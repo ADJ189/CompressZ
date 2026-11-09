@@ -22,7 +22,7 @@ site is <https://compressz.pages.dev>; the repo lives at
 ## Quick start (npm is canonical)
 
 GitHub Actions and Cloudflare Pages use **Node/npm**. CompressZ requires Node
-`^20.19.0 || ^22.13.0 || >=24`.
+`>=24.0.0` (latest Node 24 or better).
 
 ```bash
 npm ci                       # install from package-lock.json
