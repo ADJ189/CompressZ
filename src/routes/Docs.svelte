@@ -97,6 +97,24 @@
             <td>pdf-lib + PDF.js</td>
           </tr>
           <tr>
+            <td><strong>PDF Suite & Studio</strong></td>
+            <td>True redaction (300 DPI raster purge), AES-256</td>
+            <td>150 MB / interactive AcroForms</td>
+            <td>pdf-lib + QPDF WASM + Canvas Studio</td>
+          </tr>
+          <tr>
+            <td><strong>Two-Way Office (Fast)</strong></td>
+            <td>Structural OOXML text/table reconstruction</td>
+            <td>Instant (&lt;50ms), 50 MB RAM, offline</td>
+            <td>Native OOXML Generator + zip.ts</td>
+          </tr>
+          <tr>
+            <td><strong>Two-Way Office (WASM)</strong></td>
+            <td>Desktop-grade LibreOffice WASM layout</td>
+            <td>~85–110 MB WASM, 2 GiB memory ceiling</td>
+            <td>@bentopdf/libreoffice-wasm</td>
+          </tr>
+          <tr>
             <td><strong>PDF to Markdown & OCR</strong></td>
             <td>Working RAM during figure crops</td>
             <td>100 pages per document</td>

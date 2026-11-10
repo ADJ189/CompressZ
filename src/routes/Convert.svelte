@@ -1,23 +1,32 @@
 <script lang="ts">
   import FileDropzone from "../components/FileDropzone.svelte";
+  import HubHeader from "../components/HubHeader.svelte";
   import { navigate } from "../router";
   import { convertVideo, type VideoContainer } from "../lib/convertMedia";
   import { compressAudio } from "../lib/compressAudio";
   import { compressImage } from "../lib/compressImage";
   import { pdfToImages } from "../lib/convertPdf";
-  import { docxToPdf, docxToText, pptxToPdf, pptxToText } from "../lib/convertOffice";
+  import { docxToPdf, docxToText, pptxToPdf, pptxToText, htmlToPdf } from "../lib/convertOffice";
+  import { convertPdfToWord } from "../lib/conversions/pdfToWord";
+  import { convertPdfToExcel } from "../lib/conversions/pdfToExcel";
+  import { convertPdfToPpt } from "../lib/conversions/pdfToPpt";
+  import { convertExcelToPdf } from "../lib/conversions/excelToPdf";
+  import { convertWithLibreOfficeWasm } from "../lib/conversions/libreOfficeWasm";
+  import { consumeStagedUniversalFile } from "../store";
   import { naturalOrder } from "../lib/recommendations";
   import { formatBytes } from "../lib/types";
   import { toast } from "../toast";
   import { getPlatformInfo } from "../lib/platform";
+  import { onMount } from "svelte";
 
-  type Category = "video" | "audio" | "image" | "pdf2img" | "docx" | "pptx";
+  type Category = "video" | "audio" | "image" | "pdf2office" | "pdf2img" | "docx" | "xlsx" | "pptx" | "html";
 
   let activeCat = $state<Category>("video");
   let selectedFiles = $state<File[]>([]);
   let targetFormat = $state<string>("mp4");
   let isConverting = $state(false);
   let convertedResults = $state<Array<{ name: string; blob: Blob }>>([]);
+  let selectedEngine = $state<"web-native" | "libreoffice">("web-native");
 
   // macOS Inspector Advanced State
   let videoCrf = $state<number>(18);
@@ -29,6 +38,29 @@
   let stripMetadata = $state<boolean>(false);
 
   const platform = $derived(getPlatformInfo());
+
+  onMount(() => {
+    const staged = consumeStagedUniversalFile();
+    if (staged?.file) {
+      selectedFiles = [staged.file];
+      if (staged.actionId === "pdf-to-word") {
+        activeCat = "pdf2office";
+        targetFormat = "docx";
+      } else if (staged.actionId === "pdf-to-excel") {
+        activeCat = "pdf2office";
+        targetFormat = "xlsx";
+      } else if (staged.actionId === "pdf-to-ppt") {
+        activeCat = "pdf2office";
+        targetFormat = "pptx";
+      } else if (staged.actionId === "docx-to-pdf") {
+        activeCat = "docx";
+        targetFormat = "pdf";
+      } else if (staged.actionId === "xlsx-to-pdf") {
+        activeCat = "xlsx";
+        targetFormat = "pdf";
+      }
+    }
+  });
 
   const CATS: Record<
     Category,
@@ -75,6 +107,16 @@
         { value: "avif", label: "AVIF" },
       ],
     },
+    pdf2office: {
+      label: "PDF to Office",
+      icon: "📑",
+      accept: "application/pdf,.pdf",
+      targets: [
+        { value: "docx", label: "Word (.docx)" },
+        { value: "xlsx", label: "Excel (.xlsx)" },
+        { value: "pptx", label: "PowerPoint (.pptx)" },
+      ],
+    },
     pdf2img: {
       label: "PDF to Images",
       icon: "📄",
@@ -87,20 +129,36 @@
     },
     docx: {
       label: "DOCX",
-      icon: "📝",
+      icon: "📘",
       accept: ".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       targets: [
         { value: "pdf", label: "PDF Document" },
         { value: "txt", label: "Plain Text" },
       ],
     },
+    xlsx: {
+      label: "Excel",
+      icon: "📗",
+      accept: ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      targets: [
+        { value: "pdf", label: "PDF Document" },
+      ],
+    },
     pptx: {
       label: "PPTX",
-      icon: "📊",
+      icon: "📙",
       accept: ".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation",
       targets: [
         { value: "pdf", label: "PDF Document" },
         { value: "txt", label: "Plain Text" },
+      ],
+    },
+    html: {
+      label: "HTML",
+      icon: "🌐",
+      accept: ".html,.htm,text/html",
+      targets: [
+        { value: "pdf", label: "PDF Document" },
       ],
     },
   };
@@ -156,16 +214,55 @@
           const mime = targetFormat === "jpeg" ? "image/jpeg" : targetFormat === "png" ? "image/png" : targetFormat === "avif" ? "image/avif" : "image/webp";
           const res = await compressImage(file, { format: mime as any });
           blob = res.blob;
+        } else if (activeCat === "pdf2office") {
+          if (selectedEngine === "libreoffice") {
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            const outBytes = await convertWithLibreOfficeWasm(bytes, "pdf", targetFormat);
+            blob = new Blob([new Uint8Array(outBytes)]);
+          } else {
+            if (targetFormat === "docx") blob = await convertPdfToWord(file);
+            else if (targetFormat === "xlsx") blob = await convertPdfToExcel(file);
+            else if (targetFormat === "pptx") blob = await convertPdfToPpt(file);
+          }
         } else if (activeCat === "pdf2img") {
           const res = await pdfToImages(file, { format: targetFormat as any });
           blob = res.zipBlob;
           outName = file.name.replace(/\.[^/.]+$/, "") + "-images.zip";
         } else if (activeCat === "docx") {
-          if (targetFormat === "pdf") blob = await docxToPdf(file);
-          else blob = new Blob([await docxToText(file)], { type: "text/plain" });
+          if (targetFormat === "pdf") {
+            if (selectedEngine === "libreoffice") {
+              const bytes = new Uint8Array(await file.arrayBuffer());
+              const outBytes = await convertWithLibreOfficeWasm(bytes, "docx", "pdf");
+              blob = new Blob([new Uint8Array(outBytes)], { type: "application/pdf" });
+            } else {
+              blob = await docxToPdf(file);
+            }
+          } else {
+            blob = new Blob([await docxToText(file)], { type: "text/plain" });
+          }
+        } else if (activeCat === "xlsx") {
+          if (selectedEngine === "libreoffice") {
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            const outBytes = await convertWithLibreOfficeWasm(bytes, "xlsx", "pdf");
+            blob = new Blob([new Uint8Array(outBytes)], { type: "application/pdf" });
+          } else {
+            blob = await convertExcelToPdf(file);
+          }
         } else if (activeCat === "pptx") {
-          if (targetFormat === "pdf") blob = await pptxToPdf(file);
-          else blob = new Blob([await pptxToText(file)], { type: "text/plain" });
+          if (targetFormat === "pdf") {
+            if (selectedEngine === "libreoffice") {
+              const bytes = new Uint8Array(await file.arrayBuffer());
+              const outBytes = await convertWithLibreOfficeWasm(bytes, "pptx", "pdf");
+              blob = new Blob([new Uint8Array(outBytes)], { type: "application/pdf" });
+            } else {
+              blob = await pptxToPdf(file);
+            }
+          } else {
+            blob = new Blob([await pptxToText(file)], { type: "text/plain" });
+          }
+        } else if (activeCat === "html") {
+          const htmlText = await file.text();
+          blob = await htmlToPdf(htmlText);
         }
 
         if (blob) {
@@ -493,6 +590,47 @@
               <option value="96k">96 kbps (Compact)</option>
             </select>
           </div>
+        </div>
+      {:else if activeCat === "pdf2office" || activeCat === "docx" || activeCat === "xlsx" || activeCat === "pptx"}
+        <div class="cz-mac-inspector-group">
+          <div class="cz-mac-prop-row">
+            <span class="cz-mac-prop-label">
+              <span class="cz-sf-icon">⚙️</span> Document Engine
+            </span>
+          </div>
+          <div class="cz-dual-engine-box">
+            <button
+              type="button"
+              class="cz-engine-toggle {selectedEngine === 'web-native' ? 'is-selected' : ''}"
+              onclick={() => (selectedEngine = 'web-native')}
+            >
+              <div class="cz-engine-head">
+                <span class="cz-engine-icon">⚡</span>
+                <span class="cz-engine-name">Fast Web-Native</span>
+                <span class="cz-engine-chip">Default ⭐</span>
+              </div>
+              <div class="cz-engine-desc">Instant startup &bull; Low RAM (~50MB) &bull; Zero Download</div>
+            </button>
+
+            <button
+              type="button"
+              class="cz-engine-toggle {selectedEngine === 'libreoffice' ? 'is-selected' : ''}"
+              onclick={() => (selectedEngine = 'libreoffice')}
+            >
+              <div class="cz-engine-head">
+                <span class="cz-engine-icon">🏛️</span>
+                <span class="cz-engine-name">LibreOffice WASM</span>
+                <span class="cz-engine-chip is-heavy">~85MB</span>
+              </div>
+              <div class="cz-engine-desc">Desktop Fidelity &bull; Complex Equations &bull; On-Demand</div>
+            </button>
+          </div>
+
+          {#if selectedEngine === 'libreoffice'}
+            <div class="cz-engine-warning">
+              ⚠️ Downloads ~85 MB WebAssembly runtime on first execution. 100% browser-local processing.
+            </div>
+          {/if}
         </div>
       {:else}
         <div class="cz-mac-prop-info">
@@ -947,6 +1085,74 @@
   .cz-btn-ghost:hover:not(:disabled) {
     color: var(--text);
     background: var(--surface2);
+  }
+
+  .cz-dual-engine-box {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+  }
+  .cz-engine-toggle {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.6rem 0.75rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color var(--t), background var(--t), box-shadow var(--t);
+  }
+  .cz-engine-toggle:hover {
+    border-color: var(--accent);
+    background: var(--bg2);
+  }
+  .cz-engine-toggle.is-selected {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+  .cz-engine-head {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+  .cz-engine-icon {
+    font-size: 0.95rem;
+  }
+  .cz-engine-name {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .cz-engine-chip {
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+    background: var(--accent);
+    color: white;
+    margin-left: auto;
+  }
+  .cz-engine-chip.is-heavy {
+    background: #eab308;
+    color: #1a1a1a;
+  }
+  .cz-engine-desc {
+    font-size: 0.7rem;
+    color: var(--text-3);
+    line-height: 1.3;
+  }
+  .cz-engine-warning {
+    font-size: 0.72rem;
+    color: #eab308;
+    background: rgba(234, 179, 8, 0.1);
+    border: 1px solid rgba(234, 179, 8, 0.25);
+    padding: 0.5rem 0.65rem;
+    border-radius: var(--r-sm);
+    line-height: 1.4;
   }
 
   @media (max-width: 960px) {
