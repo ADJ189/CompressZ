@@ -246,3 +246,22 @@ export const pdfMarkdownStore = createStore<PdfMarkdownState>({
   activePageIndex: 0,
   editedMarkdown: "",
 });
+
+// ── Universal Staged File Store ───────────────────────────────
+export interface UniversalStagedItem {
+  file: File;
+  actionId?: string;
+  sourceHub?: string;
+}
+export const stagedUniversalFile = createStore<UniversalStagedItem | null>(null);
+
+/**
+ * Retrieve and consume the staged universal file (clears the store after reading).
+ */
+export function consumeStagedUniversalFile(): UniversalStagedItem | null {
+  const item = stagedUniversalFile.get();
+  if (item) {
+    stagedUniversalFile.set(null);
+  }
+  return item;
+}
