@@ -42,6 +42,14 @@ export async function getPdfJs(): Promise<any> {
   return lib;
 }
 
+let _pdfLib: any = null;
+export async function getPdfLib(): Promise<any> {
+  if (_pdfLib) return _pdfLib;
+  const lib = (await import(/* @vite-ignore */ PDFLIB_ESM)) as any;
+  _pdfLib = lib;
+  return lib;
+}
+
 /** Open a PDF document with the standard options every caller here used
  * (no eval, no worker-side fetch, local cmaps/fonts) — one place to keep
  * them in sync instead of three. `bytes` is sliced so callers can safely
