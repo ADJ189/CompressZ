@@ -31,6 +31,8 @@ CompressF is still maintained as its own project.
 | ---------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | **Images**       | JPEG · PNG · WebP · AVIF · HEIC · BMP                                                               | Canvas/OffscreenCanvas · optional WebGL2 resize                          |
 | **PDF Compress** | PDF                                                                                                 | PDF.js + pdf-lib (structural image resampling)                           |
+| **PDF Suite & Studio** | Merge · Split · Organize & Rotate · Crop · Watermark · Studio · Sign · Forms · Redact · Protect · Repair | pdf-lib + QPDF WASM + Canvas Studio                                      |
+| **Two-Way Office** | PDF ⇄ Word (.docx) · PDF ⇄ Excel (.xlsx) · PDF ⇄ PowerPoint (.pptx) · Excel → PDF · HTML → PDF      | Fast Web-Native (OOXML + zip.ts) + Desktop LibreOffice WASM             |
 | **Video**        | MP4 · WebM · MOV · AVI · MKV                                                                        | WebCodecs + Mediabunny → FFmpeg.wasm → MediaRecorder                    |
 | **Audio**        | MP3 · AAC · OGG · Opus · FLAC · WAV                                                                 | FFmpeg.wasm                                                              |
 | **GIF**          | GIF → GIF or WebM VP9                                                                               | FFmpeg.wasm (two-pass palettegen)                                        |

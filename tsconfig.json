@@ -15,6 +15,5 @@
     "esModuleInterop": true,
     "sourceMap": true
   },
-  "include": ["src", "e2e", "tests"],
-  "exclude": ["src/pages"]
+  "include": ["src", "e2e", "tests"]
 }

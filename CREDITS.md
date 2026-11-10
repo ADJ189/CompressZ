@@ -27,7 +27,9 @@ for your data).
 | Project | What it does here | License | Link |
 |---|---|---|---|
 | **PDF.js** | Renders PDF pages to canvas for compression, OCR, and PDF→image conversion | Apache 2.0 | https://github.com/mozilla/pdf.js |
-| **pdf-lib** | Builds and edits PDFs client-side (structural compression, searchable-PDF output, images→PDF) | MIT | https://github.com/Hopding/pdf-lib |
+| **pdf-lib** | Builds and edits PDFs client-side (structural compression, searchable-PDF output, images→PDF, split, crop, watermark, forms) | MIT | https://github.com/Hopding/pdf-lib |
+| **QPDF WASM** | WebAssembly build of QPDF powering AES-256 encryption, password decryption, and deep xref repair | Apache 2.0 | https://github.com/neslinesli93/qpdf-wasm |
+| **LibreOffice WASM** | On-demand WebAssembly build of LibreOffice for desktop-grade complex document conversions | MPL 2.0 | https://github.com/bentopdf/libreoffice-wasm |
 
 ## Video / Audio / GIF
 

@@ -29,12 +29,14 @@ GitHub.
 
 ## 3. How file processing works
 
-All compression, conversion, PDF to Markdown extraction, OCR (printed and
-English handwriting recognition), and local-AI operations run entirely
-inside your browser using WebAssembly, the Canvas API, and Web platform
-APIs. Your files are read from your device into browser memory (RAM),
-processed locally, and the output is written back to your device. At no
-point do your files traverse a network connection to our infrastructure.
+All compression, conversion, PDF Suite & Studio operations (splitting, permanent cropping,
+watermarking, signing, AcroForm filling, true redaction with 300-DPI raster stream purge,
+AES-256 password protection, and corrupt file recovery), two-way Office document conversions,
+PDF to Markdown extraction, OCR (printed and English handwriting recognition), and local-AI
+operations run entirely inside your browser using WebAssembly, the Canvas API, and Web platform
+APIs. Your files are read from your device into browser memory (RAM), processed locally,
+and the output is written back to your device. At no point do your files traverse a network
+connection to our infrastructure.
 
 When extracting Markdown from a PDF, document layout analysis, reading order
 reconstruction, figure crop generation, and ZIP packaging run entirely client-side.

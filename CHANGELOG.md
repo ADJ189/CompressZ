@@ -7,6 +7,35 @@ carry an `-a`/`-b` prerelease suffix (`-a` = early/alpha, `-b` = beta,
 close to ready) with a trailing counter, e.g. `1.12.0-b1`, `1.12.0-b2`.
 The suffix is dropped on the release that ships it (`1.12.0`).
 
+## [1.15.0] - 2026-11-10
+
+### Added — PDF Suite & Studio, Two-Way Office Conversions, Universal Upload & Fully Editable Settings
+
+- **Universal Upload Button & Dynamic Action Palette (`UniversalUpload.svelte`, `ActionPalette.svelte`, `fileRouter.ts`)**:
+  - Implemented compact `[ ⇪ Universal Upload ]` buttons in the global Header, Tools Dialog, and Hub banners.
+  - Client-side binary magic-number sniffing (PDF `%PDF-`, PNG, JPEG, GIF, WebP, WAV, MP3, FLAC, OGG, MP4/AVIF, Office ZIP `PK\x03\x04`).
+  - Contextual modal popup presenting 1-click routing into targeted compression, conversion, editing, and security workflows with auto-staged file consumption.
+- **Top Bar Consolidation & Zen Frosted Hubs (`Navigation.svelte`, `HubHeader.svelte`)**:
+  - Reorganized crowded navigation tabs into 6 clean, spacious, Zen Browser-styled frosted capsule pills (`Home`, `PDF Suite`, `Convert`, `Compress`, `AI & OCR`, `Docs`).
+  - Seamless route normalization and 100% backward compatibility for all 13 legacy URL bookmarks and direct links.
+- **Full PDF Suite & Studio (`PdfSuite.svelte`, `PdfCanvasEditor.svelte`, `SignaturePad.svelte`, `PageGrid.svelte`)**:
+  - **Split PDF (`splitPdf.ts`)**: Extract human page ranges (e.g. `1-3, 5, 8-10`), N-page chunks, or burst all pages into individual PDFs packaged into ZIP archives via native WASM CRC-32.
+  - **Visual Page Organizer (`organizePdf.ts`, `PageGrid.svelte`)**: Tactile thumbnail grid with drag-and-drop reordering, 90° clockwise rotation, page duplication, blank page insertion, and deletion toggles.
+  - **PDF Studio Annotation Layer (`PdfCanvasEditor.svelte`)**: Mozilla/Zen Browser-inspired studio featuring FreeText notes, freehand ink pen, semi-transparent highlighter with `multiply` blend mode, stamps, and page navigation.
+  - **Vector & Font Signature Pad (`SignaturePad.svelte`)**: Dual-mode vector ink signature drawing with Bézier smoothing and cursive typography generator (Caveat, Dancing Script, Great Vibes) exporting transparent stamps.
+  - **Permanent Margin & Box Cropping (`cropPdf.ts`)**: Lossless and permanent modification of `CropBox`, `MediaBox`, `BleedBox`, and `TrimBox` coordinates according to ISO-32000.
+  - **Text & Image Watermarking (`watermarkPdf.ts`)**: Dynamic angle (-90° to +90°), adjustable opacity, custom colors, and tiled repeating grid or centered stamp overlays across PDF and raster canvas.
+  - **Interactive AcroForms (`formPdf.ts`)**: Form inspection, live value editing for text fields, checkboxes, dropdowns, and true vector flattening (`form.flatten()`) to prevent tampering.
+  - **True Irreversible Redaction (`redactPdf.ts`)**: Cryptographic sanitization destroying underlying text streams and burning permanent 300-DPI raster blocks into redacted pages while preserving original vectors on untouched pages.
+  - **Cryptographic Security & Protection (`securityPdf.ts`, `qpdfWasm.ts`)**: AES-256 and 128-bit PDF encryption with dual user/owner passwords and granular permission toggles (printing, copying, annotations), alongside clean password decryption.
+  - **Deep File Recovery & Repair (`repairPdf.ts`)**: Rebuilds damaged XREF tables, repairs orphan PDF objects, and restores unfinalized MP4 recordings missing the `moov` atom.
+- **Two-Way Office Conversions & Dual-Engine Strategy (`pdfToWord.ts`, `pdfToExcel.ts`, `pdfToPpt.ts`, `excelToPdf.ts`, `libreOfficeWasm.ts`)**:
+  - **Option A (Fast Web-Native — Default ⭐)**: Instant (<50ms), lightweight (~50MB RAM), 100% offline OOXML generation producing formatted `.docx` (headings, lists, page breaks), tabular `.xlsx` (row/column clustering), and slide deck `.pptx` via `zip.ts`.
+  - **Option B (Desktop-Grade LibreOffice WASM — Lazy Loaded)**: High-fidelity document engine for complex equations and drawing shapes, strictly loaded on demand (~85 MB) only when opted into by the user.
+- **Device-Adaptive & Fully Editable Settings (`SettingsDialog.svelte`, `settings.ts`)**:
+  - Transformed static configuration labels into interactive sliders, segmented tracks, and dropdowns for image format, SSIM quality floors, PDF compression presets, video speed presets, and audio bitrates.
+  - Added dedicated per-section "Reset to Defaults" buttons restoring device-optimal profiles.
+
 ## [1.14.0] - 2026-11-09
 
 ### Changed & Fixed — Node 24+, Desktop Tools Layout, Navigation & Limitations Overhaul
