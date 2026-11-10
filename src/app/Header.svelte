@@ -1,5 +1,6 @@
 <script lang="ts">
   import { toggleTheme, resolveThemePreference, getThemePreference, THEME_EVENT } from "../lib/theme";
+  import UniversalUpload from "../components/UniversalUpload.svelte";
   import { onMount } from "svelte";
 
   interface Props {
@@ -45,6 +46,10 @@
   </a>
 
   <div class="cz-header-actions">
+    <div class="cz-hdr-upload">
+      <UniversalUpload compact={true} />
+    </div>
+
     <button
       id="tools-btn"
       class="cz-hdr-btn"
@@ -99,7 +104,7 @@
     </button>
 
     <a
-      class="cz-hdr-btn"
+      class="cz-hdr-btn cz-hdr-github"
       href="https://github.com/ADJ189/compressz"
       target="_blank"
       rel="noopener"
@@ -124,6 +129,8 @@
     position: sticky;
     top: 0;
     z-index: 100;
+    max-width: 100%;
+    box-sizing: border-box;
   }
   .cz-logo {
     display: flex;
@@ -142,6 +149,10 @@
     align-items: center;
     gap: 0.35rem;
   }
+  .cz-hdr-upload {
+    display: flex;
+    align-items: center;
+  }
   .cz-hdr-btn {
     width: 34px;
     height: 34px;
@@ -155,5 +166,24 @@
   .cz-hdr-btn:hover {
     background: var(--bg2);
     color: var(--text);
+  }
+  @media (max-width: 680px) {
+    .cz-header {
+      padding: 0 0.75rem;
+    }
+    .cz-hdr-upload {
+      display: none;
+    }
+    .cz-hdr-github {
+      display: none;
+    }
+  }
+  @media (max-width: 340px) {
+    .cz-header {
+      padding: 0 0.5rem;
+    }
+    .cz-logo-text {
+      font-size: 1rem;
+    }
   }
 </style>

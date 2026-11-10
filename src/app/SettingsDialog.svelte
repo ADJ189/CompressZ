@@ -6,6 +6,7 @@
     getSettings,
     updateSettings,
     resetSettings,
+    defaultSettings,
     resolveExecutionProfile,
     resolvedConcurrency,
     type Settings,
@@ -79,6 +80,16 @@
       }
       if (patch.recommendations !== undefined) {
         s.recommendations = { ...s.recommendations, ...patch.recommendations };
+      }
+      if (patch.engines !== undefined) {
+        s.engines = {
+          ...s.engines,
+          ...patch.engines,
+          images: { ...s.engines.images, ...(patch.engines.images ?? {}) },
+          pdf: { ...s.engines.pdf, ...(patch.engines.pdf ?? {}) },
+          video: { ...s.engines.video, ...(patch.engines.video ?? {}) },
+          audio: { ...s.engines.audio, ...(patch.engines.audio ?? {}) },
+        };
       }
     });
     settings = getSettings();
@@ -520,23 +531,155 @@
           <div class="cz-settings-group">
             <div class="cz-settings-row">
               <div>
-                <div class="cz-settings-label">Compression Engine</div>
-                <div class="cz-settings-desc">Default image format and SSIM quality presets</div>
+                <div class="cz-settings-label">Engine Configurations & Defaults</div>
+                <div class="cz-settings-desc">Fine-tune encoding parameters across images, documents, video, and audio</div>
               </div>
+              <button
+                type="button"
+                class="cz-btn cz-btn-secondary cz-btn-sm cz-btn-pill"
+                onclick={() => {
+                  const def = defaultSettings();
+                  saveChanges({ engines: def.engines });
+                  toast("Reset engine configurations to device defaults", "success");
+                }}
+              >
+                Reset to Defaults
+              </button>
             </div>
+
+            <!-- Image Settings -->
             <div class="cz-settings-row">
               <div>
-                <div class="cz-settings-label">Default Format</div>
-                <div class="cz-settings-desc">Standard image encode</div>
+                <div class="cz-settings-label">Default Image Format</div>
+                <div class="cz-settings-desc">Primary compression format for photos and graphics</div>
               </div>
-              <span class="cz-tier-tag">{settings.engines.images.format}</span>
+              <select
+                class="cz-select-pill"
+                value={settings.engines.images.format}
+                onchange={(e) => saveChanges({ engines: { ...settings.engines, images: { ...settings.engines.images, format: (e.target as HTMLSelectElement).value as any } } })}
+              >
+                <option value="image/webp">WebP (Modern & Compact)</option>
+                <option value="image/jpeg">JPEG (Universal Compatibility)</option>
+                <option value="image/png">PNG (Lossless & Alpha)</option>
+                <option value="image/avif">AVIF (Ultra High Compression)</option>
+              </select>
             </div>
+
             <div class="cz-settings-row">
               <div>
-                <div class="cz-settings-label">Default Quality</div>
-                <div class="cz-settings-desc">SSIM-guarded threshold</div>
+                <div class="cz-settings-label">Image SSIM Quality Floor ({settings.engines.images.quality}%)</div>
+                <div class="cz-settings-desc">Visual quality threshold protected by SSIM Quality Guard</div>
               </div>
-              <span class="cz-tier-tag">{settings.engines.images.quality}%</span>
+              <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <input
+                  type="range"
+                  min="30"
+                  max="100"
+                  value={settings.engines.images.quality}
+                  oninput={(e) => saveChanges({ engines: { ...settings.engines, images: { ...settings.engines.images, quality: parseInt((e.target as HTMLInputElement).value, 10) } } })}
+                />
+                <span class="cz-tier-tag">{settings.engines.images.quality}%</span>
+              </div>
+            </div>
+
+            <!-- PDF Settings -->
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">Default PDF Compression Level</div>
+                <div class="cz-settings-desc">Balances vector fidelity against downsampled raster size</div>
+              </div>
+              <div class="cz-segmented-track">
+                <button
+                  type="button"
+                  class="cz-segmented-item {settings.engines.pdf.level === 'low' ? 'is-active' : ''}"
+                  onclick={() => saveChanges({ engines: { ...settings.engines, pdf: { ...settings.engines.pdf, level: 'low' } } })}
+                >
+                  Low
+                </button>
+                <button
+                  type="button"
+                  class="cz-segmented-item {settings.engines.pdf.level === 'recommended' ? 'is-active' : ''}"
+                  onclick={() => saveChanges({ engines: { ...settings.engines, pdf: { ...settings.engines.pdf, level: 'recommended' } } })}
+                >
+                  Recommended ⭐
+                </button>
+                <button
+                  type="button"
+                  class="cz-segmented-item {settings.engines.pdf.level === 'extreme' ? 'is-active' : ''}"
+                  onclick={() => saveChanges({ engines: { ...settings.engines, pdf: { ...settings.engines.pdf, level: 'extreme' } } })}
+                >
+                  Extreme
+                </button>
+              </div>
+            </div>
+
+            <!-- Video Settings -->
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">Video Encoder Preset</div>
+                <div class="cz-settings-desc">FFmpeg WebAssembly encoding speed and CPU load</div>
+              </div>
+              <div class="cz-segmented-track">
+                <button
+                  type="button"
+                  class="cz-segmented-item {settings.engines.video.preset === 'ultrafast' ? 'is-active' : ''}"
+                  onclick={() => saveChanges({ engines: { ...settings.engines, video: { ...settings.engines.video, preset: 'ultrafast' } } })}
+                >
+                  Ultrafast
+                </button>
+                <button
+                  type="button"
+                  class="cz-segmented-item {settings.engines.video.preset === 'fast' ? 'is-active' : ''}"
+                  onclick={() => saveChanges({ engines: { ...settings.engines, video: { ...settings.engines.video, preset: 'fast' } } })}
+                >
+                  Fast (Default)
+                </button>
+                <button
+                  type="button"
+                  class="cz-segmented-item {settings.engines.video.preset === 'medium' ? 'is-active' : ''}"
+                  onclick={() => saveChanges({ engines: { ...settings.engines, video: { ...settings.engines.video, preset: 'medium' } } })}
+                >
+                  Medium
+                </button>
+              </div>
+            </div>
+
+            <!-- Audio Settings -->
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">Audio Bitrate Preset</div>
+                <div class="cz-settings-desc">Target audio bitrate for MP3, AAC, and Opus</div>
+              </div>
+              <div class="cz-segmented-track">
+                <button
+                  type="button"
+                  class="cz-segmented-item {settings.engines.audio.bitrate === 96 ? 'is-active' : ''}"
+                  onclick={() => saveChanges({ engines: { ...settings.engines, audio: { ...settings.engines.audio, bitrate: 96 } } })}
+                >
+                  96k
+                </button>
+                <button
+                  type="button"
+                  class="cz-segmented-item {settings.engines.audio.bitrate === 128 ? 'is-active' : ''}"
+                  onclick={() => saveChanges({ engines: { ...settings.engines, audio: { ...settings.engines.audio, bitrate: 128 } } })}
+                >
+                  128k
+                </button>
+                <button
+                  type="button"
+                  class="cz-segmented-item {settings.engines.audio.bitrate === 192 ? 'is-active' : ''}"
+                  onclick={() => saveChanges({ engines: { ...settings.engines, audio: { ...settings.engines.audio, bitrate: 192 } } })}
+                >
+                  192k ⭐
+                </button>
+                <button
+                  type="button"
+                  class="cz-segmented-item {settings.engines.audio.bitrate === 320 ? 'is-active' : ''}"
+                  onclick={() => saveChanges({ engines: { ...settings.engines, audio: { ...settings.engines.audio, bitrate: 320 } } })}
+                >
+                  320k
+                </button>
+              </div>
             </div>
           </div>
 

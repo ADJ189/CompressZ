@@ -22,6 +22,7 @@
   import Docs from "../routes/Docs.svelte";
   import Privacy from "../routes/Privacy.svelte";
   import Settings from "../routes/Settings.svelte";
+  import PdfSuite from "../routes/PdfSuite.svelte";
 
   let activeRoute = $state("");
   let toolsOpen = $state(false);
@@ -81,6 +82,8 @@
       <Privacy />
     {:else if activeRoute === "settings"}
       <Settings />
+    {:else if activeRoute === "pdf" || activeRoute.startsWith("pdf/")}
+      <PdfSuite />
     {:else}
       <Home />
     {/if}

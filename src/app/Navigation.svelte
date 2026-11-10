@@ -17,32 +17,66 @@
 
   const TABS = [
     { route: "", label: "Home", icon: "🏠" },
-    { route: "compress/images", label: "Images", icon: "🖼️" },
-    { route: "compress/pdf", label: "PDF", icon: "📄" },
-    { route: "compress/merge-pdf", label: "Merge PDF", icon: "🧷" },
-    { route: "compress/images-to-pdf", label: "Images to PDF", icon: "🧩" },
-    { route: "compress/video", label: "Video", icon: "🎬" },
-    { route: "compress/audio", label: "Audio", icon: "🎵" },
-    { route: "compress/gif", label: "GIF", icon: "🎞️" },
-    { route: "compress/ocr", label: "PDF OCR", icon: "🔍" },
+    { route: "compress/pdf", label: "PDF Suite", icon: "📄", badge: "Studio" },
     { route: "convert", label: "Convert", icon: "🔁" },
-    { route: "convert/pdf-markdown", label: "PDF to Markdown", icon: "📝", isNew: true },
+    { route: "compress/images", label: "Compress", icon: "🗜️" },
+    { route: "compress/ocr", label: "AI & OCR", icon: "🔍" },
     { route: "docs", label: "Docs", icon: "📖" },
-    { route: "privacy", label: "Privacy", icon: "🔒" },
   ];
 
   function isRouteActive(tabRoute: string, current: string): boolean {
     const norm = (current === "" || current === "home") ? "" : current;
     if (tabRoute === "") return norm === "";
     if (norm === tabRoute) return true;
+
+    // PDF Suite Hub matching
+    if (tabRoute === "compress/pdf") {
+      if (
+        norm === "compress/pdf" ||
+        norm === "compress/merge-pdf" ||
+        norm === "compress/images-to-pdf" ||
+        norm.startsWith("pdf")
+      ) {
+        return true;
+      }
+    }
+
+    // Convert Hub matching
+    if (tabRoute === "convert") {
+      if (norm === "convert" || norm.startsWith("convert/")) {
+        return true;
+      }
+    }
+
+    // Compress Hub matching
+    if (tabRoute === "compress/images") {
+      if (
+        norm === "compress/images" ||
+        norm === "compress/video" ||
+        norm === "compress/audio" ||
+        norm === "compress/gif" ||
+        norm === "compress"
+      ) {
+        return true;
+      }
+    }
+
+    // AI & OCR Hub matching
+    if (tabRoute === "compress/ocr") {
+      if (norm === "compress/ocr") {
+        return true;
+      }
+    }
+
+    // Docs & Privacy Hub matching
+    if (tabRoute === "docs") {
+      if (norm === "docs" || norm === "about" || norm === "privacy") {
+        return true;
+      }
+    }
+
     if (norm.startsWith(tabRoute + "/")) {
-      const hasCloserTab = TABS.some(
-        (t) =>
-          t.route !== tabRoute &&
-          t.route.length > tabRoute.length &&
-          (norm === t.route || norm.startsWith(t.route + "/")),
-      );
-      return !hasCloserTab;
+      return true;
     }
     return false;
   }
