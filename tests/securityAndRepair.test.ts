@@ -4,6 +4,12 @@
 
 import { assertEquals } from "./assert.ts";
 import {
+  isQpdfLoaded,
+  getQpdf,
+  resetQpdfForTesting,
+  runQpdfCommand,
+} from "../src/lib/qpdfWasm.ts";
+import {
   buildQpdfEncryptionArgs,
   type ProtectPdfOptions,
 } from "../src/lib/pdfTools/securityPdf.ts";
@@ -80,4 +86,41 @@ Deno.test("repairPdf: inspectAndRepairMp4Moov detects missing atoms and repairs 
     repairResult.repairedBytes[7],
   );
   assertEquals(type, "ftyp");
+});
+
+Deno.test("qpdfWasm: loads module via custom/mock loader and runs command in virtual FS", async () => {
+  resetQpdfForTesting();
+  assertEquals(isQpdfLoaded(), false);
+
+  const virtualFs = new Map<string, Uint8Array>();
+  const mockQpdfInstance = {
+    callMain: (args: string[]) => {
+      const outTarget = args[args.length - 1];
+      virtualFs.set(outTarget, new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x35]));
+      return 0;
+    },
+    FS: {
+      writeFile: (name: string, data: Uint8Array) => virtualFs.set(name, data),
+      readFile: (name: string) => virtualFs.get(name) || new Uint8Array(),
+      analyzePath: (name: string) => ({ exists: virtualFs.has(name) }),
+      unlink: (name: string) => virtualFs.delete(name),
+    },
+    print: () => {},
+    printErr: () => {},
+  };
+
+  const loaded = await getQpdf(async () => mockQpdfInstance);
+  assertEquals(loaded, mockQpdfInstance);
+  assertEquals(isQpdfLoaded(), true);
+
+  const result = await runQpdfCommand(["--check", "input.pdf", "output.pdf"], [
+    { name: "input.pdf", data: new Uint8Array([1, 2, 3]) },
+  ]);
+
+  assertEquals(result.exitCode, 0);
+  assertEquals(result.outputFiles.length, 1);
+  assertEquals(result.outputFiles[0].name, "output.pdf");
+  assertEquals(result.outputFiles[0].data[0], 0x25); // %PDF
+
+  resetQpdfForTesting();
 });

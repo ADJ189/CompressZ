@@ -3,6 +3,7 @@
  */
 
 import { assertEquals } from "./assert.ts";
+import { readZip } from "../src/lib/zip.ts";
 import {
   buildHeadingXml,
   buildParagraphXml,
@@ -109,15 +110,30 @@ Deno.test("conversions: pdfToPpt slide generation and .pptx packaging", async ()
   assertEquals(pptxBytes[1], 0x4b);
   assertEquals(pptxBytes[2], 0x03);
   assertEquals(pptxBytes[3], 0x04);
+
+  // Validate PresentationML layout & master infrastructure
+  const entries = await readZip(pptxBytes.buffer as ArrayBuffer);
+  assertEquals(entries.has("ppt/slideMasters/slideMaster1.xml"), true);
+  assertEquals(entries.has("ppt/slideMasters/_rels/slideMaster1.xml.rels"), true);
+  assertEquals(entries.has("ppt/slideLayouts/slideLayout1.xml"), true);
+  assertEquals(entries.has("ppt/slideLayouts/_rels/slideLayout1.xml.rels"), true);
+  assertEquals(entries.has("ppt/slides/_rels/slide1.xml.rels"), true);
+  assertEquals(entries.has("ppt/presentation.xml"), true);
+  assertEquals(entries.has("ppt/_rels/presentation.xml.rels"), true);
+
+  const presRelText = new TextDecoder().decode(entries.get("ppt/_rels/presentation.xml.rels")!);
+  assertEquals(presRelText.includes("slideMasters/slideMaster1.xml"), true);
+  assertEquals(presRelText.includes("slides/slide1.xml"), true);
 });
 
-Deno.test("conversions: excelToPdf shared strings and sheet parser", () => {
+Deno.test("conversions: excelToPdf shared strings, sheet parser, and XSS sanitization", () => {
   const sstXml = `<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
     <si><t>Header 1</t></si>
     <si><t>Header 2</t></si>
+    <si><t>&lt;script&gt;alert('xss')&lt;/script&gt;</t></si>
   </sst>`;
   const strings = parseSharedStringsXml(sstXml);
-  assertEquals(strings, ["Header 1", "Header 2"]);
+  assertEquals(strings, ["Header 1", "Header 2", "<script>alert('xss')</script>"]);
 
   const wsXml = `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
     <sheetData>
@@ -127,20 +143,34 @@ Deno.test("conversions: excelToPdf shared strings and sheet parser", () => {
       </row>
       <row r="2">
         <c r="A2"><v>100</v></c>
-        <c r="B2"><v>200</v></c>
+        <c r="B2" t="s"><v>2</v></c>
+      </row>
+      <row r="3">
+        <c r="A3" t="inlineStr"><t>&lt;img src=x onerror=evil()&gt;</t></c>
+        <c r="B3"><v>300</v></c>
       </row>
     </sheetData>
   </worksheet>`;
 
   const grid = parseWorksheetXml(wsXml, strings);
-  assertEquals(grid.length, 2);
+  assertEquals(grid.length, 3);
   assertEquals(grid[0], ["Header 1", "Header 2"]);
-  assertEquals(grid[1], ["100", "200"]);
+  assertEquals(grid[1], ["100", "<script>alert('xss')</script>"]);
+  assertEquals(grid[2], ["<img src=x onerror=evil()>", "300"]);
 
-  const tableHtml = gridToHtmlTable(grid, "Test Sheet");
+  // Test with crafted malicious workbook title and cell values
+  const tableHtml = gridToHtmlTable(grid, '<script>alert("title")</script>');
   assertEquals(tableHtml.includes("<table"), true);
   assertEquals(tableHtml.includes("Header 1"), true);
-  assertEquals(tableHtml.includes("200"), true);
+  assertEquals(tableHtml.includes("300"), true);
+
+  // Assert NO executable script tags or unescaped onerror handlers exist in output HTML
+  assertEquals(tableHtml.includes('<script>alert("title")</script>'), false);
+  assertEquals(tableHtml.includes("&lt;script&gt;alert(&quot;title&quot;)&lt;/script&gt;"), true);
+  assertEquals(tableHtml.includes("<script>alert('xss')</script>"), false);
+  assertEquals(tableHtml.includes("&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;"), true);
+  assertEquals(tableHtml.includes("<img src=x onerror=evil()>"), false);
+  assertEquals(tableHtml.includes("&lt;img src=x onerror=evil()&gt;"), true);
 });
 
 Deno.test("conversions: libreOfficeWasm maintains lazy loading status", () => {
