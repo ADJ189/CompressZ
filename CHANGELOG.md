@@ -7,34 +7,73 @@ carry an `-a`/`-b` prerelease suffix (`-a` = early/alpha, `-b` = beta,
 close to ready) with a trailing counter, e.g. `1.12.0-b1`, `1.12.0-b2`.
 The suffix is dropped on the release that ships it (`1.12.0`).
 
-## [1.15.0] - 2026-11-10
+## [Unreleased]
 
-### Added — PDF Suite & Studio, Two-Way Office Conversions, Universal Upload & Fully Editable Settings
+### Fixed — Conversion option contracts (every route → engine mapping)
 
-- **Universal Upload Button & Dynamic Action Palette (`UniversalUpload.svelte`, `ActionPalette.svelte`, `fileRouter.ts`)**:
-  - Implemented compact `[ ⇪ Universal Upload ]` buttons in the global Header, Tools Dialog, and Hub banners.
-  - Client-side binary magic-number sniffing (PDF `%PDF-`, PNG, JPEG, GIF, WebP, WAV, MP3, FLAC, OGG, MP4/AVIF, Office ZIP `PK\x03\x04`).
-  - Contextual modal popup presenting 1-click routing into targeted compression, conversion, editing, and security workflows with auto-staged file consumption.
-- **Top Bar Consolidation & Zen Frosted Hubs (`Navigation.svelte`, `HubHeader.svelte`)**:
-  - Reorganized crowded navigation tabs into 6 clean, spacious, Zen Browser-styled frosted capsule pills (`Home`, `PDF Suite`, `Convert`, `Compress`, `AI & OCR`, `Docs`).
-  - Seamless route normalization and 100% backward compatibility for all 13 legacy URL bookmarks and direct links.
-- **Full PDF Suite & Studio (`PdfSuite.svelte`, `PdfCanvasEditor.svelte`, `SignaturePad.svelte`, `PageGrid.svelte`)**:
-  - **Split PDF (`splitPdf.ts`)**: Extract human page ranges (e.g. `1-3, 5, 8-10`), N-page chunks, or burst all pages into individual PDFs packaged into ZIP archives via native WASM CRC-32.
-  - **Visual Page Organizer (`organizePdf.ts`, `PageGrid.svelte`)**: Tactile thumbnail grid with drag-and-drop reordering, 90° clockwise rotation, page duplication, blank page insertion, and deletion toggles.
-  - **PDF Studio Annotation Layer (`PdfCanvasEditor.svelte`)**: Mozilla/Zen Browser-inspired studio featuring FreeText notes, freehand ink pen, semi-transparent highlighter with `multiply` blend mode, stamps, and page navigation.
-  - **Vector & Font Signature Pad (`SignaturePad.svelte`)**: Dual-mode vector ink signature drawing with Bézier smoothing and cursive typography generator (Caveat, Dancing Script, Great Vibes) exporting transparent stamps.
-  - **Permanent Margin & Box Cropping (`cropPdf.ts`)**: Lossless and permanent modification of `CropBox`, `MediaBox`, `BleedBox`, and `TrimBox` coordinates according to ISO-32000.
-  - **Text & Image Watermarking (`watermarkPdf.ts`)**: Dynamic angle (-90° to +90°), adjustable opacity, custom colors, and tiled repeating grid or centered stamp overlays across PDF and raster canvas.
-  - **Interactive AcroForms (`formPdf.ts`)**: Form inspection, live value editing for text fields, checkboxes, dropdowns, and true vector flattening (`form.flatten()`) to prevent tampering.
-  - **True Irreversible Redaction (`redactPdf.ts`)**: Cryptographic sanitization destroying underlying text streams and burning permanent 300-DPI raster blocks into redacted pages while preserving original vectors on untouched pages.
-  - **Cryptographic Security & Protection (`securityPdf.ts`, `qpdfWasm.ts`)**: AES-256 and 128-bit PDF encryption with dual user/owner passwords and granular permission toggles (printing, copying, annotations), alongside clean password decryption.
-  - **Deep File Recovery & Repair (`repairPdf.ts`)**: Rebuilds damaged XREF tables, repairs orphan PDF objects, and restores unfinalized MP4 recordings missing the `moov` atom.
-- **Two-Way Office Conversions & Dual-Engine Strategy (`pdfToWord.ts`, `pdfToExcel.ts`, `pdfToPpt.ts`, `excelToPdf.ts`, `libreOfficeWasm.ts`)**:
-  - **Option A (Fast Web-Native — Default ⭐)**: Instant (<50ms), lightweight (~50MB RAM), 100% offline OOXML generation producing formatted `.docx` (headings, lists, page breaks), tabular `.xlsx` (row/column clustering), and slide deck `.pptx` via `zip.ts`.
-  - **Option B (Desktop-Grade LibreOffice WASM — Lazy Loaded)**: High-fidelity document engine for complex equations and drawing shapes, strictly loaded on demand (~85 MB) only when opted into by the user.
-- **Device-Adaptive & Fully Editable Settings (`SettingsDialog.svelte`, `settings.ts`)**:
-  - Transformed static configuration labels into interactive sliders, segmented tracks, and dropdowns for image format, SSIM quality floors, PDF compression presets, video speed presets, and audio bitrates.
-  - Added dedicated per-section "Reset to Defaults" buttons restoring device-optimal profiles.
+- **Images → PDF crash**: The reported error
+
+  ```
+  Conversion failed: `width` must be of type `number`, but was actually of type `undefined`
+  ```
+
+  came from the route passing the page-size *id* (`"auto"`) where `imagesToPdf()`
+  expects PDF points (`{ w, h }`). Fixed at the source, and `imagesToPdf()` now
+  rejects a malformed `pageSize`/`quality` with a readable message instead of
+  letting pdf-lib throw an internal type error.
+- **One shared UI → engine mapper (`src/lib/options.ts`)**: `imageOptions`,
+  `pdfOptions`, `videoOptions`, `audioOptions`, `gifOptions` and
+  `imagesToPdfOptions` are now the single translation layer for Images, PDF,
+  Video, Audio, GIF, Images → PDF and Convert. The previous per-route copies had
+  drifted from the engine vocabulary (the root cause of the crash above).
+- **Audio**: Routes sent `format`/`bitrate`/`stripMeta`; `compressAudio()` reads
+  `audioFormat`/`audioBitrate`/`sampleRate`/`stripMetadata`. Both the Audio page
+  and the Convert page now pass the keys the engine actually reads.
+- **Video**: The codec `<option>` emitted `hevc` while the engine switches on
+  `h265`, so H.265 silently encoded as H.264.
+- **PDF → Images (Convert)**: Was called as `pdfToImages(file, { format }, 150)`
+  and read a non-existent `res.zipBlob`; now `(file, format, 150)` with
+  `res.blob`. Added WebP output (flattened onto white, like JPEG).
+- **Convert targets**: Added DOCX → HTML, and Images → PDF as its own conversion
+  category (ordered, single document).
+- **GIF → video copy**: The UI promised MP4, but `compressGif()` writes WebM
+  VP9. Labels now say WebM.
+- **Download filenames follow the bytes**: Names are derived from the produced
+  blob's MIME type via `outputFilename()`/`extensionForMime()` in `types.ts`
+  instead of the requested format, so AVIF → WebP fallbacks, GIF → WebM,
+  single-page PDF renders (`.png`) and multi-page renders (`.zip`) and
+  AAC-in-MP4 (`.m4a`) all download with the correct extension.
+- **Adaptive Resource Guard coverage**: Images, PDF, Video, Audio, GIF, OCR,
+  Merge PDF, Images → PDF and Convert now run through `runScheduled()`, so no
+  route bypasses the global admission control.
+- **Quality units**: The sliders store percentages (default 82) but the engines
+  take 0.01–0.99, so `compressImage()` was clamping every image to **0.99**
+  (the slider did nothing) and `compressGif()` was asking FFmpeg for a
+  19k-colour palette. Both now convert through `qualityToUnit()`, and the GIF
+  palette stays inside FFmpeg's 256-colour limit. Expect smaller image output
+  at the default 82% setting.
+- **Typing**: `FileEntry` now declares `name`, `originalSize`, optional
+  `progress`, `compressedBlob`, `compressedSize` and `thumbUrl` (the routes and
+  `FileCard` were already using them). `SettingsDialog` imports `AppSettings`,
+  and `__APP_VERSION__` moved into `vite-env.d.ts`.
+- **Merge PDF download**: Fixed a fatal bug in `MergePdf.svelte` where `mergePdf()` returned a `MergeResult` object (`{ blob, pageCount, totalInputSize }`) which was assigned directly to `mergedBlob`. `URL.createObjectURL(mergedBlob)` threw `TypeError: Failed to execute 'createObjectURL' on 'URL': Overload resolution failed`, preventing merged document downloads. Now assigns `res.blob` and toasts the page count.
+- **FFmpeg.wasm CDN & cross-origin worker resolution**:
+  - Resolved `Failed to construct 'Worker': Script at 'https://esm.sh/@ffmpeg/ffmpeg@0.12.10/es2022/worker.js' cannot be accessed from origin` by fetching the worker script from jsDelivr, inlining internal relative modules (`const.js`, `errors.js`), and providing a completely self-contained same-origin blob URL via `classWorkerURL`. This eliminates cross-origin module imports that previously triggered `Importing a module script failed` in WebKit / Safari.
+  - Resolved `TypeError: Failed to resolve module specifier "/node/buffer.mjs". Invalid relative url or base scheme isn't hierarchical` by pointing `CORE_ST` to jsDelivr (`@ffmpeg/core@0.12.6/dist/esm`), which provides a clean self-contained ESM build without root-relative Node polyfill imports.
+  - Pinned browser FFmpeg execution to the stable single-threaded core (`CORE_ST`), avoiding deadlock issues with multi-threaded pthread workers trying to import core scripts from blob URLs.
+  - Replaced `@ffmpeg/util`'s `fetchFile` with native `file.arrayBuffer()` in `ffFetch` (`src/lib/ffmpeg.ts`) for `Blob`/`File` inputs. This eliminates the legacy `FileReader` path that threw `File could not be read! Code=8` (`NotFoundError`/`NotReadableError`) in WebKit/Safari, and removes an external CDN runtime dependency on `@ffmpeg/util`.
+- **Playwright worker-isolated test fixtures (`e2e/conversions.spec.ts`)**:
+  - Isolated synthetic fixture directories per worker (`test-results/conversion-fixtures/worker-${testInfo.workerIndex}`) and resolved them to absolute paths. This eliminates Windows NTFS file-locking and truncation collisions when multiple parallel Playwright workers concurrently run tests across browser profiles.
+- **Cross-browser OffscreenCanvas runtime guard**:
+  - In environments lacking `OffscreenCanvas` (e.g. WebKit on Windows or legacy Safari), evaluating bare `c instanceof OffscreenCanvas` previously threw `ReferenceError: Can't find variable: OffscreenCanvas`.
+  - Added safe `typeof OffscreenCanvas !== "undefined"` guards in `src/lib/compressImage.ts` and `src/lib/imagesToPdf.ts` before checking `c instanceof OffscreenCanvas`.
+- **Firefox Playwright download configuration (`playwright.config.ts`)**:
+  - In Firefox, `browser.download.viewableInternally.enabledTypes` defaults to `"xml,svg,webp,avif"`, causing Firefox to route downloaded WebP and AVIF files into an internal in-browser viewer tab instead of triggering a browser download event.
+  - Added `launchOptions.firefoxUserPrefs["browser.download.viewableInternally.enabledTypes"] = ""` in `playwright.config.ts` for the `firefox-desktop` project, enabling full automated test verification for WebP and AVIF downloads.
+- **End-to-end Playwright conversion matrix (`e2e/conversions.spec.ts`)**: Added comprehensive integration testing that uploads real files across all conversion categories (Images→WebP, Images→PDF, PDF compression, Merge PDF, Convert image→WebP, Convert images→PDF, Convert PDF→PNG, Convert DOCX→TXT, Convert DOCX→HTML, GIF optimization, GIF→WebM, Audio WAV→MP3, Video WebM→MP4) and verifies valid magic bytes and download file naming.
+- **Tests**: Added `tests/options.test.ts` — 10 contract tests over the option
+  builders, Images → PDF page points, GIF palette bounds, blob-derived
+  extensions and download naming. The offline suite is now 48 passing.
 
 ## [1.14.0] - 2026-11-09
 
