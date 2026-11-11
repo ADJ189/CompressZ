@@ -8,3 +8,4 @@
  * See src/lib/aiEngine.ts.
  */
 declare const __ORT_VERSION__: string;
+declare const __APP_VERSION__: string;

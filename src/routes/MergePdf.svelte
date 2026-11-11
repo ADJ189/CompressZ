@@ -2,6 +2,7 @@
   import FileDropzone from "../components/FileDropzone.svelte";
   import { mergeStore, type MergeState } from "../store";
   import { mergePdf } from "../lib/mergePdf";
+  import { runScheduled } from "../lib/resourceManager";
   import { formatBytes } from "../lib/types";
   import { toast } from "../toast";
   import { flip } from "svelte/animate";
@@ -97,9 +98,18 @@
 
     isMerging = true;
     try {
-      const blob = await mergePdf(state.files);
-      mergedBlob = blob;
-      toast("PDFs successfully merged", "success");
+      const files = [...state.files];
+      const bytes = files.reduce((sum, f) => sum + f.size, 0);
+      const result = await runScheduled(
+        { kind: "pdf", label: `Merge PDF (${files.length} files)`, bytes },
+        () => mergePdf(files),
+      );
+      // mergePdf() resolves with { blob, pageCount, totalInputSize } — the
+      // route used to assign the whole result object to `mergedBlob`, so
+      // URL.createObjectURL() threw "Overload resolution failed" and the
+      // downloaded merged PDF never existed.
+      mergedBlob = result.blob;
+      toast(`Merged ${result.pageCount} pages into one PDF`, "success");
     } catch (err) {
       console.error("[mergePdf] error:", err);
       toast(`Merge failed: ${(err as Error).message}`, "error");

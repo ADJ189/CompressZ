@@ -2,6 +2,8 @@
   import FileDropzone from "../components/FileDropzone.svelte";
   import { imagesToPdfStore, type ImagesToPdfState } from "../store";
   import { imagesToPdf } from "../lib/imagesToPdf";
+  import { imagesToPdfOptions } from "../lib/options";
+  import { runScheduled } from "../lib/resourceManager";
   import { formatBytes } from "../lib/types";
   import { toast } from "../toast";
   import { flip } from "svelte/animate";
@@ -168,11 +170,17 @@
 
     isConverting = true;
     try {
-      const blob = await imagesToPdf(state.files, {
-        pageSize: state.pageSize,
-        quality: state.quality,
-        maxDim: state.maxDim > 0 ? state.maxDim : undefined,
-      });
+      const files = [...state.files];
+      const options = imagesToPdfOptions(state);
+      const bytes = files.reduce((sum, f) => sum + f.size, 0);
+      const blob = await runScheduled(
+        {
+          kind: "pdf",
+          label: `Images to PDF (${files.length} images)`,
+          bytes,
+        },
+        () => imagesToPdf(files, options),
+      );
       convertedBlob = blob;
       toast("Images successfully converted to PDF", "success");
     } catch (err) {

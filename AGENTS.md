@@ -151,10 +151,13 @@ src/lib/                   pure framework-independent TypeScript engines
   qualityGuard.ts          SSIM / scale guard for lossy image output
   compressGif.ts / optimizeSvg.ts / convertMedia.ts / convertOffice.ts
   convertPdf.ts / imagesToPdf.ts / mergePdf.ts / types.ts
-test/                      Deno test suite (verified 100% passing)
+  options.ts               UI state → engine option builders (the single
+                           mapping layer for every route; see below)
+tests/                     Deno test suite (verified 100% passing)
   assert.ts                zero-dependency test assertions
   hallmark.test.ts         anti-slop and CSS floor compliance tests
   ocr.test.ts              OCR engine & handwriting disclosure tests
+  options.test.ts          route → engine option contract tests
   pdfToMarkdown.test.ts    PDF reading order and Markdown export tests
   qualityGuard.test.ts     image scaling ceiling tests
   recommendations.test.ts  natural ordering and format recommendation tests
@@ -162,6 +165,27 @@ test/                      Deno test suite (verified 100% passing)
   settings.test.ts         default settings and profile resolution tests
   zip.test.ts              ZIP path traversal and round-trip tests
 ```
+
+## UI → engine options
+
+Routes keep human-facing state (quality as 0–100, a page-size id, bitrate in
+kbps); engines in `src/lib/` take `quality` 0–1, `maxWidth`/`maxHeight`,
+`{ w, h }` page points and `audioFormat`/`audioBitrate`. **Never map those by
+hand in a route.** Import the builder from `src/lib/options.ts`:
+
+| Route state | Builder | Engine call |
+| --- | --- | --- |
+| `ImageState` | `imageOptions()` | `compressImage()` |
+| `PdfState` | `pdfOptions()` | `compressPdf()` |
+| `VideoState` | `videoOptions()` | `compressVideo()` |
+| `AudioState` | `audioOptions()` | `compressAudio()` |
+| `GifState` | `gifOptions()` | `compressGif()` |
+| `ImagesToPdfState` | `imagesToPdfOptions()` | `imagesToPdf()` |
+
+`tests/options.test.ts` pins these contracts. Download names come from the
+produced blob (`outputFilename()` in `types.ts`), never from the requested
+format, because encoders fall back (AVIF → WebP) and convert (GIF → WebM,
+multi-page PDF → ZIP).
 
 Heavy runtime engines (FFmpeg.wasm, PDF.js, pdf-lib, Tesseract.js,
 PaddleOCR/Paddle.js, mammoth.js, html2canvas, heic2any) are **not** npm

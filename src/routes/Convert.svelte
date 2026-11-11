@@ -5,13 +5,17 @@
   import { compressAudio } from "../lib/compressAudio";
   import { compressImage } from "../lib/compressImage";
   import { pdfToImages } from "../lib/convertPdf";
-  import { docxToPdf, docxToText, pptxToPdf, pptxToText } from "../lib/convertOffice";
+  import { imagesToPdf } from "../lib/imagesToPdf";
+  import { docxToPdf, docxToText, docxToHtml, pptxToPdf, pptxToText } from "../lib/convertOffice";
+  import { audioOptions, imageOptions } from "../lib/options";
+  import { runScheduled } from "../lib/resourceManager";
   import { naturalOrder } from "../lib/recommendations";
-  import { formatBytes } from "../lib/types";
+  import { formatBytes, outputFilename } from "../lib/types";
+  import type { AudioFormat, ImageFormat } from "../lib/types";
   import { toast } from "../toast";
   import { getPlatformInfo } from "../lib/platform";
 
-  type Category = "video" | "audio" | "image" | "pdf2img" | "docx" | "pptx";
+  type Category = "video" | "audio" | "image" | "pdf2img" | "img2pdf" | "docx" | "pptx";
 
   let activeCat = $state<Category>("video");
   let selectedFiles = $state<File[]>([]);
@@ -85,6 +89,12 @@
         { value: "webp", label: "WebP images" },
       ],
     },
+    img2pdf: {
+      label: "Images to PDF",
+      icon: "🧩",
+      accept: "image/*",
+      targets: [{ value: "pdf", label: "PDF document" }],
+    },
     docx: {
       label: "DOCX",
       icon: "📝",
@@ -92,6 +102,7 @@
       targets: [
         { value: "pdf", label: "PDF Document" },
         { value: "txt", label: "Plain Text" },
+        { value: "html", label: "HTML" },
       ],
     },
     pptx: {
@@ -130,50 +141,151 @@
     isConverting = true;
     convertedResults = [];
 
+    // Images → PDF produces one ordered document, not one output per file.
+    if (activeCat === "img2pdf") {
+      const files = [...selectedFiles];
+      try {
+        const bytes = files.reduce((sum, f) => sum + f.size, 0);
+        const blob = await runScheduled(
+          {
+            kind: "pdf",
+            label: `Images to PDF (${files.length} images)`,
+            bytes,
+          },
+          () => imagesToPdf(files, { quality: 0.9 }),
+        );
+        convertedResults = [
+          {
+            name: outputFilename(files[0].name, blob, {
+              suffix: `-combined-${files.length}`,
+              fallbackExt: "pdf",
+            }),
+            blob,
+          },
+        ];
+      } catch (err) {
+        console.error("[convert] img2pdf error:", err);
+        toast(
+          `Failed to combine images: ${(err as Error).message}`,
+          "error",
+        );
+      } finally {
+        isConverting = false;
+      }
+      if (convertedResults.length > 0) toast("Conversion completed", "success");
+      return;
+    }
+
     for (const file of selectedFiles) {
       try {
         let blob: Blob | null = null;
-        let outName = file.name.replace(/\.[^/.]+$/, "") + `.${targetFormat}`;
+        let suffix = "";
 
         if (activeCat === "video") {
-          const res = await convertVideo(file, targetFormat as VideoContainer, {
-            crf: videoCrf,
-            resolution: videoResolution,
-            fps: videoFps,
-            muteAudio,
-            fastStart,
-            stripMetadata,
-            audioBitrate,
-          });
+          const res = await runScheduled(
+            { kind: "video", label: file.name, bytes: file.size },
+            () =>
+              convertVideo(file, targetFormat as VideoContainer, {
+                crf: videoCrf,
+                resolution: videoResolution,
+                fps: videoFps,
+                muteAudio,
+                fastStart,
+                stripMetadata,
+                audioBitrate,
+              }),
+          );
           blob = res.blob;
         } else if (activeCat === "audio") {
-          const res = await compressAudio(file, {
-            format: targetFormat as any,
-            bitrate: audioBitrate === "320k" ? 320 : audioBitrate === "192k" ? 192 : audioBitrate === "128k" ? 128 : 96,
-          });
+          const kbps = Number(audioBitrate.replace(/k$/i, ""));
+          const res = await runScheduled(
+            { kind: "audio", label: file.name, bytes: file.size },
+            () =>
+              compressAudio(
+                file,
+                audioOptions({
+                  fmt: targetFormat as AudioFormat,
+                  bitrate: Number.isFinite(kbps) ? kbps : 192,
+                }),
+              ),
+          );
           blob = res.blob;
         } else if (activeCat === "image") {
-          const mime = targetFormat === "jpeg" ? "image/jpeg" : targetFormat === "png" ? "image/png" : targetFormat === "avif" ? "image/avif" : "image/webp";
-          const res = await compressImage(file, { format: mime as any });
+          const mime: ImageFormat =
+            targetFormat === "jpeg"
+              ? "image/jpeg"
+              : targetFormat === "png"
+                ? "image/png"
+                : targetFormat === "avif"
+                  ? "image/avif"
+                  : "image/webp";
+          const res = await runScheduled(
+            { kind: "image", label: file.name, bytes: file.size },
+            () =>
+              compressImage(file, imageOptions({ quality: 95, format: mime })),
+          );
           blob = res.blob;
         } else if (activeCat === "pdf2img") {
-          const res = await pdfToImages(file, { format: targetFormat as any });
-          blob = res.zipBlob;
-          outName = file.name.replace(/\.[^/.]+$/, "") + "-images.zip";
+          const res = await runScheduled(
+            { kind: "pdf", label: file.name, bytes: file.size },
+            () =>
+              pdfToImages(
+                file,
+                targetFormat as "png" | "jpeg" | "webp",
+                150,
+              ),
+          );
+          blob = res.blob;
+          suffix = "-images";
         } else if (activeCat === "docx") {
-          if (targetFormat === "pdf") blob = await docxToPdf(file);
-          else blob = new Blob([await docxToText(file)], { type: "text/plain" });
+          if (targetFormat === "pdf") {
+            blob = await runScheduled(
+              { kind: "document", label: file.name, bytes: file.size },
+              () => docxToPdf(file),
+            );
+          } else if (targetFormat === "html") {
+            blob = await runScheduled(
+              { kind: "document", label: file.name, bytes: file.size },
+              async () => new Blob([await docxToHtml(file)], { type: "text/html" }),
+            );
+          } else {
+            blob = await runScheduled(
+              { kind: "document", label: file.name, bytes: file.size },
+              async () => new Blob([await docxToText(file)], { type: "text/plain" }),
+            );
+          }
         } else if (activeCat === "pptx") {
-          if (targetFormat === "pdf") blob = await pptxToPdf(file);
-          else blob = new Blob([await pptxToText(file)], { type: "text/plain" });
+          if (targetFormat === "pdf") {
+            blob = await runScheduled(
+              { kind: "document", label: file.name, bytes: file.size },
+              () => pptxToPdf(file),
+            );
+          } else {
+            blob = await runScheduled(
+              { kind: "document", label: file.name, bytes: file.size },
+              async () => new Blob([await pptxToText(file)], { type: "text/plain" }),
+            );
+          }
         }
 
         if (blob) {
-          convertedResults = [...convertedResults, { name: outName, blob }];
+          convertedResults = [
+            ...convertedResults,
+            {
+              name: outputFilename(file.name, blob, {
+                suffix,
+                fallbackExt: targetFormat === "jpeg" ? "jpg" : targetFormat,
+              }),
+              blob,
+            },
+          ];
         }
       } catch (err) {
         console.error("[convert] error:", err);
-        toast(`Failed to convert ${file.name}: ${(err as Error).message}`, "error");
+        toast(
+          `Failed to convert ${file.name}: ${(err as Error).message}`,
+          "error",
+        );
       }
     }
 

@@ -3050,6 +3050,13 @@
       "integrity": "sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg=="
     }
   },
+  "remote": {
+    "https://cdn.jsdelivr.net/npm/@pdf-lib/standard-fonts@1.0.0/+esm": "30d05c627842dd8495d966e0c0d23e3e30083856d70d8c026b53f39154b39b3f",
+    "https://cdn.jsdelivr.net/npm/@pdf-lib/upng@1.0.1/+esm": "c3aadb7b5a1aff1fe2d5a580d6d72d9a358a43db70039ae7ae4a29399186ce02",
+    "https://cdn.jsdelivr.net/npm/pako@1.0.11/+esm": "f92d0cd0504f73aa677a333099cb5368d1232f37852f0f8008e3d3986f310770",
+    "https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm": "c5c129a0a41fd776f058e57e9eec0e28837bafb8be69a7b8ebd5ad862ee33b68",
+    "https://cdn.jsdelivr.net/npm/tslib@1.14.1/+esm": "98c97886287a55e4c136d2127bf81b6d4e7445e0c85ab773be1a3a9b7a86c203"
+  },
   "workspace": {
     "packageJson": {
       "dependencies": [

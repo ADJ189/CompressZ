@@ -144,8 +144,8 @@ export function mountGif(root: HTMLElement) {
         <div class="s-field">
           <span class="s-label">Output</span>
           <div class="seg" role="group" aria-label="Output format">
-            <button class="${!s.gifToVideo ? "on" : ""}" aria-pressed="${!s.gifToVideo ? "true" : "false"}" id="out-gif">Optimised GIF</button>
-            <button class="${s.gifToVideo ? "on" : ""}" aria-pressed="${s.gifToVideo ? "true" : "false"}" id="out-webm">Convert to WebM</button>
+            <button type="button" class="${!s.gifToVideo ? "on" : ""}" aria-pressed="${!s.gifToVideo ? "true" : "false"}" id="out-gif">Optimised GIF</button>
+            <button type="button" class="${s.gifToVideo ? "on" : ""}" aria-pressed="${s.gifToVideo ? "true" : "false"}" id="out-webm">Convert to WebM</button>
           </div>
         </div>
         ${
