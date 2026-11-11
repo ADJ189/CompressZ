@@ -143,20 +143,21 @@
 
     // Images → PDF produces one ordered document, not one output per file.
     if (activeCat === "img2pdf") {
+      const files = [...selectedFiles];
       try {
-        const bytes = selectedFiles.reduce((sum, f) => sum + f.size, 0);
+        const bytes = files.reduce((sum, f) => sum + f.size, 0);
         const blob = await runScheduled(
           {
             kind: "pdf",
-            label: `Images to PDF (${selectedFiles.length} images)`,
+            label: `Images to PDF (${files.length} images)`,
             bytes,
           },
-          () => imagesToPdf(selectedFiles, { quality: 0.9 }),
+          () => imagesToPdf(files, { quality: 0.9 }),
         );
         convertedResults = [
           {
-            name: outputFilename(selectedFiles[0].name, blob, {
-              suffix: `-combined-${selectedFiles.length}`,
+            name: outputFilename(files[0].name, blob, {
+              suffix: `-combined-${files.length}`,
               fallbackExt: "pdf",
             }),
             blob,
@@ -243,9 +244,15 @@
               () => docxToPdf(file),
             );
           } else if (targetFormat === "html") {
-            blob = new Blob([await docxToHtml(file)], { type: "text/html" });
+            blob = await runScheduled(
+              { kind: "document", label: file.name, bytes: file.size },
+              async () => new Blob([await docxToHtml(file)], { type: "text/html" }),
+            );
           } else {
-            blob = new Blob([await docxToText(file)], { type: "text/plain" });
+            blob = await runScheduled(
+              { kind: "document", label: file.name, bytes: file.size },
+              async () => new Blob([await docxToText(file)], { type: "text/plain" }),
+            );
           }
         } else if (activeCat === "pptx") {
           if (targetFormat === "pdf") {
@@ -254,7 +261,10 @@
               () => pptxToPdf(file),
             );
           } else {
-            blob = new Blob([await pptxToText(file)], { type: "text/plain" });
+            blob = await runScheduled(
+              { kind: "document", label: file.name, bytes: file.size },
+              async () => new Blob([await pptxToText(file)], { type: "text/plain" }),
+            );
           }
         }
 

@@ -7,7 +7,20 @@ carry an `-a`/`-b` prerelease suffix (`-a` = early/alpha, `-b` = beta,
 close to ready) with a trailing counter, e.g. `1.12.0-b1`, `1.12.0-b2`.
 The suffix is dropped on the release that ships it (`1.12.0`).
 
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:90fc2b03938cb327bf47dbf4f84e7d40cfbb06f7df76d34636d796cf82c445e4 -->
+
+## [Unreleased]
+
+### Fixed
+
+- Preserve submitted settings and file order in queued conversions, and schedule DOCX HTML/text and PPTX text jobs.
+- Match PDF image output metadata to encoded bytes, correct video CRF slider direction, and clean up FFmpeg loading resources with a bounded initialization timeout.
+
 ## [1.14.1] - 2026-11-11
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 ### Fixed — Conversion option contracts (every route → engine mapping)
 

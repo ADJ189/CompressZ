@@ -170,14 +170,16 @@
 
     isConverting = true;
     try {
-      const bytes = state.files.reduce((sum, f) => sum + f.size, 0);
+      const files = [...state.files];
+      const options = imagesToPdfOptions(state);
+      const bytes = files.reduce((sum, f) => sum + f.size, 0);
       const blob = await runScheduled(
         {
           kind: "pdf",
-          label: `Images to PDF (${state.files.length} images)`,
+          label: `Images to PDF (${files.length} images)`,
           bytes,
         },
-        () => imagesToPdf(state.files, imagesToPdfOptions(state)),
+        () => imagesToPdf(files, options),
       );
       convertedBlob = blob;
       toast("Images successfully converted to PDF", "success");

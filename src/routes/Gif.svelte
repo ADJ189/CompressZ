@@ -44,9 +44,10 @@
     });
 
     try {
+      const options = gifOptions(state);
       const res = await runScheduled(
         { kind: "gif", label: entry.name, bytes: entry.file.size },
-        () => compressGif(entry.file, gifOptions(state)),
+        () => compressGif(entry.file, options),
       );
 
       updateStore({

@@ -44,9 +44,10 @@
     });
 
     try {
+      const options = pdfOptions(state);
       const res = await runScheduled(
         { kind: "pdf", label: entry.name, bytes: entry.file.size },
-        () => compressPdf(entry.file, pdfOptions(state)),
+        () => compressPdf(entry.file, options),
       );
 
       updateStore({

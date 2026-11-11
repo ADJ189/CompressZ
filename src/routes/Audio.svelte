@@ -44,9 +44,10 @@
     });
 
     try {
+      const options = audioOptions(state);
       const res = await runScheduled(
         { kind: "audio", label: entry.name, bytes: entry.file.size },
-        () => compressAudio(entry.file, audioOptions(state)),
+        () => compressAudio(entry.file, options),
       );
 
       updateStore({

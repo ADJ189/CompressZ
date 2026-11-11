@@ -29,8 +29,7 @@ export async function pdfToImages(
 
   const scale = dpi / 72;
   const total = doc.numPages;
-  const pages: { name: string; data: Uint8Array }[] = [];
-  const ext = format === "jpeg" ? "jpg" : format;
+  const pages: { name: string; data: Uint8Array; mime: string }[] = [];
   const mime =
     format === "jpeg"
       ? "image/jpeg"
@@ -63,7 +62,13 @@ export async function pdfToImages(
         format === "jpeg" ? 0.92 : undefined,
       ),
     );
+    const extensions = new Map([
+      ["image/png", "png"], ["image/jpeg", "jpg"], ["image/webp", "webp"],
+    ]);
+    const ext = extensions.get(blob.type);
+    if (!ext) throw new Error(`Unsupported PDF image blob type: ${blob.type || "unknown"}`);
     pages.push({
+      mime: blob.type,
       name: `${base}_page${String(i).padStart(2, "0")}.${ext}`,
       data: new Uint8Array(await blob.arrayBuffer()),
     });
@@ -82,7 +87,7 @@ export async function pdfToImages(
     // that, and this also guarantees the exact byte range regardless of
     // how `data` was constructed upstream.
     return {
-      blob: new Blob([new Uint8Array(pages[0].data)], { type: mime }),
+      blob: new Blob([new Uint8Array(pages[0].data)], { type: pages[0].mime }),
       isZip: false,
       pageCount: 1,
     };

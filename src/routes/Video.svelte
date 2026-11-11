@@ -3,7 +3,7 @@
   import FileQueue from "../components/FileQueue.svelte";
   import { videoStore, type VideoState } from "../store";
   import { compressVideo } from "../lib/compressVideo";
-  import { videoOptions } from "../lib/options";
+  import { videoOptions, videoQualityFromCrf, videoCrfFromQuality } from "../lib/options";
   import { runScheduled } from "../lib/resourceManager";
   import { uid, type FileEntry, type VideoCodec, outputFilename } from "../lib/types";
   import { toast } from "../toast";
@@ -44,9 +44,10 @@
     });
 
     try {
+      const options = videoOptions(state);
       const res = await runScheduled(
         { kind: "video", label: entry.name, bytes: entry.file.size },
-        () => compressVideo(entry.file, videoOptions(state)),
+        () => compressVideo(entry.file, options),
       );
 
       updateStore({
@@ -143,15 +144,15 @@
     </div>
 
     <div class="cz-setting-item">
-      <label class="cz-setting-label" for="vid-crf">CRF ({state.crfQuality})</label>
+      <label class="cz-setting-label" for="vid-crf">CRF ({videoCrfFromQuality(state.crfQuality)})</label>
       <input
         id="vid-crf"
         type="range"
         min="16"
         max="38"
-        value={state.crfQuality}
+        value={videoCrfFromQuality(state.crfQuality)}
         class="cz-range"
-        oninput={(e) => updateStore({ crfQuality: Number((e.target as HTMLInputElement).value) })}
+        oninput={(e) => updateStore({ crfQuality: videoQualityFromCrf(Number((e.target as HTMLInputElement).value)) })}
       />
     </div>
 

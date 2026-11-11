@@ -102,6 +102,15 @@ export function audioOptions(state: AudioOptionState): CompressOptions {
 
 // ── Video ─────────────────────────────────────────────────────
 
+/** CRF slider values run in the opposite direction to percentage quality. */
+export function videoQualityFromCrf(crf: number): number {
+  return Math.round(qualityToUnit((35 - crf) / 17 * 100, 0.75) * 100);
+}
+
+export function videoCrfFromQuality(percentage: number): number {
+  return Math.round(18 + (1 - qualityToUnit(percentage, 0.75)) * 17);
+}
+
 export interface VideoOptionState {
   mode: "crf" | "bitrate" | "targetSize";
   crfQuality: number;

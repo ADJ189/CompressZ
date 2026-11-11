@@ -98,10 +98,11 @@
 
     isMerging = true;
     try {
-      const bytes = state.files.reduce((sum, f) => sum + f.size, 0);
+      const files = [...state.files];
+      const bytes = files.reduce((sum, f) => sum + f.size, 0);
       const result = await runScheduled(
-        { kind: "pdf", label: `Merge PDF (${state.files.length} files)`, bytes },
-        () => mergePdf(state.files),
+        { kind: "pdf", label: `Merge PDF (${files.length} files)`, bytes },
+        () => mergePdf(files),
       );
       // mergePdf() resolves with { blob, pageCount, totalInputSize } — the
       // route used to assign the whole result object to `mergedBlob`, so

@@ -142,9 +142,10 @@
     });
 
     try {
+      const options = imageOptions(state);
       const res = await runScheduled(
         { kind: "image", label: entry.name, bytes: entry.file.size },
-        () => compressImage(entry.file, imageOptions(state)),
+        () => compressImage(entry.file, options),
       );
 
       updateStore({

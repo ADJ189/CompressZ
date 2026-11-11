@@ -9,6 +9,8 @@ import {
   pdfPageSize,
   qualityToUnit,
   videoOptions,
+  videoQualityFromCrf,
+  videoCrfFromQuality,
 } from "../src/lib/options.ts";
 import {
   extensionForMime,
@@ -220,4 +222,15 @@ Deno.test("types: download names never mislabel the output", () => {
     outputFilename("doc.docx", opaque, { suffix: "-converted", fallbackExt: "html" }),
     "doc-converted.html",
   );
+});
+
+Deno.test("options: video CRF slider endpoints preserve quality direction and defaults", () => {
+  const options = (crfQuality: number) => videoOptions({
+    mode: "crf", crfQuality, bitrate: 2000, targetSizeMB: 8,
+    codec: "h264", preset: "fast",
+  });
+  assertEquals(options(videoQualityFromCrf(16)).quality, 0.99);
+  assertEquals(options(videoQualityFromCrf(38)).quality, 0.01);
+  assertEquals(options(75).quality, 0.75);
+  assertEquals(videoCrfFromQuality(75), 22);
 });
