@@ -24,9 +24,10 @@ export function navigate(route: string, opts: { replace?: boolean } = {}) {
 }
 
 export function getRouteFromPath(path: string): string {
-  const stripped = path.startsWith(BASE_NORM)
-    ? path.slice(BASE_NORM.length)
-    : path.replace(/^\//, "");
+  const cleanPath = path.split("?")[0].split("#")[0];
+  const stripped = cleanPath.startsWith(BASE_NORM)
+    ? cleanPath.slice(BASE_NORM.length)
+    : cleanPath.replace(/^\//, "");
   return stripped.replace(/\/$/, "");
 }
 
@@ -39,7 +40,7 @@ export function dispatch(path: string) {
 }
 
 export function init() {
-  window.addEventListener("popstate", () => dispatch(location.pathname));
+  window.addEventListener("popstate", () => dispatch(location.pathname + location.search));
   document.addEventListener("click", (e) => {
     const el = (e.target as Element).closest(
       "[data-nav]",
