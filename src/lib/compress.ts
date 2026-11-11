@@ -10,7 +10,7 @@ export async function compress(
   entry: FileEntry,
   onProgress?: (pct: number) => void,
 ): Promise<CompressResult> {
-  const { file, type, options } = entry;
+  const { file, type, options = {} } = entry;
   switch (type) {
     case 'image': return compressImage(file, options, onProgress);
     case 'pdf':   return compressPdf(file, options, onProgress);

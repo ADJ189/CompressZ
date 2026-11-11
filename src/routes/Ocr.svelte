@@ -10,6 +10,7 @@
   } from "../lib/ocrEngines";
   import { runHandwritingOcr } from "../lib/ocrHandwriting";
   import { openPdfDocument, PDFLIB_ESM } from "../lib/pdfLibs";
+  import { runScheduled } from "../lib/resourceManager";
   import { uid, type FileEntry } from "../lib/types";
   import { toast } from "../toast";
 
@@ -49,43 +50,49 @@
     });
 
     try {
-      const pdfBytes = new Uint8Array(await entry.file.arrayBuffer());
-      const pdfDoc = await openPdfDocument(pdfBytes);
-      const numPages = pdfDoc.numPages;
+      const outBlob = await runScheduled(
+        { kind: "ocr", label: entry.name, bytes: entry.file.size },
+        async () => {
+          const pdfBytes = new Uint8Array(await entry.file.arrayBuffer());
+          const pdfDoc = await openPdfDocument(pdfBytes);
+          const numPages = pdfDoc.numPages;
 
-      let combinedText = "";
+          let combinedText = "";
 
-      // Sequential single-page processing
-      for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-        const page = await pdfDoc.getPage(pageNum);
-        const viewport = page.getViewport({ scale: state.renderDpi / 72 });
-        const canvas = document.createElement("canvas");
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        const ctx = canvas.getContext("2d");
+          // Sequential single-page processing
+          for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+            const page = await pdfDoc.getPage(pageNum);
+            const viewport = page.getViewport({ scale: state.renderDpi / 72 });
+            const canvas = document.createElement("canvas");
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            const ctx = canvas.getContext("2d");
 
-        if (ctx) {
-          await page.render({ canvasContext: ctx, viewport }).promise;
-        }
+            if (ctx) {
+              await page.render({ canvasContext: ctx, viewport }).promise;
+            }
 
-        if (state.profile === "handwriting") {
-          const res = await runHandwritingOcr(canvas);
-          combinedText += `\n--- Page ${pageNum} ---\n` + res.text;
-        } else {
-          const res = await runPrintedOcr(canvas, {
-            language: state.language,
-            symbolMode: state.symbolMode,
+            if (state.profile === "handwriting") {
+              const res = await runHandwritingOcr(canvas);
+              combinedText += `\n--- Page ${pageNum} ---\n` + res.text;
+            } else {
+              const res = await runPrintedOcr(canvas, {
+                language: state.language,
+                symbolMode: state.symbolMode,
+              });
+              combinedText += `\n--- Page ${pageNum} ---\n` + res.text;
+            }
+
+            canvas.width = 0;
+            canvas.height = 0;
+          }
+
+          await pdfDoc.destroy();
+          return new Blob([combinedText.trim()], {
+            type: "text/plain;charset=utf-8",
           });
-          combinedText += `\n--- Page ${pageNum} ---\n` + res.text;
-        }
-
-        canvas.width = 0;
-        canvas.height = 0;
-      }
-
-      await pdfDoc.destroy();
-
-      const outBlob = new Blob([combinedText.trim()], { type: "text/plain;charset=utf-8" });
+        },
+      );
 
       updateStore({
         files: state.files.map((f) =>

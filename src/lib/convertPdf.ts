@@ -20,7 +20,7 @@ export interface PdfToImagesResult {
 
 export async function pdfToImages(
   file: File,
-  format: "png" | "jpeg",
+  format: "png" | "jpeg" | "webp",
   dpi: number,
   onProgress?: (pct: number) => void,
 ): Promise<PdfToImagesResult> {
@@ -29,9 +29,13 @@ export async function pdfToImages(
 
   const scale = dpi / 72;
   const total = doc.numPages;
-  const pages: { name: string; data: Uint8Array }[] = [];
-  const ext = format === "jpeg" ? "jpg" : "png";
-  const mime = format === "jpeg" ? "image/jpeg" : "image/png";
+  const pages: { name: string; data: Uint8Array; mime: string }[] = [];
+  const mime =
+    format === "jpeg"
+      ? "image/jpeg"
+      : format === "webp"
+        ? "image/webp"
+        : "image/png";
   const base = file.name.replace(/\.pdf$/i, "");
 
   for (let i = 1; i <= total; i++) {
@@ -44,7 +48,7 @@ export async function pdfToImages(
     c.width = w;
     c.height = h;
     const ctx = get2D(c, "pdf", { alpha: format === "png" });
-    if (format === "jpeg") {
+    if (format !== "png") {
       ctx.fillStyle = "#fff";
       ctx.fillRect(0, 0, w, h);
     }
@@ -58,7 +62,13 @@ export async function pdfToImages(
         format === "jpeg" ? 0.92 : undefined,
       ),
     );
+    const extensions = new Map([
+      ["image/png", "png"], ["image/jpeg", "jpg"], ["image/webp", "webp"],
+    ]);
+    const ext = extensions.get(blob.type);
+    if (!ext) throw new Error(`Unsupported PDF image blob type: ${blob.type || "unknown"}`);
     pages.push({
+      mime: blob.type,
       name: `${base}_page${String(i).padStart(2, "0")}.${ext}`,
       data: new Uint8Array(await blob.arrayBuffer()),
     });
@@ -77,7 +87,7 @@ export async function pdfToImages(
     // that, and this also guarantees the exact byte range regardless of
     // how `data` was constructed upstream.
     return {
-      blob: new Blob([new Uint8Array(pages[0].data)], { type: mime }),
+      blob: new Blob([new Uint8Array(pages[0].data)], { type: pages[0].mime }),
       isZip: false,
       pageCount: 1,
     };

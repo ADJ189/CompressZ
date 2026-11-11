@@ -3,7 +3,9 @@
   import FileQueue from "../components/FileQueue.svelte";
   import { pdfStore, type PdfState } from "../store";
   import { compressPdf } from "../lib/compressPdf";
-  import { uid, type FileEntry, type PdfLevel } from "../lib/types";
+  import { pdfOptions } from "../lib/options";
+  import { runScheduled } from "../lib/resourceManager";
+  import { uid, type FileEntry, type PdfLevel, outputFilename } from "../lib/types";
   import { toast } from "../toast";
 
   let state = $state<PdfState>(pdfStore.get());
@@ -42,10 +44,11 @@
     });
 
     try {
-      const res = await compressPdf(entry.file, {
-        level: state.level,
-        stripMeta: state.stripMeta === "on",
-      });
+      const options = pdfOptions(state);
+      const res = await runScheduled(
+        { kind: "pdf", label: entry.name, bytes: entry.file.size },
+        () => compressPdf(entry.file, options),
+      );
 
       updateStore({
         files: state.files.map((f) =>
@@ -90,9 +93,11 @@
     if (!entry.compressedBlob) return;
     const url = URL.createObjectURL(entry.compressedBlob);
     const a = document.createElement("a");
-    const base = entry.name.replace(/\.[^/.]+$/, "");
     a.href = url;
-    a.download = `${base}-compressed.pdf`;
+    a.download = outputFilename(entry.name, entry.compressedBlob, {
+      suffix: "-compressed",
+      fallbackExt: "pdf",
+    });
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   }

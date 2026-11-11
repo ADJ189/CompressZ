@@ -1,6 +1,5 @@
 <script lang="ts">
-  declare const __APP_VERSION__: string;
-  const appVersion = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.13.0-a1";
+  const appVersion = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.14.1";
 
   import {
     getSettings,
@@ -9,7 +8,7 @@
     defaultSettings,
     resolveExecutionProfile,
     resolvedConcurrency,
-    type Settings,
+    type AppSettings as Settings,
     type ResourceMode,
   } from "../lib/settings";
   import { getThemePreference, setThemePreference, THEME_EVENT } from "../lib/theme";

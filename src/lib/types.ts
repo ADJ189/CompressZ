@@ -62,12 +62,17 @@ export interface CompressResult {
 export interface FileEntry {
   id: string;
   file: File;
+  name: string;
+  originalSize: number;
   type: FileType;
   status: "idle" | "compressing" | "done" | "error";
-  progress: number;
+  progress?: number;
   result?: CompressResult;
+  compressedBlob?: Blob;
+  compressedSize?: number;
+  thumbUrl?: string;
   error?: string;
-  options: CompressOptions;
+  options?: CompressOptions;
   aiLabel?: string; // set by the local AI engine's "Smart Analyze" (see lib/aiEngine.ts) — undefined until run
 }
 
@@ -159,25 +164,8 @@ export function detectFileType(file: File): FileType {
 
 export function getOutputExtension(result: CompressResult): string {
   // Primary: derive from the actual blob MIME type — always authoritative.
-  const mime = result.blob.type.toLowerCase();
-  if (mime === "image/webp") return "webp";
-  if (mime === "image/jpeg") return "jpg";
-  if (mime === "image/png") return "png";
-  if (mime === "image/avif") return "avif";
-  if (mime === "image/gif") return "gif";
-  if (mime === "image/svg+xml") return "svg";
-  if (mime === "application/pdf") return "pdf";
-  if (mime === "video/webm") return "webm";
-  if (mime === "video/mp4") return "mp4";
-  if (mime === "video/x-matroska") return "mkv";
-  if (mime === "audio/x-matroska") return "mka";
-  if (mime === "video/quicktime") return "mov";
-  if (mime === "audio/mpeg") return "mp3";
-  if (mime === "audio/mp4") return "m4a"; // AAC in MP4 container
-  if (mime === "audio/opus") return "opus";
-  if (mime === "audio/flac") return "flac";
-  if (mime === "audio/wav" || mime === "audio/x-wav") return "wav";
-  if (mime === "audio/ogg") return "ogg";
+  const detected = extensionForMime(result.blob.type);
+  if (detected) return detected;
 
   // Fallback: parse the human-readable format string (lower-cased).
   const fmt = result.format.toLowerCase();
@@ -197,4 +185,60 @@ export function getOutputExtension(result: CompressResult): string {
   if (fmt.includes("gif")) return "gif";
   if (fmt.includes("svg")) return "svg";
   return "bin";
+}
+
+/**
+ * Map a MIME type to a safe file extension. Returns null when the type is
+ * empty or unrecognised so callers can fall back to a requested format.
+ * Parameter suffixes (`audio/ogg; codecs=opus`) are ignored.
+ */
+export function extensionForMime(type: string): string | null {
+  const mime = type.toLowerCase().split(";")[0].trim();
+  switch (mime) {
+    case "image/webp": return "webp";
+    case "image/jpeg": return "jpg";
+    case "image/png": return "png";
+    case "image/avif": return "avif";
+    case "image/gif": return "gif";
+    case "image/svg+xml": return "svg";
+    case "image/bmp": return "bmp";
+    case "application/pdf": return "pdf";
+    case "application/zip":
+    case "application/x-zip-compressed": return "zip";
+    case "text/plain": return "txt";
+    case "text/html": return "html";
+    case "text/markdown": return "md";
+    case "video/webm": return "webm";
+    case "video/mp4": return "mp4";
+    case "video/quicktime": return "mov";
+    case "video/x-matroska": return "mkv";
+    case "video/x-msvideo": return "avi";
+    case "audio/mpeg": return "mp3";
+    case "audio/mp4": return "m4a"; // AAC in an MP4 container
+    case "audio/opus": return "opus";
+    case "audio/flac": return "flac";
+    case "audio/wav":
+    case "audio/x-wav": return "wav";
+    case "audio/ogg": return "ogg";
+    case "audio/x-matroska": return "mka";
+    default: return null;
+  }
+}
+
+/**
+ * Build a download filename from the *actual* output blob, not the format the
+ * user asked for. Canvas encoders can fall back (AVIF → WebP), GIF conversion
+ * writes WebM, and MP4 containers carry AAC — trusting the request would
+ * mislabel the bytes. `fallbackExt` is used only when the blob type is opaque.
+ */
+export function outputFilename(
+  originalName: string,
+  blob: Blob,
+  opts: { suffix?: string; fallbackExt?: string } = {},
+): string {
+  const base = originalName.replace(/\.[^/.]+$/, "") || "file";
+  const ext =
+    extensionForMime(blob.type) ??
+    (opts.fallbackExt ? opts.fallbackExt.replace(/^\./, "") : "bin");
+  return `${base}${opts.suffix ?? ""}.${ext}`;
 }

@@ -82,6 +82,37 @@ export async function getFFmpeg(): Promise<unknown> {
         // The Worker has already been constructed and its module graph
         // resolved by the time load() settles, so the blob URL is no longer
         // needed.
+      const coreURLs: string[] = [];
+      try {
+        // Wait for both creations to settle so a late success is also cleaned up.
+        const urls = await Promise.allSettled([
+          toBlobURL(`${CORE_ST}/ffmpeg-core.js`, "text/javascript"),
+          toBlobURL(`${CORE_ST}/ffmpeg-core.wasm`, "application/wasm"),
+        ]);
+        for (const result of urls) {
+          if (result.status === "fulfilled") coreURLs.push(result.value);
+        }
+        for (const result of urls) {
+          if (result.status === "rejected") throw result.reason;
+        }
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([
+            ff.load({ classWorkerURL: workerBlob, coreURL: coreURLs[0], wasmURL: coreURLs[1] }),
+            new Promise<never>((_, reject) => {
+              // Allow slower devices time to compile the WASM core. Worker
+              // startup errors can leave the wrapper's load promise pending.
+              timer = setTimeout(() => reject(new Error("FFmpeg initialization timed out")), 120_000);
+            }),
+          ]);
+        } finally {
+          clearTimeout(timer);
+        }
+      } catch (error) {
+        ff.terminate();
+        throw error;
+      } finally {
+        for (const url of coreURLs) URL.revokeObjectURL(url);
         URL.revokeObjectURL(workerBlob);
       }
 

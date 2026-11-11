@@ -9,6 +9,21 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 
 ## [Unreleased]
 
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:90fc2b03938cb327bf47dbf4f84e7d40cfbb06f7df76d34636d796cf82c445e4 -->
+
+## [Unreleased]
+
+### Fixed
+
+- Preserve submitted settings and file order in queued conversions, and schedule DOCX HTML/text and PPTX text jobs.
+- Match PDF image output metadata to encoded bytes, correct video CRF slider direction, and clean up FFmpeg loading resources with a bounded initialization timeout.
+
+## [1.14.1] - 2026-11-11
+
+<!-- /coderabbit-ai-generated:v1 -->
+
 ### Fixed — Conversion option contracts (every route → engine mapping)
 
 - **Images → PDF crash**: The reported error
@@ -74,6 +89,12 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 - **Tests**: Added `tests/options.test.ts` — 10 contract tests over the option
   builders, Images → PDF page points, GIF palette bounds, blob-derived
   extensions and download naming. The offline suite is now 48 passing.
+- **GIF-to-WebM control semantics & test action alignment (`src/routes/Gif.svelte`, `src/pages/gif.ts`, `e2e/conversions.spec.ts`)**:
+  - Aligned the GIF output format selector in `src/routes/Gif.svelte` and `src/pages/gif.ts` to use a semantic segmented button group (`role="group" aria-label="Output format"`) with accessible `aria-pressed` states and `id="out-gif"` / `id="out-webm"`.
+  - Updated `e2e/conversions.spec.ts` to interact with the control as a button, asserting `aria-pressed="false"`, clicking the button, and verifying `aria-pressed="true"`.
+- **SonarCloud duplication elimination (`e2e/conversions.spec.ts`)**:
+  - Extracted shared UI helper functions `clickConvertDownload()` and `runCompression()`, parameterized DOCX format conversions (`Plain Text` and `HTML`), and streamlined canvas base64 serialization.
+  - Reduced duplicate lines density in `e2e/conversions.spec.ts` from 5.2% (30 duplicated lines) down to 0.0%, easily beating the SonarCloud 2.5% threshold.
 
 ## [1.14.0] - 2026-11-09
 
