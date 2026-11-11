@@ -1,5 +1,5 @@
 <script lang="ts">
-  const appVersion = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.13.0-a1";
+  const appVersion = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.14.1";
 
   import {
     getSettings,
