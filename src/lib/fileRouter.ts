@@ -35,13 +35,33 @@ export interface DetectionResult {
   actions: FileAction[];
 }
 
+type ActionTuple = [
+  id: string,
+  name: string,
+  icon: string,
+  desc: string,
+  route: string,
+  hub: FileAction["hub"],
+];
+
+function buildActions(defs: ActionTuple[]): FileAction[] {
+  return defs.map(([id, name, icon, desc, route, hub]) => ({
+    id,
+    name,
+    icon,
+    desc,
+    route,
+    hub,
+  }));
+}
+
 /**
  * Inspect magic bytes from a header buffer to identify file signatures.
  */
 export function identifyHeader(bytes: Uint8Array): DetectedCategory {
   if (!bytes || bytes.length < 4) return "unknown";
 
-  // PDF: %PDF- (0x25, 0x50, 0x44, 0x46, 0x2D)
+  // PDF: %PDF- (0x25, 0x50, 0x44, 0x46)
   if (
     bytes[0] === 0x25 &&
     bytes[1] === 0x50 &&
@@ -55,7 +75,7 @@ export function identifyHeader(bytes: Uint8Array): DetectedCategory {
   if (
     bytes[0] === 0x89 &&
     bytes[1] === 0x50 &&
-    bytes[2] === 0x4E &&
+    bytes[2] === 0x4e &&
     bytes[3] === 0x47
   ) {
     return "image";
@@ -84,7 +104,6 @@ export function identifyHeader(bytes: Uint8Array): DetectedCategory {
     bytes[3] === 0x46 &&
     bytes.length >= 12
   ) {
-    // bytes 8..11: WEBP or WAVE
     const tag = String.fromCharCode(
       bytes[8],
       bytes[9],
@@ -95,19 +114,15 @@ export function identifyHeader(bytes: Uint8Array): DetectedCategory {
     if (tag === "WAVE") return "audio";
   }
 
-  // MP3: ID3 tag or 0xFF\xFB / 0xFF\xF3 sync frame
+  // MP3: ID3 or MPEG sync
   if (
-    bytes[0] === 0x49 &&
-    bytes[1] === 0x44 &&
-    bytes[2] === 0x33
+    (bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) ||
+    (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)
   ) {
     return "audio";
   }
-  if (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0) {
-    return "audio";
-  }
 
-  // FLAC: fLaC (0x66, 0x4C, 0x61, 0x43)
+  // FLAC: fLaC
   if (
     bytes[0] === 0x66 &&
     bytes[1] === 0x4c &&
@@ -117,7 +132,7 @@ export function identifyHeader(bytes: Uint8Array): DetectedCategory {
     return "audio";
   }
 
-  // OggS (0x4F, 0x67, 0x67, 0x53)
+  // OggS
   if (
     bytes[0] === 0x4f &&
     bytes[1] === 0x67 &&
@@ -164,323 +179,85 @@ export function identifyHeader(bytes: Uint8Array): DetectedCategory {
     bytes[2] === 0x03 &&
     bytes[3] === 0x04
   ) {
-    // Will be refined with extension/MIME in detectFileTypeAndActions
     return "docx";
   }
 
   return "unknown";
 }
 
-/**
- * Build actions palette for PDF documents.
- */
-function getPdfActions(): FileAction[] {
-  return [
-    {
-      id: "edit-sign",
-      name: "Edit & Sign",
-      icon: "✏️",
-      desc: "Freehand ink, text callouts, stamps, and signatures",
-      route: "pdf-suite/edit",
-      hub: "pdf",
-    },
-    {
-      id: "fill-forms",
-      name: "Fill Forms",
-      icon: "📝",
-      desc: "Fill interactive AcroForm fields & optional flattening",
-      route: "pdf-suite/forms",
-      hub: "pdf",
-    },
-    {
-      id: "compress-pdf",
-      name: "Compress PDF",
-      icon: "📉",
-      desc: "Structural resampling & target size compression",
-      route: "compress/pdf",
-      hub: "compress",
-    },
-    {
-      id: "pdf-to-word",
-      name: "PDF to Word (.docx)",
-      icon: "📄",
-      desc: "Export to editable Word document with headings & tables",
-      route: "convert?from=pdf&to=docx",
-      hub: "convert",
-    },
-    {
-      id: "pdf-to-excel",
-      name: "PDF to Excel (.xlsx)",
-      icon: "📊",
-      desc: "Extract structured tables into Excel spreadsheet",
-      route: "convert?from=pdf&to=xlsx",
-      hub: "convert",
-    },
-    {
-      id: "pdf-to-ppt",
-      name: "PDF to PowerPoint",
-      icon: "📑",
-      desc: "Convert pages into PowerPoint presentation slides",
-      route: "convert?from=pdf&to=pptx",
-      hub: "convert",
-    },
-    {
-      id: "pdf-to-images",
-      name: "Extract Images",
-      icon: "🖼️",
-      desc: "Extract all pages as high-res PNG/JPEG ZIP",
-      route: "convert?from=pdf&to=images",
-      hub: "convert",
-    },
-    {
-      id: "split-pdf",
-      name: "Split PDF",
-      icon: "✂️",
-      desc: "Extract page ranges, chunk by N pages, or burst to ZIP",
-      route: "pdf-suite/split",
-      hub: "pdf",
-    },
-    {
-      id: "organize-pdf",
-      name: "Organize & Rotate",
-      icon: "🗂️",
-      desc: "Visual drag-and-drop grid, reorder, rotate & delete pages",
-      route: "pdf-suite/organize",
-      hub: "pdf",
-    },
-    {
-      id: "watermark-pdf",
-      name: "Add Watermark",
-      icon: "🏷️",
-      desc: "Add diagonal or repeating text & image watermark",
-      route: "pdf-suite/watermark",
-      hub: "pdf",
-    },
-    {
-      id: "crop-pdf",
-      name: "Crop PDF",
-      icon: "📐",
-      desc: "Trim margins and adjust visual CropBox boundary",
-      route: "pdf-suite/crop",
-      hub: "pdf",
-    },
-    {
-      id: "redact-pdf",
-      name: "Redact Content",
-      icon: "⬛",
-      desc: "Permanently purge sensitive text & image regions",
-      route: "pdf-suite/redact",
-      hub: "pdf",
-    },
-    {
-      id: "protect-pdf",
-      name: "Protect with Password",
-      icon: "🛡️",
-      desc: "AES-256 encryption with user and owner passwords",
-      route: "pdf-suite/protect",
-      hub: "pdf",
-    },
-    {
-      id: "ocr-pdf",
-      name: "PDF OCR",
-      icon: "🔍",
-      desc: "Make scanned PDF searchable with Tesseract or PaddleOCR",
-      route: "compress/ocr",
-      hub: "ai",
-    },
-    {
-      id: "pdf-markdown",
-      name: "PDF to Markdown",
-      icon: "📝",
-      desc: "Structured layout parser to Markdown and assets ZIP",
-      route: "convert/pdf-markdown",
-      hub: "ai",
-    },
-    {
-      id: "repair-pdf",
-      name: "Repair Corrupt PDF",
-      icon: "🩹",
-      desc: "Rebuild broken XREF tables and trailer dictionaries",
-      route: "pdf-suite/repair",
-      hub: "pdf",
-    },
-  ];
-}
+const PDF_ACTION_DEFS: ActionTuple[] = [
+  ["edit-sign", "Edit & Sign", "✏️", "Freehand ink, text callouts, stamps, and signatures", "pdf/edit", "pdf"],
+  ["fill-forms", "Fill Forms", "📝", "Fill interactive AcroForm fields & optional flattening", "pdf/forms", "pdf"],
+  ["compress-pdf", "Compress PDF", "📉", "Structural resampling & target size compression", "compress/pdf", "compress"],
+  ["pdf-to-word", "PDF to Word (.docx)", "📄", "Export to editable Word document with headings & tables", "convert?from=pdf&to=docx", "convert"],
+  ["pdf-to-excel", "PDF to Excel (.xlsx)", "📊", "Extract structured tables into Excel spreadsheet", "convert?from=pdf&to=xlsx", "convert"],
+  ["pdf-to-ppt", "PDF to PowerPoint", "📑", "Convert pages into PowerPoint presentation slides", "convert?from=pdf&to=pptx", "convert"],
+  ["pdf-to-images", "Extract Images", "🖼️", "Extract all pages as high-res PNG/JPEG ZIP", "convert?from=pdf&to=images", "convert"],
+  ["split-pdf", "Split PDF", "✂️", "Extract page ranges, chunk by N pages, or burst to ZIP", "pdf/split", "pdf"],
+  ["organize-pdf", "Organize & Rotate", "🗂️", "Visual drag-and-drop grid, reorder, rotate & delete pages", "pdf/organize", "pdf"],
+  ["watermark-pdf", "Add Watermark", "🏷️", "Add diagonal or repeating text & image watermark", "pdf/watermark", "pdf"],
+  ["crop-pdf", "Crop PDF", "📐", "Trim margins and adjust visual CropBox boundary", "pdf/crop", "pdf"],
+  ["redact-pdf", "Redact Content", "⬛", "Permanently purge sensitive text & image regions", "pdf/redact", "pdf"],
+  ["protect-pdf", "Protect with Password", "🛡️", "AES-256 encryption with user and owner passwords", "pdf/protect", "pdf"],
+  ["ocr-pdf", "PDF OCR", "🔍", "Make scanned PDF searchable with Tesseract or PaddleOCR", "compress/ocr", "ai"],
+  ["pdf-markdown", "PDF to Markdown", "📝", "Structured layout parser to Markdown and assets ZIP", "convert/pdf-markdown", "ai"],
+  ["repair-pdf", "Repair Corrupt PDF", "🩹", "Rebuild broken XREF tables and trailer dictionaries", "pdf/repair", "pdf"],
+];
 
-/**
- * Build actions palette for Microsoft Office documents.
- */
-function getOfficeActions(ext: "docx" | "pptx" | "xlsx"): FileAction[] {
-  if (ext === "docx") {
-    return [
-      {
-        id: "docx-to-pdf",
-        name: "Word to PDF",
-        icon: "📄",
-        desc: "Convert DOCX to high-fidelity PDF with styles & tables",
-        route: "convert?from=docx&to=pdf",
-        hub: "convert",
-      },
-      {
-        id: "docx-to-txt",
-        name: "Extract Text",
-        icon: "📝",
-        desc: "Extract raw document text without formatting",
-        route: "convert?from=docx&to=txt",
-        hub: "convert",
-      },
-    ];
-  }
+const OFFICE_CONFIGS: Record<
+  "docx" | "pptx" | "xlsx",
+  { label: string; mime: string; actions: ActionTuple[] }
+> = {
+  docx: {
+    label: "Microsoft Word Document",
+    mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    actions: [
+      ["docx-to-pdf", "Word to PDF", "📄", "Convert DOCX to high-fidelity PDF with styles & tables", "convert?from=docx&to=pdf", "convert"],
+      ["docx-to-txt", "Extract Text", "📝", "Extract raw document text without formatting", "convert?from=docx&to=txt", "convert"],
+    ],
+  },
+  pptx: {
+    label: "PowerPoint Presentation",
+    mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    actions: [
+      ["pptx-to-pdf", "PowerPoint to PDF", "📊", "Convert slides into multi-page landscape PDF", "convert?from=pptx&to=pdf", "convert"],
+      ["pptx-to-txt", "Extract Slide Text", "📝", "Extract text content from every slide in order", "convert?from=pptx&to=txt", "convert"],
+    ],
+  },
+  xlsx: {
+    label: "Excel Spreadsheet",
+    mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    actions: [
+      ["xlsx-to-pdf", "Excel to PDF", "📈", "Convert spreadsheet sheets into formatted PDF tables", "convert?from=xlsx&to=pdf", "convert"],
+      ["xlsx-to-csv", "Convert to CSV", "📑", "Export active sheet to comma-separated values", "convert?from=xlsx&to=csv", "convert"],
+    ],
+  },
+};
 
-  if (ext === "pptx") {
-    return [
-      {
-        id: "pptx-to-pdf",
-        name: "PowerPoint to PDF",
-        icon: "📊",
-        desc: "Convert slides into multi-page landscape PDF",
-        route: "convert?from=pptx&to=pdf",
-        hub: "convert",
-      },
-      {
-        id: "pptx-to-txt",
-        name: "Extract Slide Text",
-        icon: "📝",
-        desc: "Extract text content from every slide in order",
-        route: "convert?from=pptx&to=txt",
-        hub: "convert",
-      },
-    ];
-  }
+const IMAGE_ACTIONS: ActionTuple[] = [
+  ["compress-image", "Compress Image", "🖼️", "Reduce file size with SSIM quality guard", "compress/images", "compress"],
+  ["images-to-pdf", "Images to PDF", "🧩", "Compile one or more images into a multi-page PDF", "compress/images-to-pdf", "compress"],
+  ["convert-image", "Convert Format", "🔁", "Convert between WebP, AVIF, PNG, JPEG", "convert?cat=image", "convert"],
+  ["watermark-image", "Add Watermark", "🏷️", "Stamp logo or text watermark onto image", "pdf/watermark?type=image", "pdf"],
+  ["ocr-image", "Extract Text (OCR)", "🔍", "Extract printed text or handwriting to searchable text", "compress/ocr", "ai"],
+];
 
-  return [
-    {
-      id: "xlsx-to-pdf",
-      name: "Excel to PDF",
-      icon: "📈",
-      desc: "Convert spreadsheet sheets into formatted PDF tables",
-      route: "convert?from=xlsx&to=pdf",
-      hub: "convert",
-    },
-    {
-      id: "xlsx-to-csv",
-      name: "Convert to CSV",
-      icon: "📑",
-      desc: "Export active sheet to comma-separated values",
-      route: "convert?from=xlsx&to=csv",
-      hub: "convert",
-    },
-  ];
-}
+const VIDEO_ACTIONS: ActionTuple[] = [
+  ["compress-video", "Compress Video", "🎬", "WebCodecs hardware acceleration and FFmpeg transcoding", "compress/video", "compress"],
+  ["convert-video", "Convert Video Format", "🔁", "Transcode to MP4, WebM, MOV, MKV with custom bitrate", "convert?cat=video", "convert"],
+  ["video-to-gif", "Convert to Animated GIF", "🎞️", "Two-pass palettegen Bayer dithering GIF conversion", "compress/gif", "compress"],
+  ["repair-video", "Repair Corrupt Video", "🩹", "Recover missing/truncated MOOV atom in MP4/MOV recordings", "pdf/repair?type=video", "pdf"],
+];
 
-/**
- * Build actions palette for Images.
- */
-function getImageActions(): FileAction[] {
-  return [
-    {
-      id: "compress-image",
-      name: "Compress Image",
-      icon: "🖼️",
-      desc: "Reduce file size with SSIM quality guard",
-      route: "compress/images",
-      hub: "compress",
-    },
-    {
-      id: "images-to-pdf",
-      name: "Images to PDF",
-      icon: "🧩",
-      desc: "Compile one or more images into a multi-page PDF",
-      route: "compress/images-to-pdf",
-      hub: "compress",
-    },
-    {
-      id: "convert-image",
-      name: "Convert Format",
-      icon: "🔁",
-      desc: "Convert between WebP, AVIF, PNG, JPEG",
-      route: "convert?cat=image",
-      hub: "convert",
-    },
-    {
-      id: "watermark-image",
-      name: "Add Watermark",
-      icon: "🏷️",
-      desc: "Stamp logo or text watermark onto image",
-      route: "pdf-suite/watermark?type=image",
-      hub: "pdf",
-    },
-    {
-      id: "ocr-image",
-      name: "Extract Text (OCR)",
-      icon: "🔍",
-      desc: "Extract printed text or handwriting to searchable text",
-      route: "compress/ocr",
-      hub: "ai",
-    },
-  ];
-}
+const AUDIO_ACTIONS: ActionTuple[] = [
+  ["compress-audio", "Compress Audio", "🎵", "Optimize bitrate, sample rate, and volume normalization", "compress/audio", "compress"],
+  ["convert-audio", "Convert Audio Format", "🔁", "Transcode between MP3, AAC, OGG, Opus, FLAC, and WAV", "convert?cat=audio", "convert"],
+];
 
-/**
- * Build actions palette for Video and Audio.
- */
-function getMediaActions(kind: "video" | "audio"): FileAction[] {
-  if (kind === "video") {
-    return [
-      {
-        id: "compress-video",
-        name: "Compress Video",
-        icon: "🎬",
-        desc: "WebCodecs hardware acceleration and FFmpeg transcoding",
-        route: "compress/video",
-        hub: "compress",
-      },
-      {
-        id: "convert-video",
-        name: "Convert Video Format",
-        icon: "🔁",
-        desc: "Transcode to MP4, WebM, MOV, MKV with custom bitrate",
-        route: "convert?cat=video",
-        hub: "convert",
-      },
-      {
-        id: "video-to-gif",
-        name: "Convert to Animated GIF",
-        icon: "🎞️",
-        desc: "Two-pass palettegen Bayer dithering GIF conversion",
-        route: "compress/gif",
-        hub: "compress",
-      },
-      {
-        id: "repair-video",
-        name: "Repair Corrupt Video",
-        icon: "🩹",
-        desc: "Recover missing/truncated MOOV atom in MP4/MOV recordings",
-        route: "pdf-suite/repair?type=video",
-        hub: "pdf",
-      },
-    ];
-  }
-
-  return [
-    {
-      id: "compress-audio",
-      name: "Compress Audio",
-      icon: "🎵",
-      desc: "Optimize bitrate, sample rate, and volume normalization",
-      route: "compress/audio",
-      hub: "compress",
-    },
-    {
-      id: "convert-audio",
-      name: "Convert Audio Format",
-      icon: "🔁",
-      desc: "Transcode between MP3, AAC, OGG, Opus, FLAC, and WAV",
-      route: "convert?cat=audio",
-      hub: "convert",
-    },
-  ];
-}
+const GENERIC_ACTIONS: ActionTuple[] = [
+  ["repair-general", "Attempt File Repair", "🩹", "Scan for salvageable streams and reconstructed headers", "pdf/repair", "pdf"],
+  ["convert-general", "Convert Format", "🔁", "Convert media or document container", "convert", "convert"],
+];
 
 /**
  * Universal detector: takes a File and optional pre-read header bytes,
@@ -491,63 +268,31 @@ export function detectFileTypeAndActions(
   headerBytes?: Uint8Array,
 ): DetectionResult {
   const name = file.name.toLowerCase();
-  const ext = name.split(".").pop() ?? "";
+  const ext = (name.split(".").pop() ?? "") as "docx" | "pptx" | "xlsx";
   const headerCategory = headerBytes ? identifyHeader(headerBytes) : "unknown";
 
   // Check PDF
   if (
     headerCategory === "pdf" ||
     file.type === "application/pdf" ||
-    ext === "pdf"
+    name.endsWith(".pdf")
   ) {
     return {
       category: "pdf",
       label: "PDF Document",
       mime: "application/pdf",
-      actions: getPdfActions(),
+      actions: buildActions(PDF_ACTION_DEFS),
     };
   }
 
   // Check Office formats
-  if (
-    ext === "docx" ||
-    file.type ===
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-  ) {
+  if (ext in OFFICE_CONFIGS) {
+    const cfg = OFFICE_CONFIGS[ext];
     return {
-      category: "docx",
-      label: "Microsoft Word Document",
-      mime:
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      actions: getOfficeActions("docx"),
-    };
-  }
-
-  if (
-    ext === "pptx" ||
-    file.type ===
-      "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-  ) {
-    return {
-      category: "pptx",
-      label: "PowerPoint Presentation",
-      mime:
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-      actions: getOfficeActions("pptx"),
-    };
-  }
-
-  if (
-    ext === "xlsx" ||
-    file.type ===
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-  ) {
-    return {
-      category: "xlsx",
-      label: "Excel Spreadsheet",
-      mime:
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      actions: getOfficeActions("xlsx"),
+      category: ext,
+      label: cfg.label,
+      mime: cfg.mime,
+      actions: buildActions(cfg.actions),
     };
   }
 
@@ -563,7 +308,7 @@ export function detectFileTypeAndActions(
       category: "image",
       label: "Image File",
       mime: file.type || "image/jpeg",
-      actions: getImageActions(),
+      actions: buildActions(IMAGE_ACTIONS),
     };
   }
 
@@ -577,7 +322,7 @@ export function detectFileTypeAndActions(
       category: "video",
       label: "Video File",
       mime: file.type || "video/mp4",
-      actions: getMediaActions("video"),
+      actions: buildActions(VIDEO_ACTIONS),
     };
   }
 
@@ -591,7 +336,7 @@ export function detectFileTypeAndActions(
       category: "audio",
       label: "Audio File",
       mime: file.type || "audio/mpeg",
-      actions: getMediaActions("audio"),
+      actions: buildActions(AUDIO_ACTIONS),
     };
   }
 
@@ -600,24 +345,7 @@ export function detectFileTypeAndActions(
     category: "unknown",
     label: "Generic File",
     mime: file.type || "application/octet-stream",
-    actions: [
-      {
-        id: "repair-general",
-        name: "Attempt File Repair",
-        icon: "🩹",
-        desc: "Scan for salvageable streams and reconstructed headers",
-        route: "pdf-suite/repair",
-        hub: "pdf",
-      },
-      {
-        id: "convert-general",
-        name: "Convert Format",
-        icon: "🔁",
-        desc: "Convert media or document container",
-        route: "convert",
-        hub: "convert",
-      },
-    ],
+    actions: buildActions(GENERIC_ACTIONS),
   };
 }
 

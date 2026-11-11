@@ -3,11 +3,16 @@
  *
  * Provides cryptographic PDF encryption (AES-256/128), decryption,
  * xref reconstruction, linearization, and corruption repair.
- * Lazy loaded on demand.
+ * Lazy loaded on demand using version-locked audited ESM and WASM assets.
  */
 
 let _qpdfModule: any = null;
 let _loadPromise: Promise<any> | null = null;
+
+export const QPDF_ESM_URL =
+  "https://cdn.jsdelivr.net/npm/@neslinesli93/qpdf-wasm@0.3.0/+esm";
+export const QPDF_WASM_URL =
+  "https://cdn.jsdelivr.net/npm/@neslinesli93/qpdf-wasm@0.3.0/dist/qpdf.wasm";
 
 export interface QpdfStatus {
   loaded: boolean;
@@ -18,36 +23,52 @@ export function isQpdfLoaded(): boolean {
   return _qpdfModule !== null;
 }
 
+export function resetQpdfForTesting(): void {
+  _qpdfModule = null;
+  _loadPromise = null;
+}
+
+export function setQpdfInstance(instance: any): void {
+  _qpdfModule = instance;
+}
+
 /**
- * Lazy load QPDF WebAssembly module from CDN.
+ * Lazy load QPDF WebAssembly module with version-locked audited assets.
  */
-export async function getQpdf(): Promise<any> {
+export async function getQpdf(customLoader?: () => Promise<any>): Promise<any> {
   if (_qpdfModule) return _qpdfModule;
   if (_loadPromise) return _loadPromise;
 
   _loadPromise = (async () => {
     try {
-      const QPDF_URL = "https://cdn.jsdelivr.net/npm/@neslinesli93/qpdf-wasm@0.3.0/dist/qpdf.js";
-      if (typeof window !== "undefined") {
-        if (!(window as any).createQPDF) {
-          await new Promise<void>((resolve, reject) => {
-            const script = document.createElement("script");
-            script.src = QPDF_URL;
-            script.onload = () => resolve();
-            script.onerror = () => reject(new Error("Failed to load QPDF WASM library"));
-            document.head.appendChild(script);
-          });
-        }
-        const createQPDF = (window as any).createQPDF;
-        if (typeof createQPDF === "function") {
-          _qpdfModule = await createQPDF();
-          return _qpdfModule;
-        }
+      if (customLoader) {
+        _qpdfModule = await customLoader();
+        return _qpdfModule;
       }
-      throw new Error("createQPDF is not available in current environment");
-    } catch (err) {
+
+      // Check if pre-configured on window
+      if (typeof window !== "undefined" && (window as any).qpdfModule) {
+        _qpdfModule = (window as any).qpdfModule;
+        return _qpdfModule;
+      }
+
+      // Load version-locked ESM module
+      const mod = await import(/* @vite-ignore */ QPDF_ESM_URL);
+      const initQpdf = mod.default || mod;
+      if (typeof initQpdf === "function") {
+        _qpdfModule = await initQpdf({
+          locateFile: () => QPDF_WASM_URL,
+          noInitialRun: true,
+        });
+        return _qpdfModule;
+      }
+      throw new Error("QPDF module does not export an initializer function");
+    } catch (err: any) {
       _loadPromise = null;
-      throw err;
+      throw new Error(
+        `[qpdfWasm] Failed to load QPDF module: ${err?.message || err}`,
+        { cause: err },
+      );
     }
   })();
 
@@ -60,7 +81,11 @@ export async function getQpdf(): Promise<any> {
 export async function runQpdfCommand(
   args: string[],
   inputFiles: { name: string; data: Uint8Array }[],
-): Promise<{ outputFiles: { name: string; data: Uint8Array }[]; stdout: string; exitCode: number }> {
+): Promise<{
+  outputFiles: { name: string; data: Uint8Array }[];
+  stdout: string;
+  exitCode: number;
+}> {
   const qpdf = await getQpdf();
 
   // Write input files to WASM memory virtual FS
