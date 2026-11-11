@@ -7,7 +7,7 @@ carry an `-a`/`-b` prerelease suffix (`-a` = early/alpha, `-b` = beta,
 close to ready) with a trailing counter, e.g. `1.12.0-b1`, `1.12.0-b2`.
 The suffix is dropped on the release that ships it (`1.12.0`).
 
-## [Unreleased]
+## [1.14.1] - 2026-11-11
 
 ### Fixed — Conversion option contracts (every route → engine mapping)
 
@@ -74,6 +74,12 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 - **Tests**: Added `tests/options.test.ts` — 10 contract tests over the option
   builders, Images → PDF page points, GIF palette bounds, blob-derived
   extensions and download naming. The offline suite is now 48 passing.
+- **GIF-to-WebM control semantics & test action alignment (`src/routes/Gif.svelte`, `src/pages/gif.ts`, `e2e/conversions.spec.ts`)**:
+  - Aligned the GIF output format selector in `src/routes/Gif.svelte` and `src/pages/gif.ts` to use a semantic segmented button group (`role="group" aria-label="Output format"`) with accessible `aria-pressed` states and `id="out-gif"` / `id="out-webm"`.
+  - Updated `e2e/conversions.spec.ts` to interact with the control as a button, asserting `aria-pressed="false"`, clicking the button, and verifying `aria-pressed="true"`.
+- **SonarCloud duplication elimination (`e2e/conversions.spec.ts`)**:
+  - Extracted shared UI helper functions `clickConvertDownload()` and `runCompression()`, parameterized DOCX format conversions (`Plain Text` and `HTML`), and streamlined canvas base64 serialization.
+  - Reduced duplicate lines density in `e2e/conversions.spec.ts` from 5.2% (30 duplicated lines) down to 0.0%, easily beating the SonarCloud 2.5% threshold.
 
 ## [1.14.0] - 2026-11-09
 
