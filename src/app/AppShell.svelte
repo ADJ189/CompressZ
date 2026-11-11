@@ -82,7 +82,7 @@
       <Privacy />
     {:else if activeRoute === "settings"}
       <Settings />
-    {:else if activeRoute === "pdf" || activeRoute.startsWith("pdf/")}
+    {:else if activeRoute === "pdf" || activeRoute.startsWith("pdf/") || activeRoute.startsWith("pdf-suite/") || activeRoute === "pdf-suite"}
       <PdfSuite />
     {:else}
       <Home />

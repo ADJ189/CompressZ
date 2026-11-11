@@ -17,7 +17,7 @@
 
   const TABS = [
     { route: "", label: "Home", icon: "🏠" },
-    { route: "compress/pdf", label: "PDF Suite", icon: "📄", badge: "Studio" },
+    { route: "pdf", label: "PDF Suite", icon: "📄", badge: "Studio" },
     { route: "convert", label: "Convert", icon: "🔁" },
     { route: "compress/images", label: "Compress", icon: "🗜️" },
     { route: "compress/ocr", label: "AI & OCR", icon: "🔍" },
@@ -30,12 +30,12 @@
     if (norm === tabRoute) return true;
 
     // PDF Suite Hub matching
-    if (tabRoute === "compress/pdf") {
+    if (tabRoute === "pdf") {
       if (
-        norm === "compress/pdf" ||
-        norm === "compress/merge-pdf" ||
-        norm === "compress/images-to-pdf" ||
-        norm.startsWith("pdf")
+        norm === "pdf" ||
+        norm.startsWith("pdf/") ||
+        norm.startsWith("pdf-suite") ||
+        norm === "compress/pdf"
       ) {
         return true;
       }
