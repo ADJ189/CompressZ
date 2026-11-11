@@ -139,14 +139,29 @@
       />
     </div>
 
-    <label class="cz-checkbox-label">
-      <input
-        type="checkbox"
-        checked={state.gifToVideo}
-        onchange={(e) => updateStore({ gifToVideo: (e.target as HTMLInputElement).checked })}
-      />
-      <span>Convert to WebM (Up to 90% smaller)</span>
-    </label>
+    <div class="cz-setting-item">
+      <span class="cz-setting-label">Output</span>
+      <div class="seg" role="group" aria-label="Output format">
+        <button
+          type="button"
+          class={!state.gifToVideo ? "on" : ""}
+          aria-pressed={!state.gifToVideo}
+          id="out-gif"
+          onclick={() => updateStore({ gifToVideo: false })}
+        >
+          Optimised GIF
+        </button>
+        <button
+          type="button"
+          class={state.gifToVideo ? "on" : ""}
+          aria-pressed={state.gifToVideo}
+          id="out-webm"
+          onclick={() => updateStore({ gifToVideo: true })}
+        >
+          Convert to WebM
+        </button>
+      </div>
+    </div>
 
     <div class="cz-setting-item">
       <label class="cz-setting-label" for="gif-w">Max Width</label>
@@ -233,13 +248,5 @@
   }
   .cz-range {
     width: 110px;
-  }
-  .cz-checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 0.45rem;
-    font-size: 0.86rem;
-    color: var(--text-2);
-    cursor: pointer;
   }
 </style>
