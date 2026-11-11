@@ -20,7 +20,7 @@ export interface PdfToImagesResult {
 
 export async function pdfToImages(
   file: File,
-  format: "png" | "jpeg",
+  format: "png" | "jpeg" | "webp",
   dpi: number,
   onProgress?: (pct: number) => void,
 ): Promise<PdfToImagesResult> {
@@ -30,8 +30,13 @@ export async function pdfToImages(
   const scale = dpi / 72;
   const total = doc.numPages;
   const pages: { name: string; data: Uint8Array }[] = [];
-  const ext = format === "jpeg" ? "jpg" : "png";
-  const mime = format === "jpeg" ? "image/jpeg" : "image/png";
+  const ext = format === "jpeg" ? "jpg" : format;
+  const mime =
+    format === "jpeg"
+      ? "image/jpeg"
+      : format === "webp"
+        ? "image/webp"
+        : "image/png";
   const base = file.name.replace(/\.pdf$/i, "");
 
   for (let i = 1; i <= total; i++) {
@@ -44,7 +49,7 @@ export async function pdfToImages(
     c.width = w;
     c.height = h;
     const ctx = get2D(c, "pdf", { alpha: format === "png" });
-    if (format === "jpeg") {
+    if (format !== "png") {
       ctx.fillStyle = "#fff";
       ctx.fillRect(0, 0, w, h);
     }
