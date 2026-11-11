@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { openPdfDocument, getPdfLib } from "../lib/pdfLibs";
+  import type { RedactionRegion } from "../lib/pdfTools/redactPdf";
   import SignaturePad from "./SignaturePad.svelte";
 
   interface Props {
@@ -227,6 +228,8 @@
     const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
     const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
+    const trueRedactionRegions: RedactionRegion[] = [];
+
     for (let p = 1; p <= totalPages; p++) {
       const pageAnns = annotations[p] || [];
       if (pageAnns.length === 0) continue;
@@ -244,12 +247,14 @@
             color: rgb(0.9, 0.1, 0.1),
           });
         } else if (ann.type === "redact") {
-          page.drawRectangle({
+          // Collect as true redaction region to permanently purge underlying vectors & text
+          trueRedactionRegions.push({
+            pageIndex: p - 1,
             x: ann.x,
             y: height - ann.y - ann.height,
             width: ann.width,
             height: ann.height,
-            color: rgb(0, 0, 0),
+            overlayText: "[REDACTED]",
           });
         } else if (ann.type === "stamp" && ann.dataUrl) {
           const imgBytes = Uint8Array.from(atob(ann.dataUrl.split(",")[1]), (c) => c.charCodeAt(0));
@@ -264,7 +269,16 @@
       }
     }
 
-    const modified = await pdfDoc.save();
+    let modified = await pdfDoc.save();
+
+    // If true redactions exist, apply irreversible raster burn-in to sanitize document
+    if (trueRedactionRegions.length > 0) {
+      const { applyTrueRedaction } = await import("../lib/pdfTools/redactPdf");
+      modified = await applyTrueRedaction(modified, {
+        regions: trueRedactionRegions,
+      });
+    }
+
     onExport(modified);
   }
 
