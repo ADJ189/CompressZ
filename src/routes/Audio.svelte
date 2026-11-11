@@ -3,7 +3,9 @@
   import FileQueue from "../components/FileQueue.svelte";
   import { audioStore, type AudioState } from "../store";
   import { compressAudio } from "../lib/compressAudio";
-  import { uid, type FileEntry, type AudioFormat } from "../lib/types";
+  import { audioOptions } from "../lib/options";
+  import { runScheduled } from "../lib/resourceManager";
+  import { uid, type FileEntry, type AudioFormat, outputFilename } from "../lib/types";
   import { toast } from "../toast";
 
   let state = $state<AudioState>(audioStore.get());
@@ -42,11 +44,10 @@
     });
 
     try {
-      const res = await compressAudio(entry.file, {
-        format: state.fmt,
-        bitrate: state.bitrate,
-        stripMeta: state.stripMeta,
-      });
+      const res = await runScheduled(
+        { kind: "audio", label: entry.name, bytes: entry.file.size },
+        () => compressAudio(entry.file, audioOptions(state)),
+      );
 
       updateStore({
         files: state.files.map((f) =>
@@ -91,10 +92,11 @@
     if (!entry.compressedBlob) return;
     const url = URL.createObjectURL(entry.compressedBlob);
     const a = document.createElement("a");
-    const ext = state.fmt === "aac" ? "m4a" : state.fmt;
-    const base = entry.name.replace(/\.[^/.]+$/, "");
     a.href = url;
-    a.download = `${base}-compressed.${ext}`;
+    a.download = outputFilename(entry.name, entry.compressedBlob, {
+      suffix: "-compressed",
+      fallbackExt: state.fmt,
+    });
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   }

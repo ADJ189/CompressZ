@@ -3,7 +3,9 @@
   import FileQueue from "../components/FileQueue.svelte";
   import { gifStore, type GifState } from "../store";
   import { compressGif } from "../lib/compressGif";
-  import { uid, type FileEntry } from "../lib/types";
+  import { gifOptions } from "../lib/options";
+  import { runScheduled } from "../lib/resourceManager";
+  import { uid, type FileEntry, outputFilename } from "../lib/types";
   import { toast } from "../toast";
 
   let state = $state<GifState>(gifStore.get());
@@ -42,12 +44,10 @@
     });
 
     try {
-      const res = await compressGif(entry.file, {
-        quality: state.quality,
-        gifToVideo: state.gifToVideo,
-        maxWidth: state.maxWidth > 0 ? state.maxWidth : undefined,
-        fps: state.fps > 0 ? state.fps : undefined,
-      });
+      const res = await runScheduled(
+        { kind: "gif", label: entry.name, bytes: entry.file.size },
+        () => compressGif(entry.file, gifOptions(state)),
+      );
 
       updateStore({
         files: state.files.map((f) =>
@@ -92,10 +92,11 @@
     if (!entry.compressedBlob) return;
     const url = URL.createObjectURL(entry.compressedBlob);
     const a = document.createElement("a");
-    const ext = state.gifToVideo ? "mp4" : "gif";
-    const base = entry.name.replace(/\.[^/.]+$/, "");
     a.href = url;
-    a.download = `${base}-compressed.${ext}`;
+    a.download = outputFilename(entry.name, entry.compressedBlob, {
+      suffix: "-compressed",
+      fallbackExt: "gif",
+    });
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   }
@@ -120,7 +121,7 @@
   <div class="cz-tool-header">
     <h1 class="cz-tool-title">GIF Optimizer</h1>
     <p class="cz-tool-desc">
-      Compress animated GIFs using lossy LZW table optimization or convert to efficient MP4 video.
+      Compress animated GIFs using lossy LZW table optimization or convert to efficient WebM video.
     </p>
   </div>
 
@@ -144,7 +145,7 @@
         checked={state.gifToVideo}
         onchange={(e) => updateStore({ gifToVideo: (e.target as HTMLInputElement).checked })}
       />
-      <span>Convert to MP4 (Up to 90% smaller)</span>
+      <span>Convert to WebM (Up to 90% smaller)</span>
     </label>
 
     <div class="cz-setting-item">

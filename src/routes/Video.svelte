@@ -3,7 +3,9 @@
   import FileQueue from "../components/FileQueue.svelte";
   import { videoStore, type VideoState } from "../store";
   import { compressVideo } from "../lib/compressVideo";
-  import { uid, type FileEntry, type VideoCodec } from "../lib/types";
+  import { videoOptions } from "../lib/options";
+  import { runScheduled } from "../lib/resourceManager";
+  import { uid, type FileEntry, type VideoCodec, outputFilename } from "../lib/types";
   import { toast } from "../toast";
 
   let state = $state<VideoState>(videoStore.get());
@@ -42,14 +44,10 @@
     });
 
     try {
-      const res = await compressVideo(entry.file, {
-        codec: state.codec,
-        preset: state.preset,
-        crf: state.crfQuality,
-        bitrate: state.mode === "bitrate" ? state.bitrate : undefined,
-        maxWidth: state.maxWidth > 0 ? state.maxWidth : undefined,
-        fps: state.fps > 0 ? state.fps : undefined,
-      });
+      const res = await runScheduled(
+        { kind: "video", label: entry.name, bytes: entry.file.size },
+        () => compressVideo(entry.file, videoOptions(state)),
+      );
 
       updateStore({
         files: state.files.map((f) =>
@@ -94,10 +92,11 @@
     if (!entry.compressedBlob) return;
     const url = URL.createObjectURL(entry.compressedBlob);
     const a = document.createElement("a");
-    const ext = state.codec.includes("vp") ? "webm" : "mp4";
-    const base = entry.name.replace(/\.[^/.]+$/, "");
     a.href = url;
-    a.download = `${base}-compressed.${ext}`;
+    a.download = outputFilename(entry.name, entry.compressedBlob, {
+      suffix: "-compressed",
+      fallbackExt: state.codec.includes("vp") ? "webm" : "mp4",
+    });
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   }
@@ -137,7 +136,7 @@
         onchange={(e) => updateStore({ codec: (e.target as HTMLSelectElement).value as VideoCodec })}
       >
         <option value="h264">H.264 (MP4, Universal)</option>
-        <option value="hevc">H.265 / HEVC (MP4, High efficiency)</option>
+        <option value="h265">H.265 / HEVC (MP4, High efficiency)</option>
         <option value="vp9">VP9 (WebM)</option>
         <option value="av1">AV1 (MP4, Next-gen)</option>
       </select>

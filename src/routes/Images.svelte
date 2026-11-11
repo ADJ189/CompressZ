@@ -3,7 +3,9 @@
   import FileQueue from "../components/FileQueue.svelte";
   import { imageStore, type ImageState } from "../store";
   import { compressImage } from "../lib/compressImage";
-  import { uid, type FileEntry, type ImageFormat, formatBytes } from "../lib/types";
+  import { imageOptions } from "../lib/options";
+  import { runScheduled } from "../lib/resourceManager";
+  import { uid, type FileEntry, type ImageFormat, formatBytes, outputFilename } from "../lib/types";
   import { toast } from "../toast";
   import {
     recommendFor,
@@ -104,7 +106,7 @@
   async function handleAiSmartSort() {
     if (state.files.length < 2) return;
     isAiSorting = true;
-    toast("Organizing files with on-device AI...", "info");
+    toast("Organizing files with on-device AI...");
     try {
       const rawFiles = state.files.map((f) => f.file);
       const tier: AiModelTier = (settings.ai?.modelTier as AiModelTier) ?? "efficient";
@@ -140,12 +142,10 @@
     });
 
     try {
-      const res = await compressImage(entry.file, {
-        quality: state.quality,
-        format: state.format,
-        maxDim: state.maxDim,
-        targetSizeKB: state.mode === "targetSize" ? state.targetSizeKB : undefined,
-      });
+      const res = await runScheduled(
+        { kind: "image", label: entry.name, bytes: entry.file.size },
+        () => compressImage(entry.file, imageOptions(state)),
+      );
 
       updateStore({
         files: state.files.map((f) =>
@@ -190,10 +190,11 @@
     if (!entry.compressedBlob) return;
     const url = URL.createObjectURL(entry.compressedBlob);
     const a = document.createElement("a");
-    const ext = state.format === "image/webp" ? "webp" : state.format === "image/avif" ? "avif" : state.format === "image/jpeg" ? "jpg" : "png";
-    const base = entry.name.replace(/\.[^/.]+$/, "");
     a.href = url;
-    a.download = `${base}-compressed.${ext}`;
+    a.download = outputFilename(entry.name, entry.compressedBlob, {
+      suffix: "-compressed",
+      fallbackExt: "webp",
+    });
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   }
