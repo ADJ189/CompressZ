@@ -28,6 +28,30 @@ export async function imagesToPdf(
   onProgress?: (pct: number) => void,
 ): Promise<Blob> {
   if (!files.length) throw new Error("Add at least one image");
+  // Fail loudly on a caller/contract mismatch instead of letting pdf-lib throw
+  // its internal "`width` must be of type `number`" later. This exact crash
+  // happened when a route passed the page-size *id* ("auto") where PDF points
+  // were expected.
+  if (options.pageSize !== undefined) {
+    const { w, h } = options.pageSize;
+    if (
+      typeof w !== "number" ||
+      typeof h !== "number" ||
+      !Number.isFinite(w) ||
+      !Number.isFinite(h) ||
+      w <= 0 ||
+      h <= 0
+    ) {
+      throw new Error(
+        `imagesToPdf: pageSize must be { w, h } in PDF points, got ${JSON.stringify(options.pageSize)}`,
+      );
+    }
+  }
+  if (options.quality !== undefined && !Number.isFinite(options.quality)) {
+    throw new Error(
+      `imagesToPdf: quality must be a number between 0 and 1, got ${String(options.quality)}`,
+    );
+  }
   const quality = Math.max(0.01, Math.min(0.99, options.quality ?? 0.92));
   // Same global resource-limit clamp as compressImage.ts — whichever is
   // smaller of the tool's own maxDim (default: no cap) and the manual
@@ -107,7 +131,7 @@ function encodeJpeg(
   c: HTMLCanvasElement | OffscreenCanvas,
   quality: number,
 ): Promise<ArrayBuffer> {
-  if (c instanceof OffscreenCanvas) {
+  if (typeof OffscreenCanvas !== "undefined" && c instanceof OffscreenCanvas) {
     return c
       .convertToBlob({ type: "image/jpeg", quality })
       .then((b) => b.arrayBuffer());

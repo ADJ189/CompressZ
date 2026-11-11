@@ -427,7 +427,7 @@ function encode(
   fmt: string,
   q: number,
 ): Promise<Blob> {
-  if (c instanceof OffscreenCanvas)
+  if (typeof OffscreenCanvas !== "undefined" && c instanceof OffscreenCanvas)
     return c.convertToBlob({ type: fmt, quality: q });
   return new Promise((res, rej) =>
     (c as HTMLCanvasElement).toBlob(
