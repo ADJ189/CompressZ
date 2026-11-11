@@ -4,10 +4,13 @@
  * Parses SpreadsheetML worksheets and shared strings from the OOXML container
  * using in-memory zip.ts, generates a structured HTML table representation,
  * and compiles into PDF via htmlToPdf. 100% offline, zero server uploads.
+ * Includes complete HTML escaping to eliminate XSS executable sinks.
  */
 
 import { readZip, zipSupported } from "../zip";
 import { htmlToPdf } from "../convertOffice";
+import { escapeHtml } from "./common";
+export { escapeHtml };
 
 export interface ExcelToPdfOptions {
   onProgress?: (pct: number) => void;
@@ -15,11 +18,54 @@ export interface ExcelToPdfOptions {
 }
 
 /**
+ * Decode XML entities to raw text characters.
+ */
+function decodeXmlEntities(raw: string): string {
+  if (typeof DOMParser !== "undefined") {
+    try {
+      const doc = new DOMParser().parseFromString(
+        `<root>${raw}</root>`,
+        "text/xml",
+      );
+      return doc.documentElement?.textContent ?? raw;
+    } catch {
+      // Fallback to manual replacement
+    }
+  }
+  return raw
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
+/**
  * Extract shared strings table from xl/sharedStrings.xml.
  */
 export function parseSharedStringsXml(xmlStr: string): string[] {
+  if (typeof DOMParser !== "undefined") {
+    try {
+      const doc = new DOMParser().parseFromString(xmlStr, "application/xml");
+      const siNodes = doc.getElementsByTagName("si");
+      if (siNodes && siNodes.length > 0) {
+        const result: string[] = [];
+        for (let i = 0; i < siNodes.length; i++) {
+          const tNodes = siNodes[i].getElementsByTagName("t");
+          let str = "";
+          for (let j = 0; j < tNodes.length; j++) {
+            str += tNodes[j].textContent || "";
+          }
+          result.push(str);
+        }
+        return result;
+      }
+    } catch {
+      // Fallback to regex
+    }
+  }
+
   const strings: string[] = [];
-  // Match <si>...</si> entries and extract text from <t>
   const siRegex = /<si\b[^>]*>(.*?)<\/si>/gs;
   let match: RegExpExecArray | null;
 
@@ -30,7 +76,7 @@ export function parseSharedStringsXml(xmlStr: string): string[] {
     let combined = "";
 
     while ((tMatch = tRegex.exec(siContent)) !== null) {
-      combined += tMatch[1];
+      combined += decodeXmlEntities(tMatch[1]);
     }
     strings.push(combined);
   }
@@ -41,15 +87,18 @@ export function parseSharedStringsXml(xmlStr: string): string[] {
 /**
  * Parse a worksheet XML string into a 2D string grid.
  */
-export function parseWorksheetXml(xmlStr: string, sharedStrings: string[]): string[][] {
+export function parseWorksheetXml(
+  xmlStr: string,
+  sharedStrings: string[],
+): string[][] {
   const grid: string[][] = [];
   const rowRegex = /<row\b[^>]*r="(\d+)"[^>]*>(.*?)<\/row>/gs;
   let rowMatch: RegExpExecArray | null;
 
   while ((rowMatch = rowRegex.exec(xmlStr)) !== null) {
-    const _rowNum = parseInt(rowMatch[1], 10);
     const rowContent = rowMatch[2];
-    const cellRegex = /<c\b[^>]*r="([A-Z]+)\d+"(?:[^>]*t="([^"]*)")?[^>]*>(.*?)<\/c>/gs;
+    const cellRegex =
+      /<c\b[^>]*r="([A-Z]+)\d+"(?:[^>]*t="([^"]*)")?[^>]*>(.*?)<\/c>/gs;
     let cMatch: RegExpExecArray | null;
     const rowCells: { col: number; val: string }[] = [];
 
@@ -74,10 +123,10 @@ export function parseWorksheetXml(xmlStr: string, sharedStrings: string[]): stri
         }
       } else if (type === "inlineStr") {
         const tMatch = /<t\b[^>]*>(.*?)<\/t>/.exec(cellBody);
-        val = tMatch ? tMatch[1] : "";
+        val = tMatch ? decodeXmlEntities(tMatch[1]) : "";
       } else {
         const vMatch = /<v>(.*?)<\/v>/.exec(cellBody);
-        val = vMatch ? vMatch[1] : "";
+        val = vMatch ? decodeXmlEntities(vMatch[1]) : "";
       }
 
       rowCells.push({ col: colIdx, val });
@@ -97,12 +146,12 @@ export function parseWorksheetXml(xmlStr: string, sharedStrings: string[]): stri
 }
 
 /**
- * Convert 2D cell grid into a clean, printable HTML table string.
+ * Convert 2D cell grid into a clean, printable, and XSS-safe HTML table string.
  */
 export function gridToHtmlTable(grid: string[][], title?: string): string {
   let html = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;padding:20px;">`;
   if (title) {
-    html += `<h2 style="margin-bottom:16px;color:#1e293b;">${title}</h2>`;
+    html += `<h2 style="margin-bottom:16px;color:#1e293b;">${escapeHtml(title)}</h2>`;
   }
 
   html += `<table style="border-collapse:collapse;width:100%;font-size:12px;text-align:left;">`;
@@ -111,11 +160,16 @@ export function gridToHtmlTable(grid: string[][], title?: string): string {
     const row = grid[r];
     const isHeader = r === 0;
     const tag = isHeader ? "th" : "td";
-    const bg = isHeader ? "background:#f1f5f9;font-weight:600;color:#0f172a;" : r % 2 === 1 ? "background:#f8fafc;" : "background:#ffffff;";
+    const bg = isHeader
+      ? "background:#f1f5f9;font-weight:600;color:#0f172a;"
+      : r % 2 === 1
+        ? "background:#f8fafc;"
+        : "background:#ffffff;";
 
     html += `<tr style="${bg}">`;
     for (const cell of row) {
-      html += `<${tag} style="border:1px solid #cbd5e1;padding:6px 10px;word-break:break-word;">${cell || "&nbsp;"}</${tag}>`;
+      const safeContent = cell ? escapeHtml(cell) : "&nbsp;";
+      html += `<${tag} style="border:1px solid #cbd5e1;padding:6px 10px;word-break:break-word;">${safeContent}</${tag}>`;
     }
     html += `</tr>`;
   }
@@ -132,7 +186,9 @@ export async function convertExcelToPdf(
   options: ExcelToPdfOptions = {},
 ): Promise<Blob> {
   if (!zipSupported()) {
-    throw new Error("Browser does not support CompressionStream for reading Excel archives.");
+    throw new Error(
+      "Browser does not support CompressionStream for reading Excel archives.",
+    );
   }
   options.onProgress?.(5);
 
@@ -157,7 +213,8 @@ export async function convertExcelToPdf(
   const grid = parseWorksheetXml(sheetXml, sharedStrings);
 
   options.onProgress?.(40);
-  const tableHtml = gridToHtmlTable(grid, options.title || file.name.replace(/\.xlsx$/i, ""));
+  const title = options.title || file.name.replace(/\.xlsx$/i, "");
+  const tableHtml = gridToHtmlTable(grid, title);
 
   return htmlToPdf(tableHtml, options.onProgress, 40);
 }
