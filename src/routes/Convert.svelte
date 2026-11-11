@@ -39,7 +39,46 @@
 
   const platform = $derived(getPlatformInfo());
 
+  function applyQueryParams() {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const qFrom = params.get("from");
+    const qTo = params.get("to");
+    const qType = params.get("type");
+    const qCat = params.get("cat");
+
+    if (qCat && qCat in CATS) {
+      activeCat = qCat as Category;
+    } else if (qType === "pdf-word" || (qFrom === "pdf" && qTo === "docx")) {
+      activeCat = "pdf2office";
+      targetFormat = "docx";
+    } else if (qType === "pdf-excel" || (qFrom === "pdf" && qTo === "xlsx")) {
+      activeCat = "pdf2office";
+      targetFormat = "xlsx";
+    } else if (qType === "pdf-ppt" || (qFrom === "pdf" && qTo === "pptx")) {
+      activeCat = "pdf2office";
+      targetFormat = "pptx";
+    } else if (qType === "office-pdf" || (qFrom === "docx" && qTo === "pdf")) {
+      activeCat = "docx";
+      targetFormat = "pdf";
+    } else if (qFrom === "xlsx" && qTo === "pdf") {
+      activeCat = "xlsx";
+      targetFormat = "pdf";
+    } else if (qFrom === "pptx" && qTo === "pdf") {
+      activeCat = "pptx";
+      targetFormat = "pdf";
+    } else if (qFrom === "pdf" && qTo === "images") {
+      activeCat = "pdf2img";
+      targetFormat = "png";
+    } else if (qFrom === "html" || qTo === "html") {
+      activeCat = "html";
+      if (qTo) targetFormat = qTo;
+    }
+  }
+
   onMount(() => {
+    applyQueryParams();
+
     const staged = consumeStagedUniversalFile();
     if (staged?.file) {
       selectedFiles = [staged.file];
@@ -52,6 +91,9 @@
       } else if (staged.actionId === "pdf-to-ppt") {
         activeCat = "pdf2office";
         targetFormat = "pptx";
+      } else if (staged.actionId === "pdf-to-images") {
+        activeCat = "pdf2img";
+        targetFormat = "png";
       } else if (staged.actionId === "docx-to-pdf") {
         activeCat = "docx";
         targetFormat = "pdf";

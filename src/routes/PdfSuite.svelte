@@ -75,7 +75,38 @@
   // Redaction state
   let redactPage = $state<number>(1);
   let redactReason = $state<string>("PII");
+  let redactX = $state<number>(50);
+  let redactY = $state<number>(50);
+  let redactWidth = $state<number>(200);
+  let redactHeight = $state<number>(30);
   let redactionList = $state<RedactionRegion[]>([]);
+
+  function addRedactionRegion() {
+    if (redactPage < 1 || redactPage > (totalPages || 1)) {
+      toast(`Page must be between 1 and ${totalPages || 1}`, "error");
+      return;
+    }
+    redactionList = [
+      ...redactionList,
+      {
+        pageIndex: redactPage - 1,
+        x: Number(redactX) || 0,
+        y: Number(redactY) || 0,
+        width: Math.max(10, Number(redactWidth) || 50),
+        height: Math.max(10, Number(redactHeight) || 20),
+        overlayText: redactReason || undefined,
+      },
+    ];
+    toast(`Added redaction region on page ${redactPage}`, "info");
+  }
+
+  function removeRedactionRegion(index: number) {
+    redactionList = redactionList.filter((_, i) => i !== index);
+  }
+
+  function clearAllRedactions() {
+    redactionList = [];
+  }
 
   // Studio state
   let showStudio = $state<boolean>(false);
@@ -254,6 +285,10 @@
         );
         toast(rep.message, "success");
       } else if (activeTool === "redact") {
+        if (redactionList.length === 0) {
+          toast("Please add at least one redaction region before exporting.", "error");
+          return;
+        }
         const out = await applyTrueRedaction(pdfBytes!, {
           regions: redactionList,
           onProgress: (p) => (progressPct = p),
@@ -274,12 +309,29 @@
   }
 
   onMount(() => {
+    if (typeof window !== "undefined") {
+      const parts = window.location.pathname.split("/").filter(Boolean);
+      const sub = parts[parts.length - 1];
+      if (sub === "split") activeTool = "split";
+      else if (sub === "organize") activeTool = "organize";
+      else if (sub === "crop") activeTool = "crop";
+      else if (sub === "forms") activeTool = "forms";
+      else if (sub === "watermark") activeTool = "watermark";
+      else if (sub === "redact") activeTool = "redact";
+      else if (sub === "protect" || sub === "security") activeTool = "security";
+      else if (sub === "repair") activeTool = "repair";
+      else if (sub === "edit" || sub === "studio" || sub === "sign") activeTool = "studio";
+    }
+
     const staged = consumeStagedUniversalFile();
     if (staged?.file) {
       loadFile(staged.file);
       if (staged.actionId === "split-pdf") activeTool = "split";
       else if (staged.actionId === "organize-pdf") activeTool = "organize";
       else if (staged.actionId === "watermark-pdf") activeTool = "watermark";
+      else if (staged.actionId === "crop-pdf") activeTool = "crop";
+      else if (staged.actionId === "fill-forms") activeTool = "forms";
+      else if (staged.actionId === "redact-pdf") activeTool = "redact";
       else if (staged.actionId === "repair-pdf") activeTool = "repair";
       else if (staged.actionId === "protect-pdf") activeTool = "security";
       else if (staged.actionId === "edit-sign") activeTool = "studio";
@@ -299,6 +351,7 @@
       { id: "watermark", label: "Watermark", icon: "💧" },
       { id: "crop", label: "Crop", icon: "📐" },
       { id: "forms", label: "Forms", icon: "📋" },
+      { id: "redact", label: "Redact", icon: "⬛" },
       { id: "security", label: "Protect", icon: "🔐" },
       { id: "repair", label: "Repair", icon: "🩹" },
     ]}
@@ -713,6 +766,129 @@
                 </button>
               </div>
             </div>
+          {:else if activeTool === "redact"}
+            <div class="cz-panel-section">
+              <div class="cz-section-header">
+                <h3>True Irreversible Redaction</h3>
+                <p>
+                  Permanently destroys vector text and image streams in the marked regions via 300-DPI raster burn-in. Content cannot be recovered or selected.
+                </p>
+              </div>
+
+              <div class="cz-redact-workspace">
+                <div class="cz-redact-controls">
+                  <div class="cz-field-group">
+                    <span class="cz-label">Page Number (1 to {totalPages || 1})</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max={totalPages || 1}
+                      bind:value={redactPage}
+                      class="cz-input"
+                    />
+                  </div>
+
+                  <div class="cz-field-group">
+                    <span class="cz-label">Redaction Reason / Label</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. [REDACTED], PII, CONFIDENTIAL"
+                      bind:value={redactReason}
+                      class="cz-input"
+                    />
+                  </div>
+
+                  <div class="cz-form-grid-2">
+                    <div class="cz-field-group">
+                      <span class="cz-label">X Offset (pt)</span>
+                      <input type="number" min="0" bind:value={redactX} class="cz-input" />
+                    </div>
+                    <div class="cz-field-group">
+                      <span class="cz-label">Y Offset (pt)</span>
+                      <input type="number" min="0" bind:value={redactY} class="cz-input" />
+                    </div>
+                    <div class="cz-field-group">
+                      <span class="cz-label">Width (pt)</span>
+                      <input type="number" min="5" bind:value={redactWidth} class="cz-input" />
+                    </div>
+                    <div class="cz-field-group">
+                      <span class="cz-label">Height (pt)</span>
+                      <input type="number" min="5" bind:value={redactHeight} class="cz-input" />
+                    </div>
+                  </div>
+
+                  <div class="cz-redact-btn-row">
+                    <button
+                      type="button"
+                      class="cz-btn cz-btn-secondary"
+                      onclick={addRedactionRegion}
+                    >
+                      + Add Redaction Region
+                    </button>
+                    <button
+                      type="button"
+                      class="cz-btn cz-btn-outline"
+                      onclick={() => (showStudio = true)}
+                    >
+                      Draw in Studio
+                    </button>
+                  </div>
+                </div>
+
+                <div class="cz-redact-list-pane">
+                  <div class="cz-redact-list-header">
+                    <strong>Staged Regions ({redactionList.length})</strong>
+                    {#if redactionList.length > 0}
+                      <button
+                        type="button"
+                        class="cz-btn cz-btn-subtle cz-btn-sm"
+                        onclick={clearAllRedactions}
+                      >
+                        Clear All
+                      </button>
+                    {/if}
+                  </div>
+
+                  {#if redactionList.length === 0}
+                    <div class="cz-empty-redact-note">
+                      <p>No redaction regions defined yet.</p>
+                      <small>Enter coordinates above or use Draw in Studio to mark areas.</small>
+                    </div>
+                  {:else}
+                    <div class="cz-redactions-table">
+                      {#each redactionList as reg, idx}
+                        <div class="cz-redact-item">
+                          <span class="cz-redact-chip">Page {reg.pageIndex + 1}</span>
+                          <span class="cz-redact-coords">({reg.x}, {reg.y}) {reg.width}×{reg.height}pt</span>
+                          {#if reg.overlayText}
+                            <span class="cz-redact-tag">{reg.overlayText}</span>
+                          {/if}
+                          <button
+                            type="button"
+                            class="cz-redact-del-btn"
+                            aria-label="Remove region"
+                            onclick={() => removeRedactionRegion(idx)}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+                </div>
+              </div>
+
+              <div class="cz-action-footer">
+                <button
+                  type="button"
+                  class="cz-btn cz-btn-primary"
+                  disabled={isProcessing || redactionList.length === 0}
+                  onclick={handleExecuteTool}
+                >
+                  {isProcessing ? "Burning in Redactions…" : "Apply True Redaction & Export"}
+                </button>
+              </div>
+            </div>
           {/if}
         </div>
       </div>
@@ -998,5 +1174,96 @@
   .cz-btn-ghost:hover:not(:disabled) {
     color: var(--text);
     background: var(--surface2);
+  }
+
+  .cz-redact-workspace {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+  @media (max-width: 768px) {
+    .cz-redact-workspace {
+      grid-template-columns: 1fr;
+    }
+  }
+  .cz-redact-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+  .cz-redact-btn-row {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .cz-redact-list-pane {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-height: 380px;
+    overflow-y: auto;
+  }
+  .cz-redact-list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.88rem;
+    color: var(--text);
+  }
+  .cz-empty-redact-note {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--text-3);
+  }
+  .cz-redactions-table {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .cz-redact-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+  }
+  .cz-redact-chip {
+    font-weight: 700;
+    color: var(--text);
+  }
+  .cz-redact-coords {
+    color: var(--text-3);
+    font-family: var(--mono);
+    font-size: 0.75rem;
+  }
+  .cz-redact-tag {
+    background: var(--rose-soft, #fee2e2);
+    color: var(--rose, #dc2626);
+    padding: 0.15rem 0.4rem;
+    border-radius: var(--r-xs);
+    font-size: 0.72rem;
+    font-weight: 600;
+  }
+  .cz-redact-del-btn {
+    background: transparent;
+    border: none;
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--text-3);
+    padding: 0.2rem 0.4rem;
+  }
+  .cz-redact-del-btn:hover {
+    color: var(--rose, #dc2626);
   }
 </style>
