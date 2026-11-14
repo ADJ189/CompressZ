@@ -6,15 +6,14 @@
   import { compressAudio } from "../lib/compressAudio";
   import { compressImage } from "../lib/compressImage";
   import { pdfToImages } from "../lib/convertPdf";
-  import { docxToPdf, docxToText, pptxToPdf, pptxToText, htmlToPdf } from "../lib/convertOffice";
+  import { docxToPdf, docxToText, docxToHtml, pptxToPdf, pptxToText, htmlToPdf } from "../lib/convertOffice";
   import { convertPdfToWord } from "../lib/conversions/pdfToWord";
   import { convertPdfToExcel } from "../lib/conversions/pdfToExcel";
   import { convertPdfToPpt } from "../lib/conversions/pdfToPpt";
-  import { convertExcelToPdf } from "../lib/conversions/excelToPdf";
+  import { convertExcelToPdf, convertExcelToCsv } from "../lib/conversions/excelToPdf";
   import { convertWithLibreOfficeWasm } from "../lib/conversions/libreOfficeWasm";
   import { consumeStagedUniversalFile } from "../store";
   import { imagesToPdf } from "../lib/imagesToPdf";
-  import { docxToPdf, docxToText, docxToHtml, pptxToPdf, pptxToText } from "../lib/convertOffice";
   import { audioOptions, imageOptions } from "../lib/options";
   import { runScheduled } from "../lib/resourceManager";
   import { naturalOrder } from "../lib/recommendations";
@@ -24,8 +23,7 @@
   import { getPlatformInfo } from "../lib/platform";
   import { onMount } from "svelte";
 
-  type Category = "video" | "audio" | "image" | "pdf2office" | "pdf2img" | "docx" | "xlsx" | "pptx" | "html";
-  type Category = "video" | "audio" | "image" | "pdf2img" | "img2pdf" | "docx" | "pptx";
+  type Category = "video" | "audio" | "image" | "pdf2office" | "pdf2img" | "img2pdf" | "docx" | "xlsx" | "pptx" | "html";
 
   let activeCat = $state<Category>("video");
   let selectedFiles = $state<File[]>([]);
@@ -55,6 +53,10 @@
 
     if (qCat && qCat in CATS) {
       activeCat = qCat as Category;
+      targetFormat = CATS[activeCat].targets[0].value;
+      if (qTo && CATS[activeCat].targets.some((t) => t.value === qTo)) {
+        targetFormat = qTo;
+      }
     } else if (qType === "pdf-word" || (qFrom === "pdf" && qTo === "docx")) {
       activeCat = "pdf2office";
       targetFormat = "docx";
@@ -67,18 +69,34 @@
     } else if (qType === "office-pdf" || (qFrom === "docx" && qTo === "pdf")) {
       activeCat = "docx";
       targetFormat = "pdf";
+    } else if (qFrom === "docx" && qTo === "txt") {
+      activeCat = "docx";
+      targetFormat = "txt";
+    } else if (qFrom === "docx" && qTo === "html") {
+      activeCat = "docx";
+      targetFormat = "html";
     } else if (qFrom === "xlsx" && qTo === "pdf") {
       activeCat = "xlsx";
       targetFormat = "pdf";
+    } else if (qFrom === "xlsx" && qTo === "csv") {
+      activeCat = "xlsx";
+      targetFormat = "csv";
     } else if (qFrom === "pptx" && qTo === "pdf") {
       activeCat = "pptx";
       targetFormat = "pdf";
+    } else if (qFrom === "pptx" && qTo === "txt") {
+      activeCat = "pptx";
+      targetFormat = "txt";
     } else if (qFrom === "pdf" && qTo === "images") {
       activeCat = "pdf2img";
       targetFormat = "png";
     } else if (qFrom === "html" || qTo === "html") {
       activeCat = "html";
-      if (qTo) targetFormat = qTo;
+      targetFormat = "pdf";
+    }
+
+    if (CATS[activeCat] && !CATS[activeCat].targets.some((t) => t.value === targetFormat)) {
+      targetFormat = CATS[activeCat].targets[0].value;
     }
   }
 
@@ -103,10 +121,29 @@
       } else if (staged.actionId === "docx-to-pdf") {
         activeCat = "docx";
         targetFormat = "pdf";
+      } else if (staged.actionId === "docx-to-txt") {
+        activeCat = "docx";
+        targetFormat = "txt";
       } else if (staged.actionId === "xlsx-to-pdf") {
         activeCat = "xlsx";
         targetFormat = "pdf";
+      } else if (staged.actionId === "xlsx-to-csv") {
+        activeCat = "xlsx";
+        targetFormat = "csv";
+      } else if (staged.actionId === "pptx-to-pdf") {
+        activeCat = "pptx";
+        targetFormat = "pdf";
+      } else if (staged.actionId === "pptx-to-txt") {
+        activeCat = "pptx";
+        targetFormat = "txt";
+      } else if (staged.actionId === "convert-image") {
+        activeCat = "image";
+        targetFormat = "webp";
       }
+    }
+
+    if (CATS[activeCat] && !CATS[activeCat].targets.some((t) => t.value === targetFormat)) {
+      targetFormat = CATS[activeCat].targets[0].value;
     }
   });
 
@@ -197,6 +234,7 @@
       accept: ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       targets: [
         { value: "pdf", label: "PDF Document" },
+        { value: "csv", label: "CSV (.csv)" },
       ],
     },
     pptx: {
@@ -358,11 +396,18 @@
             } else {
               blob = await docxToPdf(file);
             }
+          } else if (targetFormat === "html") {
+            blob = new Blob([await docxToHtml(file)], { type: "text/html" });
           } else {
             blob = new Blob([await docxToText(file)], { type: "text/plain" });
           }
         } else if (activeCat === "xlsx") {
-          if (selectedEngine === "libreoffice") {
+          if (targetFormat === "csv") {
+            blob = await runScheduled(
+              { kind: "document", label: file.name, bytes: file.size },
+              () => convertExcelToCsv(file),
+            );
+          } else if (selectedEngine === "libreoffice") {
             const bytes = new Uint8Array(await file.arrayBuffer());
             const outBytes = await convertWithLibreOfficeWasm(bytes, "xlsx", "pdf");
             blob = new Blob([new Uint8Array(outBytes)], { type: "application/pdf" });
@@ -384,33 +429,6 @@
         } else if (activeCat === "html") {
           const htmlText = await file.text();
           blob = await htmlToPdf(htmlText);
-            blob = await runScheduled(
-              { kind: "document", label: file.name, bytes: file.size },
-              () => docxToPdf(file),
-            );
-          } else if (targetFormat === "html") {
-            blob = await runScheduled(
-              { kind: "document", label: file.name, bytes: file.size },
-              async () => new Blob([await docxToHtml(file)], { type: "text/html" }),
-            );
-          } else {
-            blob = await runScheduled(
-              { kind: "document", label: file.name, bytes: file.size },
-              async () => new Blob([await docxToText(file)], { type: "text/plain" }),
-            );
-          }
-        } else if (activeCat === "pptx") {
-          if (targetFormat === "pdf") {
-            blob = await runScheduled(
-              { kind: "document", label: file.name, bytes: file.size },
-              () => pptxToPdf(file),
-            );
-          } else {
-            blob = await runScheduled(
-              { kind: "document", label: file.name, bytes: file.size },
-              async () => new Blob([await pptxToText(file)], { type: "text/plain" }),
-            );
-          }
         }
 
         if (blob) {

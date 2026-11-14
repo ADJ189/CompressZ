@@ -11,7 +11,7 @@
   import { inspectPdfForm, fillPdfForm, type FormFieldInfo } from "../lib/pdfTools/formPdf";
   import { applyTrueRedaction, type RedactionRegion } from "../lib/pdfTools/redactPdf";
   import { protectPdf, unlockPdf } from "../lib/pdfTools/securityPdf";
-  import { repairCorruptPdf } from "../lib/pdfTools/repairPdf";
+  import { repairCorruptPdf, inspectAndRepairMp4Moov } from "../lib/pdfTools/repairPdf";
   import { openPdfDocument, getPdfLib } from "../lib/pdfLibs";
   import { consumeStagedUniversalFile } from "../store";
   import { formatBytes } from "../lib/types";
@@ -207,6 +207,10 @@
         );
         toast("Pages reorganized successfully", "success");
       } else if (activeTool === "watermark") {
+        if (!selectedFile?.name.toLowerCase().endsWith(".pdf") && selectedFile?.type !== "application/pdf") {
+          toast("Watermarking is only supported for PDF documents.", "error");
+          return;
+        }
         const out = await applyPdfWatermark(
           pdfBytes!,
           {
@@ -278,12 +282,24 @@
         }
       } else if (activeTool === "repair") {
         const bytes = pdfBytes || new Uint8Array(await selectedFile!.arrayBuffer());
-        const rep = await repairCorruptPdf(bytes, (p) => (progressPct = p));
-        downloadBlob(
-          new Blob([rep.repairedBytes], { type: "application/pdf" }),
-          `repaired-${selectedFile?.name || "document.pdf"}`,
-        );
-        toast(rep.message, "success");
+        const isVideo =
+          selectedFile?.type.startsWith("video/") ||
+          /\.(mp4|mov|m4v)$/i.test(selectedFile?.name || "");
+        if (isVideo) {
+          const rep = inspectAndRepairMp4Moov(bytes);
+          downloadBlob(
+            new Blob([rep.repairedBytes], { type: selectedFile?.type || "video/mp4" }),
+            `repaired-${selectedFile?.name || "video.mp4"}`,
+          );
+          toast(rep.message, rep.fixed ? "success" : "info");
+        } else {
+          const rep = await repairCorruptPdf(bytes, (p) => (progressPct = p));
+          downloadBlob(
+            new Blob([rep.repairedBytes], { type: "application/pdf" }),
+            `repaired-${selectedFile?.name || "document.pdf"}`,
+          );
+          toast(rep.message, "success");
+        }
       } else if (activeTool === "redact") {
         if (redactionList.length === 0) {
           toast("Please add at least one redaction region before exporting.", "error");
