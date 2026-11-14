@@ -2,29 +2,44 @@
   import { currentRoute } from "../store";
   import { navigate } from "../router";
   import { onMount, tick } from "svelte";
+  import MacIcon from "../components/MacIcon.svelte";
+  import ToolsMegaMenu from "../components/ToolsMegaMenu.svelte";
 
   let activeRoute = $state("");
   let scrollContainer: HTMLElement;
   let thumbEl: HTMLElement;
+  let megaMenuOpen = $state(false);
 
   $effect(() => {
     const unsub = currentRoute.subscribe((r) => {
       activeRoute = r;
+      megaMenuOpen = false;
       tick().then(updateThumb);
     });
     return unsub;
   });
 
-  const TABS = [
-    { route: "", label: "Home", icon: "🏠" },
-    { route: "pdf", label: "PDF Suite", icon: "📄", badge: "Studio" },
-    { route: "convert", label: "Convert", icon: "🔁" },
-    { route: "compress/images", label: "Compress", icon: "🗜️" },
-    { route: "compress/ocr", label: "AI & OCR", icon: "🔍" },
-    { route: "docs", label: "Docs", icon: "📖" },
+  interface TabItem {
+    route: string;
+    label: string;
+    icon: string;
+    badge?: string;
+    isDropdown?: boolean;
+    isNew?: boolean;
+  }
+
+  const TABS: TabItem[] = [
+    { route: "", label: "Home", icon: "home" },
+    { route: "tools", label: "Tools", icon: "tools", isDropdown: true },
+    { route: "pdf", label: "PDF Suite", icon: "pdf", badge: "Studio" },
+    { route: "convert", label: "Convert", icon: "convert" },
+    { route: "compress/images", label: "Compress", icon: "compress" },
+    { route: "compress/ocr", label: "AI & OCR", icon: "ocr" },
+    { route: "docs", label: "Docs", icon: "docs" },
   ];
 
   function isRouteActive(tabRoute: string, current: string): boolean {
+    if (tabRoute === "tools") return megaMenuOpen;
     const norm = (current === "" || current === "home") ? "" : current;
     if (tabRoute === "") return norm === "";
     if (norm === tabRoute) return true;
@@ -104,10 +119,18 @@
     });
   }
 
-  function handleTabClick(route: string, e: MouseEvent) {
+  function handleTabClick(tab: TabItem, e: MouseEvent) {
+    if (tab.isDropdown) {
+      e.preventDefault();
+      megaMenuOpen = !megaMenuOpen;
+      tick().then(updateThumb);
+      return;
+    }
+
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
-    navigate(route);
+    megaMenuOpen = false;
+    navigate(tab.route);
   }
 
   onMount(() => {
@@ -118,28 +141,49 @@
 </script>
 
 <nav id="tabbar" class="cz-tabbar" aria-label="Tool navigation">
-  <div class="cz-tabbar-scroll" bind:this={scrollContainer}>
-    <span class="cz-tabbar-thumb" bind:this={thumbEl} aria-hidden="true"></span>
+  <div class="cz-tabbar-center">
+    <div class="cz-tabbar-scroll" bind:this={scrollContainer}>
+      <span class="cz-tabbar-thumb" bind:this={thumbEl} aria-hidden="true"></span>
 
-    {#each TABS as tab}
-      {@const active = isRouteActive(tab.route, activeRoute)}
-      <a
-        href="/{tab.route}"
-        class="cz-tab {active ? 'is-active active' : ''}"
-        data-tab
-        data-nav={tab.route}
-        aria-label={tab.label}
-        onclick={(e) => handleTabClick(tab.route, e)}
-      >
-        <span class="cz-tab-icon" aria-hidden="true">{tab.icon}</span>
-        <span class="cz-tab-label">{tab.label}</span>
-        {#if tab.isNew}
-          <span class="cz-tab-badge">New</span>
+      {#each TABS as tab}
+        {@const active = isRouteActive(tab.route, activeRoute)}
+        {#if tab.isDropdown}
+          <button
+            type="button"
+            class="cz-tab cz-tab-dropdown {active ? 'is-active active' : ''}"
+            aria-label="All features & tools"
+            aria-expanded={megaMenuOpen}
+            aria-haspopup="dialog"
+            onclick={(e) => handleTabClick(tab, e)}
+          >
+            <span class="cz-tab-icon"><MacIcon name={tab.icon} size={15} /></span>
+            <span class="cz-tab-label">{tab.label}</span>
+            <span class="cz-tab-chevron" class:is-open={megaMenuOpen}>
+              <MacIcon name="chevron-down" size={11} />
+            </span>
+          </button>
+        {:else}
+          <a
+            href="/{tab.route}"
+            class="cz-tab {active ? 'is-active active' : ''}"
+            data-tab
+            data-nav={tab.route}
+            aria-label={tab.label}
+            onclick={(e) => handleTabClick(tab, e)}
+          >
+            <span class="cz-tab-icon"><MacIcon name={tab.icon} size={15} /></span>
+            <span class="cz-tab-label">{tab.label}</span>
+            {#if tab.badge}
+              <span class="cz-tab-badge">{tab.badge}</span>
+            {/if}
+          </a>
         {/if}
-      </a>
-    {/each}
+      {/each}
+    </div>
   </div>
 </nav>
+
+<ToolsMegaMenu open={megaMenuOpen} onClose={() => { megaMenuOpen = false; tick().then(updateThumb); }} />
 
 <style>
   .cz-tabbar {
@@ -151,19 +195,29 @@
     height: var(--tabbar-h);
     display: flex;
     align-items: center;
+    justify-content: center;
+    width: 100%;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+  .cz-tabbar-center {
+    width: 100%;
+    max-width: 1040px;
+    display: flex;
+    justify-content: center;
+    padding: 0 0.75rem;
   }
   .cz-tabbar-scroll {
     position: relative;
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 0.35rem;
-    padding: 0 1rem;
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: none;
     -ms-overflow-style: none;
     height: 100%;
-    width: 100%;
   }
   .cz-tabbar-scroll::-webkit-scrollbar {
     display: none;
@@ -184,7 +238,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.45rem;
-    padding: 0.35rem 0.8rem;
+    padding: 0.35rem 0.85rem;
     height: 33px;
     font-size: 0.85rem;
     font-weight: 500;
@@ -194,6 +248,8 @@
     transition: color var(--t), background var(--t), border-color var(--t), box-shadow var(--t);
     text-decoration: none;
     border: 1px solid transparent;
+    cursor: pointer;
+    background: transparent;
   }
   .cz-tab:hover {
     color: var(--text);
@@ -207,7 +263,20 @@
     box-shadow: 0 1px 6px var(--accent-glow);
   }
   .cz-tab-icon {
-    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .cz-tab-chevron {
+    display: flex;
+    align-items: center;
+    transition: transform var(--t);
+    opacity: 0.7;
+    margin-left: -0.1rem;
+  }
+  .cz-tab-chevron.is-open {
+    transform: rotate(180deg);
+    opacity: 1;
   }
   .cz-tab-badge {
     padding: 0.05rem 0.35rem;
@@ -216,5 +285,11 @@
     font-weight: 600;
     background: var(--accent);
     color: #ffffff;
+  }
+  @media (max-width: 768px) {
+    .cz-tabbar-scroll {
+      justify-content: flex-start;
+      width: 100%;
+    }
   }
 </style>
