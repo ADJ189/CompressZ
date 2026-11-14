@@ -48,9 +48,8 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  // Eight local Chromium workers overloaded constrained machines and produced
-  // 30s timeouts in mobile tests; two is plenty for a smoke suite this size.
-  workers: process.env.CI ? 4 : 2,
+  // Capped at max 3 workers as requested for balanced concurrency and zero timeout flakes
+  workers: process.env.PW_WORKERS ? Number(process.env.PW_WORKERS) : 3,
   reporter: process.env.CI ? [["github"], ["list"]] : "list",
   use: {
     baseURL: BASE_URL,

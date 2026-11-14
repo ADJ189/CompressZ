@@ -20,6 +20,20 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 - Preserve submitted settings and file order in queued conversions, and schedule DOCX HTML/text and PPTX text jobs.
 - Match PDF image output metadata to encoded bytes, correct video CRF slider direction, and clean up FFmpeg loading resources with a bounded initialization timeout.
 
+## [1.15.0] - 2026-11-14
+
+### Added
+- **Mac-Inspired Vector Iconography (`MacIcon.svelte`)**: Replaced raw unicode emojis across navigation, header, tools dialog, and workbench with authentic Apple SF-Symbols style vector glyphs and macOS squircle gradient badges.
+- **Centered Top Toolbar (`Navigation.svelte`)**: Re-oriented the top navigation bar to be center-aligned with balanced spacing, frosted acrylic glassmorphism, and a smooth sliding active pill indicator.
+- **Interactive Tools Mega-Menu (`ToolsMegaMenu.svelte`)**: Added a prominent "Tools" dropdown directly adjacent to "Home", featuring animated squircle feature cards with native CSS spring elevation, real-time search filter, and category groupings (PDF Suite, Media Compression, Format Conversions, AI & OCR).
+- **Advanced Standalone PDF to Markdown (`pdfToMarkdown.ts`, `PdfMarkdown.svelte`)**:
+  - Standalone `.md` download is now the primary default action, exporting clean text, GFM tables, and LaTeX math equations (`$$ ... $$`) directly without requiring a ZIP archive or external images.
+  - Added an Advanced Customization accordion: LaTeX math vs plain text vs HTML formatting, GFM pipe table reconstruction, header/footer filter, YAML frontmatter metadata, and configurable page delimiters.
+- **Deno Tasks & Test Runner Invariants (`deno.json`, `scripts/test.mjs`)**:
+  - Configured Deno tasks (`test`, `test:parallel`, `check`, `e2e`).
+  - Fixed `scripts/test.mjs` with recursive directory walking so all nested TypeScript modules under `src/lib/` are transpiled to `.test-dist`, achieving 100% test pass rate under both Deno and Node runtimes.
+- **Playwright Concurrency Invariant**: Capped Playwright workers at maximum 3 for balanced multi-process execution.
+
 ## [1.14.1] - 2026-11-11
 
 <!-- /coderabbit-ai-generated:v1 -->
