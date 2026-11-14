@@ -20,7 +20,7 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 - Preserve submitted settings and file order in queued conversions, and schedule DOCX HTML/text and PPTX text jobs.
 - Match PDF image output metadata to encoded bytes, correct video CRF slider direction, and clean up FFmpeg loading resources with a bounded initialization timeout.
 
-## [1.16.0] - 2026-11-14
+## [1.15.0] - 2026-11-14
 
 ### Added
 - **Multi-File Compression & Archive Engines (`archives.ts`, `tar.ts`)**: Built native Web Streams multi-file archiving with zero external dependencies. Supports `.tar.gz`, `.tgz`, `.gz`, `.tar`, and `.zip` with 64 KiB streaming chunking, CRC-32 integrity checks, and browser memory guards.
@@ -33,26 +33,30 @@ The suffix is dropped on the release that ships it (`1.12.0`).
   - Added automatic Cache API caching (`compressz-engines-v1`) for QPDF WASM and models for instant offline reloads.
 - **Top Navigation "Tools" Tab Distinct Border**: Gave `.cz-tab-dropdown` on the navigation shelf a prominent glowing Apple brand border and squircle badge for immediate discovery.
 - **Universal Upload Button Everywhere (`UniversalUpload.svelte`)**: Modernized into an authentic glassmorphic squircle pill with spring elevation, drag pulsing aura, touch target $\ge 44\text{px}$, DPR 1x vs 2x Retina styling, Chromium/WebKit/Gecko engine tuning, and reduced-motion floor. Integrated into Header, Home Hero cluster, HubHeader, and ToolsDialog.
-
-### Fixed
-- **CodeQL High Security Warning (`router.ts:39`)**: Neutralized unvalidated dynamic method call vulnerability by enforcing regex route validation and registered handler existence checks before invocation.
-- **SonarCloud ReDoS Regular Expression Backtracking**:
-  - `repairPdf.ts:30`: Bounded object scanner regex to `/\b(\d{1,10}) (\d{1,5}) obj\b/g` (SonarCloud issue `AaHGVmdXqaoFdu8catgT`).
-  - `pdfToMarkdown.ts:314, 367, 402`: Neutralized super-linear backtracking in pipe table and running header filters (SonarCloud issues `AaHaHOeBH6_68wC1rlgT`, `AaHaHOeBH6_68wC1rlgS`).
-- **Unbounded Loop Execution (`splitPdf.ts:53-72`)**: Clamped start and end page bounds to `totalPages`, skipping out-of-bounds ranges and preventing unbounded execution on massive inputs like `1-1000000000`. Added regression test in `tests/splitPdf.test.ts`.
-- **Redaction UI & Engine Property Sync (`PdfSuite.svelte`, `redactPdf.ts`)**: Standardized on `reason` across UI region creation, inspector tags, and canvas rasterization, retaining `overlayText` as backward-compatible alias.
-- **Mounted Route & Staged File Reactivity (`Convert.svelte`, `PdfSuite.svelte`)**: Added Svelte 5 `$effect` subscribers listening to `currentRoute` and `consumeStagedUniversalFile()` so already-mounted views reactively reinitialize upon navigation and staged file drops.
-- **Dependency Pinning (`package.json`)**: Locked `"basic-ftp": "^6.2.3"` in `overrides` to secure `get-uri` without triggering npm downgrade of `@lhci/cli` from 0.16.0 to 0.13.0.
-
-## [1.15.0] - 2026-11-14
-
-### Added
 - **Mac-Inspired Vector Iconography (`MacIcon.svelte`)**: Replaced raw unicode emojis across navigation, header, tools dialog, and workbench with authentic Apple SF-Symbols style vector glyphs and macOS squircle gradient badges.
 - **Centered Top Toolbar (`Navigation.svelte`)**: Re-oriented the top navigation bar to be center-aligned with balanced spacing, frosted acrylic glassmorphism, and a smooth sliding active pill indicator.
 - **Interactive Tools Mega-Menu (`ToolsMegaMenu.svelte`)**: Added a prominent "Tools" dropdown directly adjacent to "Home", featuring animated squircle feature cards with native CSS spring elevation, real-time search filter, and category groupings (PDF Suite, Media Compression, Format Conversions, AI & OCR).
 - **Advanced Standalone PDF to Markdown (`pdfToMarkdown.ts`, `PdfMarkdown.svelte`)**:
   - Standalone `.md` download is now the primary default action, exporting clean text, GFM tables, and LaTeX math equations (`$$ ... $$`) directly without requiring a ZIP archive or external images.
   - Added an Advanced Customization accordion: LaTeX math vs plain text vs HTML formatting, GFM pipe table reconstruction, header/footer filter, YAML frontmatter metadata, and configurable page delimiters.
+
+### Fixed
+- **CodeQL High Security Warning (`router.ts:39`)**: Neutralized unvalidated dynamic method call vulnerability by enforcing regex route validation and registered handler existence checks before invocation.
+- **SonarCloud ReDoS Regular Expression Backtracking**:
+  - `repairPdf.ts:30`: Bounded object scanner regex to `/\b(\d{1,10}) (\d{1,5}) obj\b/g` (SonarCloud issue `AaHGVmdXqaoFdu8catgT`).
+  - `pdfToMarkdown.ts:314, 367, 402`: Neutralized super-linear backtracking in pipe table and running header filters (SonarCloud issues `AaHaHOeBH6_68wC1rlgT`, `AaHaHOeBH6_68wC1rlgS`).
+  - `pdfToMarkdown.ts:407`: Replaced formula backtick stripping regex with deterministic linear character scanning (SonarCloud issue `AaHaawGyHSNS_W3eqGDd`).
+- **SonarCloud Floating Promise Handlers**:
+  - `archives.ts:109`: Awaited decompressor stream writer inside try/catch block (SonarCloud issue `AaHaawGgHSNS_W3eqGDc`).
+  - `qpdfWasm.ts:62`: Explicitly marked non-blocking Cache API write with `void` operator (SonarCloud issue `AaHaawE3HSNS_W3eqGDb`).
+- **CSV Formula Injection Mitigation (`excelToPdf.ts`)**: Neutralized spreadsheet cells beginning with `=`, `+`, `-`, or `@` (including leading whitespace and control characters) with a single-quote prefix.
+- **Zip Bomb & Decompression Guard (`zip.ts`)**: Enforced strict per-entry (64MB) and aggregate (256MB) inflation limits in `readZip` to prevent denial-of-service via malformed archives.
+- **PDF Page Splitting Integrity (`splitPdf.ts`, `organizePdf.ts`)**: Enforced `/^\d+$/` token validation rejecting `2foo` and `1e2`, and flattened form fields (`form.flatten()`) to preserve interactive form input.
+- **PDF Canvas Editor Lifecycle & Transforms (`PdfCanvasEditor.svelte`)**: Cancelled in-flight PDF.js rendering tasks, converted touch/mouse listeners to unified pointer events with `touch-action: none`, and implemented rotation-aware vector export.
+- **Unbounded Loop Execution (`splitPdf.ts:53-72`)**: Clamped start and end page bounds to `totalPages`, skipping out-of-bounds ranges and preventing unbounded execution on massive inputs like `1-1000000000`. Added regression test in `tests/splitPdf.test.ts`.
+- **Redaction UI & Engine Property Sync (`PdfSuite.svelte`, `redactPdf.ts`)**: Standardized on `reason` across UI region creation, inspector tags, and canvas rasterization, retaining `overlayText` as backward-compatible alias.
+- **Mounted Route & Staged File Reactivity (`Convert.svelte`, `PdfSuite.svelte`)**: Added Svelte 5 `$effect` subscribers listening to `currentRoute` and `consumeStagedUniversalFile()` so already-mounted views reactively reinitialize upon navigation and staged file drops.
+- **Dependency Pinning (`package.json`)**: Locked `"basic-ftp": "^6.2.3"` in `overrides` to secure `get-uri` without triggering npm downgrade of `@lhci/cli` from 0.16.0 to 0.13.0.
 - **Deno Tasks & Test Runner Invariants (`deno.json`, `scripts/test.mjs`)**:
   - Configured Deno tasks (`test`, `test:parallel`, `check`, `e2e`).
   - Fixed `scripts/test.mjs` with recursive directory walking so all nested TypeScript modules under `src/lib/` are transpiled to `.test-dist`, achieving 100% test pass rate under both Deno and Node runtimes.

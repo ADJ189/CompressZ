@@ -55,9 +55,9 @@ first use and cached by your browser thereafter. Full attribution and
 licenses for all of these are in [CREDITS.md](CREDITS.md); the
 privacy-relevant summary is:
 
-- **FFmpeg.wasm** — loaded from `esm.sh` (video/audio/GIF). The CDN serves
+- **FFmpeg.wasm** — loaded from `cdn.jsdelivr.net` (video/audio/GIF). The CDN serves
   the JavaScript wrapper, core scripts, worker, and WebAssembly binaries; no
-  file data is sent to esm.sh.
+  file data is sent to jsDelivr.
 - **Mediabunny** — loaded from `esm.sh` only when the browser supports
   WebCodecs and the requested output codec configuration is encodable
   (video fast path). It demuxes and muxes media in-memory; no file data is
