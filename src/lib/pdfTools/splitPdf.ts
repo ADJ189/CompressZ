@@ -73,9 +73,12 @@ export function parsePageRanges(
         groups.push(group);
       }
     } else {
-      const single = Number.parseInt(part, 10);
-      if (Number.isNaN(single) || single <= 0) {
+      if (!/^\d+$/.test(part)) {
         throw new Error(`Invalid page number "${part}".`);
+      }
+      const single = Number.parseInt(part, 10);
+      if (single <= 0) {
+        throw new Error(`Page numbers must be 1 or greater (got "${part}").`);
       }
       if (single <= totalPages) {
         groups.push([single - 1]);
@@ -148,6 +151,16 @@ export async function splitPdf(
 
   const baseName = (options.baseFilename || "document").replace(/\.pdf$/i, "");
   const outputFiles: SplitOutputFile[] = [];
+
+  // Flatten interactive form fields if present to permanently preserve appearance
+  try {
+    const form = srcDoc.getForm();
+    if (form && form.getFields().length > 0) {
+      form.flatten();
+    }
+  } catch {
+    // If PDF has no AcroForm or flattening fails, proceed with raw pages
+  }
 
   for (let i = 0; i < plannedGroups.length; i++) {
     const group = plannedGroups[i];

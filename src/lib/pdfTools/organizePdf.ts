@@ -60,6 +60,17 @@ export async function reorganizePdf(
 
   const { PDFDocument, degrees } = await getPdfLib();
   const srcDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+
+  // Flatten interactive form fields if present to permanently preserve appearance
+  try {
+    const form = srcDoc.getForm();
+    if (form && form.getFields().length > 0) {
+      form.flatten();
+    }
+  } catch {
+    // If PDF has no AcroForm or flattening fails, proceed with raw pages
+  }
+
   const newDoc = await PDFDocument.create();
 
   // Distinct indices to copy from srcDoc

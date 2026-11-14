@@ -70,14 +70,17 @@ export async function renderSanitizedRasterPage(
     viewport,
   }).promise;
 
-  // Burn in permanent opaque redaction blocks
+  // Burn in permanent opaque redaction blocks using viewport transform
   ctx.save();
   for (const r of redactions) {
-    // Convert PDF bottom-left coordinates to Canvas top-left coordinates
-    const canvasX = r.x * scale;
-    const canvasY = (page.view[3] - r.y - r.height) * scale;
-    const canvasW = r.width * scale;
-    const canvasH = r.height * scale;
+    // Convert PDF coordinates to Canvas viewport coordinates via PDF.js transform
+    // (correctly accounts for MediaBox origin, rotation, and DPI scaling)
+    const [p1x, p1y] = viewport.convertToViewportPoint(r.x, r.y + r.height);
+    const [p2x, p2y] = viewport.convertToViewportPoint(r.x + r.width, r.y);
+    const canvasX = Math.min(p1x, p2x);
+    const canvasY = Math.min(p1y, p2y);
+    const canvasW = Math.abs(p2x - p1x);
+    const canvasH = Math.abs(p2y - p1y);
 
     ctx.fillStyle = "#000000";
     ctx.fillRect(canvasX, canvasY, canvasW, canvasH);
@@ -108,8 +111,8 @@ export async function renderSanitizedRasterPage(
 
   return {
     pngBytes,
-    widthPt: page.view[2] - page.view[0],
-    heightPt: page.view[3] - page.view[1],
+    widthPt: viewport.width / scale,
+    heightPt: viewport.height / scale,
   };
 }
 

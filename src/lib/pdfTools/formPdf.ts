@@ -143,6 +143,12 @@ export async function fillPdfForm(
       } else if (field instanceof PDFDropdown && typeof value === "string") {
         field.select(value);
       } else if (field instanceof PDFRadioGroup && typeof value === "string") {
+        const validOptions = field.getOptions();
+        if (validOptions.length > 0 && !validOptions.includes(value)) {
+          throw new Error(
+            `Invalid radio option "${value}" for field "${name}". Valid options: ${validOptions.join(", ")}`,
+          );
+        }
         field.select(value);
       }
     } catch (err) {

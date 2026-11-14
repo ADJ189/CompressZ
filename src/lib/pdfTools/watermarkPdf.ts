@@ -87,6 +87,35 @@ export function resolveTargetPages(
 }
 
 /**
+ * Sanitize input text so all characters can be safely encoded by StandardFonts (WinAnsi).
+ * Characters outside Windows-1252 (e.g. Cyrillic, CJK, Arabic, Emoji) are safely replaced with '?'
+ * to prevent pdf-lib encoding exceptions.
+ */
+export function sanitizeWinAnsi(str: string): string {
+  let res = "";
+  for (const ch of str) {
+    const code = ch.codePointAt(0) ?? 0;
+    if (code >= 0x20 && code <= 0x7e) {
+      res += ch;
+    } else if (code >= 0xa0 && code <= 0xff) {
+      res += ch;
+    } else if (
+      [
+        0x20ac, 0x201a, 0x0192, 0x201e, 0x2026, 0x2020, 0x2021, 0x02c6,
+        0x2030, 0x0160, 0x2039, 0x0152, 0x017d, 0x2018, 0x2019, 0x201c,
+        0x201d, 0x2022, 0x2013, 0x2014, 0x02dc, 0x2122, 0x0161, 0x203a,
+        0x0153, 0x017e, 0x0178,
+      ].includes(code)
+    ) {
+      res += ch;
+    } else {
+      res += "?";
+    }
+  }
+  return res.trim() || "WATERMARK";
+}
+
+/**
  * Apply watermark to a PDF document buffer.
  */
 export async function applyPdfWatermark(
@@ -124,9 +153,14 @@ export async function applyPdfWatermark(
     embeddedFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   }
 
-  const text = options.text?.trim() || "CONFIDENTIAL";
+  const rawText = options.text?.trim() || "CONFIDENTIAL";
+  const safeText = sanitizeWinAnsi(rawText);
   const fontSize = options.fontSize ?? 42;
   const color = hexToRgb01(options.colorHex || "#666666");
+
+  const rad = (rotation * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
 
   for (let i = 0; i < targetIndices.length; i++) {
     const pageIndex = targetIndices[i];
@@ -137,21 +171,32 @@ export async function applyPdfWatermark(
     for (const pos of positions) {
       if (embeddedImage) {
         const imgDims = embeddedImage.scale(0.5);
+        // Rotate around image visual center
+        const uc = imgDims.width / 2;
+        const vc = imgDims.height / 2;
+        const x0 = pos.x - (uc * cos - vc * sin);
+        const y0 = pos.y - (uc * sin + vc * cos);
+
         page.drawImage(embeddedImage, {
-          x: pos.x - imgDims.width / 2,
-          y: pos.y - imgDims.height / 2,
+          x: x0,
+          y: y0,
           width: imgDims.width,
           height: imgDims.height,
           opacity,
           rotate: degrees(rotation),
         });
       } else {
-        const textWidth = embeddedFont.widthOfTextAtSize(text, fontSize);
+        const textWidth = embeddedFont.widthOfTextAtSize(safeText, fontSize);
         const textHeight = embeddedFont.heightAtSize(fontSize);
-        // Center text box around position
-        page.drawText(text, {
-          x: pos.x - textWidth / 2,
-          y: pos.y - textHeight / 4,
+        // Rotate around text visual center
+        const uc = textWidth / 2;
+        const vc = textHeight / 3;
+        const x0 = pos.x - (uc * cos - vc * sin);
+        const y0 = pos.y - (uc * sin + vc * cos);
+
+        page.drawText(safeText, {
+          x: x0,
+          y: y0,
           size: fontSize,
           font: embeddedFont,
           color: rgb(color.r, color.g, color.b),

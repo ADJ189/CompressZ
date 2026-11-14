@@ -29,9 +29,19 @@ export interface UnlockPdfOptions {
   onProgress?: (pct: number) => void;
 }
 
+function generateSecureOwnerPassword(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    const bytes = new Uint8Array(24);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  }
+  return `cz_owner_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
 /**
  * Pure calculation: compile QPDF command-line encryption arguments.
  * Enforces AES-256 as standard default; strictly adds --use-aes=y for 128-bit.
+ * Generates distinct owner password when only user password is provided.
  */
 export function buildQpdfEncryptionArgs(
   options: ProtectPdfOptions,
@@ -39,7 +49,10 @@ export function buildQpdfEncryptionArgs(
   outputFile: string = "out.pdf",
 ): string[] {
   const userPass = options.userPassword || "";
-  const ownerPass = options.ownerPassword || options.userPassword || "owner";
+  let ownerPass = options.ownerPassword;
+  if (!ownerPass) {
+    ownerPass = userPass ? generateSecureOwnerPassword() : "owner";
+  }
   
   // Default to 256-bit AES (PDF 2.0 V=5, R=6)
   const is128 = options.standard === "aes-128" || options.keyLength === 128;
@@ -76,6 +89,11 @@ export function buildQpdfEncryptionArgs(
 
   if (options.allowAnnotations === false) {
     args.push("--annotate=n");
+  }
+
+  // If AES-256 R5 compatibility standard requested, add --force-R5 before '--'
+  if (options.standard === "aes-256-r5" && !is128) {
+    args.push("--force-R5");
   }
 
   args.push("--", inputFile, outputFile);
