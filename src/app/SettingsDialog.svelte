@@ -6,11 +6,13 @@
     updateSettings,
     resetSettings,
     defaultSettings,
+    deviceDefaultSettings,
     resolveExecutionProfile,
     resolvedConcurrency,
     type AppSettings as Settings,
     type ResourceMode,
   } from "../lib/settings";
+  import { syncEngineSettingsToStores } from "../store";
   import { getThemePreference, setThemePreference, THEME_EVENT } from "../lib/theme";
   import {
     clearDismissedRecommendations,
@@ -89,6 +91,7 @@
           video: { ...s.engines.video, ...(patch.engines.video ?? {}) },
           audio: { ...s.engines.audio, ...(patch.engines.audio ?? {}) },
         };
+        syncEngineSettingsToStores();
       }
     });
     settings = getSettings();
@@ -282,6 +285,7 @@
                   class="cz-btn cz-btn-danger cz-btn-sm cz-btn-pill"
                   onclick={() => {
                     resetSettings();
+                    syncEngineSettingsToStores();
                     settings = getSettings();
                     resetArmed = false;
                     toast("All settings reset to defaults", "success");
@@ -537,8 +541,9 @@
                 type="button"
                 class="cz-btn cz-btn-secondary cz-btn-sm cz-btn-pill"
                 onclick={() => {
-                  const def = defaultSettings();
+                  const def = deviceDefaultSettings();
                   saveChanges({ engines: def.engines });
+                  syncEngineSettingsToStores();
                   toast("Reset engine configurations to device defaults", "success");
                 }}
               >
