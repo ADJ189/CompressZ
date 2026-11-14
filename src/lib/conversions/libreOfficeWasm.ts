@@ -112,6 +112,13 @@ export async function loadLibreOfficeWasm(
 }
 
 /**
+ * Returns whether a self-hosted LibreOffice WASM environment is available in this runtime.
+ */
+export function isLibreOfficeAvailable(): boolean {
+  return typeof window !== "undefined" && Boolean((window as any).libreOfficeWasm);
+}
+
+/**
  * Convert an office document using Desktop-Grade LibreOffice WASM.
  */
 export async function convertWithLibreOfficeWasm(
@@ -135,14 +142,29 @@ export async function convertWithLibreOfficeWasm(
   }
 
   if (typeof instance.run === "function") {
-    const result = await instance.run([
-      "--headless",
-      "--convert-to",
-      targetExt.replace(/^\./, ""),
-      "input." + inputExt.replace(/^\./, ""),
-    ]);
-    onProgress?.(100, "Done");
-    return result;
+    if (!instance.FS || typeof instance.FS.writeFile !== "function") {
+      throw new Error("LibreOffice WASM instance does not expose an Emscripten FS interface.");
+    }
+    const cleanIn = inputExt.replace(/^\./, "");
+    const cleanOut = targetExt.replace(/^\./, "");
+    const inPath = `input.${cleanIn}`;
+    const outPath = `input.${cleanOut}`;
+
+    try {
+      instance.FS.writeFile(inPath, fileBytes);
+      await instance.run([
+        "--headless",
+        "--convert-to",
+        cleanOut,
+        inPath,
+      ]);
+      const outData = instance.FS.readFile(outPath);
+      onProgress?.(100, "Done");
+      return new Uint8Array(outData);
+    } finally {
+      try { instance.FS.unlink(inPath); } catch { /* ignore unlink error */ }
+      try { instance.FS.unlink(outPath); } catch { /* ignore unlink error */ }
+    }
   }
 
   throw new Error(

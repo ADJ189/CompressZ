@@ -198,35 +198,43 @@ export async function convertPdfToExcel(
   options.onProgress?.(10);
 
   const pdfDoc = await openPdfDocument(bytes);
-  const numPages = pdfDoc.numPages;
-  const masterGrid: string[][] = [];
+  let xlsxBytes: Uint8Array;
+  try {
+    const numPages = pdfDoc.numPages;
+    const masterGrid: string[][] = [];
 
-  for (let i = 1; i <= numPages; i++) {
-    const page = await pdfDoc.getPage(i);
-    const textContent = await page.getTextContent();
+    for (let i = 1; i <= numPages; i++) {
+      const page = await pdfDoc.getPage(i);
+      const textContent = await page.getTextContent();
 
-    const items = textContent.items.map((it: any) => ({
-      str: it.str,
-      x: it.transform[4],
-      y: it.transform[5],
-      w: it.width,
-      h: it.height,
-    }));
+      const items = textContent.items.map((it: any) => ({
+        str: it.str,
+        x: it.transform[4],
+        y: it.transform[5],
+        w: it.width,
+        h: it.height,
+      }));
 
-    const pageGrid = clusterTextIntoGrid(items, options.toleranceY ?? 5);
-    if (pageGrid.length > 0) {
-      if (masterGrid.length > 0) {
-        // Blank row separator between pages
-        masterGrid.push([`--- Page ${i} ---`]);
+      const pageGrid = clusterTextIntoGrid(items, options.toleranceY ?? 5);
+      if (pageGrid.length > 0) {
+        if (masterGrid.length > 0) {
+          // Blank row separator between pages
+          masterGrid.push([`--- Page ${i} ---`]);
+        }
+        masterGrid.push(...pageGrid);
       }
-      masterGrid.push(...pageGrid);
+
+      const pct = Math.round(15 + (i / numPages) * 70);
+      options.onProgress?.(pct);
     }
 
-    const pct = Math.round(15 + (i / numPages) * 70);
-    options.onProgress?.(pct);
+    xlsxBytes = await packageXlsx(masterGrid);
+  } finally {
+    if (pdfDoc && typeof pdfDoc.destroy === "function") {
+      await pdfDoc.destroy().catch(() => {});
+    }
   }
 
-  const xlsxBytes = await packageXlsx(masterGrid);
   options.onProgress?.(100);
 
   return new Blob([new Uint8Array(xlsxBytes)], {

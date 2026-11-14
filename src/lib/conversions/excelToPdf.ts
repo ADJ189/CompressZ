@@ -86,32 +86,48 @@ export function parseSharedStringsXml(xmlStr: string): string[] {
 
 /**
  * Parse a worksheet XML string into a 2D string grid.
+ * Safely handles rows and cells whether or not explicit 'r' references are present.
  */
 export function parseWorksheetXml(
   xmlStr: string,
   sharedStrings: string[],
 ): string[][] {
   const grid: string[][] = [];
-  const rowRegex = /<row\b[^>]*r="(\d+)"[^>]*>(.*?)<\/row>/gs;
+  const rowRegex = /<row\b([^>]*)>(.*?)<\/row>/gs;
   let rowMatch: RegExpExecArray | null;
+  let fallbackRowIdx = 0;
 
   while ((rowMatch = rowRegex.exec(xmlStr)) !== null) {
+    const rowAttrs = rowMatch[1];
     const rowContent = rowMatch[2];
-    const cellRegex =
-      /<c\b[^>]*r="([A-Z]+)\d+"(?:[^>]*t="([^"]*)")?[^>]*>(.*?)<\/c>/gs;
+
+    const rAttrMatch = /\br="(\d+)"/.exec(rowAttrs);
+    const rowIdx = rAttrMatch ? Number.parseInt(rAttrMatch[1], 10) - 1 : fallbackRowIdx;
+    fallbackRowIdx = Math.max(fallbackRowIdx + 1, rowIdx + 1);
+
+    const cellRegex = /<c\b([^>]*)>(.*?)<\/c>/gs;
     let cMatch: RegExpExecArray | null;
     const rowCells: { col: number; val: string }[] = [];
+    let fallbackColIdx = 0;
 
     while ((cMatch = cellRegex.exec(rowContent)) !== null) {
-      const colLetters = cMatch[1];
-      const type = cMatch[2];
-      const cellBody = cMatch[3];
+      const cellAttrs = cMatch[1];
+      const cellBody = cMatch[2];
 
-      let colIdx = 0;
-      for (let i = 0; i < colLetters.length; i++) {
-        colIdx = colIdx * 26 + (colLetters.charCodeAt(i) - 64);
+      const cellRMatch = /\br="([A-Z]+)\d*"/.exec(cellAttrs);
+      let colIdx = fallbackColIdx;
+      if (cellRMatch) {
+        const colLetters = cellRMatch[1];
+        let computed = 0;
+        for (let i = 0; i < colLetters.length; i++) {
+          computed = computed * 26 + (colLetters.charCodeAt(i) - 64);
+        }
+        colIdx = computed - 1; // 0-based
       }
-      colIdx -= 1; // 0-based
+      fallbackColIdx = Math.max(fallbackColIdx + 1, colIdx + 1);
+
+      const typeMatch = /\bt="([^"]*)"/.exec(cellAttrs);
+      const type = typeMatch ? typeMatch[1] : "";
 
       let val = "";
       if (type === "s") {
@@ -138,7 +154,10 @@ export function parseWorksheetXml(
       for (const c of rowCells) {
         cells[c.col] = c.val;
       }
-      grid.push(cells);
+      while (grid.length <= rowIdx) {
+        grid.push([]);
+      }
+      grid[rowIdx] = cells;
     }
   }
 
@@ -180,6 +199,7 @@ export function gridToHtmlTable(grid: string[][], title?: string): string {
 
 /**
  * Convert Excel workbook (.xlsx) to PDF.
+ * Parses all worksheets in the workbook with decompression bounds.
  */
 export async function convertExcelToPdf(
   file: File,
@@ -192,7 +212,11 @@ export async function convertExcelToPdf(
   }
   options.onProgress?.(5);
 
-  const entries = await readZip(await file.arrayBuffer());
+  const entries = await readZip(await file.arrayBuffer(), {
+    maxEntries: 300,
+    maxEntryBytes: 32 * 1024 * 1024,
+    maxAggregateBytes: 128 * 1024 * 1024,
+  });
   options.onProgress?.(20);
 
   // Parse shared strings if present
@@ -203,24 +227,45 @@ export async function convertExcelToPdf(
     sharedStrings = parseSharedStringsXml(sstXml);
   }
 
-  // Parse first worksheet
-  const sheetBytes = entries.get("xl/worksheets/sheet1.xml");
-  if (!sheetBytes) {
+  // Find all worksheet entries
+  const sheetKeys: string[] = [];
+  for (const k of entries.keys()) {
+    if (/^xl\/worksheets\/sheet\d+\.xml$/i.test(k)) {
+      sheetKeys.push(k);
+    }
+  }
+
+  // Sort worksheets by sheet number
+  sheetKeys.sort((a, b) => {
+    const numA = Number.parseInt(a.match(/\d+/)![0], 10);
+    const numB = Number.parseInt(b.match(/\d+/)![0], 10);
+    return numA - numB;
+  });
+
+  if (sheetKeys.length === 0) {
     throw new Error("No worksheet found in Excel file.");
   }
 
-  const sheetXml = new TextDecoder().decode(sheetBytes);
-  const grid = parseWorksheetXml(sheetXml, sharedStrings);
+  const baseTitle = options.title || file.name.replace(/\.xlsx$/i, "");
+  let combinedHtml = "";
+
+  for (let i = 0; i < sheetKeys.length; i++) {
+    const k = sheetKeys[i];
+    const bytes = entries.get(k)!;
+    const sheetXml = new TextDecoder().decode(bytes);
+    const grid = parseWorksheetXml(sheetXml, sharedStrings);
+    const sheetTitle = sheetKeys.length > 1 ? `${baseTitle} — Sheet ${i + 1}` : baseTitle;
+    const pageBreak = i > 0 ? "page-break-before: always; margin-top: 32px;" : "";
+    combinedHtml += `<div style="${pageBreak}">${gridToHtmlTable(grid, sheetTitle)}</div>`;
+  }
 
   options.onProgress?.(40);
-  const title = options.title || file.name.replace(/\.xlsx$/i, "");
-  const tableHtml = gridToHtmlTable(grid, title);
-
-  return htmlToPdf(tableHtml, options.onProgress, 40);
+  return htmlToPdf(combinedHtml, options.onProgress, 40);
 }
 
 /**
  * Convert 2D string grid into RFC 4180-compliant CSV string.
+ * Neutralizes potential CSV formula injection payloads (=, +, -, @).
  */
 export function gridToCsv(grid: string[][]): string {
   return grid
@@ -228,15 +273,30 @@ export function gridToCsv(grid: string[][]): string {
       row
         .map((cell) => {
           if (!cell) return "";
+          let val = cell;
+          // Neutralize cells beginning with formula triggers (=, +, -, @)
+          // including values with leading whitespace or control characters
+          // eslint-disable-next-line no-control-regex
+          const trimmed = val.replace(/^[\s\x00-\x1f]+/, "");
           if (
-            cell.includes('"') ||
-            cell.includes(",") ||
-            cell.includes("\n") ||
-            cell.includes("\r")
+            trimmed.startsWith("=") ||
+            trimmed.startsWith("+") ||
+            trimmed.startsWith("-") ||
+            trimmed.startsWith("@") ||
+            trimmed.startsWith("\t") ||
+            trimmed.startsWith("\r")
           ) {
-            return `"${cell.replace(/"/g, '""')}"`;
+            val = "'" + val;
           }
-          return cell;
+          if (
+            val.includes('"') ||
+            val.includes(",") ||
+            val.includes("\n") ||
+            val.includes("\r")
+          ) {
+            return `"${val.replace(/"/g, '""')}"`;
+          }
+          return val;
         })
         .join(","),
     )
@@ -245,6 +305,7 @@ export function gridToCsv(grid: string[][]): string {
 
 /**
  * Convert Excel workbook (.xlsx) to CSV blob.
+ * Enforces resource bounds against oversized archives and parses all sheets.
  */
 export async function convertExcelToCsv(
   file: File,
@@ -257,7 +318,11 @@ export async function convertExcelToCsv(
   }
   onProgress?.(10);
 
-  const entries = await readZip(await file.arrayBuffer());
+  const entries = await readZip(await file.arrayBuffer(), {
+    maxEntries: 300,
+    maxEntryBytes: 32 * 1024 * 1024,
+    maxAggregateBytes: 128 * 1024 * 1024,
+  });
   onProgress?.(30);
 
   let sharedStrings: string[] = [];
@@ -267,16 +332,39 @@ export async function convertExcelToCsv(
     sharedStrings = parseSharedStringsXml(sstXml);
   }
 
-  const sheetBytes = entries.get("xl/worksheets/sheet1.xml");
-  if (!sheetBytes) {
+  // Find all worksheet entries
+  const sheetKeys: string[] = [];
+  for (const k of entries.keys()) {
+    if (/^xl\/worksheets\/sheet\d+\.xml$/i.test(k)) {
+      sheetKeys.push(k);
+    }
+  }
+  sheetKeys.sort((a, b) => {
+    const numA = Number.parseInt(a.match(/\d+/)![0], 10);
+    const numB = Number.parseInt(b.match(/\d+/)![0], 10);
+    return numA - numB;
+  });
+
+  if (sheetKeys.length === 0) {
     throw new Error("No worksheet found in Excel file.");
   }
 
-  const sheetXml = new TextDecoder().decode(sheetBytes);
-  const grid = parseWorksheetXml(sheetXml, sharedStrings);
-  onProgress?.(80);
+  const masterGrid: string[][] = [];
+  for (let i = 0; i < sheetKeys.length; i++) {
+    const k = sheetKeys[i];
+    const bytes = entries.get(k)!;
+    const sheetXml = new TextDecoder().decode(bytes);
+    const grid = parseWorksheetXml(sheetXml, sharedStrings);
+    if (grid.length > 0) {
+      if (sheetKeys.length > 1 && masterGrid.length > 0) {
+        masterGrid.push([`--- Sheet ${i + 1} ---`]);
+      }
+      masterGrid.push(...grid);
+    }
+  }
 
-  const csv = gridToCsv(grid);
+  onProgress?.(80);
+  const csv = gridToCsv(masterGrid);
   onProgress?.(100);
 
   return new Blob([csv], { type: "text/csv;charset=utf-8" });

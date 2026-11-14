@@ -46,34 +46,40 @@ export async function extractPdfPageBlocks(
 
   onProgress?.(10);
   const pdfDoc = await openPdfDocument(bytes);
-  const numPages = pdfDoc.numPages;
-  const allPageBlocks: ExtractedBlock[][] = [];
+  try {
+    const numPages = pdfDoc.numPages;
+    const allPageBlocks: ExtractedBlock[][] = [];
 
-  for (let i = 1; i <= numPages; i++) {
-    const page = await pdfDoc.getPage(i);
-    const viewport = page.getViewport({ scale: 1.0 });
-    const textContent = await page.getTextContent();
+    for (let i = 1; i <= numPages; i++) {
+      const page = await pdfDoc.getPage(i);
+      const viewport = page.getViewport({ scale: 1.0 });
+      const textContent = await page.getTextContent();
 
-    const rawItems = textContent.items.map((it: any) => ({
-      str: it.str,
-      x: it.transform[4],
-      y: it.transform[5],
-      w: it.width,
-      h: it.height,
-      fontSize: Math.hypot(it.transform[0], it.transform[1]),
-      fontName: it.fontName,
-    }));
+      const rawItems = textContent.items.map((it: any) => ({
+        str: it.str,
+        x: it.transform[4],
+        y: it.transform[5],
+        w: it.width,
+        h: it.height,
+        fontSize: Math.hypot(it.transform[0], it.transform[1]),
+        fontName: it.fontName,
+      }));
 
-    const blocks = reconstructReadingOrder(
-      rawItems,
-      viewport.width,
-      viewport.height,
-    );
-    allPageBlocks.push(blocks);
+      const blocks = reconstructReadingOrder(
+        rawItems,
+        viewport.width,
+        viewport.height,
+      );
+      allPageBlocks.push(blocks);
 
-    const pct = Math.round(15 + (i / numPages) * 70);
-    onProgress?.(pct);
+      const pct = Math.round(15 + (i / numPages) * 70);
+      onProgress?.(pct);
+    }
+
+    return allPageBlocks;
+  } finally {
+    if (pdfDoc && typeof pdfDoc.destroy === "function") {
+      await pdfDoc.destroy().catch(() => {});
+    }
   }
-
-  return allPageBlocks;
 }
