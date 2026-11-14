@@ -7,9 +7,15 @@
 
 import { runQpdfCommand } from "../qpdfWasm";
 
+export type PdfEncryptionStandard =
+  | "aes-256-r6" // PDF 2.0 (V=5, R=6) — Modern Standard (Default & Max Security)
+  | "aes-256-r5" // PDF 1.7 (V=5, R=5) — AES-256-CBC (Acrobat 9+)
+  | "aes-128";    // PDF 1.6 (V=4, R=4) — AES-128 (Legacy Compatible, --use-aes=y enforced)
+
 export interface ProtectPdfOptions {
   userPassword?: string;
   ownerPassword?: string;
+  standard?: PdfEncryptionStandard;
   keyLength?: 128 | 256;
   allowPrinting?: boolean;
   allowCopying?: boolean;
@@ -25,6 +31,7 @@ export interface UnlockPdfOptions {
 
 /**
  * Pure calculation: compile QPDF command-line encryption arguments.
+ * Enforces AES-256 as standard default; strictly adds --use-aes=y for 128-bit.
  */
 export function buildQpdfEncryptionArgs(
   options: ProtectPdfOptions,
@@ -33,7 +40,10 @@ export function buildQpdfEncryptionArgs(
 ): string[] {
   const userPass = options.userPassword || "";
   const ownerPass = options.ownerPassword || options.userPassword || "owner";
-  const keyLen = String(options.keyLength || 256);
+  
+  // Default to 256-bit AES (PDF 2.0 V=5, R=6)
+  const is128 = options.standard === "aes-128" || options.keyLength === 128;
+  const keyLen = is128 ? "128" : "256";
 
   const args: string[] = [
     "--encrypt",
@@ -41,6 +51,11 @@ export function buildQpdfEncryptionArgs(
     ownerPass,
     keyLen,
   ];
+
+  // Strictly enforce AES over insecure RC4 for 128-bit encryption
+  if (is128) {
+    args.push("--use-aes=y");
+  }
 
   // Permissions flags
   if (options.allowPrinting === false) {

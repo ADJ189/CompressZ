@@ -27,7 +27,7 @@ export function salvagePdfObjects(bytes: Uint8Array): {
   const hasHeader = text.startsWith("%PDF-") || text.includes("%PDF-");
   const hasEof = text.includes("%%EOF");
 
-  const objRegex = /(\d+) (\d+) obj/g;
+  const objRegex = /\b(\d{1,10}) (\d{1,5}) obj\b/g;
   let match: RegExpExecArray | null;
 
   while ((match = objRegex.exec(text)) !== null) {

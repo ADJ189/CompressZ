@@ -16,7 +16,8 @@ export interface RedactionRegion {
   y: number;
   width: number;
   height: number;
-  reason?: string; // Optional label e.g. "REDACTED", "PII"
+  reason?: string; // Standard label e.g. "REDACTED", "PII"
+  overlayText?: string; // Backward-compatible alias for reason
 }
 
 export interface RedactionOptions {
@@ -81,13 +82,14 @@ export async function renderSanitizedRasterPage(
     ctx.fillStyle = "#000000";
     ctx.fillRect(canvasX, canvasY, canvasW, canvasH);
 
-    if (r.reason) {
+    const label = r.reason || r.overlayText;
+    if (label) {
       ctx.fillStyle = "#ffffff";
       ctx.font = `bold ${Math.max(12, Math.round(10 * scale))}px sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(
-        `[${r.reason.toUpperCase()}]`,
+        `[${label.toUpperCase()}]`,
         canvasX + canvasW / 2,
         canvasY + canvasH / 2,
         canvasW - 4,

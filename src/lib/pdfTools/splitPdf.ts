@@ -60,11 +60,14 @@ export function parsePageRanges(
       }
       const min = Math.min(start, end);
       const max = Math.max(start, end);
+      if (min > totalPages) {
+        continue;
+      }
+      const clampedStart = Math.max(1, min);
+      const clampedEnd = Math.min(totalPages, max);
       const group: number[] = [];
-      for (let p = min; p <= max; p++) {
-        if (p <= totalPages) {
-          group.push(p - 1);
-        }
+      for (let p = clampedStart; p <= clampedEnd; p++) {
+        group.push(p - 1);
       }
       if (group.length > 0) {
         groups.push(group);
