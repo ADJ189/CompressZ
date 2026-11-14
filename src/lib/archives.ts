@@ -106,8 +106,12 @@ export async function streamDecompressBytes(
   const reader = ds.readable.getReader();
 
   const writePromise = (async () => {
-    writer.write(bytes as BufferSource);
-    await writer.close();
+    try {
+      await writer.write(bytes as BufferSource);
+      await writer.close();
+    } catch {
+      // Ignore write errors if decompression stream is closed or aborted early
+    }
   })();
 
   const outChunks: Uint8Array[] = [];
