@@ -361,15 +361,15 @@
     description="Browser-native workstation for organizing, splitting, editing, signing, watermarking, filling, and securing PDF documents."
     activeToolId={activeTool}
     tools={[
-      { id: "split", label: "Split", icon: "✂️" },
-      { id: "organize", label: "Organize", icon: "📑" },
-      { id: "studio", label: "Studio", icon: "✏️" },
-      { id: "watermark", label: "Watermark", icon: "💧" },
-      { id: "crop", label: "Crop", icon: "📐" },
-      { id: "forms", label: "Forms", icon: "📋" },
-      { id: "redact", label: "Redact", icon: "⬛" },
-      { id: "security", label: "Protect", icon: "🔐" },
-      { id: "repair", label: "Repair", icon: "🩹" },
+      { id: "split", name: "Split", icon: "split" },
+      { id: "organize", name: "Organize", icon: "organize" },
+      { id: "studio", name: "Studio", icon: "studio" },
+      { id: "watermark", name: "Watermark", icon: "watermark" },
+      { id: "crop", name: "Crop", icon: "crop" },
+      { id: "forms", name: "Forms", icon: "forms" },
+      { id: "redact", name: "Redact", icon: "redact" },
+      { id: "security", name: "Protect", icon: "security" },
+      { id: "repair", name: "Repair", icon: "repair" },
     ]}
     onSelectTool={(id) => (activeTool = id as SubTool)}
     onFilesSelected={(files) => files[0] && loadFile(files[0])}

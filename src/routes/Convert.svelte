@@ -158,7 +158,7 @@
   > = {
     video: {
       label: "Video",
-      icon: "🎬",
+      icon: "video",
       accept: "video/*",
       targets: [
         { value: "mp4", label: "MP4 (H.264/AAC)" },
@@ -170,7 +170,7 @@
     },
     audio: {
       label: "Audio",
-      icon: "🎵",
+      icon: "audio",
       accept: "audio/*",
       targets: [
         { value: "mp3", label: "MP3" },
@@ -183,7 +183,7 @@
     },
     image: {
       label: "Image",
-      icon: "🖼️",
+      icon: "image",
       accept: "image/*,.heic,.heif",
       targets: [
         { value: "webp", label: "WebP" },
@@ -194,7 +194,7 @@
     },
     pdf2office: {
       label: "PDF to Office",
-      icon: "📑",
+      icon: "word",
       accept: "application/pdf,.pdf",
       targets: [
         { value: "docx", label: "Word (.docx)" },
@@ -204,7 +204,7 @@
     },
     pdf2img: {
       label: "PDF to Images",
-      icon: "📄",
+      icon: "image",
       accept: "application/pdf,.pdf",
       targets: [
         { value: "png", label: "PNG images" },
@@ -214,13 +214,13 @@
     },
     img2pdf: {
       label: "Images to PDF",
-      icon: "🧩",
+      icon: "pdf",
       accept: "image/*",
       targets: [{ value: "pdf", label: "PDF document" }],
     },
     docx: {
       label: "DOCX",
-      icon: "📘",
+      icon: "word",
       accept: ".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       targets: [
         { value: "pdf", label: "PDF Document" },
@@ -230,7 +230,7 @@
     },
     xlsx: {
       label: "Excel",
-      icon: "📗",
+      icon: "excel",
       accept: ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       targets: [
         { value: "pdf", label: "PDF Document" },
@@ -239,7 +239,7 @@
     },
     pptx: {
       label: "PPTX",
-      icon: "📙",
+      icon: "ppt",
       accept: ".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation",
       targets: [
         { value: "pdf", label: "PDF Document" },
@@ -248,7 +248,7 @@
     },
     html: {
       label: "HTML",
-      icon: "🌐",
+      icon: "docs",
       accept: ".html,.htm,text/html",
       targets: [
         { value: "pdf", label: "PDF Document" },
