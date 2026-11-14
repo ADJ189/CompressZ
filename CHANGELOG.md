@@ -20,6 +20,30 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 - Preserve submitted settings and file order in queued conversions, and schedule DOCX HTML/text and PPTX text jobs.
 - Match PDF image output metadata to encoded bytes, correct video CRF slider direction, and clean up FFmpeg loading resources with a bounded initialization timeout.
 
+## [1.16.0] - 2026-11-14
+
+### Added
+- **Multi-File Compression & Archive Engines (`archives.ts`, `tar.ts`)**: Built native Web Streams multi-file archiving with zero external dependencies. Supports `.tar.gz`, `.tgz`, `.gz`, `.tar`, and `.zip` with 64 KiB streaming chunking, CRC-32 integrity checks, and browser memory guards.
+- **Hardware-Accelerated WebCrypto File Encryption (`fileEncryption.ts`)**: Client-side zero-download `AES-256-GCM` authenticated encryption with PBKDF2 (100k iterations, SHA-256) for arbitrary documents and folder vaults.
+- **AES-256 Standard Default PDF Encryption (`securityPdf.ts`)**: Enforced modern ISO 32000-2 PDF 2.0 (V=5, R=6) 256-bit AES encryption as default standard. Added user-facing encryption mode selector (Default AES-256, Standard PDF 1.7 AES-256-CBC, and Compatibility AES-128 with `--use-aes=y` strictly enforced).
+- **Mac-Like UI Overhaul for PDF Suite & Convert**:
+  - Upgraded action buttons with Apple squircle curvature, gradient highlights, and `<MacIcon />` vector glyphs.
+  - Added collapsible rectangular **Advanced Options Drawer** (`.cz-advanced-drawer`) for instant customization of DPI, encryption standards, and format parameters.
+  - Implemented persistent settings profiles via `localStorage` (`cz-pdfsuite-profile`, `cz-convert-profile`).
+  - Added automatic Cache API caching (`compressz-engines-v1`) for QPDF WASM and models for instant offline reloads.
+- **Top Navigation "Tools" Tab Distinct Border**: Gave `.cz-tab-dropdown` on the navigation shelf a prominent glowing Apple brand border and squircle badge for immediate discovery.
+- **Universal Upload Button Everywhere (`UniversalUpload.svelte`)**: Modernized into an authentic glassmorphic squircle pill with spring elevation, drag pulsing aura, touch target $\ge 44\text{px}$, DPR 1x vs 2x Retina styling, Chromium/WebKit/Gecko engine tuning, and reduced-motion floor. Integrated into Header, Home Hero cluster, HubHeader, and ToolsDialog.
+
+### Fixed
+- **CodeQL High Security Warning (`router.ts:39`)**: Neutralized unvalidated dynamic method call vulnerability by enforcing regex route validation and registered handler existence checks before invocation.
+- **SonarCloud ReDoS Regular Expression Backtracking**:
+  - `repairPdf.ts:30`: Bounded object scanner regex to `/\b(\d{1,10}) (\d{1,5}) obj\b/g` (SonarCloud issue `AaHGVmdXqaoFdu8catgT`).
+  - `pdfToMarkdown.ts:314, 367, 402`: Neutralized super-linear backtracking in pipe table and running header filters (SonarCloud issues `AaHaHOeBH6_68wC1rlgT`, `AaHaHOeBH6_68wC1rlgS`).
+- **Unbounded Loop Execution (`splitPdf.ts:53-72`)**: Clamped start and end page bounds to `totalPages`, skipping out-of-bounds ranges and preventing unbounded execution on massive inputs like `1-1000000000`. Added regression test in `tests/splitPdf.test.ts`.
+- **Redaction UI & Engine Property Sync (`PdfSuite.svelte`, `redactPdf.ts`)**: Standardized on `reason` across UI region creation, inspector tags, and canvas rasterization, retaining `overlayText` as backward-compatible alias.
+- **Mounted Route & Staged File Reactivity (`Convert.svelte`, `PdfSuite.svelte`)**: Added Svelte 5 `$effect` subscribers listening to `currentRoute` and `consumeStagedUniversalFile()` so already-mounted views reactively reinitialize upon navigation and staged file drops.
+- **Dependency Pinning (`package.json`)**: Locked `"basic-ftp": "^6.2.3"` in `overrides` to secure `get-uri` without triggering npm downgrade of `@lhci/cli` from 0.16.0 to 0.13.0.
+
 ## [1.15.0] - 2026-11-14
 
 ### Added
