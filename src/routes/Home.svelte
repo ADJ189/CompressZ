@@ -3,6 +3,7 @@
   import { navigate } from "../router";
   import { mountWorkbench } from "../lib/workbench";
   import MacIcon from "../components/MacIcon.svelte";
+  import UniversalUpload from "../components/UniversalUpload.svelte";
 
   let rootEl: HTMLElement;
 
@@ -162,6 +163,7 @@
           <path d="M5 12h14M12 5l7 7-7 7"/>
         </svg>
       </a>
+      <UniversalUpload label="Drop or Pick Any File" />
       <button
         type="button"
         class="btn-ghost"

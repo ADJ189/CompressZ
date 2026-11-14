@@ -10,14 +10,15 @@
   import { applyPdfWatermark } from "../lib/pdfTools/watermarkPdf";
   import { inspectPdfForm, fillPdfForm, type FormFieldInfo } from "../lib/pdfTools/formPdf";
   import { applyTrueRedaction, type RedactionRegion } from "../lib/pdfTools/redactPdf";
-  import { protectPdf, unlockPdf } from "../lib/pdfTools/securityPdf";
+  import { protectPdf, unlockPdf, type PdfEncryptionStandard } from "../lib/pdfTools/securityPdf";
   import { repairCorruptPdf, inspectAndRepairMp4Moov } from "../lib/pdfTools/repairPdf";
   import { openPdfDocument, getPdfLib } from "../lib/pdfLibs";
-  import { consumeStagedUniversalFile } from "../store";
+  import { consumeStagedUniversalFile, currentRoute } from "../store";
   import { formatBytes } from "../lib/types";
   import { toast } from "../toast";
   import { onMount } from "svelte";
   import { navigate } from "../router";
+  import MacIcon from "../components/MacIcon.svelte";
 
   type SubTool =
     | "split"
@@ -71,6 +72,40 @@
   let allowPrinting = $state<boolean>(true);
   let allowCopying = $state<boolean>(false);
   let securityMode = $state<"protect" | "unlock">("protect");
+  let encryptionStandard = $state<PdfEncryptionStandard>("aes-256-r6");
+  let renderDpi = $state<number>(300);
+  let advancedDrawerOpen = $state<boolean>(false);
+
+  function loadSavedProfile() {
+    try {
+      const saved = localStorage.getItem("cz-pdfsuite-profile");
+      if (saved) {
+        const p = JSON.parse(saved);
+        if (p.encryptionStandard) encryptionStandard = p.encryptionStandard;
+        if (p.renderDpi) renderDpi = p.renderDpi;
+        if (typeof p.allowPrinting === "boolean") allowPrinting = p.allowPrinting;
+        if (typeof p.allowCopying === "boolean") allowCopying = p.allowCopying;
+      }
+    } catch {
+      // Ignored
+    }
+  }
+
+  function saveProfile() {
+    try {
+      localStorage.setItem(
+        "cz-pdfsuite-profile",
+        JSON.stringify({
+          encryptionStandard,
+          renderDpi,
+          allowPrinting,
+          allowCopying,
+        }),
+      );
+    } catch {
+      // Ignored
+    }
+  }
 
   // Redaction state
   let redactPage = $state<number>(1);
@@ -94,7 +129,7 @@
         y: Number(redactY) || 0,
         width: Math.max(10, Number(redactWidth) || 50),
         height: Math.max(10, Number(redactHeight) || 20),
-        overlayText: redactReason || undefined,
+        reason: redactReason || undefined,
       },
     ];
     toast(`Added redaction region on page ${redactPage}`, "info");
@@ -260,6 +295,7 @@
           const out = await protectPdf(pdfBytes!, {
             userPassword,
             ownerPassword,
+            standard: encryptionStandard,
             allowPrinting,
             allowCopying,
             onProgress: (p) => (progressPct = p),
@@ -324,21 +360,21 @@
     }
   }
 
-  onMount(() => {
-    if (typeof window !== "undefined") {
-      const parts = window.location.pathname.split("/").filter(Boolean);
-      const sub = parts[parts.length - 1];
-      if (sub === "split") activeTool = "split";
-      else if (sub === "organize") activeTool = "organize";
-      else if (sub === "crop") activeTool = "crop";
-      else if (sub === "forms") activeTool = "forms";
-      else if (sub === "watermark") activeTool = "watermark";
-      else if (sub === "redact") activeTool = "redact";
-      else if (sub === "protect" || sub === "security") activeTool = "security";
-      else if (sub === "repair") activeTool = "repair";
-      else if (sub === "edit" || sub === "studio" || sub === "sign") activeTool = "studio";
-    }
+  function applyRouteSubpath(path: string) {
+    const parts = path.split("/").filter(Boolean);
+    const sub = parts[parts.length - 1];
+    if (sub === "split") activeTool = "split";
+    else if (sub === "organize") activeTool = "organize";
+    else if (sub === "crop") activeTool = "crop";
+    else if (sub === "forms") activeTool = "forms";
+    else if (sub === "watermark") activeTool = "watermark";
+    else if (sub === "redact") activeTool = "redact";
+    else if (sub === "protect" || sub === "security") activeTool = "security";
+    else if (sub === "repair") activeTool = "repair";
+    else if (sub === "edit" || sub === "studio" || sub === "sign") activeTool = "studio";
+  }
 
+  function applyStagedFile() {
     const staged = consumeStagedUniversalFile();
     if (staged?.file) {
       loadFile(staged.file);
@@ -352,6 +388,23 @@
       else if (staged.actionId === "protect-pdf") activeTool = "security";
       else if (staged.actionId === "edit-sign") activeTool = "studio";
     }
+  }
+
+  onMount(() => {
+    loadSavedProfile();
+    if (typeof window !== "undefined") {
+      applyRouteSubpath(window.location.pathname);
+    }
+    applyStagedFile();
+  });
+
+  $effect(() => {
+    // Keep mounted page reactive to route navigation & staged files
+    const unsub = currentRoute.subscribe((r) => {
+      if (r) applyRouteSubpath(r);
+      applyStagedFile();
+    });
+    return unsub;
   });
 </script>
 
@@ -416,6 +469,75 @@
               Change File
             </button>
           </div>
+        </div>
+
+        <!-- Rectangular Collapsible Advanced Options Drawer -->
+        <div class="cz-advanced-drawer {advancedDrawerOpen ? 'is-open' : ''}">
+          <button
+            type="button"
+            class="cz-advanced-drawer-toggle"
+            onclick={() => (advancedDrawerOpen = !advancedDrawerOpen)}
+            aria-expanded={advancedDrawerOpen}
+          >
+            <span class="cz-drawer-title">
+              <MacIcon name="settings" size={14} />
+              <span>Engine & Profile Configuration</span>
+            </span>
+            <span class="cz-drawer-summary">
+              {encryptionStandard === "aes-256-r6" ? "AES-256 (Default)" : encryptionStandard === "aes-256-r5" ? "AES-256-CBC" : "AES-128"} · {renderDpi} DPI · {allowPrinting ? "Print: Yes" : "Print: No"}
+            </span>
+            <span class="cz-drawer-chevron" class:is-rotated={advancedDrawerOpen}>
+              <MacIcon name="chevron-down" size={12} />
+            </span>
+          </button>
+
+          {#if advancedDrawerOpen}
+            <div class="cz-advanced-drawer-body">
+              <div class="cz-drawer-grid">
+                <div class="cz-drawer-field">
+                  <label for="pdf-enc-standard">Encryption Mode</label>
+                  <select
+                    id="pdf-enc-standard"
+                    class="cz-select cz-select-sm"
+                    bind:value={encryptionStandard}
+                    onchange={saveProfile}
+                  >
+                    <option value="aes-256-r6">★ PDF 2.0 (V=5, R=6) — AES-256 (Default)</option>
+                    <option value="aes-256-r5">PDF 1.7 (V=5, R=5) — AES-256-CBC</option>
+                    <option value="aes-128">PDF 1.6 — AES-128 (Legacy Compatible)</option>
+                  </select>
+                </div>
+
+                <div class="cz-drawer-field">
+                  <label for="pdf-render-dpi">Archival Render DPI</label>
+                  <select
+                    id="pdf-render-dpi"
+                    class="cz-select cz-select-sm"
+                    bind:value={renderDpi}
+                    onchange={saveProfile}
+                  >
+                    <option value={150}>150 DPI (Fast / Draft)</option>
+                    <option value={300}>300 DPI (Standard Archival)</option>
+                    <option value={600}>600 DPI (Ultra Fidelity)</option>
+                  </select>
+                </div>
+
+                <div class="cz-drawer-field cz-drawer-field-checks">
+                  <label class="cz-check-label">
+                    <input type="checkbox" bind:checked={allowPrinting} onchange={saveProfile} />
+                    <span>Permit Printing</span>
+                  </label>
+                  <label class="cz-check-label">
+                    <input type="checkbox" bind:checked={allowCopying} onchange={saveProfile} />
+                    <span>Permit Copying</span>
+                  </label>
+                </div>
+              </div>
+              <div class="cz-drawer-footer">
+                <small>Preferences automatically saved to local profile & cached.</small>
+              </div>
+            </div>
+          {/if}
         </div>
 
         <!-- Tool Workspace -->
@@ -876,8 +998,8 @@
                         <div class="cz-redact-item">
                           <span class="cz-redact-chip">Page {reg.pageIndex + 1}</span>
                           <span class="cz-redact-coords">({reg.x}, {reg.y}) {reg.width}×{reg.height}pt</span>
-                          {#if reg.overlayText}
-                            <span class="cz-redact-tag">{reg.overlayText}</span>
+                          {#if reg.reason || reg.overlayText}
+                            <span class="cz-redact-tag">{reg.reason || reg.overlayText}</span>
                           {/if}
                           <button
                             type="button"
@@ -1163,22 +1285,139 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 0.45rem;
     font-size: 0.85rem;
     font-weight: 600;
-    padding: 0.5rem 1rem;
-    border-radius: var(--r-sm);
+    padding: 0.52rem 1.15rem;
+    border-radius: var(--r-md, 8px);
     cursor: pointer;
-    transition: background var(--t);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    outline: none;
+    user-select: none;
+    -webkit-user-select: none;
+    transition:
+      background-color 0.16s ease,
+      border-color 0.16s ease,
+      box-shadow 0.16s ease,
+      transform 0.16s ease;
   }
 
   .cz-btn-primary {
-    background: var(--accent);
+    background: linear-gradient(180deg, var(--accent) 0%, var(--accent-2, var(--accent)) 100%);
     color: #ffffff;
-    border: 1px solid transparent;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.2);
   }
 
   .cz-btn-primary:hover:not(:disabled) {
-    background: var(--accent-2);
+    box-shadow: 0 0 10px var(--accent-glow), 0 3px 8px rgba(0, 0, 0, 0.15);
+    transform: translateY(-1px);
+  }
+
+  .cz-btn:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  /* Rectangular Collapsible Advanced Options Drawer */
+  .cz-advanced-drawer {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md, 8px);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    transition: border-color var(--t), box-shadow var(--t);
+  }
+  .cz-advanced-drawer.is-open {
+    border-color: var(--brand);
+    box-shadow: 0 0 0 1px var(--brand-glow), var(--shadow-sm);
+  }
+  .cz-advanced-drawer-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.65rem 1rem;
+    background: var(--surface2);
+    border: none;
+    cursor: pointer;
+    color: var(--text);
+    font-size: 0.82rem;
+    text-align: left;
+    transition: background-color var(--t);
+  }
+  .cz-advanced-drawer-toggle:hover {
+    background: var(--surface3, var(--surface2));
+  }
+  .cz-drawer-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .cz-drawer-summary {
+    font-size: 0.75rem;
+    color: var(--text-3);
+    font-weight: 500;
+  }
+  .cz-drawer-chevron {
+    display: flex;
+    align-items: center;
+    transition: transform var(--t);
+    color: var(--text-3);
+  }
+  .cz-drawer-chevron.is-rotated {
+    transform: rotate(180deg);
+  }
+  .cz-advanced-drawer-body {
+    padding: 1rem 1.25rem;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .cz-drawer-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    align-items: end;
+  }
+  .cz-drawer-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+  .cz-drawer-field label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-2);
+  }
+  .cz-select-sm {
+    padding: 0.45rem 0.65rem;
+    font-size: 0.8rem;
+    border-radius: var(--r-sm);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    outline: none;
+  }
+  .cz-drawer-field-checks {
+    flex-direction: row;
+    gap: 1rem;
+    padding-bottom: 0.4rem;
+  }
+  .cz-check-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+    color: var(--text-2);
+    cursor: pointer;
+  }
+  .cz-drawer-footer {
+    margin-top: 0.75rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border);
+    color: var(--text-3);
+    font-size: 0.72rem;
   }
 
   .cz-btn-ghost {

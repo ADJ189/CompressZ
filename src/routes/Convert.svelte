@@ -12,12 +12,13 @@
   import { convertPdfToPpt } from "../lib/conversions/pdfToPpt";
   import { convertExcelToPdf, convertExcelToCsv } from "../lib/conversions/excelToPdf";
   import { convertWithLibreOfficeWasm } from "../lib/conversions/libreOfficeWasm";
-  import { consumeStagedUniversalFile } from "../store";
+  import { consumeStagedUniversalFile, currentRoute } from "../store";
   import { imagesToPdf } from "../lib/imagesToPdf";
   import { audioOptions, imageOptions } from "../lib/options";
   import { runScheduled } from "../lib/resourceManager";
   import { naturalOrder } from "../lib/recommendations";
   import { formatBytes, outputFilename } from "../lib/types";
+  import MacIcon from "../components/MacIcon.svelte";
   import type { AudioFormat, ImageFormat } from "../lib/types";
   import { toast } from "../toast";
   import { getPlatformInfo } from "../lib/platform";
@@ -100,9 +101,42 @@
     }
   }
 
-  onMount(() => {
-    applyQueryParams();
+  // Rectangular Advanced Options Drawer state & profile persistence
+  let convertDrawerOpen = $state(false);
+  let convertQuality = $state(82);
+  let convertScaleDpi = $state(150);
 
+  function loadConvertProfile() {
+    try {
+      const saved = localStorage.getItem("cz-convert-profile");
+      if (saved) {
+        const p = JSON.parse(saved);
+        if (p.convertQuality) convertQuality = p.convertQuality;
+        if (p.convertScaleDpi) convertScaleDpi = p.convertScaleDpi;
+        if (p.activeCat && CATS[p.activeCat as Category]) activeCat = p.activeCat as Category;
+      }
+    } catch {
+      // Ignored
+    }
+  }
+
+  function saveConvertProfile() {
+    try {
+      localStorage.setItem(
+        "cz-convert-profile",
+        JSON.stringify({
+          convertQuality,
+          convertScaleDpi,
+          activeCat,
+          targetFormat,
+        }),
+      );
+    } catch {
+      // Ignored
+    }
+  }
+
+  function applyStagedFile() {
     const staged = consumeStagedUniversalFile();
     if (staged?.file) {
       selectedFiles = [staged.file];
@@ -145,6 +179,21 @@
     if (CATS[activeCat] && !CATS[activeCat].targets.some((t) => t.value === targetFormat)) {
       targetFormat = CATS[activeCat].targets[0].value;
     }
+  }
+
+  onMount(() => {
+    loadConvertProfile();
+    applyQueryParams();
+    applyStagedFile();
+  });
+
+  $effect(() => {
+    // Keep mounted Convert page reactive to route navigation & staged files
+    const unsub = currentRoute.subscribe((r) => {
+      if (r) applyQueryParams();
+      applyStagedFile();
+    });
+    return unsub;
   });
 
   const CATS: Record<
@@ -524,6 +573,64 @@
           {/each}
         </div>
       </div>
+    </div>
+
+    <!-- Rectangular Collapsible Advanced Options Drawer -->
+    <div class="cz-advanced-drawer {convertDrawerOpen ? 'is-open' : ''}">
+      <button
+        type="button"
+        class="cz-advanced-drawer-toggle"
+        onclick={() => (convertDrawerOpen = !convertDrawerOpen)}
+        aria-expanded={convertDrawerOpen}
+      >
+        <span class="cz-drawer-title">
+          <MacIcon name="settings" size={14} />
+          <span>Conversion Profile & Engine Tuning</span>
+        </span>
+        <span class="cz-drawer-summary">
+          Quality: {convertQuality}% · Scale: {convertScaleDpi} DPI · Category: {CATS[activeCat].label}
+        </span>
+        <span class="cz-drawer-chevron" class:is-rotated={convertDrawerOpen}>
+          <MacIcon name="chevron-down" size={12} />
+        </span>
+      </button>
+
+      {#if convertDrawerOpen}
+        <div class="cz-advanced-drawer-body">
+          <div class="cz-drawer-grid">
+            <div class="cz-drawer-field">
+              <label for="conv-quality">Encoding Quality: {convertQuality}%</label>
+              <input
+                id="conv-quality"
+                type="range"
+                min="30"
+                max="100"
+                step="1"
+                class="cz-range"
+                bind:value={convertQuality}
+                onchange={saveConvertProfile}
+              />
+            </div>
+
+            <div class="cz-drawer-field">
+              <label for="conv-dpi">PDF / Document Raster DPI</label>
+              <select
+                id="conv-dpi"
+                class="cz-select cz-select-sm"
+                bind:value={convertScaleDpi}
+                onchange={saveConvertProfile}
+              >
+                <option value={96}>96 DPI (Web / Fast)</option>
+                <option value={150}>150 DPI (Balanced)</option>
+                <option value={300}>300 DPI (High-Res Print)</option>
+              </select>
+            </div>
+          </div>
+          <div class="cz-drawer-footer">
+            <small>Conversion preferences automatically saved to local profile.</small>
+          </div>
+        </div>
+      {/if}
     </div>
 
     <!-- Ingestion Dropzone -->
@@ -1234,18 +1341,127 @@
     justify-content: center;
     font-size: 0.82rem;
     font-weight: 600;
-    padding: 0.4rem 0.85rem;
-    border-radius: var(--r-sm);
+    padding: 0.45rem 0.95rem;
+    border-radius: var(--r-md, 8px);
     cursor: pointer;
-    transition: background var(--t), color var(--t);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    outline: none;
+    user-select: none;
+    -webkit-user-select: none;
+    transition:
+      background-color 0.16s ease,
+      border-color 0.16s ease,
+      box-shadow 0.16s ease,
+      color 0.16s ease,
+      transform 0.16s ease;
   }
   .cz-btn-primary {
-    background: var(--accent);
+    background: linear-gradient(180deg, var(--accent) 0%, var(--accent-2, var(--accent)) 100%);
     color: #fff;
-    border: 1px solid transparent;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.2);
   }
   .cz-btn-primary:hover:not(:disabled) {
-    background: var(--accent-2);
+    box-shadow: 0 0 10px var(--accent-glow), 0 3px 8px rgba(0, 0, 0, 0.15);
+    transform: translateY(-1px);
+  }
+  .cz-btn:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  /* Rectangular Collapsible Advanced Options Drawer */
+  .cz-advanced-drawer {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md, 8px);
+    overflow: hidden;
+    margin-bottom: 1.25rem;
+    box-shadow: var(--shadow-sm);
+    transition: border-color var(--t), box-shadow var(--t);
+  }
+  .cz-advanced-drawer.is-open {
+    border-color: var(--brand);
+    box-shadow: 0 0 0 1px var(--brand-glow), var(--shadow-sm);
+  }
+  .cz-advanced-drawer-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.65rem 1rem;
+    background: var(--surface2);
+    border: none;
+    cursor: pointer;
+    color: var(--text);
+    font-size: 0.82rem;
+    text-align: left;
+    transition: background-color var(--t);
+  }
+  .cz-advanced-drawer-toggle:hover {
+    background: var(--surface3, var(--surface2));
+  }
+  .cz-drawer-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .cz-drawer-summary {
+    font-size: 0.75rem;
+    color: var(--text-3);
+    font-weight: 500;
+  }
+  .cz-drawer-chevron {
+    display: flex;
+    align-items: center;
+    transition: transform var(--t);
+    color: var(--text-3);
+  }
+  .cz-drawer-chevron.is-rotated {
+    transform: rotate(180deg);
+  }
+  .cz-advanced-drawer-body {
+    padding: 1rem 1.25rem;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .cz-drawer-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.25rem;
+    align-items: center;
+  }
+  .cz-drawer-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .cz-drawer-field label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-2);
+  }
+  .cz-range {
+    width: 100%;
+    accent-color: var(--brand);
+    cursor: pointer;
+  }
+  .cz-select-sm {
+    padding: 0.45rem 0.65rem;
+    font-size: 0.8rem;
+    border-radius: var(--r-sm);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    outline: none;
+  }
+  .cz-drawer-footer {
+    margin-top: 0.75rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border);
+    color: var(--text-3);
+    font-size: 0.72rem;
   }
   .cz-btn-secondary {
     background: var(--surface2);
