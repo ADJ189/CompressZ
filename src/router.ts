@@ -35,8 +35,20 @@ export function dispatch(path: string) {
   const route = getRouteFromPath(path);
   currentRoute.set(route);
   trackRecent(route);
-  const handler = handlers.get(route) ?? handlers.get("*");
-  handler?.();
+
+  // Validate route pattern and safely invoke registered handler
+  if (/^[a-zA-Z0-9_\-/]+$/.test(route) && handlers.has(route)) {
+    const handler = handlers.get(route);
+    if (typeof handler === "function") {
+      handler();
+      return;
+    }
+  }
+
+  const fallback = handlers.get("*");
+  if (typeof fallback === "function") {
+    fallback();
+  }
 }
 
 export function init() {
