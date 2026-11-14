@@ -122,6 +122,7 @@ export function readTar(tarBytes: Uint8Array): TarEntry[] {
   const entries: TarEntry[] = [];
   let offset = 0;
   const dec = new TextDecoder();
+  let pendingName: string | null = null;
 
   while (offset + 512 <= tarBytes.length) {
     // Check for two consecutive 512 zero blocks (EOF)
@@ -134,10 +135,10 @@ export function readTar(tarBytes: Uint8Array): TarEntry[] {
     }
     if (isZero) break;
 
-    // Read name
+    // Read name (0..100)
     let nameEnd = offset;
     while (nameEnd < offset + 100 && tarBytes[nameEnd] !== 0) nameEnd++;
-    const name = dec.decode(tarBytes.subarray(offset, nameEnd)).trim();
+    let name = dec.decode(tarBytes.subarray(offset, nameEnd)).trim();
 
     // Read size (octal at 124..135)
     let sizeEnd = offset + 124;
@@ -145,18 +146,76 @@ export function readTar(tarBytes: Uint8Array): TarEntry[] {
     const sizeStr = dec.decode(tarBytes.subarray(offset + 124, sizeEnd)).trim();
     const size = Number.parseInt(sizeStr, 8) || 0;
 
-    offset += 512;
+    // Read typeflag (byte 156)
+    const typeflagByte = tarBytes[offset + 156];
+    const typeflag = String.fromCharCode(typeflagByte);
 
-    if (name && offset + size <= tarBytes.length) {
-      const data = tarBytes.subarray(offset, offset + size);
-      entries.push({ name, data: new Uint8Array(data) });
+    // Read ustar magic (257..262) & prefix (345..499)
+    let magicEnd = offset + 257;
+    while (magicEnd < offset + 262 && tarBytes[magicEnd] !== 0 && tarBytes[magicEnd] !== 0x20) magicEnd++;
+    const magic = dec.decode(tarBytes.subarray(offset + 257, magicEnd)).trim();
+    if (magic === "ustar") {
+      let prefixEnd = offset + 345;
+      while (prefixEnd < offset + 500 && tarBytes[prefixEnd] !== 0) prefixEnd++;
+      const prefix = dec.decode(tarBytes.subarray(offset + 345, prefixEnd)).trim();
+      if (prefix && name) {
+        name = `${prefix}/${name}`;
+      }
     }
 
-    offset += size;
-    const remainder = size % 512;
-    if (remainder > 0) {
-      offset += 512 - remainder;
+    const dataOffset = offset + 512;
+    const padding = size % 512 === 0 ? 0 : 512 - (size % 512);
+    const nextHeaderOffset = dataOffset + size + padding;
+
+    // GNU long filename extension ('L')
+    if (typeflag === "L") {
+      if (dataOffset + size <= tarBytes.length) {
+        const rawLongName = dec.decode(tarBytes.subarray(dataOffset, dataOffset + size));
+        pendingName = rawLongName.replace(/\0.*$/, "").trim();
+      }
+      offset = nextHeaderOffset;
+      continue;
     }
+
+    // PAX extended header ('x')
+    if (typeflag === "x") {
+      if (dataOffset + size <= tarBytes.length) {
+        const paxText = dec.decode(tarBytes.subarray(dataOffset, dataOffset + size));
+        for (const line of paxText.split("\n")) {
+          const match = /^\d+\s+path=(.*)$/.exec(line);
+          if (match) {
+            pendingName = match[1].trim();
+          }
+        }
+      }
+      offset = nextHeaderOffset;
+      continue;
+    }
+
+    // Global PAX extended header ('g') - ignore
+    if (typeflag === "g") {
+      offset = nextHeaderOffset;
+      continue;
+    }
+
+    // Directory ('5') - skip while still advancing past data
+    if (typeflag === "5") {
+      pendingName = null;
+      offset = nextHeaderOffset;
+      continue;
+    }
+
+    // Regular file: '0' (0x30) or NUL (0x00)
+    if (typeflag === "0" || typeflagByte === 0) {
+      const finalName = pendingName || name;
+      pendingName = null;
+      if (finalName && dataOffset + size <= tarBytes.length) {
+        const data = tarBytes.subarray(dataOffset, dataOffset + size);
+        entries.push({ name: finalName, data: new Uint8Array(data) });
+      }
+    }
+
+    offset = nextHeaderOffset;
   }
 
   return entries;

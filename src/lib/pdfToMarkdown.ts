@@ -79,7 +79,7 @@ export interface PdfMarkdownBundle {
   markdown: string;
   manifest: Record<string, any>;
   extractionJson: Record<string, any>;
-  zipBytes: Uint8Array;
+  zipBytes?: Uint8Array;
   sha256: string;
   pageCount: number;
   assets: Array<{ path: string; bytes: Uint8Array }>;
@@ -217,6 +217,7 @@ export function reconstructReadingOrder(
 
     // Convert lines into structured blocks (headings, paragraphs, lists, tables)
     let paragraphBuffer: string[] = [];
+    let tableBuffer: string[] = [];
 
     const flushParagraph = () => {
       if (!paragraphBuffer.length) return;
@@ -234,12 +235,27 @@ export function reconstructReadingOrder(
       paragraphBuffer = [];
     };
 
+    const flushTable = () => {
+      if (tableBuffer.length > 0) {
+        blocks.push({
+          type: "table",
+          pageNumber: 1,
+          readingOrder: order++,
+          text: tableBuffer.join("\n"),
+          source: "native",
+          confidence: 90,
+        });
+      }
+      tableBuffer = [];
+    };
+
     for (const l of lines) {
       const text = l.text;
 
       // Heading detection: large font sizes (> 16px) or prominent bold
       if (l.fontSize >= 20) {
         flushParagraph();
+        flushTable();
         blocks.push({
           type: "heading",
           level: 1,
@@ -252,6 +268,7 @@ export function reconstructReadingOrder(
         continue;
       } else if (l.fontSize >= 15) {
         flushParagraph();
+        flushTable();
         blocks.push({
           type: "heading",
           level: 2,
@@ -268,6 +285,7 @@ export function reconstructReadingOrder(
       const isListItem = /^([*•-]|\d+\.)\s+/.test(text);
       if (isListItem) {
         flushParagraph();
+        flushTable();
         blocks.push({
           type: "list-item",
           pageNumber: 1,
@@ -282,20 +300,15 @@ export function reconstructReadingOrder(
       // Table line heuristic (multiple tab/pipe/multi-space columns)
       if (text.includes(" | ") || text.split(/\s{3,}/).length >= 3) {
         flushParagraph();
-        blocks.push({
-          type: "table",
-          pageNumber: 1,
-          readingOrder: order++,
-          text,
-          source: "native",
-          confidence: 90,
-        });
+        tableBuffer.push(text);
         continue;
       }
 
+      flushTable();
       paragraphBuffer.push(text);
     }
     flushParagraph();
+    flushTable();
   }
 
   return blocks;
@@ -310,13 +323,25 @@ export function formatGfmTable(text: string): string {
 
   // Already pipe-delimited
   if (rawRows.every((r) => r.includes("|"))) {
-    // If it lacks a separator row (| --- |), insert one after header
-    if (rawRows.length >= 2 && !/^\|?\s*:?-+:?\s*\|/.test(rawRows[1].trim())) {
-      const colCount = Math.max(2, (rawRows[0].match(/\|/g) || []).length);
-      const sep = "|" + Array(colCount).fill(" --- |").join("");
-      return [rawRows[0], sep, ...rawRows.slice(1)].join("\n");
+    // Determine column count by splitting header on '|' after trimming leading and trailing pipe
+    const cleanHeader = rawRows[0].replace(/^\|/, "").replace(/\|$/, "");
+    const headerCols = cleanHeader.split("|").map((c) => c.trim());
+    const colCount = Math.max(2, headerCols.length);
+
+    const normalizedRows: string[] = [];
+    for (let i = 0; i < rawRows.length; i++) {
+      const row = rawRows[i];
+      // Skip redundant or existing separator row
+      if (i === 1 && /^\|?\s*:?-+:?\s*\|/.test(row)) {
+        continue;
+      }
+      const cells = row.replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
+      while (cells.length < colCount) cells.push("");
+      normalizedRows.push("| " + cells.slice(0, colCount).join(" | ") + " |");
     }
-    return text;
+
+    const sep = "|" + Array(colCount).fill(" --- |").join("");
+    return [normalizedRows[0], sep, ...normalizedRows.slice(1)].join("\n");
   }
 
   // Convert tab or multi-space separated columns
@@ -404,7 +429,10 @@ export function blocksToMarkdown(
         if (includeVisualAssets && b.assetPath) {
           lines.push(`\n<!-- Preserved formula visual -->\n![Formula on page ${pageNumber}](${b.assetPath})\n`);
         } else if (formulaFormat === "latex") {
-          const cleanEq = b.text.replace(/^`+/, "").replace(/`+$/, "").trim();
+          let cleanEq = b.text.trim();
+          while (cleanEq.startsWith("`")) cleanEq = cleanEq.slice(1);
+          while (cleanEq.endsWith("`")) cleanEq = cleanEq.slice(0, -1);
+          cleanEq = cleanEq.trim();
           lines.push(`\n$$\n${cleanEq}\n$$\n`);
         } else {
           lines.push(`\n\`${b.text}\`\n`);
@@ -624,8 +652,8 @@ export async function convertPdfToMarkdown(
   if (includeFrontmatter) {
     mdSections.push(
       `---\n` +
-      `title: "${documentTitle}"\n` +
-      `originalFilename: "${filename}"\n` +
+      `title: ${JSON.stringify(documentTitle)}\n` +
+      `originalFilename: ${JSON.stringify(filename)}\n` +
       `pageCount: ${pageCount}\n` +
       `sha256: "${sha256}"\n` +
       `generator: "CompressZ PDF-to-Markdown Engine"\n` +
@@ -664,6 +692,20 @@ export async function convertPdfToMarkdown(
     metadata: manifest,
     blocks: allBlocks,
   };
+
+  // If standalone mode requested, return clean markdown result without assembling ZIP
+  if (exportMode === "standalone-md") {
+    onProgress?.(1.0, "Export markdown ready.");
+    return {
+      markdown: fullMarkdown,
+      manifest,
+      extractionJson,
+      sha256,
+      pageCount,
+      assets,
+      warnings,
+    };
+  }
 
   // 8. Bundle into ZIP
   onProgress?.(0.9, "Assembling portable ZIP archive...");

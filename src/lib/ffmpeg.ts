@@ -27,9 +27,16 @@ async function classWorkerURL(): Promise<string> {
     fetch(`${FFMPEG_CLASS_ESM}/const.js`),
     fetch(`${FFMPEG_CLASS_ESM}/errors.js`),
   ]);
-  if (!workerRes.ok || !constRes.ok || !errorsRes.ok) {
+
+  const responses = [
+    { name: "worker.js", res: workerRes, url: `${FFMPEG_CLASS_ESM}/worker.js` },
+    { name: "const.js", res: constRes, url: `${FFMPEG_CLASS_ESM}/const.js` },
+    { name: "errors.js", res: errorsRes, url: `${FFMPEG_CLASS_ESM}/errors.js` },
+  ];
+  const failed = responses.find((r) => !r.res.ok);
+  if (failed) {
     throw new Error(
-      `Could not download the FFmpeg worker runtime (HTTP ${workerRes.status})`,
+      `Could not download the FFmpeg worker runtime asset "${failed.name}" from ${failed.url} (HTTP ${failed.res.status})`,
     );
   }
 

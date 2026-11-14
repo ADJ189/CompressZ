@@ -59,7 +59,7 @@ export async function getQpdf(customLoader?: () => Promise<any>): Promise<any> {
           const cachedWasm = await cache.match(QPDF_WASM_URL);
           if (!cachedWasm) {
             fetch(QPDF_WASM_URL).then((res) => {
-              if (res.ok) cache.put(QPDF_WASM_URL, res);
+              if (res.ok) void cache.put(QPDF_WASM_URL, res);
             }).catch(() => {});
           }
         } catch {

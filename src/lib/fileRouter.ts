@@ -266,7 +266,7 @@ export function detectFileTypeAndActions(
   headerBytes?: Uint8Array,
 ): DetectionResult {
   const name = file.name.toLowerCase();
-  const ext = (name.split(".").pop() ?? "") as "docx" | "pptx" | "xlsx";
+  const ext = name.split(".").pop() ?? "";
   const headerCategory = headerBytes ? identifyHeader(headerBytes) : "unknown";
 
   // Check PDF
@@ -283,8 +283,26 @@ export function detectFileTypeAndActions(
     };
   }
 
+  // Check HTML
+  if (
+    ext === "html" ||
+    ext === "htm" ||
+    file.type === "text/html" ||
+    name.endsWith(".html") ||
+    name.endsWith(".htm")
+  ) {
+    return {
+      category: "html",
+      label: "HTML Document",
+      mime: "text/html",
+      actions: buildActions([
+        ["convert-html-pdf", "Convert HTML to PDF", "📄", "Render responsive HTML document to vector PDF", "convert?cat=html", "convert"],
+      ]),
+    };
+  }
+
   // Check Office formats
-  if (ext in OFFICE_CONFIGS) {
+  if (ext === "docx" || ext === "pptx" || ext === "xlsx") {
     const cfg = OFFICE_CONFIGS[ext];
     return {
       category: ext,
