@@ -40,6 +40,20 @@ Deno.test("splitPdf: parsePageRanges clamps out-of-bounds indices", () => {
   ]);
 });
 
+Deno.test("splitPdf: parsePageRanges clamps massive out-of-bounds endpoint in finite time", () => {
+  // Very large endpoint (1 billion) with a 3-page PDF must resolve instantly without freezing
+  const result = parsePageRanges("1-1000000000", 3);
+  assertEquals(result, [
+    [0, 1, 2],
+  ]);
+
+  // Out-of-bounds starting range skipped cleanly
+  const partial = parsePageRanges("1-2, 500-1000000", 3);
+  assertEquals(partial, [
+    [0, 1],
+  ]);
+});
+
 Deno.test("splitPdf: parsePageRanges throws on empty or invalid inputs", () => {
   assertThrows(() => parsePageRanges("", 5));
   assertThrows(() => parsePageRanges("   ", 5));

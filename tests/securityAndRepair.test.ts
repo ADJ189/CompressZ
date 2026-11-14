@@ -18,12 +18,16 @@ import {
   buildSyntheticXrefTrailer,
   inspectAndRepairMp4Moov,
 } from "../src/lib/pdfTools/repairPdf.ts";
+import {
+  encryptFileAesGcm,
+  decryptFileAesGcm,
+} from "../src/lib/fileEncryption.ts";
 
 Deno.test("securityPdf: buildQpdfEncryptionArgs compiles AES-256 arguments and permission flags", () => {
   const options: ProtectPdfOptions = {
     userPassword: "user123",
     ownerPassword: "adminSecret",
-    keyLength: 256,
+    standard: "aes-256-r6",
     allowPrinting: false,
     allowCopying: false,
     allowModifying: false,
@@ -39,6 +43,32 @@ Deno.test("securityPdf: buildQpdfEncryptionArgs compiles AES-256 arguments and p
   assertEquals(args.includes("--extract=n"), true);
   assertEquals(args.includes("--modify=none"), true);
   assertEquals(args.slice(-2), ["in.pdf", "out.pdf"]);
+});
+
+Deno.test("securityPdf: buildQpdfEncryptionArgs enforces --use-aes=y for 128-bit encryption", () => {
+  const options: ProtectPdfOptions = {
+    userPassword: "user123",
+    keyLength: 128,
+  };
+
+  const args = buildQpdfEncryptionArgs(options, "in.pdf", "out.pdf");
+  assertEquals(args.includes("--encrypt"), true);
+  assertEquals(args.includes("128"), true);
+  assertEquals(args.includes("--use-aes=y"), true);
+});
+
+Deno.test("fileEncryption: encryptFileAesGcm and decryptFileAesGcm round-trip correctly", async () => {
+  const enc = new TextEncoder();
+  const plainText = "CompressZ confidential payload with UTF-8 characters: 🔐 12345";
+  const bytes = enc.encode(plainText);
+  const password = "MasterStrongPassword2026!";
+
+  const encrypted = await encryptFileAesGcm(bytes, password);
+  assertEquals(encrypted.length > bytes.length, true);
+  assertEquals(new TextDecoder().decode(encrypted.subarray(0, 4)), "CZ25");
+
+  const decrypted = await decryptFileAesGcm(encrypted, password);
+  assertEquals(new TextDecoder().decode(decrypted), plainText);
 });
 
 Deno.test("repairPdf: salvagePdfObjects locates objects and buildSyntheticXrefTrailer creates valid table", () => {
