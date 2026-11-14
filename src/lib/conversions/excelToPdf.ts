@@ -118,7 +118,7 @@ export function parseWorksheetXml(
         // Shared string index
         const vMatch = /<v>(.*?)<\/v>/.exec(cellBody);
         if (vMatch) {
-          const sIdx = parseInt(vMatch[1], 10);
+          const sIdx = Number.parseInt(vMatch[1], 10);
           val = sharedStrings[sIdx] ?? "";
         }
       } else if (type === "inlineStr") {
@@ -217,4 +217,67 @@ export async function convertExcelToPdf(
   const tableHtml = gridToHtmlTable(grid, title);
 
   return htmlToPdf(tableHtml, options.onProgress, 40);
+}
+
+/**
+ * Convert 2D string grid into RFC 4180-compliant CSV string.
+ */
+export function gridToCsv(grid: string[][]): string {
+  return grid
+    .map((row) =>
+      row
+        .map((cell) => {
+          if (!cell) return "";
+          if (
+            cell.includes('"') ||
+            cell.includes(",") ||
+            cell.includes("\n") ||
+            cell.includes("\r")
+          ) {
+            return `"${cell.replace(/"/g, '""')}"`;
+          }
+          return cell;
+        })
+        .join(","),
+    )
+    .join("\r\n");
+}
+
+/**
+ * Convert Excel workbook (.xlsx) to CSV blob.
+ */
+export async function convertExcelToCsv(
+  file: File,
+  onProgress?: (pct: number) => void,
+): Promise<Blob> {
+  if (!zipSupported()) {
+    throw new Error(
+      "Browser does not support CompressionStream for reading Excel archives.",
+    );
+  }
+  onProgress?.(10);
+
+  const entries = await readZip(await file.arrayBuffer());
+  onProgress?.(30);
+
+  let sharedStrings: string[] = [];
+  const sstBytes = entries.get("xl/sharedStrings.xml");
+  if (sstBytes) {
+    const sstXml = new TextDecoder().decode(sstBytes);
+    sharedStrings = parseSharedStringsXml(sstXml);
+  }
+
+  const sheetBytes = entries.get("xl/worksheets/sheet1.xml");
+  if (!sheetBytes) {
+    throw new Error("No worksheet found in Excel file.");
+  }
+
+  const sheetXml = new TextDecoder().decode(sheetBytes);
+  const grid = parseWorksheetXml(sheetXml, sharedStrings);
+  onProgress?.(80);
+
+  const csv = gridToCsv(grid);
+  onProgress?.(100);
+
+  return new Blob([csv], { type: "text/csv;charset=utf-8" });
 }

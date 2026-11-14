@@ -125,7 +125,7 @@ export function generateWorksheetXml(grid: string[][]): string {
       const cellRef = `${columnToLetter(c)}${rowNum}`;
       const numVal = Number(cellVal.replace(/,/g, ""));
 
-      if (!isNaN(numVal) && cellVal.trim() !== "" && !cellVal.startsWith("0") || cellVal === "0") {
+      if (!Number.isNaN(numVal) && cellVal.trim() !== "" && !cellVal.startsWith("0") || cellVal === "0") {
         rowXml += `<c r="${cellRef}"><v>${numVal}</v></c>`;
       } else {
         rowXml += `<c r="${cellRef}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(cellVal)}</t></is></c>`;
