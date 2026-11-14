@@ -26,11 +26,26 @@ import { runHandwritingOcr } from "./ocrHandwriting";
 import { writeZip, type ZipEntryIn } from "./zip";
 
 export type PdfMarkdownProfile = "auto" | "printed" | "handwriting" | "mixed";
+export type ExportMode = "standalone-md" | "bundle-zip";
+export type FormulaFormat = "latex" | "ascii" | "html";
+export type TableFormat = "gfm" | "html" | "text";
+export type PageDelimiter = "rule" | "pagebreak" | "none";
 
-export interface PdfMarkdownOptions {
+export interface MarkdownFormattingOptions {
+  includePageAnchors?: boolean;
+  includeVisualAssets?: boolean;
+  formulaFormat?: FormulaFormat;
+  tableFormat?: TableFormat;
+  stripHeadersFooters?: boolean;
+  pageDelimiters?: PageDelimiter;
+  includeFrontmatter?: boolean;
+}
+
+export interface PdfMarkdownOptions extends MarkdownFormattingOptions {
   profile?: PdfMarkdownProfile;
   language?: OcrLanguage;
   dpi?: number;
+  exportMode?: ExportMode; // Default: "standalone-md"
   includeVisuals?: boolean;
   includeOriginalPdf?: boolean;
   onProgress?: (progress: number, status: string) => void;
@@ -287,12 +302,72 @@ export function reconstructReadingOrder(
 }
 
 /**
+ * Formats tabular text into a clean GitHub-flavored Markdown pipe table.
+ */
+export function formatGfmTable(text: string): string {
+  const rawRows = text.split("\n").map((r) => r.trim()).filter(Boolean);
+  if (!rawRows.length) return text;
+
+  // Already pipe-delimited
+  if (rawRows.every((r) => r.includes("|"))) {
+    // If it lacks a separator row (| --- |), insert one after header
+    if (rawRows.length >= 2 && !/^\s*\|?\s*:?-+:?\s*\|/.test(rawRows[1])) {
+      const colCount = Math.max(2, (rawRows[0].match(/\|/g) || []).length);
+      const sep = "|" + Array(colCount).fill(" --- |").join("");
+      return [rawRows[0], sep, ...rawRows.slice(1)].join("\n");
+    }
+    return text;
+  }
+
+  // Convert tab or multi-space separated columns
+  const parsedRows = rawRows.map((r) => r.split(/\t+|\s{3,}/).map((c) => c.trim()));
+  const maxCols = Math.max(...parsedRows.map((r) => r.length));
+  if (maxCols < 2) return text;
+
+  const padRows = parsedRows.map((r) => {
+    const cells = [...r];
+    while (cells.length < maxCols) cells.push("");
+    return "| " + cells.join(" | ") + " |";
+  });
+  const sep = "| " + Array(maxCols).fill("---").join(" | ") + " |";
+  return [padRows[0], sep, ...padRows.slice(1)].join("\n");
+}
+
+/**
  * Formats structured blocks into standard GitHub-flavored Markdown text.
  */
-export function blocksToMarkdown(blocks: ExtractedBlock[], pageNumber: number): string {
-  const lines: string[] = [`## Page ${pageNumber}\n`];
+export function blocksToMarkdown(
+  blocks: ExtractedBlock[],
+  pageNumber: number,
+  options: MarkdownFormattingOptions = {},
+): string {
+  const {
+    includePageAnchors = true,
+    includeVisualAssets = true,
+    formulaFormat = "latex",
+    tableFormat = "gfm",
+    stripHeadersFooters = true,
+    pageDelimiters = "rule",
+  } = options;
 
-  for (const b of blocks) {
+  const lines: string[] = [];
+
+  if (includePageAnchors) {
+    if (pageDelimiters === "pagebreak") {
+      lines.push(`<!-- pagebreak -->\n## Page ${pageNumber}\n`);
+    } else if (pageDelimiters === "none") {
+      lines.push(`<!-- Page ${pageNumber} -->\n`);
+    } else {
+      lines.push(`## Page ${pageNumber}\n`);
+    }
+  }
+
+  // Filter out running headers and standalone page numbers if requested
+  const filteredBlocks = stripHeadersFooters
+    ? blocks.filter((b) => !/^(page\s+\d+(\s+of\s+\d+)?|\d+\s*\/\s*\d+|\d+)$/i.test(b.text.trim()))
+    : blocks;
+
+  for (const b of filteredBlocks) {
     switch (b.type) {
       case "heading": {
         const prefix = "#".repeat(b.level ?? 2);
@@ -308,19 +383,24 @@ export function blocksToMarkdown(blocks: ExtractedBlock[], pageNumber: number): 
         break;
       }
       case "table": {
-        // Format pipe table or structured table
-        lines.push(`\n${b.text}\n`);
+        const tableText = tableFormat === "gfm" ? formatGfmTable(b.text) : b.text;
+        lines.push(`\n${tableText}\n`);
         break;
       }
       case "figure": {
-        if (b.assetPath) {
+        if (includeVisualAssets && b.assetPath) {
           lines.push(`\n![Figure on page ${pageNumber}](${b.assetPath})\n`);
+        } else if (!includeVisualAssets && b.text) {
+          lines.push(`\n<!-- [Figure on page ${pageNumber}: ${b.text}] -->\n`);
         }
         break;
       }
       case "formula": {
-        if (b.assetPath) {
+        if (includeVisualAssets && b.assetPath) {
           lines.push(`\n<!-- Preserved formula visual -->\n![Formula on page ${pageNumber}](${b.assetPath})\n`);
+        } else if (formulaFormat === "latex") {
+          const cleanEq = b.text.replace(/^`+|`+$/g, "").trim();
+          lines.push(`\n$$\n${cleanEq}\n$$\n`);
         } else {
           lines.push(`\n\`${b.text}\`\n`);
         }
@@ -350,6 +430,12 @@ export async function convertPdfToMarkdown(
     profile = "auto",
     language = "eng",
     dpi = 200,
+    exportMode = "standalone-md",
+    formulaFormat = "latex",
+    tableFormat = "gfm",
+    stripHeadersFooters = true,
+    pageDelimiters = "rule",
+    includeFrontmatter = true,
     includeVisuals = true,
     includeOriginalPdf = true,
     onProgress,
@@ -501,7 +587,13 @@ export async function convertPdfToMarkdown(
         if (!b.confidence) b.confidence = pageConfidence;
       }
 
-      const pageMd = blocksToMarkdown(pageBlocks, pageNum);
+      const pageMd = blocksToMarkdown(pageBlocks, pageNum, {
+        ...options,
+        formulaFormat,
+        tableFormat,
+        stripHeadersFooters,
+        includeVisualAssets: exportMode === "bundle-zip" ? includeVisuals : false,
+      });
       pageMarkdownParts.push(pageMd);
       allBlocks.push(...pageBlocks);
 
@@ -520,14 +612,31 @@ export async function convertPdfToMarkdown(
     }
   }
 
-  // 5. Build full document.md
+  // 5. Build full document.md with optional frontmatter
   const documentTitle = cleanBaseName.replace(/_/g, " ");
-  const fullMarkdown = [
-    `# ${documentTitle}\n`,
-    `> Extracted on ${new Date().toISOString()} via CompressZ Local-First Engine`,
-    `> Source checksum (SHA-256): \`${sha256}\`\n`,
-    pageMarkdownParts.join("\n\n---\n\n"),
-  ].join("\n");
+  const mdSections: string[] = [];
+
+  if (includeFrontmatter) {
+    mdSections.push(
+      `---\n` +
+      `title: "${documentTitle}"\n` +
+      `originalFilename: "${filename}"\n` +
+      `pageCount: ${pageCount}\n` +
+      `sha256: "${sha256}"\n` +
+      `generator: "CompressZ PDF-to-Markdown Engine"\n` +
+      `extractedAt: "${new Date().toISOString()}"\n` +
+      `---\n\n`
+    );
+  }
+
+  mdSections.push(`# ${documentTitle}\n\n`);
+  mdSections.push(`> Extracted on ${new Date().toISOString()} via CompressZ Local-First Engine\n`);
+  mdSections.push(`> Source checksum (SHA-256): \`${sha256}\`\n\n`);
+
+  const delimiter = pageDelimiters === "pagebreak" ? "\n\n<!-- pagebreak -->\n\n" : (pageDelimiters === "none" ? "\n\n" : "\n\n---\n\n");
+  mdSections.push(pageMarkdownParts.join(delimiter));
+
+  const fullMarkdown = mdSections.join("");
 
   // 6. Build manifest.json
   const manifest = {
