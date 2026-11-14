@@ -311,7 +311,7 @@ export function formatGfmTable(text: string): string {
   // Already pipe-delimited
   if (rawRows.every((r) => r.includes("|"))) {
     // If it lacks a separator row (| --- |), insert one after header
-    if (rawRows.length >= 2 && !/^\s*\|?\s*:?-+:?\s*\|/.test(rawRows[1])) {
+    if (rawRows.length >= 2 && !/^\|?\s*:?-+:?\s*\|/.test(rawRows[1].trim())) {
       const colCount = Math.max(2, (rawRows[0].match(/\|/g) || []).length);
       const sep = "|" + Array(colCount).fill(" --- |").join("");
       return [rawRows[0], sep, ...rawRows.slice(1)].join("\n");
@@ -320,7 +320,7 @@ export function formatGfmTable(text: string): string {
   }
 
   // Convert tab or multi-space separated columns
-  const parsedRows = rawRows.map((r) => r.split(/\t+|\s{3,}/).map((c) => c.trim()));
+  const parsedRows = rawRows.map((r) => r.split(/[\t ]{3,}|\t+/).map((c) => c.trim()));
   const maxCols = Math.max(...parsedRows.map((r) => r.length));
   if (maxCols < 2) return text;
 
@@ -362,9 +362,14 @@ export function blocksToMarkdown(
     }
   }
 
-  // Filter out running headers and standalone page numbers if requested
+  // Filter out running headers and standalone page numbers if requested (discrete non-backtracking checks)
+  const isPageNum = (t: string) =>
+    /^\d{1,6}$/.test(t) ||
+    /^\d{1,6}\s*\/\s*\d{1,6}$/.test(t) ||
+    /^page\s+\d{1,6}(?:\s+of\s+\d{1,6})?$/i.test(t);
+
   const filteredBlocks = stripHeadersFooters
-    ? blocks.filter((b) => !/^(page\s+\d+(\s+of\s+\d+)?|\d+\s*\/\s*\d+|\d+)$/i.test(b.text.trim()))
+    ? blocks.filter((b) => !isPageNum(b.text.trim()))
     : blocks;
 
   for (const b of filteredBlocks) {
@@ -399,7 +404,7 @@ export function blocksToMarkdown(
         if (includeVisualAssets && b.assetPath) {
           lines.push(`\n<!-- Preserved formula visual -->\n![Formula on page ${pageNumber}](${b.assetPath})\n`);
         } else if (formulaFormat === "latex") {
-          const cleanEq = b.text.replace(/^`+|`+$/g, "").trim();
+          const cleanEq = b.text.replace(/^`+/, "").replace(/`+$/, "").trim();
           lines.push(`\n$$\n${cleanEq}\n$$\n`);
         } else {
           lines.push(`\n\`${b.text}\`\n`);

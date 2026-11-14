@@ -52,7 +52,21 @@ export async function getQpdf(customLoader?: () => Promise<any>): Promise<any> {
         return _qpdfModule;
       }
 
-      // Load version-locked ESM module
+      // Load version-locked ESM module with Cache API persistence
+      if (typeof caches !== "undefined") {
+        try {
+          const cache = await caches.open("compressz-engines-v1");
+          const cachedWasm = await cache.match(QPDF_WASM_URL);
+          if (!cachedWasm) {
+            fetch(QPDF_WASM_URL).then((res) => {
+              if (res.ok) cache.put(QPDF_WASM_URL, res);
+            }).catch(() => {});
+          }
+        } catch {
+          // Ignore cache storage errors
+        }
+      }
+
       const mod = await import(/* @vite-ignore */ QPDF_ESM_URL);
       const initQpdf = mod.default || mod;
       if (typeof initQpdf === "function") {
