@@ -25,6 +25,7 @@ import {
   parseSharedStringsXml,
   parseWorksheetXml,
   gridToHtmlTable,
+  gridToCsv,
 } from "../src/lib/conversions/excelToPdf.ts";
 import {
   getLibreOfficeStatus,
@@ -178,4 +179,17 @@ Deno.test("conversions: libreOfficeWasm maintains lazy loading status", () => {
   const status = getLibreOfficeStatus();
   assertEquals(status.loaded, false);
   assertEquals(status.loading, false);
+});
+
+Deno.test("conversions: gridToCsv formats 2D grid into properly escaped CSV", () => {
+  const grid = [
+    ["Name", "Notes", "Count"],
+    ["Widget A", 'Includes "quotes" and, commas', "42"],
+    ["Widget B", "Multi\nline", "10"],
+  ];
+  const csv = gridToCsv(grid);
+  assertEquals(
+    csv,
+    'Name,Notes,Count\r\nWidget A,"Includes ""quotes"" and, commas",42\r\nWidget B,"Multi\nline",10',
+  );
 });
