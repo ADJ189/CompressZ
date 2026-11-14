@@ -158,13 +158,26 @@
     { id: "redact", name: "Redaction", icon: "⬛" },
   ];
 
+  let loadSeq = 0;
   async function loadFile(file: File) {
+    const mySeq = ++loadSeq;
     selectedFile = file;
+
+    // Reset per-file state immediately
+    redactionList = [];
+    formValues = {};
+    formFields = [];
+    pageThumbnails = {};
+    pageSpecs = [];
+
     const bytes = new Uint8Array(await file.arrayBuffer());
+    if (mySeq !== loadSeq) return;
     pdfBytes = bytes;
 
+    let pdfJs: any = null;
     try {
-      const pdfJs = await openPdfDocument(bytes);
+      pdfJs = await openPdfDocument(bytes);
+      if (mySeq !== loadSeq) return;
       totalPages = pdfJs.numPages;
 
       // Initialize page specs for organize tool
@@ -176,24 +189,32 @@
 
       // Generate thumbnails for the first 12 pages
       for (let i = 1; i <= Math.min(totalPages, 12); i++) {
+        if (mySeq !== loadSeq) return;
         const p = await pdfJs.getPage(i);
+        if (mySeq !== loadSeq) return;
         const vp = p.getViewport({ scale: 0.25 });
         const canvas = document.createElement("canvas");
         canvas.width = Math.round(vp.width);
         canvas.height = Math.round(vp.height);
         const ctx = canvas.getContext("2d")!;
         await p.render({ canvasContext: ctx, viewport: vp }).promise;
+        if (mySeq !== loadSeq) return;
         pageThumbnails[i - 1] = canvas.toDataURL("image/jpeg", 0.7);
       }
 
       // Check form fields
       const formInfo = await inspectPdfForm(bytes);
+      if (mySeq !== loadSeq) return;
       formFields = formInfo.fields;
       for (const f of formInfo.fields) {
         formValues[f.name] = f.value;
       }
     } catch (err) {
       console.warn("[PdfSuite] Inspection error (file might need repair):", err);
+    } finally {
+      if (pdfJs && typeof pdfJs.destroy === "function") {
+        await pdfJs.destroy().catch(() => {});
+      }
     }
   }
 
@@ -343,6 +364,7 @@
         }
         const out = await applyTrueRedaction(pdfBytes!, {
           regions: redactionList,
+          renderDpi: archivalDpi,
           onProgress: (p) => (progressPct = p),
         });
         downloadBlob(
@@ -412,20 +434,10 @@
   <HubHeader
     title="PDF Suite & Studio"
     description="Browser-native workstation for organizing, splitting, editing, signing, watermarking, filling, and securing PDF documents."
+    icon="📄"
     activeToolId={activeTool}
-    tools={[
-      { id: "split", name: "Split", icon: "split" },
-      { id: "organize", name: "Organize", icon: "organize" },
-      { id: "studio", name: "Studio", icon: "studio" },
-      { id: "watermark", name: "Watermark", icon: "watermark" },
-      { id: "crop", name: "Crop", icon: "crop" },
-      { id: "forms", name: "Forms", icon: "forms" },
-      { id: "redact", name: "Redact", icon: "redact" },
-      { id: "security", name: "Protect", icon: "security" },
-      { id: "repair", name: "Repair", icon: "repair" },
-    ]}
+    tools={TOOLS}
     onSelectTool={(id) => (activeTool = id as SubTool)}
-    onFilesSelected={(files) => files[0] && loadFile(files[0])}
   />
 
   <div class="cz-pdf-suite-content">
@@ -544,10 +556,12 @@
         <div class="cz-tool-workspace-panel">
           {#if activeTool === "studio"}
             {#if pdfBytes}
-              <PdfCanvasEditor
-                pdfBytes={pdfBytes}
-                onExport={(mod) => downloadBlob(new Blob([mod], { type: "application/pdf" }), `${selectedFile?.name.replace(/\.pdf$/i, "")}-annotated.pdf`)}
-              />
+              {#key selectedFile ? `${selectedFile.name}-${selectedFile.size}-${selectedFile.lastModified}` : "studio-editor"}
+                <PdfCanvasEditor
+                  pdfBytes={pdfBytes}
+                  onExport={(mod) => downloadBlob(new Blob([mod], { type: "application/pdf" }), `${selectedFile?.name.replace(/\.pdf$/i, "")}-annotated.pdf`)}
+                />
+              {/key}
             {/if}
           {:else if activeTool === "organize"}
             <div class="cz-panel-section">
@@ -777,6 +791,21 @@
                             <option value={opt}>{opt}</option>
                           {/each}
                         </select>
+                      {:else if field.type === "radio" && field.options && field.options.length > 0}
+                        <div class="cz-radio-group" role="radiogroup" aria-label={field.name}>
+                          {#each field.options as opt}
+                            <label class="cz-radio-pill {formValues[field.name] === opt ? 'is-selected' : ''}">
+                              <input
+                                type="radio"
+                                name={field.name}
+                                value={opt}
+                                checked={formValues[field.name] === opt}
+                                onchange={() => (formValues[field.name] = opt)}
+                              />
+                              <span>{opt}</span>
+                            </label>
+                          {/each}
+                        </div>
                       {:else}
                         <input
                           id={`field-${field.name}`}
@@ -965,10 +994,10 @@
                     </button>
                     <button
                       type="button"
-                      class="cz-btn cz-btn-outline"
-                      onclick={() => (showStudio = true)}
+                      class="cz-btn cz-btn-secondary"
+                      onclick={() => (activeTool = "studio")}
                     >
-                      Draw in Studio
+                      ✏️ Draw in Studio Editor
                     </button>
                   </div>
                 </div>

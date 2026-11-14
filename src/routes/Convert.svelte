@@ -11,7 +11,7 @@
   import { convertPdfToExcel } from "../lib/conversions/pdfToExcel";
   import { convertPdfToPpt } from "../lib/conversions/pdfToPpt";
   import { convertExcelToPdf, convertExcelToCsv } from "../lib/conversions/excelToPdf";
-  import { convertWithLibreOfficeWasm } from "../lib/conversions/libreOfficeWasm";
+  import { convertWithLibreOfficeWasm, isLibreOfficeAvailable } from "../lib/conversions/libreOfficeWasm";
   import { consumeStagedUniversalFile, currentRoute } from "../store";
   import { imagesToPdf } from "../lib/imagesToPdf";
   import { audioOptions, imageOptions } from "../lib/options";
@@ -52,7 +52,7 @@
     const qType = params.get("type");
     const qCat = params.get("cat");
 
-    if (qCat && qCat in CATS) {
+    if (qCat && Object.hasOwn(CATS, qCat)) {
       activeCat = qCat as Category;
       targetFormat = CATS[activeCat].targets[0].value;
       if (qTo && CATS[activeCat].targets.some((t) => t.value === qTo)) {
@@ -173,6 +173,36 @@
       } else if (staged.actionId === "convert-image") {
         activeCat = "image";
         targetFormat = "webp";
+      } else {
+        const name = staged.file.name.toLowerCase();
+        const type = staged.file.type.toLowerCase();
+        if (type.startsWith("image/") || /\.(png|jpe?g|webp|avif|bmp|tiff|gif|svg)$/i.test(name)) {
+          activeCat = "image";
+          targetFormat = "webp";
+        } else if (type.startsWith("video/") || /\.(mp4|webm|mov|mkv|avi)$/i.test(name)) {
+          activeCat = "video";
+          targetFormat = "mp4";
+        } else if (type.startsWith("audio/") || /\.(mp3|wav|ogg|aac|flac|m4a|opus)$/i.test(name)) {
+          activeCat = "audio";
+          targetFormat = "mp3";
+        } else if (name.endsWith(".docx") || type.includes("wordprocessingml")) {
+          activeCat = "docx";
+          targetFormat = "pdf";
+        } else if (name.endsWith(".xlsx") || type.includes("spreadsheetml")) {
+          activeCat = "xlsx";
+          targetFormat = "pdf";
+        } else if (name.endsWith(".pptx") || type.includes("presentationml")) {
+          activeCat = "pptx";
+          targetFormat = "pdf";
+        } else if (name.endsWith(".html") || name.endsWith(".htm") || type === "text/html") {
+          activeCat = "html";
+          targetFormat = "pdf";
+        } else if (name.endsWith(".pdf") || type === "application/pdf") {
+          activeCat = "pdf2office";
+          targetFormat = "docx";
+        } else {
+          toast(`Unsupported conversion file format for ${staged.file.name}`, "error");
+        }
       }
     }
 
@@ -296,7 +326,7 @@
       ],
     },
     html: {
-      label: "HTML",
+      label: "HTML to PDF",
       icon: "docs",
       accept: ".html,.htm,text/html",
       targets: [
@@ -411,15 +441,18 @@
           const res = await runScheduled(
             { kind: "image", label: file.name, bytes: file.size },
             () =>
-              compressImage(file, imageOptions({ quality: 95, format: mime })),
+              compressImage(file, imageOptions({ quality: convertQuality, format: mime })),
           );
           blob = res.blob;
         } else if (activeCat === "pdf2office") {
-          if (selectedEngine === "libreoffice") {
+          if (selectedEngine === "libreoffice" && isLibreOfficeAvailable()) {
             const bytes = new Uint8Array(await file.arrayBuffer());
             const outBytes = await convertWithLibreOfficeWasm(bytes, "pdf", targetFormat);
             blob = new Blob([new Uint8Array(outBytes)]);
           } else {
+            if (selectedEngine === "libreoffice" && !isLibreOfficeAvailable()) {
+              toast("LibreOffice WASM not loaded in this runtime. Using fast web-native engine.", "info");
+            }
             if (targetFormat === "docx") blob = await convertPdfToWord(file);
             else if (targetFormat === "xlsx") blob = await convertPdfToExcel(file);
             else if (targetFormat === "pptx") blob = await convertPdfToPpt(file);
@@ -431,18 +464,21 @@
               pdfToImages(
                 file,
                 targetFormat as "png" | "jpeg" | "webp",
-                150,
+                convertScaleDpi,
               ),
           );
           blob = res.blob;
           suffix = "-images";
         } else if (activeCat === "docx") {
           if (targetFormat === "pdf") {
-            if (selectedEngine === "libreoffice") {
+            if (selectedEngine === "libreoffice" && isLibreOfficeAvailable()) {
               const bytes = new Uint8Array(await file.arrayBuffer());
               const outBytes = await convertWithLibreOfficeWasm(bytes, "docx", "pdf");
               blob = new Blob([new Uint8Array(outBytes)], { type: "application/pdf" });
             } else {
+              if (selectedEngine === "libreoffice" && !isLibreOfficeAvailable()) {
+                toast("LibreOffice WASM not loaded in this runtime. Using fast web-native engine.", "info");
+              }
               blob = await docxToPdf(file);
             }
           } else if (targetFormat === "html") {
@@ -456,20 +492,26 @@
               { kind: "document", label: file.name, bytes: file.size },
               () => convertExcelToCsv(file),
             );
-          } else if (selectedEngine === "libreoffice") {
+          } else if (selectedEngine === "libreoffice" && isLibreOfficeAvailable()) {
             const bytes = new Uint8Array(await file.arrayBuffer());
             const outBytes = await convertWithLibreOfficeWasm(bytes, "xlsx", "pdf");
             blob = new Blob([new Uint8Array(outBytes)], { type: "application/pdf" });
           } else {
+            if (selectedEngine === "libreoffice" && !isLibreOfficeAvailable()) {
+              toast("LibreOffice WASM not loaded in this runtime. Using fast web-native engine.", "info");
+            }
             blob = await convertExcelToPdf(file);
           }
         } else if (activeCat === "pptx") {
           if (targetFormat === "pdf") {
-            if (selectedEngine === "libreoffice") {
+            if (selectedEngine === "libreoffice" && isLibreOfficeAvailable()) {
               const bytes = new Uint8Array(await file.arrayBuffer());
               const outBytes = await convertWithLibreOfficeWasm(bytes, "pptx", "pdf");
               blob = new Blob([new Uint8Array(outBytes)], { type: "application/pdf" });
             } else {
+              if (selectedEngine === "libreoffice" && !isLibreOfficeAvailable()) {
+                toast("LibreOffice WASM not loaded in this runtime. Using fast web-native engine.", "info");
+              }
               blob = await pptxToPdf(file);
             }
           } else {
@@ -523,12 +565,18 @@
 </script>
 
 <div class="tool-wrap cz-apple-workbench">
+  <HubHeader
+    title="Multi-Format Converter"
+    description="High-speed client-side conversion for video, audio, office files, and raster images. Zero server uploads."
+    icon="🔄"
+  />
+
   <!-- Left Main Column: Converter Workspace -->
   <main class="cz-card-main">
     <div class="cz-main-header">
       <div>
-        <h1 class="cz-main-title">Multi-Format Converter</h1>
-        <p class="cz-main-sub">Convert video, audio, office files, and images in browser memory</p>
+        <h2 class="cz-main-title">Format Transcoding</h2>
+        <p class="cz-main-sub">Client-side transcode presets optimized for web delivery and quality</p>
       </div>
 
       <!-- Quick Fast Organize Reorder Action -->
@@ -551,7 +599,7 @@
           class="cz-segmented-item {activeCat === catKey ? 'is-active' : ''}"
           onclick={() => handleCatChange(catKey as Category)}
         >
-          <span>{meta.icon}</span>
+          <MacIcon name={meta.icon} size={15} />
           <span>{meta.label}</span>
         </button>
       {/each}
@@ -900,18 +948,25 @@
             <button
               type="button"
               class="cz-engine-toggle {selectedEngine === 'libreoffice' ? 'is-selected' : ''}"
-              onclick={() => (selectedEngine = 'libreoffice')}
+              onclick={() => {
+                if (!isLibreOfficeAvailable()) {
+                  toast("LibreOffice WASM requires self-hosted bundle environment. Defaulting to fast Web-Native.", "info");
+                  return;
+                }
+                selectedEngine = 'libreoffice';
+              }}
+              title={!isLibreOfficeAvailable() ? "LibreOffice WASM bundle not available in this environment" : ""}
             >
               <div class="cz-engine-head">
                 <span class="cz-engine-icon">🏛️</span>
                 <span class="cz-engine-name">LibreOffice WASM</span>
-                <span class="cz-engine-chip is-heavy">~85MB</span>
+                <span class="cz-engine-chip is-heavy">{isLibreOfficeAvailable() ? "~85MB" : "Unavailable"}</span>
               </div>
-              <div class="cz-engine-desc">Desktop Fidelity &bull; Complex Equations &bull; On-Demand</div>
+              <div class="cz-engine-desc">{isLibreOfficeAvailable() ? "Desktop Fidelity • Complex Equations • On-Demand" : "Not detected in browser bundle; using Web-Native"}</div>
             </button>
           </div>
 
-          {#if selectedEngine === 'libreoffice'}
+          {#if selectedEngine === 'libreoffice' && isLibreOfficeAvailable()}
             <div class="cz-engine-warning">
               ⚠️ Downloads ~85 MB WebAssembly runtime on first execution. 100% browser-local processing.
             </div>

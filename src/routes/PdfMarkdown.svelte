@@ -2,6 +2,7 @@
   import FileDropzone from "../components/FileDropzone.svelte";
   import ProgressStatus from "../components/ProgressStatus.svelte";
   import MacIcon from "../components/MacIcon.svelte";
+  import { renderMarkdownToHtml } from "../lib/markdownPreview";
   import {
     convertPdfToMarkdown,
     type PdfMarkdownBundle,
@@ -37,6 +38,7 @@
   let activePageIndex = $state(0);
   let editableMarkdown = $state("");
   let viewMode = $state<"editor" | "rendered">("editor");
+  const renderedHtml = $derived(renderMarkdownToHtml(editableMarkdown));
 
   function handleFileSelected(files: File[]) {
     if (files.length > 0) {
@@ -515,7 +517,8 @@
             ></textarea>
           {:else}
             <div class="cz-markdown-rendered">
-              <pre>{editableMarkdown}</pre>
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+              {@html renderedHtml}
             </div>
           {/if}
         </div>
@@ -895,13 +898,79 @@
   }
   .cz-markdown-rendered {
     flex: 1;
-    padding: 1rem;
+    padding: 1.25rem;
     overflow-y: auto;
     font-family: var(--sans);
     font-size: 0.9rem;
     line-height: 1.6;
+    color: var(--text);
   }
-  .cz-markdown-rendered pre {
+  .cz-markdown-rendered :global(h1),
+  .cz-markdown-rendered :global(h2),
+  .cz-markdown-rendered :global(h3),
+  .cz-markdown-rendered :global(h4) {
+    color: var(--text);
+    margin-top: 1.25rem;
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+  }
+  .cz-markdown-rendered :global(p) {
+    margin-bottom: 0.85rem;
+  }
+  .cz-markdown-rendered :global(ul),
+  .cz-markdown-rendered :global(ol) {
+    padding-left: 1.5rem;
+    margin-bottom: 0.85rem;
+  }
+  .cz-markdown-rendered :global(blockquote) {
+    border-left: 3px solid var(--accent);
+    padding-left: 1rem;
+    color: var(--text-2);
+    margin: 0.85rem 0;
+  }
+  .cz-markdown-rendered :global(code) {
+    font-family: var(--mono);
+    font-size: 0.84rem;
+    background: var(--surface-2);
+    padding: 0.15rem 0.35rem;
+    border-radius: var(--r-xs);
+  }
+  .cz-markdown-rendered :global(pre.cz-code-block) {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: 1rem;
+    overflow-x: auto;
+    margin: 1rem 0;
+  }
+  .cz-markdown-rendered :global(.cz-rendered-math-block) {
+    background: var(--accent-soft);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: 0.75rem 1rem;
+    text-align: center;
+    margin: 1rem 0;
+  }
+  .cz-markdown-rendered :global(.cz-table-wrap) {
+    overflow-x: auto;
+    margin: 1rem 0;
+  }
+  .cz-markdown-rendered :global(table.cz-rendered-table) {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+  .cz-markdown-rendered :global(table.cz-rendered-table th),
+  .cz-markdown-rendered :global(table.cz-rendered-table td) {
+    border: 1px solid var(--border);
+    padding: 0.45rem 0.75rem;
+    text-align: left;
+  }
+  .cz-markdown-rendered :global(table.cz-rendered-table th) {
+    background: var(--surface-2);
+    font-weight: 600;
+  }
+  .cz-markdown-rendered :global(pre) {
     white-space: pre-wrap;
     font-family: var(--mono);
     font-size: 0.85rem;
