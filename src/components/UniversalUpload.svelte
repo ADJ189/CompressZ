@@ -96,7 +96,7 @@
     font-size: 0.8rem;
     font-weight: 600;
     cursor: pointer;
-    transition: all var(--t-fast);
+    transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast), box-shadow var(--t-fast), transform var(--t-fast);
     outline: none;
     user-select: none;
     box-shadow: var(--shadow-sm);
