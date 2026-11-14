@@ -116,6 +116,14 @@
       {:else if name === "markdown" || name === "pdf-markdown"}
         <rect x="3" y="4" width="18" height="16" rx="2" />
         <path d="M7 15V9l2.5 3L12 9v6M17 12l-2 3M15 12l2-3" />
+      {:else if name === "upload"}
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+        <polyline points="17 8 12 3 7 8" />
+        <line x1="12" y1="3" x2="12" y2="15" />
+      {:else if name === "archive"}
+        <polyline points="21 8 21 21 3 21 3 8" />
+        <rect x="1" y="3" width="22" height="5" />
+        <line x1="10" y1="12" x2="14" y2="12" />
       {:else}
         <circle cx="12" cy="12" r="8" />
       {/if}
@@ -250,4 +258,6 @@
   .cz-sq-excel { background: linear-gradient(135deg, #107c41, #0b5a2e); }
   .cz-sq-ppt { background: linear-gradient(135deg, #d83b01, #a82a00); }
   .cz-sq-markdown, .cz-sq-pdf-markdown { background: linear-gradient(135deg, #0a84ff, #30d158); }
+  .cz-sq-upload { background: linear-gradient(135deg, #0a84ff, #5e5ce6); }
+  .cz-sq-archive { background: linear-gradient(135deg, #ff9f0a, #ff453a); }
 </style>
