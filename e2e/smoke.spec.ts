@@ -96,7 +96,7 @@ test("quick actions navigate client-side and tab state follows", async ({
     .click();
   await expect(page).toHaveURL(/\/compress\/pdf$/);
   await expect(
-    page.locator('[data-tab][data-nav="compress/pdf"]'),
+    page.locator('[data-tab][data-nav="pdf"]'),
   ).toHaveClass(/active/);
   await page.goBack();
   await expect(page).toHaveURL(/\/$/);
