@@ -231,14 +231,14 @@ match. Several were previously wrong; don't regress them.
   - SHA-256 digest of original PDF input computed via `crypto.subtle.digest`.
   - Column-aware reading order reconstruction: clusters text items into lines,
     detects multi-column splits, classifies headings by relative font scale,
-    identifies bullet/numbered lists and Markdown pipe tables.
-  - Crop generation for equations and diagram figures: equations are rendered
-    to high-resolution visual crops (`assets/figures/*.png`); never hallucinated
-    into invented or syntactically invalid LaTeX.
-  - Full-page previews rendered to `assets/pages/page-*.png`.
-  - Portable, self-contained ZIP bundle download containing:
-    `document.md`, `manifest.json`, `extraction.json`, `source/original.pdf`,
-    `assets/pages/*.png`, and `assets/figures/*.png`.
+    identifies bullet/numbered lists and formats Markdown pipe tables (`formatGfmTable`).
+  - **Standalone Markdown (.md) is the primary default download**: exports pure,
+    clean Markdown containing all words, GFM tables, and LaTeX math formulas (`$$ ... $$`),
+    with zero ZIP overhead and zero external image requirements.
+  - Optional complete ZIP bundle containing: `document.md`, `manifest.json`,
+    `extraction.json`, `source/original.pdf`, and lossless `assets/pages/*.png`.
+  - Advanced engine options: `exportMode`, `formulaFormat` (LaTeX / Plain / HTML),
+    `tableFormat` (GFM / HTML / Text), `stripHeadersFooters`, `pageDelimiters`, and `includeFrontmatter`.
 
 ### Video / Audio / GIF
 - Video: **WebCodecs + Mediabunny fast path → FFmpeg.wasm → MediaRecorder**.

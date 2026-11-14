@@ -198,7 +198,15 @@ async function makeImage(
         ctx.fillStyle = "#101010";
         ctx.font = "bold 48px sans-serif";
         ctx.fillText("CompressZ", 32, 88);
-        return canvas.toDataURL(type, 0.92).split(",")[1];
+        const blob = await new Promise<Blob>((resolve) =>
+          canvas.toBlob((b) => resolve(b!), type, 0.92),
+        );
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        let binary = "";
+        for (let i = 0; i < bytes.length; i += 0x8000) {
+          binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        }
+        return btoa(binary);
       },
       { type, width, height },
     );
@@ -248,6 +256,12 @@ async function makeVideo(browser: Browser): Promise<Buffer | null> {
       stream.getTracks().forEach((t) => t.stop());
 
       const blob = new Blob(chunks, { type: mime });
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      let binary = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      }
+      return btoa(binary);
       return new Promise<string>((res, rej) => {
         const r = new FileReader();
         r.onload = () => res(String(r.result).split(",")[1]);
@@ -392,7 +406,10 @@ test.describe("conversion matrix", () => {
   test("Images: two photos compress to WebP with blob-derived names", async ({ page }) => {
     await page.goto("/compress/images");
     await upload(page, fixtures.png, fixtures.jpg);
-    const { name, bytes } = await runCompression(page, 2);
+    await page.getByRole("button", { name: "Compress all" }).click();
+    await waitForCards(page, 2);
+
+    const { name, bytes } = await clickDownload(page);
     expect(name).toMatch(/-compressed\.webp$/);
     expect(bytes.subarray(0, 4).toString("latin1")).toBe("RIFF");
     expect(bytes.subarray(8, 12).toString("latin1")).toBe("WEBP");
@@ -419,7 +436,10 @@ test.describe("conversion matrix", () => {
     test.setTimeout(CDN_TIMEOUT);
     await page.goto("/compress/pdf");
     await upload(page, fixtures.pdf);
-    const { name, bytes } = await runCompression(page);
+    await page.getByRole("button", { name: "Compress all" }).click();
+    await waitForCards(page, 1);
+
+    const { name, bytes } = await clickDownload(page);
     expect(name).toMatch(/-compressed\.pdf$/);
     expect(bytes.subarray(0, 4).toString("latin1")).toBe("%PDF");
   });
@@ -474,34 +494,57 @@ test.describe("conversion matrix", () => {
     await upload(page, fixtures.pdf);
     await page.getByRole("button", { name: "Convert All" }).click();
 
-    const { name, bytes } = await clickConvertDownload(page);
-    expect(name).toMatch(/-images\.png$/);
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      convertDownload(page).click({ timeout: CDN_TIMEOUT }),
+    ]);
+    const bytes = await readDownload(download);
+    expect(download.suggestedFilename()).toMatch(/-images\.png$/);
     expect(bytes.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
   });
 
-  for (const [format, ext] of [
-    ["Plain Text", /\.txt$/],
-    ["HTML", /\.html$/],
-  ] as const) {
-    test(`Convert: DOCX → ${format}`, async ({ page }) => {
-      test.setTimeout(CDN_TIMEOUT);
-      await page.goto("/convert");
-      await category(page, "DOCX").click();
-      await page.getByRole("button", { name: format }).click();
-      await upload(page, fixtures.docx);
-      await page.getByRole("button", { name: "Convert All" }).click();
+  test("Convert: DOCX → TXT", async ({ page }) => {
+    test.setTimeout(CDN_TIMEOUT);
+    await page.goto("/convert");
+    await category(page, "DOCX").click();
+    await page.getByRole("button", { name: "Plain Text" }).click();
+    await upload(page, fixtures.docx);
+    await page.getByRole("button", { name: "Convert All" }).click();
 
-      const { name, bytes } = await clickConvertDownload(page);
-      expect(name).toMatch(ext);
-      expect(bytes.toString("utf8")).toContain("CompressZ document text");
-    });
-  }
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      convertDownload(page).click({ timeout: CDN_TIMEOUT }),
+    ]);
+    const bytes = await readDownload(download);
+    expect(download.suggestedFilename()).toMatch(/\.txt$/);
+    expect(bytes.toString("utf8")).toContain("CompressZ document text");
+  });
+
+  test("Convert: DOCX → HTML", async ({ page }) => {
+    test.setTimeout(CDN_TIMEOUT);
+    await page.goto("/convert");
+    await category(page, "DOCX").click();
+    await page.getByRole("button", { name: "HTML", exact: true }).click();
+    await upload(page, fixtures.docx);
+    await page.getByRole("button", { name: "Convert All" }).click();
+
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      convertDownload(page).click({ timeout: CDN_TIMEOUT }),
+    ]);
+    const bytes = await readDownload(download);
+    expect(download.suggestedFilename()).toMatch(/\.html$/);
+    expect(bytes.toString("utf8")).toContain("CompressZ document text");
+  });
 
   test("GIF: re-optimise keeps a GIF", async ({ page }) => {
     test.setTimeout(CDN_TIMEOUT);
     await page.goto("/compress/gif");
     await upload(page, fixtures.gif);
-    const { name, bytes } = await runCompression(page);
+    await page.getByRole("button", { name: "Compress all" }).click();
+    await waitForCards(page, 1);
+
+    const { name, bytes } = await clickDownload(page);
     expect(name).toMatch(/-compressed\.gif$/);
     expect(bytes.subarray(0, 6).toString("latin1")).toMatch(/^GIF8[79]a$/);
   });
@@ -523,7 +566,10 @@ test.describe("conversion matrix", () => {
     test.setTimeout(CDN_TIMEOUT);
     await page.goto("/compress/audio");
     await upload(page, fixtures.wav);
-    const { name, bytes } = await runCompression(page);
+    await page.getByRole("button", { name: "Compress all" }).click();
+    await waitForCards(page, 1);
+
+    const { name, bytes } = await clickDownload(page);
     expect(name).toMatch(/-compressed\.mp3$/);
     // ID3 tag or a raw MPEG frame sync.
     const id3 = bytes.subarray(0, 3).toString("latin1") === "ID3";
@@ -536,7 +582,10 @@ test.describe("conversion matrix", () => {
     test.skip(!fixtures.webm, "MediaRecorder produced no WebM clip in this browser");
     await page.goto("/compress/video");
     await upload(page, fixtures.webm!);
-    const { name, bytes } = await runCompression(page);
+    await page.getByRole("button", { name: "Compress all" }).click();
+    await waitForCards(page, 1);
+
+    const { name, bytes } = await clickDownload(page);
     expect(name).toMatch(/-compressed\.mp4$/);
     expect(bytes.subarray(4, 8).toString("latin1")).toBe("ftyp");
   });

@@ -325,7 +325,7 @@ function wrapText(
 }
 
 // ── Shared: HTML → PDF via html2canvas + pdf-lib ────────────────
-async function htmlToPdf(
+export async function htmlToPdf(
   html: string,
   onProgress?: (pct: number) => void,
   startPct = 0,

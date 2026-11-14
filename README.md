@@ -31,12 +31,16 @@ CompressF is still maintained as its own project.
 | ---------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | **Images**       | JPEG · PNG · WebP · AVIF · HEIC · BMP                                                               | Canvas/OffscreenCanvas · optional WebGL2 resize                          |
 | **PDF Compress** | PDF                                                                                                 | PDF.js + pdf-lib (structural image resampling)                           |
+| **PDF Suite & Studio** | Merge · Split · Organize & Rotate · Crop · Watermark · Studio · Sign · Forms · Redact · Protect · Repair | pdf-lib + QPDF WASM + Canvas Studio                                      |
+| **Two-Way Office** | PDF ⇄ Word (.docx) · PDF ⇄ Excel (.xlsx) · PDF ⇄ PowerPoint (.pptx) · Excel → PDF · HTML → PDF      | Fast Web-Native (OOXML + zip.ts) + Desktop LibreOffice WASM             |
 | **Video**        | MP4 · WebM · MOV · AVI · MKV                                                                        | WebCodecs + Mediabunny → FFmpeg.wasm → MediaRecorder                    |
 | **Audio**        | MP3 · AAC · OGG · Opus · FLAC · WAV                                                                 | FFmpeg.wasm                                                              |
 | **GIF**          | GIF → GIF or WebM VP9                                                                               | FFmpeg.wasm (two-pass palettegen)                                        |
 | **SVG**          | SVG                                                                                                 | Pure TypeScript, zero dependencies                                       |
 | **PDF OCR**      | Scanned PDF / Image → Searchable PDF + TXT / Handwriting TXT                                       | Tesseract.js 5 + optional PaddleOCR PP-OCRv3 + TrOCR English handwriting  |
-| **PDF → Markdown** | PDF → Markdown (`document.md`) + structured figures/manifest ZIP                                 | Column-aware layout parser, PDF.js, pure TypeScript ZIP engine           |
+| **PDF → Markdown** | PDF → Standalone Markdown (`.md`, default) or complete figures/manifest ZIP | Column-aware parser, LaTeX formula reconstruction, GFM tables, PDF.js |
+| **Multi-File Archives** | Multi-file `.tar.gz` · `.tgz` · `.gz` · `.tar` · `.zip`                                            | Native Web Streams (`CompressionStream`) + POSIX UStar tar.ts + zip.ts  |
+| **Vault Encryption** | Client-side zero-download authenticated file encryption                                            | Hardware-accelerated WebCrypto AES-256-GCM + PBKDF2 (100k iterations)     |
 | **Convert**      | Video ⇄ video · Audio ⇄ audio · Image ⇄ image · PDF ⇄ Images · DOCX → PDF/TXT/HTML · PPTX → PDF/TXT | FFmpeg.wasm, pdf-lib, mammoth.js, html2canvas, zero-dep ZIP              |
 | **Images → PDF** | Images → single PDF, one page each                                                                  | pdf-lib, with an optional local AI sort-by-label pass                    |
 

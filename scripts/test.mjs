@@ -9,7 +9,7 @@
  * and Node's built-in APIs.
  */
 import { readdir, readFile, mkdir, rm, writeFile } from "node:fs/promises";
-import { join, resolve, dirname } from "node:path";
+import { join, resolve, dirname, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT_DIR = fileURLToPath(new URL("..", import.meta.url));
@@ -149,17 +149,25 @@ async function transpileFile(srcPath, outPath) {
   await writeFile(outPath, fixed, "utf-8");
 }
 
-try {
-  // Transpile src/lib
-  const srcLibDir = join(ROOT_DIR, "src", "lib");
-  const libEntries = await readdir(srcLibDir);
-  for (const entry of libEntries) {
-    if (entry.endsWith(".ts")) {
-      await transpileFile(
-        join(srcLibDir, entry),
-        join(CACHE_DIR, "src", "lib", entry.replace(/\.ts$/, ".js")),
-      );
+async function* walkTsFiles(dir) {
+  const entries = await readdir(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      yield* walkTsFiles(full);
+    } else if (entry.isFile() && entry.name.endsWith(".ts")) {
+      yield full;
     }
+  }
+}
+
+try {
+  // Transpile src/lib recursively (including conversions/ and pdfTools/)
+  const srcLibDir = join(ROOT_DIR, "src", "lib");
+  for await (const fullPath of walkTsFiles(srcLibDir)) {
+    const rel = relative(srcLibDir, fullPath);
+    const outPath = join(CACHE_DIR, "src", "lib", rel.replace(/\.ts$/, ".js"));
+    await transpileFile(fullPath, outPath);
   }
 
   // Transpile test files

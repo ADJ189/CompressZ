@@ -1,4 +1,10 @@
 {
+  "tasks": {
+    "test": "deno test --allow-read tests/",
+    "test:parallel": "deno test --parallel --allow-read tests/",
+    "check": "deno check tests/*.ts src/lib/*.ts",
+    "e2e": "deno run -A npm:@playwright/test test --workers=3"
+  },
   "compilerOptions": {
     "lib": ["deno.ns", "dom", "esnext"]
   },

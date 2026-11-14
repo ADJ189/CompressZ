@@ -246,3 +246,51 @@ export const pdfMarkdownStore = createStore<PdfMarkdownState>({
   activePageIndex: 0,
   editedMarkdown: "",
 });
+
+// ── Universal Staged File Store ───────────────────────────────
+export interface UniversalStagedItem {
+  file: File;
+  actionId?: string;
+  sourceHub?: string;
+}
+export const stagedUniversalFile = createStore<UniversalStagedItem | null>(null);
+
+/**
+ * Retrieve and consume the staged universal file (clears the store after reading).
+ */
+export function consumeStagedUniversalFile(): UniversalStagedItem | null {
+  const item = stagedUniversalFile.get();
+  if (item) {
+    stagedUniversalFile.set(null);
+  }
+  return item;
+}
+
+/**
+ * Propagates updated engine settings (or reset defaults) into live tool stores.
+ */
+export function syncEngineSettingsToStores(): void {
+  const current = getSettings().engines;
+  imageStore.update((s) => ({
+    ...s,
+    quality: current.images.quality,
+    format: current.images.format,
+    maxDim: current.images.maxDim,
+  }));
+  audioStore.update((s) => ({
+    ...s,
+    fmt: current.audio.format,
+    bitrate: current.audio.bitrate,
+  }));
+  videoStore.update((s) => ({
+    ...s,
+    crfQuality: current.video.crfQuality,
+    codec: current.video.codec,
+    preset: current.video.preset,
+  }));
+  pdfStore.update((s) => ({
+    ...s,
+    level: current.pdf.level,
+    renderScale: current.pdf.renderScale,
+  }));
+}

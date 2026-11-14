@@ -1,5 +1,7 @@
 <script lang="ts">
   import { navigate } from "../router";
+  import UniversalUpload from "../components/UniversalUpload.svelte";
+  import MacIcon from "../components/MacIcon.svelte";
 
   interface Props {
     open: boolean;
@@ -12,31 +14,46 @@
 
   const ALL_TOOLS = [
     {
+      category: "PDF Suite & Studio",
+      items: [
+        { route: "compress/merge-pdf", name: "Merge PDF", desc: "Combine multiple PDF documents without rasterisation", icon: "🧷", iconName: "merge" },
+        { route: "pdf/split", name: "Split PDF", desc: "Extract page ranges, chunk into N-parts, or burst to ZIP", icon: "✂️", iconName: "split", isNew: true },
+        { route: "pdf/organize", name: "Organize Pages", desc: "Drag-drop visual reorder, rotate, duplicate, and delete pages", icon: "📑", iconName: "organize", isNew: true },
+        { route: "pdf/edit", name: "PDF Studio & Editor", desc: "FreeText annotations, ink drawing, highlighting, and stamps", icon: "✏️", iconName: "studio", isNew: true },
+        { route: "pdf/sign", name: "Sign PDF", desc: "Vector signature pad, cursive typography, and stamp placement", icon: "🖋️", iconName: "sign", isNew: true },
+        { route: "pdf/watermark", name: "Watermark", desc: "Apply dynamic text, angle, opacity, or image stamp overlay", icon: "💧", iconName: "watermark", isNew: true },
+        { route: "pdf/crop", name: "Crop PDF", desc: "Adjust cropbox boundaries and trim margins permanently", icon: "📐", iconName: "crop", isNew: true },
+        { route: "pdf/forms", name: "Interactive Forms", desc: "Fill AcroForm fields and flatten to immutable vectors", icon: "📋", iconName: "forms", isNew: true },
+        { route: "pdf/redact", name: "True Redaction", desc: "Purge text streams and burn-in permanent redaction blocks", icon: "⬛", iconName: "redact", isNew: true },
+        { route: "pdf/protect", name: "Protect & Unlock", desc: "AES 128/256-bit encryption with user/owner permissions & decrypt", icon: "🔐", iconName: "security", isNew: true },
+        { route: "pdf/repair", name: "Repair & Recover", desc: "Rebuild corrupted PDF xref tables and salvage unreadable files", icon: "🩹", iconName: "repair", isNew: true },
+        { route: "compress/images-to-pdf", name: "Images to PDF", desc: "Compile image sequence into clean multi-page PDF", icon: "🧩", iconName: "image" },
+        { route: "compress/pdf", name: "Compress PDF", desc: "Reduce document size via downsampling and deduplication", icon: "📄", iconName: "pdf" },
+        { route: "compress/ocr", name: "PDF OCR", desc: "Extract text and generate searchable PDFs via Tesseract", icon: "🔍", iconName: "ocr" },
+        { route: "convert/pdf-markdown", name: "PDF to Markdown", desc: "High-fidelity text, table, and visual preservation export", icon: "📝", iconName: "markdown" },
+      ],
+    },
+    {
       category: "Compression",
       items: [
-        { route: "compress/images", name: "Images", desc: "Compress WebP, JPEG, PNG, AVIF with quality guard", icon: "🖼️" },
-        { route: "compress/pdf", name: "PDF", desc: "Reduce document size via downsampling and deduplication", icon: "📄" },
-        { route: "compress/video", name: "Video", desc: "WebCodecs hardware acceleration and FFmpeg transcoding", icon: "🎬" },
-        { route: "compress/audio", name: "Audio", desc: "Optimize MP3, AAC, OGG, Opus, FLAC, and WAV", icon: "🎵" },
-        { route: "compress/gif", name: "GIF", desc: "Lossy LZW compression and GIF-to-video conversion", icon: "🎞️" },
+        { route: "compress/images", name: "Images", desc: "Compress WebP, JPEG, PNG, AVIF with quality guard", icon: "🖼️", iconName: "image" },
+        { route: "compress/pdf", name: "PDF", desc: "Reduce document size via downsampling and deduplication", icon: "📄", iconName: "pdf" },
+        { route: "compress/video", name: "Video", desc: "WebCodecs hardware acceleration and FFmpeg transcoding", icon: "🎬", iconName: "video" },
+        { route: "compress/audio", name: "Audio", desc: "Optimize MP3, AAC, OGG, Opus, FLAC, and WAV", icon: "🎵", iconName: "audio" },
+        { route: "compress/gif", name: "GIF", desc: "Lossy LZW compression and GIF-to-video conversion", icon: "🎞️", iconName: "gif" },
       ],
     },
     {
-      category: "PDF & Documents",
+      category: "Conversions & Document Engines",
       items: [
-        { route: "compress/ocr", name: "PDF OCR", desc: "Extract text and generate searchable PDFs via Tesseract", icon: "🔍" },
-        { route: "convert/pdf-markdown", name: "PDF to Markdown", desc: "High-fidelity text, table, and visual preservation export", icon: "📝", isNew: true },
-        { route: "compress/merge-pdf", name: "Merge PDF", desc: "Combine multiple PDF documents without rasterisation", icon: "🧷" },
-        { route: "compress/images-to-pdf", name: "Images to PDF", desc: "Compile image sequence into clean multi-page PDF", icon: "🧩" },
-      ],
-    },
-    {
-      category: "Conversion & Utilities",
-      items: [
-        { route: "convert", name: "Format Converter", desc: "Convert between video, audio, office, and image formats", icon: "🔁" },
-        { route: "about", name: "About", desc: "Architecture, mission, and offline privacy model", icon: "ℹ️" },
-        { route: "docs", name: "Documentation", desc: "Engine specifications, limits, and technical guides", icon: "📖" },
-        { route: "privacy", name: "Privacy", desc: "Local-only invariants and zero-telemetry guarantee", icon: "🔒" },
+        { route: "convert", name: "Format Converter", desc: "Two-way Office (Word, Excel, PPT), Video, Audio & Images", icon: "🔁", iconName: "convert" },
+        { route: "convert?type=pdf-word", name: "PDF to Word (DOCX)", desc: "Export PDF layout directly into formatted Word document", icon: "📘", iconName: "word", isNew: true },
+        { route: "convert?type=pdf-excel", name: "PDF to Excel (XLSX)", desc: "Extract tabular coordinates into editable spreadsheet sheets", icon: "📗", iconName: "excel", isNew: true },
+        { route: "convert?type=pdf-ppt", name: "PDF to PowerPoint (PPTX)", desc: "Render slide decks with vector text and visual assets", icon: "📙", iconName: "ppt", isNew: true },
+        { route: "convert?type=office-pdf", name: "Office to PDF", desc: "Render DOCX, PPTX, and XLSX into PDF via native/WASM engines", icon: "📑", iconName: "pdf", isNew: true },
+        { route: "about", name: "About", desc: "Architecture, mission, and offline privacy model", icon: "ℹ️", iconName: "docs" },
+        { route: "docs", name: "Documentation", desc: "Engine specifications, limits, and technical guides", icon: "📖", iconName: "docs" },
+        { route: "privacy", name: "Privacy", desc: "Local-only invariants and zero-telemetry guarantee", icon: "🔒", iconName: "security" },
       ],
     },
   ];
@@ -89,6 +106,10 @@
       </button>
     </div>
 
+    <div class="cz-dialog-universal-upload">
+      <UniversalUpload compact={false} onActionSelected={onClose} />
+    </div>
+
     <div class="cz-dialog-search">
       <input
         type="search"
@@ -110,7 +131,9 @@
                 class="cz-tool-card"
                 onclick={() => selectTool(tool.route)}
               >
-                <span class="cz-tool-icon" aria-hidden="true">{tool.icon}</span>
+                <span class="cz-tool-icon" aria-hidden="true">
+                  <MacIcon name={tool.iconName || "tools"} variant="squircle" squircleSize={34} />
+                </span>
                 <div class="cz-tool-meta">
                   <div class="cz-tool-name">
                     {tool.name}
@@ -166,6 +189,10 @@
     font-size: 1.2rem;
     font-weight: 700;
     color: var(--text);
+  }
+  .cz-dialog-universal-upload {
+    padding: 0.85rem 1.35rem 0.5rem;
+    background: var(--surface);
   }
   .cz-dialog-search {
     padding: 0.85rem 1.35rem;

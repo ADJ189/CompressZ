@@ -16,5 +16,5 @@
     "sourceMap": true
   },
   "include": ["src", "e2e", "tests"],
-  "exclude": ["src/pages"]
+  "exclude": ["src/pages", "dist", "node_modules"]
 }

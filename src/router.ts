@@ -24,9 +24,10 @@ export function navigate(route: string, opts: { replace?: boolean } = {}) {
 }
 
 export function getRouteFromPath(path: string): string {
-  const stripped = path.startsWith(BASE_NORM)
-    ? path.slice(BASE_NORM.length)
-    : path.replace(/^\//, "");
+  const cleanPath = path.split("?")[0].split("#")[0];
+  const stripped = cleanPath.startsWith(BASE_NORM)
+    ? cleanPath.slice(BASE_NORM.length)
+    : cleanPath.replace(/^\//, "");
   return stripped.replace(/\/$/, "");
 }
 
@@ -34,12 +35,24 @@ export function dispatch(path: string) {
   const route = getRouteFromPath(path);
   currentRoute.set(route);
   trackRecent(route);
-  const handler = handlers.get(route) ?? handlers.get("*");
-  handler?.();
+
+  // Validate route pattern and safely invoke registered handler
+  if (/^[a-zA-Z0-9_\-/]+$/.test(route) && handlers.has(route)) {
+    const handler = handlers.get(route);
+    if (typeof handler === "function") {
+      handler();
+      return;
+    }
+  }
+
+  const fallback = handlers.get("*");
+  if (typeof fallback === "function") {
+    fallback();
+  }
 }
 
 export function init() {
-  window.addEventListener("popstate", () => dispatch(location.pathname));
+  window.addEventListener("popstate", () => dispatch(location.pathname + location.search));
   document.addEventListener("click", (e) => {
     const el = (e.target as Element).closest(
       "[data-nav]",

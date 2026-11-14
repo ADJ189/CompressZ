@@ -171,7 +171,16 @@
     isConverting = true;
     try {
       const files = [...state.files];
-      const options = imagesToPdfOptions(state);
+      const pageSizePt =
+        state.pageSize === "a4"
+          ? { w: 595.28, h: 841.89 }
+          : state.pageSize === "letter"
+            ? { w: 612, h: 792 }
+            : undefined;
+      const options = {
+        ...imagesToPdfOptions(state),
+        pageSize: pageSizePt,
+      };
       const bytes = files.reduce((sum, f) => sum + f.size, 0);
       const blob = await runScheduled(
         {

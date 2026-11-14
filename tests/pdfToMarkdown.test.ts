@@ -4,6 +4,7 @@ import {
   computeSha256,
   reconstructReadingOrder,
   blocksToMarkdown,
+  formatGfmTable,
   type ExtractedBlock,
 } from "../src/lib/pdfToMarkdown.ts";
 
@@ -81,4 +82,47 @@ Deno.test("pdfToMarkdown: blocksToMarkdown generates clean Markdown with page an
   assert(md.includes("## Introduction"));
   assert(md.includes("This is a paragraph of extracted text."));
   assert(md.includes("![Figure on page 1](assets/pages/page-0001.png)"));
+});
+
+Deno.test("pdfToMarkdown: blocksToMarkdown formats standalone formulas into LaTeX without image dependencies", () => {
+  const blocks: ExtractedBlock[] = [
+    {
+      type: "formula",
+      pageNumber: 1,
+      readingOrder: 0,
+      text: "E = mc^2",
+      assetPath: "assets/figures/eq-001.png",
+      source: "visual-preservation",
+      confidence: 100,
+    },
+    {
+      type: "paragraph",
+      pageNumber: 1,
+      readingOrder: 1,
+      text: "Page 1 of 10",
+      source: "native",
+      confidence: 100,
+    },
+  ];
+
+  // In standalone mode (includeVisualAssets = false):
+  const md = blocksToMarkdown(blocks, 1, {
+    includeVisualAssets: false,
+    formulaFormat: "latex",
+    stripHeadersFooters: true,
+  });
+
+  assert(md.includes("$$"));
+  assert(md.includes("E = mc^2"));
+  assert(!md.includes("![Formula"));
+  // Page number was stripped
+  assert(!md.includes("Page 1 of 10"));
+});
+
+Deno.test("pdfToMarkdown: formatGfmTable creates valid pipe table with separator row", () => {
+  const rawTable = "Name\tRole\tScore\nAlice\tEngineer\t98\nBob\tDesigner\t95";
+  const gfm = formatGfmTable(rawTable);
+  assert(gfm.includes("| Name | Role | Score |"));
+  assert(gfm.includes("| --- | --- | --- |"));
+  assert(gfm.includes("| Alice | Engineer | 98 |"));
 });

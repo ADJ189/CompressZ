@@ -2,6 +2,8 @@
   import { onMount } from "svelte";
   import { navigate } from "../router";
   import { mountWorkbench } from "../lib/workbench";
+  import MacIcon from "../components/MacIcon.svelte";
+  import UniversalUpload from "../components/UniversalUpload.svelte";
 
   let rootEl: HTMLElement;
 
@@ -29,6 +31,7 @@
       id: "images",
       route: "compress/images",
       icon: "🖼️",
+      iconName: "image",
       name: "Images",
       desc: "GPU-accelerated encoding via OffscreenCanvas. Binary search to hit exact target sizes. SSIM quality guard.",
       tags: ["JPEG", "PNG", "WebP", "AVIF", "HEIC", "✨ AI"],
@@ -38,6 +41,7 @@
       id: "pdf",
       route: "compress/pdf",
       icon: "📄",
+      iconName: "pdf",
       name: "PDF",
       desc: "Structural image resampling — text and vectors untouched. Compress to exact MB/KB target.",
       tags: ["Structural", "pdf-lib", "Target size"],
@@ -47,6 +51,7 @@
       id: "merge",
       route: "compress/merge-pdf",
       icon: "🧷",
+      iconName: "merge",
       name: "Merge PDF",
       desc: "Combine multiple PDFs into one, in any order — pages copied directly, nothing rasterised.",
       tags: ["pdf-lib", "Reorderable", "Preview"],
@@ -56,6 +61,7 @@
       id: "images-to-pdf",
       route: "compress/images-to-pdf",
       icon: "🧩",
+      iconName: "image",
       name: "Images → PDF",
       desc: "Combine photos or screenshots into one PDF, one page each, reorderable with visual previews.",
       tags: ["pdf-lib", "Reorderable", "GPU", "✨ AI"],
@@ -65,6 +71,7 @@
       id: "video",
       route: "compress/video",
       icon: "🎬",
+      iconName: "video",
       name: "Video",
       desc: "WebCodecs hardware acceleration with FFmpeg.wasm multi-threaded fallback for edit proxies.",
       tags: ["H.264", "H.265", "VP9", "AV1"],
@@ -74,6 +81,7 @@
       id: "audio",
       route: "compress/audio",
       icon: "🎵",
+      iconName: "audio",
       name: "Audio",
       desc: "FFmpeg.wasm encodes to 6 formats with custom bitrate, sample rate, and volume normalization.",
       tags: ["MP3", "AAC", "Opus", "FLAC", "WAV"],
@@ -83,6 +91,7 @@
       id: "gif",
       route: "compress/gif",
       icon: "🎞️",
+      iconName: "gif",
       name: "GIF",
       desc: "Gold-standard two-pass palettegen + paletteuse Bayer dithering or WebM VP9 conversion.",
       tags: ["GIF", "WebM VP9", "FFmpeg"],
@@ -92,6 +101,7 @@
       id: "ocr",
       route: "compress/ocr",
       icon: "🔍",
+      iconName: "ocr",
       name: "PDF OCR",
       desc: "Make scanned PDFs searchable. Tesseract.js LSTM neural OCR running in WebAssembly (100+ langs).",
       tags: ["Tesseract", "WASM", "Searchable PDF"],
@@ -101,6 +111,7 @@
       id: "convert",
       route: "convert",
       icon: "🔁",
+      iconName: "convert",
       name: "Convert",
       desc: "Format conversion for video, audio, images, PDF ⇄ images, Word DOCX, and PowerPoint PPTX.",
       tags: ["Video", "DOCX", "PPTX", "PDF"],
@@ -110,6 +121,7 @@
       id: "pdf-markdown",
       route: "convert/pdf-markdown",
       icon: "📝",
+      iconName: "markdown",
       name: "PDF to Markdown",
       desc: "High-fidelity structural extraction with column-aware reading order, table preservation, and figure crops.",
       tags: ["Markdown", "TrOCR", "ZIP Bundle", "✨ New"],
@@ -151,6 +163,7 @@
           <path d="M5 12h14M12 5l7 7-7 7"/>
         </svg>
       </a>
+      <UniversalUpload label="Drop or Pick Any File" />
       <button
         type="button"
         class="btn-ghost"
@@ -217,7 +230,9 @@
         onclick={(e) => handleNav(tool.route, e)}
       >
         <div class="htc-head">
-          <div class="htc-icon">{tool.icon}</div>
+          <div class="htc-icon">
+            <MacIcon name={tool.iconName} variant="squircle" squircleSize={40} />
+          </div>
           <button
             type="button"
             class="cz-wb-all__fav"

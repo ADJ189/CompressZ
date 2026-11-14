@@ -1,27 +1,37 @@
 <script lang="ts">
   import FileDropzone from "../components/FileDropzone.svelte";
+  import HubHeader from "../components/HubHeader.svelte";
   import { navigate } from "../router";
   import { convertVideo, type VideoContainer } from "../lib/convertMedia";
   import { compressAudio } from "../lib/compressAudio";
   import { compressImage } from "../lib/compressImage";
   import { pdfToImages } from "../lib/convertPdf";
+  import { docxToPdf, docxToText, docxToHtml, pptxToPdf, pptxToText, htmlToPdf } from "../lib/convertOffice";
+  import { convertPdfToWord } from "../lib/conversions/pdfToWord";
+  import { convertPdfToExcel } from "../lib/conversions/pdfToExcel";
+  import { convertPdfToPpt } from "../lib/conversions/pdfToPpt";
+  import { convertExcelToPdf, convertExcelToCsv } from "../lib/conversions/excelToPdf";
+  import { convertWithLibreOfficeWasm, isLibreOfficeAvailable } from "../lib/conversions/libreOfficeWasm";
+  import { consumeStagedUniversalFile, currentRoute } from "../store";
   import { imagesToPdf } from "../lib/imagesToPdf";
-  import { docxToPdf, docxToText, docxToHtml, pptxToPdf, pptxToText } from "../lib/convertOffice";
   import { audioOptions, imageOptions } from "../lib/options";
   import { runScheduled } from "../lib/resourceManager";
   import { naturalOrder } from "../lib/recommendations";
   import { formatBytes, outputFilename } from "../lib/types";
+  import MacIcon from "../components/MacIcon.svelte";
   import type { AudioFormat, ImageFormat } from "../lib/types";
   import { toast } from "../toast";
   import { getPlatformInfo } from "../lib/platform";
+  import { onMount } from "svelte";
 
-  type Category = "video" | "audio" | "image" | "pdf2img" | "img2pdf" | "docx" | "pptx";
+  type Category = "video" | "audio" | "image" | "pdf2office" | "pdf2img" | "img2pdf" | "docx" | "xlsx" | "pptx" | "html";
 
   let activeCat = $state<Category>("video");
   let selectedFiles = $state<File[]>([]);
   let targetFormat = $state<string>("mp4");
   let isConverting = $state(false);
   let convertedResults = $state<Array<{ name: string; blob: Blob }>>([]);
+  let selectedEngine = $state<"web-native" | "libreoffice">("web-native");
 
   // macOS Inspector Advanced State
   let videoCrf = $state<number>(18);
@@ -34,6 +44,188 @@
 
   const platform = $derived(getPlatformInfo());
 
+  function applyQueryParams() {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const qFrom = params.get("from");
+    const qTo = params.get("to");
+    const qType = params.get("type");
+    const qCat = params.get("cat");
+
+    if (qCat && Object.hasOwn(CATS, qCat)) {
+      activeCat = qCat as Category;
+      targetFormat = CATS[activeCat].targets[0].value;
+      if (qTo && CATS[activeCat].targets.some((t) => t.value === qTo)) {
+        targetFormat = qTo;
+      }
+    } else if (qType === "pdf-word" || (qFrom === "pdf" && qTo === "docx")) {
+      activeCat = "pdf2office";
+      targetFormat = "docx";
+    } else if (qType === "pdf-excel" || (qFrom === "pdf" && qTo === "xlsx")) {
+      activeCat = "pdf2office";
+      targetFormat = "xlsx";
+    } else if (qType === "pdf-ppt" || (qFrom === "pdf" && qTo === "pptx")) {
+      activeCat = "pdf2office";
+      targetFormat = "pptx";
+    } else if (qType === "office-pdf" || (qFrom === "docx" && qTo === "pdf")) {
+      activeCat = "docx";
+      targetFormat = "pdf";
+    } else if (qFrom === "docx" && qTo === "txt") {
+      activeCat = "docx";
+      targetFormat = "txt";
+    } else if (qFrom === "docx" && qTo === "html") {
+      activeCat = "docx";
+      targetFormat = "html";
+    } else if (qFrom === "xlsx" && qTo === "pdf") {
+      activeCat = "xlsx";
+      targetFormat = "pdf";
+    } else if (qFrom === "xlsx" && qTo === "csv") {
+      activeCat = "xlsx";
+      targetFormat = "csv";
+    } else if (qFrom === "pptx" && qTo === "pdf") {
+      activeCat = "pptx";
+      targetFormat = "pdf";
+    } else if (qFrom === "pptx" && qTo === "txt") {
+      activeCat = "pptx";
+      targetFormat = "txt";
+    } else if (qFrom === "pdf" && qTo === "images") {
+      activeCat = "pdf2img";
+      targetFormat = "png";
+    } else if (qFrom === "html" || qTo === "html") {
+      activeCat = "html";
+      targetFormat = "pdf";
+    }
+
+    if (CATS[activeCat] && !CATS[activeCat].targets.some((t) => t.value === targetFormat)) {
+      targetFormat = CATS[activeCat].targets[0].value;
+    }
+  }
+
+  // Rectangular Advanced Options Drawer state & profile persistence
+  let convertDrawerOpen = $state(false);
+  let convertQuality = $state(82);
+  let convertScaleDpi = $state(150);
+
+  function loadConvertProfile() {
+    try {
+      const saved = localStorage.getItem("cz-convert-profile");
+      if (saved) {
+        const p = JSON.parse(saved);
+        if (p.convertQuality) convertQuality = p.convertQuality;
+        if (p.convertScaleDpi) convertScaleDpi = p.convertScaleDpi;
+        if (p.activeCat && CATS[p.activeCat as Category]) activeCat = p.activeCat as Category;
+      }
+    } catch {
+      // Ignored
+    }
+  }
+
+  function saveConvertProfile() {
+    try {
+      localStorage.setItem(
+        "cz-convert-profile",
+        JSON.stringify({
+          convertQuality,
+          convertScaleDpi,
+          activeCat,
+          targetFormat,
+        }),
+      );
+    } catch {
+      // Ignored
+    }
+  }
+
+  function applyStagedFile() {
+    const staged = consumeStagedUniversalFile();
+    if (staged?.file) {
+      selectedFiles = [staged.file];
+      if (staged.actionId === "pdf-to-word") {
+        activeCat = "pdf2office";
+        targetFormat = "docx";
+      } else if (staged.actionId === "pdf-to-excel") {
+        activeCat = "pdf2office";
+        targetFormat = "xlsx";
+      } else if (staged.actionId === "pdf-to-ppt") {
+        activeCat = "pdf2office";
+        targetFormat = "pptx";
+      } else if (staged.actionId === "pdf-to-images") {
+        activeCat = "pdf2img";
+        targetFormat = "png";
+      } else if (staged.actionId === "docx-to-pdf") {
+        activeCat = "docx";
+        targetFormat = "pdf";
+      } else if (staged.actionId === "docx-to-txt") {
+        activeCat = "docx";
+        targetFormat = "txt";
+      } else if (staged.actionId === "xlsx-to-pdf") {
+        activeCat = "xlsx";
+        targetFormat = "pdf";
+      } else if (staged.actionId === "xlsx-to-csv") {
+        activeCat = "xlsx";
+        targetFormat = "csv";
+      } else if (staged.actionId === "pptx-to-pdf") {
+        activeCat = "pptx";
+        targetFormat = "pdf";
+      } else if (staged.actionId === "pptx-to-txt") {
+        activeCat = "pptx";
+        targetFormat = "txt";
+      } else if (staged.actionId === "convert-image") {
+        activeCat = "image";
+        targetFormat = "webp";
+      } else {
+        const name = staged.file.name.toLowerCase();
+        const type = staged.file.type.toLowerCase();
+        if (type.startsWith("image/") || /\.(png|jpe?g|webp|avif|bmp|tiff|gif|svg)$/i.test(name)) {
+          activeCat = "image";
+          targetFormat = "webp";
+        } else if (type.startsWith("video/") || /\.(mp4|webm|mov|mkv|avi)$/i.test(name)) {
+          activeCat = "video";
+          targetFormat = "mp4";
+        } else if (type.startsWith("audio/") || /\.(mp3|wav|ogg|aac|flac|m4a|opus)$/i.test(name)) {
+          activeCat = "audio";
+          targetFormat = "mp3";
+        } else if (name.endsWith(".docx") || type.includes("wordprocessingml")) {
+          activeCat = "docx";
+          targetFormat = "pdf";
+        } else if (name.endsWith(".xlsx") || type.includes("spreadsheetml")) {
+          activeCat = "xlsx";
+          targetFormat = "pdf";
+        } else if (name.endsWith(".pptx") || type.includes("presentationml")) {
+          activeCat = "pptx";
+          targetFormat = "pdf";
+        } else if (name.endsWith(".html") || name.endsWith(".htm") || type === "text/html") {
+          activeCat = "html";
+          targetFormat = "pdf";
+        } else if (name.endsWith(".pdf") || type === "application/pdf") {
+          activeCat = "pdf2office";
+          targetFormat = "docx";
+        } else {
+          toast(`Unsupported conversion file format for ${staged.file.name}`, "error");
+        }
+      }
+    }
+
+    if (CATS[activeCat] && !CATS[activeCat].targets.some((t) => t.value === targetFormat)) {
+      targetFormat = CATS[activeCat].targets[0].value;
+    }
+  }
+
+  onMount(() => {
+    loadConvertProfile();
+    applyQueryParams();
+    applyStagedFile();
+  });
+
+  $effect(() => {
+    // Keep mounted Convert page reactive to route navigation & staged files
+    const unsub = currentRoute.subscribe((r) => {
+      if (r) applyQueryParams();
+      applyStagedFile();
+    });
+    return unsub;
+  });
+
   const CATS: Record<
     Category,
     {
@@ -45,7 +237,7 @@
   > = {
     video: {
       label: "Video",
-      icon: "🎬",
+      icon: "video",
       accept: "video/*",
       targets: [
         { value: "mp4", label: "MP4 (H.264/AAC)" },
@@ -57,7 +249,7 @@
     },
     audio: {
       label: "Audio",
-      icon: "🎵",
+      icon: "audio",
       accept: "audio/*",
       targets: [
         { value: "mp3", label: "MP3" },
@@ -70,7 +262,7 @@
     },
     image: {
       label: "Image",
-      icon: "🖼️",
+      icon: "image",
       accept: "image/*,.heic,.heif",
       targets: [
         { value: "webp", label: "WebP" },
@@ -79,9 +271,19 @@
         { value: "avif", label: "AVIF" },
       ],
     },
+    pdf2office: {
+      label: "PDF to Office",
+      icon: "word",
+      accept: "application/pdf,.pdf",
+      targets: [
+        { value: "docx", label: "Word (.docx)" },
+        { value: "xlsx", label: "Excel (.xlsx)" },
+        { value: "pptx", label: "PowerPoint (.pptx)" },
+      ],
+    },
     pdf2img: {
       label: "PDF to Images",
-      icon: "📄",
+      icon: "image",
       accept: "application/pdf,.pdf",
       targets: [
         { value: "png", label: "PNG images" },
@@ -91,13 +293,13 @@
     },
     img2pdf: {
       label: "Images to PDF",
-      icon: "🧩",
+      icon: "pdf",
       accept: "image/*",
       targets: [{ value: "pdf", label: "PDF document" }],
     },
     docx: {
       label: "DOCX",
-      icon: "📝",
+      icon: "word",
       accept: ".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       targets: [
         { value: "pdf", label: "PDF Document" },
@@ -105,13 +307,30 @@
         { value: "html", label: "HTML" },
       ],
     },
+    xlsx: {
+      label: "Excel",
+      icon: "excel",
+      accept: ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      targets: [
+        { value: "pdf", label: "PDF Document" },
+        { value: "csv", label: "CSV (.csv)" },
+      ],
+    },
     pptx: {
       label: "PPTX",
-      icon: "📊",
+      icon: "ppt",
       accept: ".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation",
       targets: [
         { value: "pdf", label: "PDF Document" },
         { value: "txt", label: "Plain Text" },
+      ],
+    },
+    html: {
+      label: "HTML to PDF",
+      icon: "docs",
+      accept: ".html,.htm,text/html",
+      targets: [
+        { value: "pdf", label: "PDF Document" },
       ],
     },
   };
@@ -222,9 +441,22 @@
           const res = await runScheduled(
             { kind: "image", label: file.name, bytes: file.size },
             () =>
-              compressImage(file, imageOptions({ quality: 95, format: mime })),
+              compressImage(file, imageOptions({ quality: convertQuality, format: mime })),
           );
           blob = res.blob;
+        } else if (activeCat === "pdf2office") {
+          if (selectedEngine === "libreoffice" && isLibreOfficeAvailable()) {
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            const outBytes = await convertWithLibreOfficeWasm(bytes, "pdf", targetFormat);
+            blob = new Blob([new Uint8Array(outBytes)]);
+          } else {
+            if (selectedEngine === "libreoffice" && !isLibreOfficeAvailable()) {
+              toast("LibreOffice WASM not loaded in this runtime. Using fast web-native engine.", "info");
+            }
+            if (targetFormat === "docx") blob = await convertPdfToWord(file);
+            else if (targetFormat === "xlsx") blob = await convertPdfToExcel(file);
+            else if (targetFormat === "pptx") blob = await convertPdfToPpt(file);
+          }
         } else if (activeCat === "pdf2img") {
           const res = await runScheduled(
             { kind: "pdf", label: file.name, bytes: file.size },
@@ -232,40 +464,62 @@
               pdfToImages(
                 file,
                 targetFormat as "png" | "jpeg" | "webp",
-                150,
+                convertScaleDpi,
               ),
           );
           blob = res.blob;
           suffix = "-images";
         } else if (activeCat === "docx") {
           if (targetFormat === "pdf") {
-            blob = await runScheduled(
-              { kind: "document", label: file.name, bytes: file.size },
-              () => docxToPdf(file),
-            );
+            if (selectedEngine === "libreoffice" && isLibreOfficeAvailable()) {
+              const bytes = new Uint8Array(await file.arrayBuffer());
+              const outBytes = await convertWithLibreOfficeWasm(bytes, "docx", "pdf");
+              blob = new Blob([new Uint8Array(outBytes)], { type: "application/pdf" });
+            } else {
+              if (selectedEngine === "libreoffice" && !isLibreOfficeAvailable()) {
+                toast("LibreOffice WASM not loaded in this runtime. Using fast web-native engine.", "info");
+              }
+              blob = await docxToPdf(file);
+            }
           } else if (targetFormat === "html") {
-            blob = await runScheduled(
-              { kind: "document", label: file.name, bytes: file.size },
-              async () => new Blob([await docxToHtml(file)], { type: "text/html" }),
-            );
+            blob = new Blob([await docxToHtml(file)], { type: "text/html" });
           } else {
+            blob = new Blob([await docxToText(file)], { type: "text/plain" });
+          }
+        } else if (activeCat === "xlsx") {
+          if (targetFormat === "csv") {
             blob = await runScheduled(
               { kind: "document", label: file.name, bytes: file.size },
-              async () => new Blob([await docxToText(file)], { type: "text/plain" }),
+              () => convertExcelToCsv(file),
             );
+          } else if (selectedEngine === "libreoffice" && isLibreOfficeAvailable()) {
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            const outBytes = await convertWithLibreOfficeWasm(bytes, "xlsx", "pdf");
+            blob = new Blob([new Uint8Array(outBytes)], { type: "application/pdf" });
+          } else {
+            if (selectedEngine === "libreoffice" && !isLibreOfficeAvailable()) {
+              toast("LibreOffice WASM not loaded in this runtime. Using fast web-native engine.", "info");
+            }
+            blob = await convertExcelToPdf(file);
           }
         } else if (activeCat === "pptx") {
           if (targetFormat === "pdf") {
-            blob = await runScheduled(
-              { kind: "document", label: file.name, bytes: file.size },
-              () => pptxToPdf(file),
-            );
+            if (selectedEngine === "libreoffice" && isLibreOfficeAvailable()) {
+              const bytes = new Uint8Array(await file.arrayBuffer());
+              const outBytes = await convertWithLibreOfficeWasm(bytes, "pptx", "pdf");
+              blob = new Blob([new Uint8Array(outBytes)], { type: "application/pdf" });
+            } else {
+              if (selectedEngine === "libreoffice" && !isLibreOfficeAvailable()) {
+                toast("LibreOffice WASM not loaded in this runtime. Using fast web-native engine.", "info");
+              }
+              blob = await pptxToPdf(file);
+            }
           } else {
-            blob = await runScheduled(
-              { kind: "document", label: file.name, bytes: file.size },
-              async () => new Blob([await pptxToText(file)], { type: "text/plain" }),
-            );
+            blob = new Blob([await pptxToText(file)], { type: "text/plain" });
           }
+        } else if (activeCat === "html") {
+          const htmlText = await file.text();
+          blob = await htmlToPdf(htmlText);
         }
 
         if (blob) {
@@ -311,12 +565,18 @@
 </script>
 
 <div class="tool-wrap cz-apple-workbench">
+  <HubHeader
+    title="Multi-Format Converter"
+    description="High-speed client-side conversion for video, audio, office files, and raster images. Zero server uploads."
+    icon="🔄"
+  />
+
   <!-- Left Main Column: Converter Workspace -->
   <main class="cz-card-main">
     <div class="cz-main-header">
       <div>
-        <h1 class="cz-main-title">Multi-Format Converter</h1>
-        <p class="cz-main-sub">Convert video, audio, office files, and images in browser memory</p>
+        <h2 class="cz-main-title">Format Transcoding</h2>
+        <p class="cz-main-sub">Client-side transcode presets optimized for web delivery and quality</p>
       </div>
 
       <!-- Quick Fast Organize Reorder Action -->
@@ -339,7 +599,7 @@
           class="cz-segmented-item {activeCat === catKey ? 'is-active' : ''}"
           onclick={() => handleCatChange(catKey as Category)}
         >
-          <span>{meta.icon}</span>
+          <MacIcon name={meta.icon} size={15} />
           <span>{meta.label}</span>
         </button>
       {/each}
@@ -361,6 +621,64 @@
           {/each}
         </div>
       </div>
+    </div>
+
+    <!-- Rectangular Collapsible Advanced Options Drawer -->
+    <div class="cz-advanced-drawer {convertDrawerOpen ? 'is-open' : ''}">
+      <button
+        type="button"
+        class="cz-advanced-drawer-toggle"
+        onclick={() => (convertDrawerOpen = !convertDrawerOpen)}
+        aria-expanded={convertDrawerOpen}
+      >
+        <span class="cz-drawer-title">
+          <MacIcon name="settings" size={14} />
+          <span>Conversion Profile & Engine Tuning</span>
+        </span>
+        <span class="cz-drawer-summary">
+          Quality: {convertQuality}% · Scale: {convertScaleDpi} DPI · Category: {CATS[activeCat].label}
+        </span>
+        <span class="cz-drawer-chevron" class:is-rotated={convertDrawerOpen}>
+          <MacIcon name="chevron-down" size={12} />
+        </span>
+      </button>
+
+      {#if convertDrawerOpen}
+        <div class="cz-advanced-drawer-body">
+          <div class="cz-drawer-grid">
+            <div class="cz-drawer-field">
+              <label for="conv-quality">Encoding Quality: {convertQuality}%</label>
+              <input
+                id="conv-quality"
+                type="range"
+                min="30"
+                max="100"
+                step="1"
+                class="cz-range"
+                bind:value={convertQuality}
+                onchange={saveConvertProfile}
+              />
+            </div>
+
+            <div class="cz-drawer-field">
+              <label for="conv-dpi">PDF / Document Raster DPI</label>
+              <select
+                id="conv-dpi"
+                class="cz-select cz-select-sm"
+                bind:value={convertScaleDpi}
+                onchange={saveConvertProfile}
+              >
+                <option value={96}>96 DPI (Web / Fast)</option>
+                <option value={150}>150 DPI (Balanced)</option>
+                <option value={300}>300 DPI (High-Res Print)</option>
+              </select>
+            </div>
+          </div>
+          <div class="cz-drawer-footer">
+            <small>Conversion preferences automatically saved to local profile.</small>
+          </div>
+        </div>
+      {/if}
     </div>
 
     <!-- Ingestion Dropzone -->
@@ -605,6 +923,54 @@
               <option value="96k">96 kbps (Compact)</option>
             </select>
           </div>
+        </div>
+      {:else if activeCat === "pdf2office" || activeCat === "docx" || activeCat === "xlsx" || activeCat === "pptx"}
+        <div class="cz-mac-inspector-group">
+          <div class="cz-mac-prop-row">
+            <span class="cz-mac-prop-label">
+              <span class="cz-sf-icon">⚙️</span> Document Engine
+            </span>
+          </div>
+          <div class="cz-dual-engine-box">
+            <button
+              type="button"
+              class="cz-engine-toggle {selectedEngine === 'web-native' ? 'is-selected' : ''}"
+              onclick={() => (selectedEngine = 'web-native')}
+            >
+              <div class="cz-engine-head">
+                <span class="cz-engine-icon">⚡</span>
+                <span class="cz-engine-name">Fast Web-Native</span>
+                <span class="cz-engine-chip">Default ⭐</span>
+              </div>
+              <div class="cz-engine-desc">Instant startup &bull; Low RAM (~50MB) &bull; Zero Download</div>
+            </button>
+
+            <button
+              type="button"
+              class="cz-engine-toggle {selectedEngine === 'libreoffice' ? 'is-selected' : ''}"
+              onclick={() => {
+                if (!isLibreOfficeAvailable()) {
+                  toast("LibreOffice WASM requires self-hosted bundle environment. Defaulting to fast Web-Native.", "info");
+                  return;
+                }
+                selectedEngine = 'libreoffice';
+              }}
+              title={!isLibreOfficeAvailable() ? "LibreOffice WASM bundle not available in this environment" : ""}
+            >
+              <div class="cz-engine-head">
+                <span class="cz-engine-icon">🏛️</span>
+                <span class="cz-engine-name">LibreOffice WASM</span>
+                <span class="cz-engine-chip is-heavy">{isLibreOfficeAvailable() ? "~85MB" : "Unavailable"}</span>
+              </div>
+              <div class="cz-engine-desc">{isLibreOfficeAvailable() ? "Desktop Fidelity • Complex Equations • On-Demand" : "Not detected in browser bundle; using Web-Native"}</div>
+            </button>
+          </div>
+
+          {#if selectedEngine === 'libreoffice' && isLibreOfficeAvailable()}
+            <div class="cz-engine-warning">
+              ⚠️ Downloads ~85 MB WebAssembly runtime on first execution. 100% browser-local processing.
+            </div>
+          {/if}
         </div>
       {:else}
         <div class="cz-mac-prop-info">
@@ -1030,18 +1396,127 @@
     justify-content: center;
     font-size: 0.82rem;
     font-weight: 600;
-    padding: 0.4rem 0.85rem;
-    border-radius: var(--r-sm);
+    padding: 0.45rem 0.95rem;
+    border-radius: var(--r-md, 8px);
     cursor: pointer;
-    transition: background var(--t), color var(--t);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    outline: none;
+    user-select: none;
+    -webkit-user-select: none;
+    transition:
+      background-color 0.16s ease,
+      border-color 0.16s ease,
+      box-shadow 0.16s ease,
+      color 0.16s ease,
+      transform 0.16s ease;
   }
   .cz-btn-primary {
-    background: var(--accent);
+    background: linear-gradient(180deg, var(--accent) 0%, var(--accent-2, var(--accent)) 100%);
     color: #fff;
-    border: 1px solid transparent;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.2);
   }
   .cz-btn-primary:hover:not(:disabled) {
-    background: var(--accent-2);
+    box-shadow: 0 0 10px var(--accent-glow), 0 3px 8px rgba(0, 0, 0, 0.15);
+    transform: translateY(-1px);
+  }
+  .cz-btn:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  /* Rectangular Collapsible Advanced Options Drawer */
+  .cz-advanced-drawer {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md, 8px);
+    overflow: hidden;
+    margin-bottom: 1.25rem;
+    box-shadow: var(--shadow-sm);
+    transition: border-color var(--t), box-shadow var(--t);
+  }
+  .cz-advanced-drawer.is-open {
+    border-color: var(--brand);
+    box-shadow: 0 0 0 1px var(--brand-glow), var(--shadow-sm);
+  }
+  .cz-advanced-drawer-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.65rem 1rem;
+    background: var(--surface2);
+    border: none;
+    cursor: pointer;
+    color: var(--text);
+    font-size: 0.82rem;
+    text-align: left;
+    transition: background-color var(--t);
+  }
+  .cz-advanced-drawer-toggle:hover {
+    background: var(--surface3, var(--surface2));
+  }
+  .cz-drawer-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .cz-drawer-summary {
+    font-size: 0.75rem;
+    color: var(--text-3);
+    font-weight: 500;
+  }
+  .cz-drawer-chevron {
+    display: flex;
+    align-items: center;
+    transition: transform var(--t);
+    color: var(--text-3);
+  }
+  .cz-drawer-chevron.is-rotated {
+    transform: rotate(180deg);
+  }
+  .cz-advanced-drawer-body {
+    padding: 1rem 1.25rem;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .cz-drawer-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.25rem;
+    align-items: center;
+  }
+  .cz-drawer-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .cz-drawer-field label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-2);
+  }
+  .cz-range {
+    width: 100%;
+    accent-color: var(--brand);
+    cursor: pointer;
+  }
+  .cz-select-sm {
+    padding: 0.45rem 0.65rem;
+    font-size: 0.8rem;
+    border-radius: var(--r-sm);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    outline: none;
+  }
+  .cz-drawer-footer {
+    margin-top: 0.75rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border);
+    color: var(--text-3);
+    font-size: 0.72rem;
   }
   .cz-btn-secondary {
     background: var(--surface2);
@@ -1059,6 +1534,74 @@
   .cz-btn-ghost:hover:not(:disabled) {
     color: var(--text);
     background: var(--surface2);
+  }
+
+  .cz-dual-engine-box {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+  }
+  .cz-engine-toggle {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.6rem 0.75rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color var(--t), background var(--t), box-shadow var(--t);
+  }
+  .cz-engine-toggle:hover {
+    border-color: var(--accent);
+    background: var(--bg2);
+  }
+  .cz-engine-toggle.is-selected {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+  .cz-engine-head {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+  .cz-engine-icon {
+    font-size: 0.95rem;
+  }
+  .cz-engine-name {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .cz-engine-chip {
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+    background: var(--accent);
+    color: white;
+    margin-left: auto;
+  }
+  .cz-engine-chip.is-heavy {
+    background: #eab308;
+    color: #1a1a1a;
+  }
+  .cz-engine-desc {
+    font-size: 0.7rem;
+    color: var(--text-3);
+    line-height: 1.3;
+  }
+  .cz-engine-warning {
+    font-size: 0.72rem;
+    color: #eab308;
+    background: rgba(234, 179, 8, 0.1);
+    border: 1px solid rgba(234, 179, 8, 0.25);
+    padding: 0.5rem 0.65rem;
+    border-radius: var(--r-sm);
+    line-height: 1.4;
   }
 
   @media (max-width: 960px) {
