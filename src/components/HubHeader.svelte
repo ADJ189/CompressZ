@@ -1,5 +1,6 @@
 <script lang="ts">
   import UniversalUpload from "./UniversalUpload.svelte";
+  import MacIcon from "./MacIcon.svelte";
 
   export interface HubToolItem {
     id: string;
@@ -46,8 +47,14 @@
           aria-selected={activeToolId === tool.id}
           onclick={() => onSelectTool?.(tool.id)}
         >
-          <span class="cz-hub-tool-icon" aria-hidden="true">{tool.icon}</span>
-          <span class="cz-hub-tool-name">{tool.name}</span>
+          <span class="cz-hub-tool-icon" aria-hidden="true">
+            {#if /^[a-z0-9_-]+$/.test(tool.icon)}
+              <MacIcon name={tool.icon} size={15} />
+            {:else}
+              {tool.icon}
+            {/if}
+          </span>
+          <span class="cz-hub-tool-name">{tool.name || (tool as any).label}</span>
         </button>
       {/each}
     </div>
@@ -131,7 +138,7 @@
     font-weight: 600;
     color: var(--text-2);
     cursor: pointer;
-    transition: all var(--t-fast);
+    transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
   }
   .cz-hub-tool-chip:hover {
     color: var(--text);

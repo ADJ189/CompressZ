@@ -218,7 +218,7 @@
     border: 1px solid var(--border);
     cursor: pointer;
     text-align: left;
-    transition: all var(--t-fast);
+    transition: transform var(--t-fast), border-color var(--t-fast), background var(--t-fast), box-shadow var(--t-fast);
   }
   .cz-palette-card:hover {
     border-color: var(--brand);
