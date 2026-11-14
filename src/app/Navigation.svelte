@@ -255,6 +255,24 @@
     color: var(--text);
     background: var(--bg2);
   }
+  .cz-tab.cz-tab-dropdown {
+    background: var(--surface2, rgba(255, 255, 255, 0.06));
+    border: 1px solid var(--brand);
+    color: var(--brand);
+    font-weight: 600;
+    box-shadow: 0 0 8px var(--brand-glow), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  }
+  .cz-tab.cz-tab-dropdown:hover {
+    background: var(--surface3, rgba(255, 255, 255, 0.12));
+    border-color: var(--brand);
+    box-shadow: 0 0 14px var(--brand-glow), 0 0 0 1px var(--brand);
+    color: var(--brand);
+  }
+  .cz-tab.cz-tab-dropdown.is-active {
+    background: var(--brand-glow);
+    border-color: var(--brand);
+    box-shadow: 0 0 16px var(--brand-glow), 0 0 0 1px var(--brand);
+  }
   .cz-tab.is-active {
     color: var(--accent);
     background: var(--accent-soft);
