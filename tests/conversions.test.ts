@@ -181,15 +181,22 @@ Deno.test("conversions: libreOfficeWasm maintains lazy loading status", () => {
   assertEquals(status.loading, false);
 });
 
-Deno.test("conversions: gridToCsv formats 2D grid into properly escaped CSV", () => {
+Deno.test("conversions: gridToCsv formats 2D grid into properly escaped CSV and neutralizes formulas", () => {
   const grid = [
-    ["Name", "Notes", "Count"],
-    ["Widget A", 'Includes "quotes" and, commas', "42"],
-    ["Widget B", "Multi\nline", "10"],
+    ["Name", "Notes", "Count", "FormulaText"],
+    ["Widget A", 'Includes "quotes" and, commas', "42", "=1+1"],
+    ["Widget B", "Multi\nline", "10", "+CMD|' /C calc'!A0"],
+    ["Widget C", "Regular", "5", "@HYPERLINK('http://evil.com')"],
+    ["Widget D", "Tabs", "1", "\t=SUM(A1:A10)"],
+    ["Widget E", "Minus", "-15", "-10+5"],
   ];
   const csv = gridToCsv(grid);
-  assertEquals(
-    csv,
-    'Name,Notes,Count\r\nWidget A,"Includes ""quotes"" and, commas",42\r\nWidget B,"Multi\nline",10',
-  );
+  
+  // Formula triggers must be prefixed with single quote to prevent spreadsheet execution
+  assertEquals(csv.includes("'=1+1"), true);
+  assertEquals(csv.includes("'+CMD"), true);
+  assertEquals(csv.includes("'@HYPERLINK"), true);
+  assertEquals(csv.includes("'\t=SUM"), true);
+  assertEquals(csv.includes("'-10+5"), true);
+  assertEquals(csv.includes('"Includes ""quotes"" and, commas"'), true);
 });

@@ -61,3 +61,36 @@ Deno.test("archives: createArchive and extractArchive round-trip TAR", async () 
   assertEquals(extracted[0].name, "log1.txt");
   assertEquals(new TextDecoder().decode(extracted[0].data), "Log entry 1");
 });
+
+Deno.test("tar: readTar skips directories and respects typeflag", () => {
+  const enc = new TextEncoder();
+  // Build a synthetic TAR with a directory entry (typeflag '5') and a file entry (typeflag '0')
+  const dirBlock = new Uint8Array(512);
+  const fileBlock = new Uint8Array(512);
+  const fileData = enc.encode("Hello from file");
+  const dataBlock = new Uint8Array(512);
+  dataBlock.set(fileData, 0);
+
+  // Directory header
+  dirBlock.set(enc.encode("mydir/"), 0);
+  dirBlock[156] = "5".charCodeAt(0);
+
+  // File header
+  fileBlock.set(enc.encode("mydir/file.txt"), 0);
+  fileBlock[156] = "0".charCodeAt(0);
+  // size octal
+  fileBlock.set(enc.encode(fileData.length.toString(8).padStart(11, "0") + " "), 124);
+
+  const eof = new Uint8Array(1024);
+  const tar = new Uint8Array(512 + 512 + 512 + 1024);
+  tar.set(dirBlock, 0);
+  tar.set(fileBlock, 512);
+  tar.set(dataBlock, 1024);
+  tar.set(eof, 1536);
+
+  const parsed = readTar(tar);
+  // Directory should be skipped, only regular file returned
+  assertEquals(parsed.length, 1);
+  assertEquals(parsed[0].name, "mydir/file.txt");
+  assertEquals(new TextDecoder().decode(parsed[0].data), "Hello from file");
+});

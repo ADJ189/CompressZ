@@ -7,6 +7,7 @@ import {
   hexToRgb01,
   calculateWatermarkPositions,
   resolveTargetPages,
+  sanitizeWinAnsi,
 } from "../src/lib/pdfTools/watermarkPdf.ts";
 
 Deno.test("watermark: hexToRgb01 converts hex to 0..1 RGB floats", () => {
@@ -49,4 +50,13 @@ Deno.test("watermark: resolveTargetPages filters target pages safely", () => {
   assertEquals(resolveTargetPages(5, "all"), [0, 1, 2, 3, 4]);
   assertEquals(resolveTargetPages(5, "first"), [0]);
   assertEquals(resolveTargetPages(5, [1, 3, 9]), [1, 3]); // 9 clamped out
+});
+
+Deno.test("watermark: sanitizeWinAnsi neutralizes non-WinAnsi glyphs", () => {
+  assertEquals(sanitizeWinAnsi("CONFIDENTIAL"), "CONFIDENTIAL");
+  assertEquals(sanitizeWinAnsi("Price: 100 €"), "Price: 100 €");
+  // Cyrillic, Chinese, and Emoji are replaced with '?' to prevent pdf-lib crash
+  assertEquals(sanitizeWinAnsi("Секретно"), "????????");
+  assertEquals(sanitizeWinAnsi("机密"), "??");
+  assertEquals(sanitizeWinAnsi("🔒 TOP SECRET"), "? TOP SECRET");
 });

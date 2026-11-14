@@ -57,6 +57,24 @@ Deno.test("securityPdf: buildQpdfEncryptionArgs enforces --use-aes=y for 128-bit
   assertEquals(args.includes("--use-aes=y"), true);
 });
 
+Deno.test("securityPdf: buildQpdfEncryptionArgs adds --force-R5 and generates distinct owner password when omitted", () => {
+  const options: ProtectPdfOptions = {
+    userPassword: "secretUserPass",
+    standard: "aes-256-r5",
+  };
+
+  const args = buildQpdfEncryptionArgs(options, "in.pdf", "out.pdf");
+  assertEquals(args.includes("--encrypt"), true);
+  assertEquals(args.includes("256"), true);
+  assertEquals(args.includes("--force-R5"), true);
+  
+  // Owner password must NOT match user password when user only supplies userPassword
+  const userIdx = args.indexOf("secretUserPass");
+  const ownerPass = args[userIdx + 1];
+  assertEquals(ownerPass !== "secretUserPass", true);
+  assertEquals(ownerPass.length > 8, true);
+});
+
 Deno.test("fileEncryption: encryptFileAesGcm and decryptFileAesGcm round-trip correctly", async () => {
   const enc = new TextEncoder();
   const plainText = "CompressZ confidential payload with UTF-8 characters: 🔐 12345";

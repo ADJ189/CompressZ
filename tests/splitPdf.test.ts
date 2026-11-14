@@ -58,6 +58,8 @@ Deno.test("splitPdf: parsePageRanges throws on empty or invalid inputs", () => {
   assertThrows(() => parsePageRanges("", 5));
   assertThrows(() => parsePageRanges("   ", 5));
   assertThrows(() => parsePageRanges("abc", 5));
+  assertThrows(() => parsePageRanges("2foo", 5)); // Malformed suffix rejected
+  assertThrows(() => parsePageRanges("1e2", 5));  // Exponential token rejected
   assertThrows(() => parsePageRanges("10-15", 5)); // All out of bounds
 });
 
