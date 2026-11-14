@@ -95,9 +95,26 @@
     return offCanvas.toDataURL("image/png");
   }
 
+  function switchMode(newMode: "draw" | "type") {
+    if (mode === newMode) return;
+    mode = newMode;
+    if (newMode === "draw") {
+      hasInk = false;
+      setTimeout(() => {
+        if (canvasEl) {
+          ctx = canvasEl.getContext("2d");
+          if (ctx) {
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+          }
+        }
+      }, 0);
+    }
+  }
+
   function handleConfirm() {
     if (mode === "draw") {
-      if (!hasInk) return;
+      if (!hasInk || !canvasEl) return;
       onSave(canvasEl.toDataURL("image/png"));
     } else {
       if (!typedName.trim()) return;
@@ -112,14 +129,14 @@
       <button
         type="button"
         class="cz-sig-tab {mode === 'draw' ? 'is-active' : ''}"
-        onclick={() => (mode = 'draw')}
+        onclick={() => switchMode('draw')}
       >
         ✏️ Draw Signature
       </button>
       <button
         type="button"
         class="cz-sig-tab {mode === 'type' ? 'is-active' : ''}"
-        onclick={() => (mode = 'type')}
+        onclick={() => switchMode('type')}
       >
         ⌨️ Type Signature
       </button>

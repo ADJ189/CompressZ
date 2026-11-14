@@ -89,6 +89,11 @@
   file={activeFile}
   open={paletteOpen}
   onClose={handlePaletteClose}
+  onActionSelected={() => {
+    paletteOpen = false;
+    activeFile = null;
+    onActionSelected?.();
+  }}
 />
 
 <style>

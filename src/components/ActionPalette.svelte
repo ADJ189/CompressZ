@@ -14,38 +14,56 @@
     file: File | null;
     open: boolean;
     onClose: () => void;
+    onActionSelected?: (action: FileAction) => void;
   }
 
-  let { file, open, onClose }: Props = $props();
+  let { file, open, onClose, onActionSelected }: Props = $props();
 
   let detection = $state<DetectionResult | null>(null);
   let isLoading = $state(false);
 
   $effect(() => {
     if (file && open) {
+      const currentFile = file;
+      let cancelled = false;
       isLoading = true;
-      readFileHeaderBytes(file)
+      readFileHeaderBytes(currentFile)
         .then((headerBytes) => {
-          detection = detectFileTypeAndActions(file!, headerBytes);
+          if (!cancelled && file === currentFile && open) {
+            detection = detectFileTypeAndActions(currentFile, headerBytes);
+          }
         })
         .catch(() => {
-          detection = detectFileTypeAndActions(file!);
+          if (!cancelled && file === currentFile && open) {
+            detection = detectFileTypeAndActions(currentFile);
+          }
         })
         .finally(() => {
-          isLoading = false;
+          if (!cancelled && file === currentFile && open) {
+            isLoading = false;
+          }
         });
+      return () => {
+        cancelled = true;
+      };
     } else {
       detection = null;
+      isLoading = false;
     }
   });
 
   function handleSelectAction(action: FileAction) {
     if (!file) return;
-    stagedUniversalFile.set({
-      file,
-      actionId: action.id,
-      sourceHub: action.hub,
-    });
+    if (action.route.startsWith("convert") || action.route.startsWith("pdf")) {
+      stagedUniversalFile.set({
+        file,
+        actionId: action.id,
+        sourceHub: action.hub,
+      });
+    } else {
+      stagedUniversalFile.set(null);
+    }
+    onActionSelected?.(action);
     onClose();
     navigate(action.route);
     toast(`Routing to ${action.name}`, "info");

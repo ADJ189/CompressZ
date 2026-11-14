@@ -47,20 +47,65 @@
   let activeColor = $state<string>("#ef4444"); // Red for text
   let highlighterColor = $state<string>("rgba(254, 240, 138, 0.45)"); // Yellow highlighter
 
+  let currentRenderTask: any = null;
+  let renderSeq = 0;
+
+  function transformVisualPointToPdf(
+    vx: number,
+    vy: number,
+    pageWidth: number,
+    pageHeight: number,
+    rotation: number,
+  ): { x: number; y: number } {
+    const rot = ((rotation % 360) + 360) % 360;
+    switch (rot) {
+      case 90:
+        return { x: pageWidth - vy, y: vx };
+      case 180:
+        return { x: pageWidth - vx, y: vy };
+      case 270:
+        return { x: vy, y: pageHeight - vx };
+      case 0:
+      default:
+        return { x: vx, y: pageHeight - vy };
+    }
+  }
+
   async function renderPage(pageNum: number) {
     if (!pdfDocInstance || !canvasEl || !overlayCanvasEl) return;
-    const page = await pdfDocInstance.getPage(pageNum);
-    const viewport = page.getViewport({ scale: zoomLevel * 1.5 });
+    if (currentRenderTask) {
+      try {
+        currentRenderTask.cancel();
+      } catch {}
+      currentRenderTask = null;
+    }
+    const mySeq = ++renderSeq;
+    try {
+      const page = await pdfDocInstance.getPage(pageNum);
+      if (mySeq !== renderSeq) return;
+      const viewport = page.getViewport({ scale: zoomLevel * 1.5 });
 
-    canvasEl.width = Math.round(viewport.width);
-    canvasEl.height = Math.round(viewport.height);
-    overlayCanvasEl.width = Math.round(viewport.width);
-    overlayCanvasEl.height = Math.round(viewport.height);
+      canvasEl.width = Math.round(viewport.width);
+      canvasEl.height = Math.round(viewport.height);
+      overlayCanvasEl.width = Math.round(viewport.width);
+      overlayCanvasEl.height = Math.round(viewport.height);
 
-    const ctx = canvasEl.getContext("2d")!;
-    await page.render({ canvasContext: ctx, viewport }).promise;
+      const ctx = canvasEl.getContext("2d")!;
+      const task = page.render({ canvasContext: ctx, viewport });
+      currentRenderTask = task;
+      await task.promise;
 
-    redrawOverlay();
+      if (mySeq === renderSeq) {
+        redrawOverlay();
+      }
+    } catch (err: any) {
+      if (err?.name === "RenderingCancelledException") return;
+      console.error("PDF page render error:", err);
+    } finally {
+      if (mySeq === renderSeq) {
+        currentRenderTask = null;
+      }
+    }
   }
 
   function redrawOverlay() {
@@ -110,7 +155,7 @@
     }
   }
 
-  function handleOverlayMouseDown(e: MouseEvent) {
+  function handleOverlayPointerDown(e: PointerEvent) {
     if (activeTool === "select") return;
     const rect = overlayCanvasEl.getBoundingClientRect();
     const x = (e.clientX - rect.left) / (zoomLevel * 1.5);
@@ -134,6 +179,9 @@
       }
     } else if (activeTool === "ink" || activeTool === "highlighter") {
       isDrawing = true;
+      try {
+        overlayCanvasEl.setPointerCapture(e.pointerId);
+      } catch {}
       currentStrokePoints = [{ x, y }];
     } else if (activeTool === "stamp" && activeStampUrl) {
       const ann: Annotation = {
@@ -159,7 +207,7 @@
     }
   }
 
-  function handleOverlayMouseMove(e: MouseEvent) {
+  function handleOverlayPointerMove(e: PointerEvent) {
     if (!isDrawing) return;
     const rect = overlayCanvasEl.getBoundingClientRect();
     const x = (e.clientX - rect.left) / (zoomLevel * 1.5);
@@ -189,9 +237,12 @@
     ctx.restore();
   }
 
-  function handleOverlayMouseUp() {
+  function handleOverlayPointerUp(e: PointerEvent) {
     if (!isDrawing) return;
     isDrawing = false;
+    try {
+      overlayCanvasEl.releasePointerCapture(e.pointerId);
+    } catch {}
     if (currentStrokePoints.length > 1) {
       const ann: Annotation = {
         id: `ann-${Date.now()}`,
@@ -224,7 +275,7 @@
   }
 
   async function handleExportPdf() {
-    const { PDFDocument, rgb, StandardFonts } = await getPdfLib();
+    const { PDFDocument, rgb, degrees, StandardFonts } = await getPdfLib();
     const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
     const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
@@ -235,36 +286,58 @@
       if (pageAnns.length === 0) continue;
 
       const page = pdfDoc.getPage(p - 1);
-      const { height } = page.getSize();
+      const { width, height } = page.getSize();
+      const rotation = page.getRotation().angle;
 
       for (const ann of pageAnns) {
         if (ann.type === "text" && ann.text) {
+          const pt = transformVisualPointToPdf(ann.x, ann.y + (ann.fontSize || 16), width, height, rotation);
           page.drawText(ann.text, {
-            x: ann.x,
-            y: height - ann.y - (ann.fontSize || 16),
+            x: pt.x,
+            y: pt.y,
             size: ann.fontSize || 16,
             font,
             color: rgb(0.9, 0.1, 0.1),
+            rotate: degrees(rotation),
           });
         } else if (ann.type === "redact") {
-          // Collect as true redaction region to permanently purge underlying vectors & text
+          const pt = transformVisualPointToPdf(ann.x, ann.y + ann.height, width, height, rotation);
           trueRedactionRegions.push({
             pageIndex: p - 1,
-            x: ann.x,
-            y: height - ann.y - ann.height,
+            x: pt.x,
+            y: pt.y,
             width: ann.width,
             height: ann.height,
-            overlayText: "[REDACTED]",
+            reason: "[REDACTED]",
           });
         } else if (ann.type === "stamp" && ann.dataUrl) {
           const imgBytes = Uint8Array.from(atob(ann.dataUrl.split(",")[1]), (c) => c.charCodeAt(0));
           const embedded = await pdfDoc.embedPng(imgBytes);
+          const pt = transformVisualPointToPdf(ann.x, ann.y + ann.height, width, height, rotation);
           page.drawImage(embedded, {
-            x: ann.x,
-            y: height - ann.y - ann.height,
+            x: pt.x,
+            y: pt.y,
             width: ann.width,
             height: ann.height,
+            rotate: degrees(rotation),
           });
+        } else if ((ann.type === "ink" || ann.type === "highlighter") && ann.points && ann.points.length > 1) {
+          const isHighlighter = ann.type === "highlighter";
+          const thickness = isHighlighter ? 16 : 2.5;
+          const strokeColor = isHighlighter ? rgb(1, 0.95, 0.2) : rgb(0.9, 0.1, 0.1);
+          const strokeOpacity = isHighlighter ? 0.35 : 1.0;
+
+          for (let i = 1; i < ann.points.length; i++) {
+            const pt1 = transformVisualPointToPdf(ann.points[i - 1].x, ann.points[i - 1].y, width, height, rotation);
+            const pt2 = transformVisualPointToPdf(ann.points[i].x, ann.points[i].y, width, height, rotation);
+            page.drawLine({
+              start: { x: pt1.x, y: pt1.y },
+              end: { x: pt2.x, y: pt2.y },
+              thickness,
+              color: strokeColor,
+              opacity: strokeOpacity,
+            });
+          }
         }
       }
     }
@@ -282,21 +355,51 @@
     onExport(modified);
   }
 
-  onMount(async () => {
-    pdfDocInstance = await openPdfDocument(pdfBytes);
-    totalPages = pdfDocInstance.numPages;
-    await renderPage(1);
+  let activeDocSeq = 0;
+  async function loadDocument(bytes: Uint8Array) {
+    const mySeq = ++activeDocSeq;
+    if (currentRenderTask) {
+      try { currentRenderTask.cancel(); } catch {}
+      currentRenderTask = null;
+    }
+    if (pdfDocInstance && typeof pdfDocInstance.destroy === "function") {
+      await pdfDocInstance.destroy().catch(() => {});
+    }
+    annotations = {};
+    pageThumbnails = {};
+    currentPage = 1;
 
-    // Generate thumbnails for pages
-    for (let i = 1; i <= Math.min(totalPages, 20); i++) {
-      const p = await pdfDocInstance.getPage(i);
-      const vp = p.getViewport({ scale: 0.2 });
-      const thumbCanvas = document.createElement("canvas");
-      thumbCanvas.width = Math.round(vp.width);
-      thumbCanvas.height = Math.round(vp.height);
-      const tctx = thumbCanvas.getContext("2d")!;
-      await p.render({ canvasContext: tctx, viewport: vp }).promise;
-      pageThumbnails[i] = thumbCanvas.toDataURL("image/jpeg", 0.65);
+    try {
+      const doc = await openPdfDocument(bytes);
+      if (mySeq !== activeDocSeq) {
+        await doc.destroy().catch(() => {});
+        return;
+      }
+      pdfDocInstance = doc;
+      totalPages = doc.numPages;
+      await renderPage(1);
+
+      for (let i = 1; i <= Math.min(totalPages, 20); i++) {
+        if (mySeq !== activeDocSeq) break;
+        const p = await doc.getPage(i);
+        if (mySeq !== activeDocSeq) break;
+        const vp = p.getViewport({ scale: 0.2 });
+        const thumbCanvas = document.createElement("canvas");
+        thumbCanvas.width = Math.round(vp.width);
+        thumbCanvas.height = Math.round(vp.height);
+        const tctx = thumbCanvas.getContext("2d")!;
+        await p.render({ canvasContext: tctx, viewport: vp }).promise;
+        if (mySeq !== activeDocSeq) break;
+        pageThumbnails[i] = thumbCanvas.toDataURL("image/jpeg", 0.65);
+      }
+    } catch (err) {
+      console.error("Studio document load error:", err);
+    }
+  }
+
+  $effect(() => {
+    if (pdfBytes) {
+      loadDocument(pdfBytes);
     }
   });
 
@@ -421,9 +524,11 @@
         <canvas
           bind:this={overlayCanvasEl}
           class="cz-overlay-ann-canvas {activeTool !== 'select' ? 'is-interactive' : ''}"
-          onmousedown={handleOverlayMouseDown}
-          onmousemove={handleOverlayMouseMove}
-          onmouseup={handleOverlayMouseUp}
+          style="touch-action: none;"
+          onpointerdown={handleOverlayPointerDown}
+          onpointermove={handleOverlayPointerMove}
+          onpointerup={handleOverlayPointerUp}
+          onpointercancel={handleOverlayPointerUp}
         ></canvas>
 
         <!-- HTML-based Floating Text Annotations on current page -->
