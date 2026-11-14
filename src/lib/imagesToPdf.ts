@@ -19,7 +19,7 @@ import { resolvedMaxImageDim } from "./settings";
 export interface ImagesToPdfOptions {
   quality?: number; // JPEG quality, 0.01-0.99 — default 0.92
   maxDim?: number; // cap the longer edge before embedding — 0/undefined = no cap
-  pageSize?: { w: number; h: number }; // fixed page size in PDF points — image is scaled to fit and centered; undefined = page matches each image's own size ("Auto")
+  pageSize?: { w: number; h: number } | "auto" | "a4" | "letter"; // fixed page size in PDF points — image is scaled to fit and centered; undefined = page matches each image's own size ("Auto")
 }
 
 export async function imagesToPdf(
@@ -28,10 +28,16 @@ export async function imagesToPdf(
   onProgress?: (pct: number) => void,
 ): Promise<Blob> {
   if (!files.length) throw new Error("Add at least one image");
-  // Fail loudly on a caller/contract mismatch instead of letting pdf-lib throw
-  // its internal "`width` must be of type `number`" later. This exact crash
-  // happened when a route passed the page-size *id* ("auto") where PDF points
-  // were expected.
+  // Translate "auto" to an omitted page size and fixed-size selections to { w, h } in PDF points
+  if (typeof options.pageSize === "string") {
+    if (options.pageSize === "auto") {
+      options.pageSize = undefined;
+    } else if (options.pageSize === "a4") {
+      options.pageSize = { w: 595.28, h: 841.89 };
+    } else if (options.pageSize === "letter") {
+      options.pageSize = { w: 612, h: 792 };
+    }
+  }
   if (options.pageSize !== undefined) {
     const { w, h } = options.pageSize;
     if (

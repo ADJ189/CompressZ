@@ -238,7 +238,6 @@ const IMAGE_ACTIONS: ActionTuple[] = [
   ["compress-image", "Compress Image", "🖼️", "Reduce file size with SSIM quality guard", "compress/images", "compress"],
   ["images-to-pdf", "Images to PDF", "🧩", "Compile one or more images into a multi-page PDF", "compress/images-to-pdf", "compress"],
   ["convert-image", "Convert Format", "🔁", "Convert between WebP, AVIF, PNG, JPEG", "convert?cat=image", "convert"],
-  ["watermark-image", "Add Watermark", "🏷️", "Stamp logo or text watermark onto image", "pdf/watermark?type=image", "pdf"],
   ["ocr-image", "Extract Text (OCR)", "🔍", "Extract printed text or handwriting to searchable text", "compress/ocr", "ai"],
 ];
 
@@ -246,7 +245,6 @@ const VIDEO_ACTIONS: ActionTuple[] = [
   ["compress-video", "Compress Video", "🎬", "WebCodecs hardware acceleration and FFmpeg transcoding", "compress/video", "compress"],
   ["convert-video", "Convert Video Format", "🔁", "Transcode to MP4, WebM, MOV, MKV with custom bitrate", "convert?cat=video", "convert"],
   ["video-to-gif", "Convert to Animated GIF", "🎞️", "Two-pass palettegen Bayer dithering GIF conversion", "compress/gif", "compress"],
-  ["repair-video", "Repair Corrupt Video", "🩹", "Recover missing/truncated MOOV atom in MP4/MOV recordings", "pdf/repair?type=video", "pdf"],
 ];
 
 const AUDIO_ACTIONS: ActionTuple[] = [

@@ -67,21 +67,6 @@ export async function getFFmpeg(): Promise<unknown> {
       const ff = new FFmpeg();
       const workerBlob = await classWorkerURL();
 
-      try {
-        const [coreURL, wasmURL] = await Promise.all([
-          toBlobURL(`${CORE_ST}/ffmpeg-core.js`, "text/javascript"),
-          toBlobURL(`${CORE_ST}/ffmpeg-core.wasm`, "application/wasm"),
-        ]);
-
-        await ff.load({
-          classWorkerURL: workerBlob,
-          coreURL,
-          wasmURL,
-        });
-      } finally {
-        // The Worker has already been constructed and its module graph
-        // resolved by the time load() settles, so the blob URL is no longer
-        // needed.
       const coreURLs: string[] = [];
       try {
         // Wait for both creations to settle so a late success is also cleaned up.

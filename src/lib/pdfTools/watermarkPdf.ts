@@ -32,13 +32,13 @@ export function hexToRgb01(hex: string): { r: number; g: number; b: number } {
   if (clean.length !== 6) {
     return { r: 0.4, g: 0.4, b: 0.4 }; // fallback slate
   }
-  const r = parseInt(clean.slice(0, 2), 16) / 255;
-  const g = parseInt(clean.slice(2, 4), 16) / 255;
-  const b = parseInt(clean.slice(4, 6), 16) / 255;
+  const r = Number.parseInt(clean.slice(0, 2), 16) / 255;
+  const g = Number.parseInt(clean.slice(2, 4), 16) / 255;
+  const b = Number.parseInt(clean.slice(4, 6), 16) / 255;
   return {
-    r: isNaN(r) ? 0.4 : r,
-    g: isNaN(g) ? 0.4 : g,
-    b: isNaN(b) ? 0.4 : b,
+    r: Number.isNaN(r) ? 0.4 : r,
+    g: Number.isNaN(g) ? 0.4 : g,
+    b: Number.isNaN(b) ? 0.4 : b,
   };
 }
 

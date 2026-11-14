@@ -27,11 +27,11 @@ export function salvagePdfObjects(bytes: Uint8Array): {
   const hasHeader = text.startsWith("%PDF-") || text.includes("%PDF-");
   const hasEof = text.includes("%%EOF");
 
-  const objRegex = /(\d+)\s+(\d+)\s+obj\b/g;
+  const objRegex = /(\d+) (\d+) obj/g;
   let match: RegExpExecArray | null;
 
   while ((match = objRegex.exec(text)) !== null) {
-    const objNum = parseInt(match[1], 10);
+    const objNum = Number.parseInt(match[1], 10);
     const offset = match.index;
     if (!objectOffsets.has(objNum)) {
       objectOffsets.set(objNum, offset);

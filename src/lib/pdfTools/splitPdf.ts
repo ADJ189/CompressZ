@@ -53,8 +53,8 @@ export function parsePageRanges(
   for (const part of parts) {
     const rangeMatch = part.match(/^(\d+)\s*-\s*(\d+)$/);
     if (rangeMatch) {
-      const start = parseInt(rangeMatch[1], 10);
-      const end = parseInt(rangeMatch[2], 10);
+      const start = Number.parseInt(rangeMatch[1], 10);
+      const end = Number.parseInt(rangeMatch[2], 10);
       if (start <= 0 || end <= 0) {
         throw new Error(`Page numbers must be 1 or greater (got "${part}").`);
       }
@@ -70,8 +70,8 @@ export function parsePageRanges(
         groups.push(group);
       }
     } else {
-      const single = parseInt(part, 10);
-      if (isNaN(single) || single <= 0) {
+      const single = Number.parseInt(part, 10);
+      if (Number.isNaN(single) || single <= 0) {
         throw new Error(`Invalid page number "${part}".`);
       }
       if (single <= totalPages) {
