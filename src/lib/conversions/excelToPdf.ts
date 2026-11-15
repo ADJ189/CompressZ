@@ -206,25 +206,29 @@ export function gridToHtmlTable(grid: string[][], title?: string): string {
  * Convert Excel workbook (.xlsx) to PDF.
  * Parses all worksheets in the workbook with decompression bounds.
  */
-export async function convertExcelToPdf(
+interface ParsedWorksheet {
+  key: string;
+  grid: string[][];
+}
+
+async function extractWorksheetGrids(
   file: File,
-  options: ExcelToPdfOptions = {},
-): Promise<Blob> {
+  onProgress?: (pct: number) => void,
+): Promise<ParsedWorksheet[]> {
   if (!zipSupported()) {
     throw new Error(
       "Browser does not support CompressionStream for reading Excel archives.",
     );
   }
-  options.onProgress?.(5);
+  onProgress?.(10);
 
   const entries = await readZip(await file.arrayBuffer(), {
     maxEntries: 300,
     maxEntryBytes: 32 * 1024 * 1024,
     maxAggregateBytes: 128 * 1024 * 1024,
   });
-  options.onProgress?.(20);
+  onProgress?.(25);
 
-  // Parse shared strings if present
   let sharedStrings: string[] = [];
   const sstBytes = entries.get("xl/sharedStrings.xml");
   if (sstBytes) {
@@ -232,7 +236,6 @@ export async function convertExcelToPdf(
     sharedStrings = parseSharedStringsXml(sstXml);
   }
 
-  // Find all worksheet entries
   const sheetKeys: string[] = [];
   for (const k of entries.keys()) {
     if (/^xl\/worksheets\/sheet\d+\.xml$/i.test(k)) {
@@ -240,7 +243,6 @@ export async function convertExcelToPdf(
     }
   }
 
-  // Sort worksheets by sheet number
   sheetKeys.sort((a, b) => {
     const numA = Number.parseInt(a.match(/\d+/)![0], 10);
     const numB = Number.parseInt(b.match(/\d+/)![0], 10);
@@ -251,15 +253,32 @@ export async function convertExcelToPdf(
     throw new Error("No worksheet found in Excel file.");
   }
 
-  const baseTitle = options.title || file.name.replace(/\.xlsx$/i, "");
-  let combinedHtml = "";
-
-  for (let i = 0; i < sheetKeys.length; i++) {
-    const k = sheetKeys[i];
+  const worksheets: ParsedWorksheet[] = [];
+  for (const k of sheetKeys) {
     const bytes = entries.get(k)!;
     const sheetXml = new TextDecoder().decode(bytes);
     const grid = parseWorksheetXml(sheetXml, sharedStrings);
-    const sheetTitle = sheetKeys.length > 1 ? `${baseTitle} — Sheet ${i + 1}` : baseTitle;
+    worksheets.push({ key: k, grid });
+  }
+
+  return worksheets;
+}
+
+/**
+ * Convert Excel (.xlsx) file to PDF document.
+ * Combines parsed worksheets into structured printable HTML and renders via pdf-lib.
+ */
+export async function convertExcelToPdf(
+  file: File,
+  options: ExcelToPdfOptions = {},
+): Promise<Blob> {
+  const worksheets = await extractWorksheetGrids(file, options.onProgress);
+  const baseTitle = options.title || file.name.replace(/\.xlsx$/i, "");
+  let combinedHtml = "";
+
+  for (let i = 0; i < worksheets.length; i++) {
+    const { grid } = worksheets[i];
+    const sheetTitle = worksheets.length > 1 ? `${baseTitle} — Sheet ${i + 1}` : baseTitle;
     const pageBreak = i > 0 ? "page-break-before: always; margin-top: 32px;" : "";
     combinedHtml += `<div style="${pageBreak}">${gridToHtmlTable(grid, sheetTitle)}</div>`;
   }
@@ -316,52 +335,13 @@ export async function convertExcelToCsv(
   file: File,
   onProgress?: (pct: number) => void,
 ): Promise<Blob> {
-  if (!zipSupported()) {
-    throw new Error(
-      "Browser does not support CompressionStream for reading Excel archives.",
-    );
-  }
-  onProgress?.(10);
-
-  const entries = await readZip(await file.arrayBuffer(), {
-    maxEntries: 300,
-    maxEntryBytes: 32 * 1024 * 1024,
-    maxAggregateBytes: 128 * 1024 * 1024,
-  });
-  onProgress?.(30);
-
-  let sharedStrings: string[] = [];
-  const sstBytes = entries.get("xl/sharedStrings.xml");
-  if (sstBytes) {
-    const sstXml = new TextDecoder().decode(sstBytes);
-    sharedStrings = parseSharedStringsXml(sstXml);
-  }
-
-  // Find all worksheet entries
-  const sheetKeys: string[] = [];
-  for (const k of entries.keys()) {
-    if (/^xl\/worksheets\/sheet\d+\.xml$/i.test(k)) {
-      sheetKeys.push(k);
-    }
-  }
-  sheetKeys.sort((a, b) => {
-    const numA = Number.parseInt(a.match(/\d+/)![0], 10);
-    const numB = Number.parseInt(b.match(/\d+/)![0], 10);
-    return numA - numB;
-  });
-
-  if (sheetKeys.length === 0) {
-    throw new Error("No worksheet found in Excel file.");
-  }
+  const worksheets = await extractWorksheetGrids(file, onProgress);
 
   const masterGrid: string[][] = [];
-  for (let i = 0; i < sheetKeys.length; i++) {
-    const k = sheetKeys[i];
-    const bytes = entries.get(k)!;
-    const sheetXml = new TextDecoder().decode(bytes);
-    const grid = parseWorksheetXml(sheetXml, sharedStrings);
+  for (let i = 0; i < worksheets.length; i++) {
+    const { grid } = worksheets[i];
     if (grid.length > 0) {
-      if (sheetKeys.length > 1 && masterGrid.length > 0) {
+      if (worksheets.length > 1 && masterGrid.length > 0) {
         masterGrid.push([`--- Sheet ${i + 1} ---`]);
       }
       masterGrid.push(...grid);
