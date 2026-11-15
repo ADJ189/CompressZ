@@ -304,10 +304,24 @@
     background: var(--accent);
     color: #ffffff;
   }
-  @media (max-width: 768px) {
+  @media (max-width: 820px) {
+    .cz-tabbar-center {
+      justify-content: flex-start;
+      padding: 0 0.25rem;
+      mask-image: linear-gradient(to right, transparent 0, black 16px, black calc(100% - 16px), transparent 100%);
+      -webkit-mask-image: linear-gradient(to right, transparent 0, black 16px, black calc(100% - 16px), transparent 100%);
+    }
     .cz-tabbar-scroll {
       justify-content: flex-start;
       width: 100%;
+      scroll-snap-type: x proximity;
+      padding: 0 0.75rem;
+    }
+    .cz-tab {
+      padding: 0.3rem 0.65rem;
+      gap: 0.35rem;
+      font-size: 0.8rem;
+      scroll-snap-align: center;
     }
   }
 </style>

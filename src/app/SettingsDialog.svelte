@@ -1,5 +1,5 @@
 <script lang="ts">
-  const appVersion = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.14.1";
+  const appVersion = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.15.0";
 
   import {
     getSettings,
@@ -20,6 +20,7 @@
   } from "../lib/recommendations";
   import { toast } from "../toast";
   import { onMount } from "svelte";
+  import MacIcon from "../components/MacIcon.svelte";
 
   interface Props {
     open: boolean;
@@ -455,16 +456,20 @@
                 <button
                   type="button"
                   class="cz-segmented-item {settings.ai?.modelTier !== 'powerful' ? 'is-active' : ''}"
+                  aria-pressed={settings.ai?.modelTier !== 'powerful'}
                   onclick={() => saveChanges({ ai: { ...settings.ai, modelTier: "efficient" } })}
                 >
-                  ⚡ Efficient
+                  <MacIcon name="zap" size={13} />
+                  <span>Efficient</span>
                 </button>
                 <button
                   type="button"
                   class="cz-segmented-item {settings.ai?.modelTier === 'powerful' ? 'is-active' : ''}"
+                  aria-pressed={settings.ai?.modelTier === 'powerful'}
                   onclick={() => saveChanges({ ai: { ...settings.ai, modelTier: "powerful" } })}
                 >
-                  🧠 Powerful
+                  <MacIcon name="cpu" size={13} />
+                  <span>Powerful</span>
                 </button>
               </div>
             </div>

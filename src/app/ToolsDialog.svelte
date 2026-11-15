@@ -29,7 +29,7 @@
         { route: "pdf/repair", name: "Repair & Recover", desc: "Rebuild corrupted PDF xref tables and salvage unreadable files", icon: "🩹", iconName: "repair", isNew: true },
         { route: "compress/images-to-pdf", name: "Images to PDF", desc: "Compile image sequence into clean multi-page PDF", icon: "🧩", iconName: "image" },
         { route: "compress/pdf", name: "Compress PDF", desc: "Reduce document size via downsampling and deduplication", icon: "📄", iconName: "pdf" },
-        { route: "compress/ocr", name: "PDF OCR", desc: "Extract text and generate searchable PDFs via Tesseract", icon: "🔍", iconName: "ocr" },
+        { route: "compress/ocr", name: "PDF OCR", desc: "Generate searchable PDFs or plain text from scanned PDFs and images", icon: "🔍", iconName: "ocr" },
         { route: "convert/pdf-markdown", name: "PDF to Markdown", desc: "High-fidelity text, table, and visual preservation export", icon: "📝", iconName: "markdown" },
       ],
     },
