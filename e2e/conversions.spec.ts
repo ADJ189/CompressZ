@@ -2,6 +2,8 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { crc32 as zlibCrc32 } from "node:zlib";
 import { test, expect, type Browser, type Download, type Page } from "@playwright/test";
+import { packageXlsx } from "../src/lib/conversions/pdfToExcel";
+import { packagePptx } from "../src/lib/conversions/pdfToPpt";
 
 /**
  * End-to-end conversion matrix.
@@ -364,6 +366,9 @@ let fixtures: {
   docx: string;
   wav: string;
   webm: string | null;
+  xlsx: string;
+  pptx: string;
+  unsupported: string;
 };
 
 test.beforeAll(async ({ browser }, testInfo) => {
@@ -375,6 +380,18 @@ test.beforeAll(async ({ browser }, testInfo) => {
     return path;
   };
 
+  const xlsxBytes = await packageXlsx([
+    ["Item", "Quantity", "Price"],
+    ["Widget A", "10", "5.99"],
+    ["Widget B", "5", "12.50"],
+  ]);
+  const pptxBytes = await packagePptx([
+    [
+      { type: "heading", text: "Slide One Header", readingOrder: 0, pageNumber: 1, source: "native" },
+      { type: "paragraph", text: "This is slide body content.", readingOrder: 1, pageNumber: 1, source: "native" },
+    ],
+  ]);
+
   fixtures = {
     png: write("photo.png", await makeImage(browser, "image/png")),
     jpg: write("photo.jpg", await makeImage(browser, "image/jpeg")),
@@ -384,6 +401,9 @@ test.beforeAll(async ({ browser }, testInfo) => {
     docx: write("sample.docx", makeDocx()),
     wav: write("tone.wav", makeWav()),
     webm: null,
+    xlsx: write("sample.xlsx", Buffer.from(xlsxBytes)),
+    pptx: write("sample.pptx", Buffer.from(pptxBytes)),
+    unsupported: write("dummy.unsupportedext", Buffer.from("arbitrary raw text")),
   };
 
   const video = await makeVideo(browser);
@@ -588,5 +608,101 @@ test.describe("conversion matrix", () => {
     const { name, bytes } = await clickDownload(page);
     expect(name).toMatch(/-compressed\.mp4$/);
     expect(bytes.subarray(4, 8).toString("latin1")).toBe("ftyp");
+  });
+
+  test("Convert: profile restore round-trip", async ({ page }) => {
+    await page.goto("/convert");
+    await category(page, "Audio").click();
+    await page.getByRole("button", { name: "FLAC" }).click();
+    await page.locator(".cz-advanced-drawer-toggle").click();
+    await page.locator("#conv-quality").fill("90");
+    await page.locator("#conv-quality").dispatchEvent("change");
+
+    await page.reload();
+    await expect(page.locator(".cz-cat-segmented .is-active")).toContainText("Audio");
+    await expect(page.locator(".cz-options-pill-bar .is-active")).toContainText("FLAC");
+    await expect(page.locator(".cz-drawer-summary")).toContainText("90%");
+  });
+
+  test("Convert: unsupported file dropped leaves queue empty", async ({ page }) => {
+    await page.goto("/convert");
+    await upload(page, fixtures.unsupported);
+    await expect(page.locator(".toast-item")).toContainText("Unsupported conversion file format");
+    await expect(page.locator("#file-list .cz-inset-row")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Convert All" })).not.toBeVisible();
+  });
+
+  test("Convert: Audio WAV → MP3", async ({ page }) => {
+    test.setTimeout(CDN_TIMEOUT);
+    await page.goto("/convert");
+    await category(page, "Audio").click();
+    await page.getByRole("button", { name: "MP3" }).click();
+    await upload(page, fixtures.wav);
+    await page.getByRole("button", { name: "Convert All" }).click();
+
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      convertDownload(page).click({ timeout: CDN_TIMEOUT }),
+    ]);
+    const bytes = await readDownload(download);
+    expect(download.suggestedFilename()).toMatch(/\.mp3$/);
+    const id3 = bytes.subarray(0, 3).toString("latin1") === "ID3";
+    const frameSync = bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0;
+    expect(id3 || frameSync).toBe(true);
+  });
+
+  test("Convert: XLSX → CSV", async ({ page }) => {
+    test.setTimeout(CDN_TIMEOUT);
+    await page.goto("/convert");
+    await category(page, "Excel").click();
+    await page.getByRole("button", { name: "CSV (.csv)" }).click();
+    await upload(page, fixtures.xlsx);
+    await page.getByRole("button", { name: "Convert All" }).click();
+
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      convertDownload(page).click({ timeout: CDN_TIMEOUT }),
+    ]);
+    const bytes = await readDownload(download);
+    expect(download.suggestedFilename()).toMatch(/\.csv$/);
+    const csvContent = bytes.toString("utf8");
+    expect(csvContent).toContain("Widget A");
+    expect(csvContent).toContain("5.99");
+  });
+
+  test("Convert: PPTX → TXT", async ({ page }) => {
+    test.setTimeout(CDN_TIMEOUT);
+    await page.goto("/convert");
+    await category(page, "PPTX").click();
+    await page.getByRole("button", { name: "Plain Text" }).click();
+    await upload(page, fixtures.pptx);
+    await page.getByRole("button", { name: "Convert All" }).click();
+
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      convertDownload(page).click({ timeout: CDN_TIMEOUT }),
+    ]);
+    const bytes = await readDownload(download);
+    expect(download.suggestedFilename()).toMatch(/\.txt$/);
+    expect(bytes.toString("utf8")).toContain("Slide One Header");
+  });
+
+  test("Convert: forced engine error leaves UI usable", async ({ page }) => {
+    await page.goto("/convert");
+    await category(page, "Image").click();
+    const workerFixtures = resolve("test-results", "conversion-fixtures", "error-test");
+    mkdirSync(workerFixtures, { recursive: true });
+    const corruptPng = join(workerFixtures, "fake.png");
+    writeFileSync(corruptPng, Buffer.from("not a real png content at all"));
+
+    await upload(page, corruptPng);
+    await page.getByRole("button", { name: "Convert All" }).click();
+
+    await expect(page.locator(".toast-item")).toBeVisible({ timeout: 15_000 });
+    const convertBtn = page.getByRole("button", { name: "Convert All" });
+    await expect(convertBtn).toBeEnabled();
+
+    await page.getByRole("button", { name: "Clear" }).click();
+    await expect(page.locator("#file-list .cz-inset-row")).toHaveCount(0);
   });
 });
