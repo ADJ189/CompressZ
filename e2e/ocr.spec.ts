@@ -1,15 +1,9 @@
 import { test, expect } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { makeTestImage, upload } from "./helpers";
 
 const CDN_TIMEOUT = 120_000;
-
-// Minimal 100x100 PNG fixture with a white background and red box
-function makeTestImage(): Buffer {
-  // 1x1 PNG or small PNG buffer
-  const pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
-  return Buffer.from(pngBase64, "base64");
-}
 
 let fixtureImg: string;
 
@@ -32,7 +26,7 @@ test.describe("OCR workbench", () => {
 
   test("OCR: image input stages with Recognise action and output mode selector", async ({ page }) => {
     await page.goto("/compress/ocr");
-    await page.locator("#dz-mount input[type=file]").setInputFiles(fixtureImg);
+    await upload(page, fixtureImg);
 
     // Verify card appears with "Recognise"
     const card = page.locator("#file-list .file-card");
