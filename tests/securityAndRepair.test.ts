@@ -7,6 +7,7 @@ import {
   isQpdfLoaded,
   getQpdf,
   resetQpdfForTesting,
+  setQpdfInstance,
   runQpdfCommand,
 } from "../src/lib/qpdfWasm.ts";
 import {
@@ -16,6 +17,7 @@ import {
 import {
   salvagePdfObjects,
   buildSyntheticXrefTrailer,
+  repairCorruptPdf,
   inspectAndRepairMp4Moov,
 } from "../src/lib/pdfTools/repairPdf.ts";
 import {
@@ -97,7 +99,7 @@ Deno.test("repairPdf: salvagePdfObjects locates objects and buildSyntheticXrefTr
       "3 0 obj\n<< /Type /Page >>\nendobj\n",
   );
 
-  const { objectOffsets, hasHeader, hasEof } = salvagePdfObjects(corruptPayload);
+  const { objectOffsets, hasHeader, hasEof, rootObject } = salvagePdfObjects(corruptPayload);
 
   assertEquals(hasHeader, true);
   assertEquals(hasEof, false); // Truncated / missing EOF
@@ -105,6 +107,7 @@ Deno.test("repairPdf: salvagePdfObjects locates objects and buildSyntheticXrefTr
   assertEquals(objectOffsets.has(1), true);
   assertEquals(objectOffsets.has(2), true);
   assertEquals(objectOffsets.has(3), true);
+  assertEquals(rootObject, 1);
 
   const syntheticXref = buildSyntheticXrefTrailer(objectOffsets);
   assertEquals(syntheticXref.includes("xref"), true);
@@ -113,27 +116,103 @@ Deno.test("repairPdf: salvagePdfObjects locates objects and buildSyntheticXrefTr
   assertEquals(syntheticXref.includes("/Root 1 0 R"), true);
 });
 
-Deno.test("repairPdf: inspectAndRepairMp4Moov detects missing atoms and repairs headers", () => {
-  // Truncated video buffer: starts with mdat directly without ftyp or moov
-  const mdatOnly = new Uint8Array([
-    0x00, 0x00, 0x00, 0x20, // size 32
-    0x6d, 0x64, 0x61, 0x74, // mdat
-    0x01, 0x02, 0x03, 0x04,
-  ]);
+Deno.test("repairPdf: salvage prefers the newest object and shifts offsets for a prepended header", () => {
+  const enc = new TextEncoder();
+  const first = enc.encode("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+  const second = enc.encode("1 0 obj\n<< /Type /Catalog /Pages 3 0 R >>\nendobj\n");
+  const bytes = new Uint8Array(first.length + second.length);
+  bytes.set(first, 0);
+  bytes.set(second, first.length);
 
-  const repairResult = inspectAndRepairMp4Moov(mdatOnly);
-  assertEquals(repairResult.fixed, true);
-  assertEquals(repairResult.repairedBytes.length > mdatOnly.length, true);
+  const { objectOffsets, hasHeader, rootObject } = salvagePdfObjects(bytes);
+  assertEquals(hasHeader, false); // no %PDF header at all
+  assertEquals(rootObject, 1);
+  // Incremental update: the later definition wins.
+  assertEquals(objectOffsets.get(1), first.length);
 
-  // Repaired buffer now starts with ftyp
-  const _dv = new DataView(repairResult.repairedBytes.buffer);
-  const type = String.fromCharCode(
-    repairResult.repairedBytes[4],
-    repairResult.repairedBytes[5],
-    repairResult.repairedBytes[6],
-    repairResult.repairedBytes[7],
-  );
-  assertEquals(type, "ftyp");
+  // A prepended header moves every object; the xref must reflect that.
+  const headerLen = 9;
+  const xref = buildSyntheticXrefTrailer(objectOffsets, rootObject!, headerLen);
+  assertEquals(xref.includes("/Root 1 0 R"), true);
+  const expected = String(first.length + headerLen).padStart(10, "0");
+  assertEquals(xref.includes(`${expected} 00000 n`), true);
+});
+
+Deno.test("repairPdf: js salvage refuses to build a file with no catalog", async () => {
+  resetQpdfForTesting();
+  // Force the QPDF path to fail so the JS salvage branch runs, without a CDN import.
+  setQpdfInstance({
+    callMain: () => {
+      throw new Error("qpdf unavailable in test");
+    },
+    FS: {
+      writeFile: () => {},
+      unlink: () => {},
+      analyzePath: () => ({ exists: false }),
+      readFile: () => new Uint8Array(0),
+    },
+    print: () => {},
+    printErr: () => {},
+  });
+  const bytes = new TextEncoder().encode("1 0 obj\n<< /Type /Page >>\nendobj\n");
+
+  let message = "";
+  try {
+    await repairCorruptPdf(bytes);
+  } catch (err) {
+    message = String((err as Error).message);
+  } finally {
+    resetQpdfForTesting();
+  }
+  assertEquals(/catalog/i.test(message), true);
+});
+
+function mp4Box(type: string, payload = new Uint8Array(0)): Uint8Array {
+  const out = new Uint8Array(8 + payload.length);
+  new DataView(out.buffer).setUint32(0, out.length, false);
+  out.set(new TextEncoder().encode(type), 4);
+  out.set(payload, 8);
+  return out;
+}
+
+function mp4Join(...parts: Uint8Array[]): Uint8Array {
+  const out = new Uint8Array(parts.reduce((sum, p) => sum + p.length, 0));
+  let offset = 0;
+  for (const part of parts) {
+    out.set(part, offset);
+    offset += part.length;
+  }
+  return out;
+}
+
+Deno.test("repairPdf: inspectAndRepairMp4Moov refuses to fake-repair a moov-less recording", () => {
+  const mdatOnly = mp4Join(mp4Box("mdat", new Uint8Array(8)));
+  const mdatResult = inspectAndRepairMp4Moov(mdatOnly);
+  assertEquals(mdatResult.ok, false);
+  assertEquals(mdatResult.ok === false && /MOOV/.test(mdatResult.reason), true);
+
+  // Nothing usable at all.
+  const garbage = inspectAndRepairMp4Moov(new Uint8Array(16));
+  assertEquals(garbage.ok, false);
+  assertEquals(garbage.ok === false && /mdat/.test(garbage.reason), true);
+
+  // A finalized container that only lost its ftyp box is genuinely fixable.
+  const noFtyp = mp4Join(mp4Box("moov", new Uint8Array(8)), mp4Box("mdat", new Uint8Array(8)));
+  const fixed = inspectAndRepairMp4Moov(noFtyp);
+  assertEquals(fixed.ok, true);
+  if (fixed.ok) {
+    assertEquals(fixed.repairedBytes.length, noFtyp.length + 24);
+    assertEquals(
+      String.fromCharCode(...fixed.repairedBytes.subarray(4, 8)),
+      "ftyp",
+    );
+  }
+
+  // An already-valid file is reported as such, never re-downloaded.
+  const valid = mp4Join(mp4Box("ftyp"), mp4Box("moov"), mp4Box("mdat"));
+  const already = inspectAndRepairMp4Moov(valid);
+  assertEquals(already.ok, false);
+  assertEquals(already.ok === false && already.alreadyValid, true);
 });
 
 Deno.test("qpdfWasm: loads module via custom/mock loader and runs command in virtual FS", async () => {
@@ -169,6 +248,61 @@ Deno.test("qpdfWasm: loads module via custom/mock loader and runs command in vir
   assertEquals(result.outputFiles.length, 1);
   assertEquals(result.outputFiles[0].name, "output.pdf");
   assertEquals(result.outputFiles[0].data[0], 0x25); // %PDF
+
+  resetQpdfForTesting();
+});
+
+Deno.test("qpdfWasm: captures stdout/stderr and restores the instance handlers", async () => {
+  resetQpdfForTesting();
+
+  const originalCalls: string[] = [];
+  const virtualFs = new Map<string, Uint8Array>();
+  const consoleErrorBefore = console.error;
+  type MockQpdf = {
+    callMain: () => number;
+    FS: {
+      writeFile: (name: string, data: Uint8Array) => void;
+      readFile: (name: string) => Uint8Array;
+      analyzePath: (name: string) => { exists: boolean };
+      unlink: (name: string) => void;
+    };
+    print: (text: string) => void;
+    printErr: (text: string) => void;
+  };
+  const mock: MockQpdf = {
+    callMain: () => {
+      mock.print("hello from qpdf");
+      mock.printErr("warning from qpdf");
+      // qpdf-wasm 0.3.0 writes here regardless of the init options.
+      console.error("this.program: can't find startxref");
+      return 0;
+    },
+    FS: {
+      writeFile: (name: string, data: Uint8Array) => virtualFs.set(name, data),
+      readFile: (name: string) => virtualFs.get(name) || new Uint8Array(),
+      analyzePath: (name: string) => ({ exists: virtualFs.has(name) }),
+      unlink: (name: string) => virtualFs.delete(name),
+    },
+    print: (text: string) => originalCalls.push(text),
+    printErr: (text: string) => originalCalls.push(text),
+  };
+
+  await getQpdf(async () => mock);
+  const result = await runQpdfCommand(["input.pdf", "output.pdf"], [
+    { name: "input.pdf", data: new Uint8Array([1]) },
+  ]);
+
+  // Commands written during the run must land in `stdout`, not the instance's
+  // own handler — that is the regression this guards.
+  assertEquals(result.stdout.includes("hello from qpdf"), true);
+  assertEquals(result.stdout.includes("warning from qpdf"), true);
+  assertEquals(result.stdout.includes("can't find startxref"), true);
+  assertEquals(originalCalls.length, 0);
+  assertEquals(console.error === consoleErrorBefore, true);
+
+  // The instance handler is put back afterwards.
+  mock.print("after");
+  assertEquals(originalCalls.length, 1);
 
   resetQpdfForTesting();
 });

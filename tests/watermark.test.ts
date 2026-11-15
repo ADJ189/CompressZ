@@ -36,6 +36,12 @@ Deno.test("watermark: calculateWatermarkPositions centers when not tiled", () =>
   assertEquals(pos[0], { x: 300, y: 400 });
 });
 
+Deno.test("watermark: F8 calculateWatermarkPositions accounts for CropBox origin offset", () => {
+  const pos = calculateWatermarkPositions(600, 800, false, 220, 50, 100);
+  assertEquals(pos.length, 1);
+  assertEquals(pos[0], { x: 350, y: 500 }); // 50 + 300, 100 + 400
+});
+
 Deno.test("watermark: calculateWatermarkPositions tiles grid across page", () => {
   const pos = calculateWatermarkPositions(400, 400, true, 200);
   // With width 400 and height 400, spacing 200 -> at least 4 positions

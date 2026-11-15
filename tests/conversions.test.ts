@@ -31,6 +31,7 @@ import {
   getLibreOfficeStatus,
   isLibreOfficeLoaded,
 } from "../src/lib/conversions/libreOfficeWasm.ts";
+import { stripInvalidXml, escapeXml } from "../src/lib/conversions/common.ts";
 
 Deno.test("conversions: pdfToWord generates valid WordprocessingML tags and packages .docx", async () => {
   const heading = buildHeadingXml("Test Title", 1);
@@ -199,4 +200,35 @@ Deno.test("conversions: gridToCsv formats 2D grid into properly escaped CSV and 
   assertEquals(csv.includes("'\t=SUM"), true);
   assertEquals(csv.includes("'-10+5"), true);
   assertEquals(csv.includes('"Includes ""quotes"" and, commas"'), true);
+});
+
+Deno.test("conversions: F11 excelToPdf collects multi-run <t> in inlineStr", () => {
+  const wsXml = `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+    <sheetData>
+      <row r="1">
+        <c r="A1" t="inlineStr">
+          <is>
+            <r><t>Hello </t></r>
+            <r><rPr><b/></rPr><t>Beautiful </t></r>
+            <r><t>World</t></r>
+          </is>
+        </c>
+      </row>
+    </sheetData>
+  </worksheet>`;
+
+  const grid = parseWorksheetXml(wsXml, []);
+  assertEquals(grid.length, 1);
+  assertEquals(grid[0][0], "Hello Beautiful World");
+});
+
+Deno.test("conversions: F12 stripInvalidXml strips disallowed control chars from OOXML", () => {
+  // Disallowed: 0x00 through 0x08, 0x0B, 0x0C, 0x0E through 0x1F, 0xFFFE, 0xFFFF
+  // Allowed: \t (\u0009), \n (\u000A), \r (\u000D)
+  const input = "Valid text\twith tab\nand newline\r\u0000\u0001\u0008\u000B\u000C\u001F\uFFFE\uFFFFend";
+  const stripped = stripInvalidXml(input);
+  assertEquals(stripped, "Valid text\twith tab\nand newline\rend");
+
+  const escaped = escapeXml("<test>\u0000&foo</test>");
+  assertEquals(escaped, "&lt;test&gt;&amp;foo&lt;/test&gt;");
 });
