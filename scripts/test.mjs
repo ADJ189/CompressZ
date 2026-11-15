@@ -203,8 +203,8 @@ try {
         console.log(`  ✓ ${t.name}`);
         passed++;
       } catch (err) {
-        console.error(`  ✗ ${t.name}`);
-        console.error(`    ${err.stack || err.message}`);
+        console.log(`  ✗ ${t.name}`);
+        console.log(`    ${err.stack || err.message}`);
         failed++;
       }
     }
