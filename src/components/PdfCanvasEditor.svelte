@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onDestroy } from "svelte";
   import { openPdfDocument, getPdfLib } from "../lib/pdfLibs";
   import type { RedactionRegion } from "../lib/pdfTools/redactPdf";
   import SignaturePad from "./SignaturePad.svelte";
@@ -406,6 +406,21 @@
   $effect(() => {
     if (currentPage && zoomLevel) {
       renderPage(currentPage);
+    }
+  });
+
+  onDestroy(() => {
+    // Bump the sequence so the thumbnail loop and any in-flight render stop
+    // touching state, then release the pdf.js document (workers + buffers).
+    activeDocSeq++;
+    try {
+      currentRenderTask?.cancel();
+    } catch {}
+    currentRenderTask = null;
+    const doc = pdfDocInstance;
+    pdfDocInstance = null;
+    if (doc && typeof doc.destroy === "function") {
+      void doc.destroy().catch(() => {});
     }
   });
 </script>

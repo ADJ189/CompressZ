@@ -72,7 +72,7 @@
       title: "AI & Neural OCR",
       icon: "ocr",
       items: [
-        { id: "ocr-printed", route: "compress/ocr", name: "Searchable PDF OCR", desc: "Extract text via Tesseract.js neural LSTM in 100+ langs", icon: "ocr", badge: "AI" },
+        { id: "ocr-printed", route: "compress/ocr", name: "Searchable PDF OCR", desc: "Add a selectable text layer to scanned PDFs and images (Tesseract.js)", icon: "ocr", badge: "AI" },
         { id: "ocr-handwriting", route: "convert/pdf-markdown", name: "Handwriting Recognition", desc: "TrOCR English line recognition for handwriting", icon: "studio", badge: "TrOCR" },
       ],
     },

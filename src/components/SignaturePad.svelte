@@ -9,7 +9,7 @@
   let { onSave, onCancel }: Props = $props();
 
   let mode = $state<"draw" | "type">("draw");
-  let canvasEl = $state<HTMLCanvasElement>();
+  let canvasEl: HTMLCanvasElement | undefined = $state();
   let ctx: CanvasRenderingContext2D | null = null;
   let isDrawing = $state(false);
   let hasInk = $state(false);
@@ -40,11 +40,13 @@
   });
 
   function getCanvasPos(e: MouseEvent | TouchEvent): { x: number; y: number } {
-    const rect = canvasEl.getBoundingClientRect();
+    const canvas = canvasEl;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
     const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
     const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
-    const scaleX = canvasEl.width / rect.width;
-    const scaleY = canvasEl.height / rect.height;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
     return {
       x: (clientX - rect.left) * scaleX,
       y: (clientY - rect.top) * scaleY,
@@ -77,7 +79,7 @@
   }
 
   function handleClear() {
-    if (!ctx) return;
+    if (!ctx || !canvasEl) return;
     ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
     hasInk = false;
   }
