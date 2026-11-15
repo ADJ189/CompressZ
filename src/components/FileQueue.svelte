@@ -13,6 +13,9 @@
     onDownloadSingle: (entry: FileEntry) => void;
     onRemoveSingle: (id: string) => void;
     onEditSingle?: (entry: FileEntry) => void;
+    actionLabel?: string;
+    busyLabel?: string;
+    doneLabel?: string;
   }
 
   let {
@@ -25,6 +28,9 @@
     onDownloadSingle,
     onRemoveSingle,
     onEditSingle,
+    actionLabel = "Compress",
+    busyLabel = "Converting...",
+    doneLabel = "Converted",
   }: Props = $props();
 
   const totalOriginalBytes = $derived(
@@ -54,7 +60,7 @@
           disabled={isBusy}
           onclick={onCompressAll}
         >
-          Compress all
+          {actionLabel} all
         </button>
       {/if}
 
@@ -78,6 +84,9 @@
         onDownload={onDownloadSingle}
         onRemove={onRemoveSingle}
         onEdit={onEditSingle}
+        {actionLabel}
+        {busyLabel}
+        {doneLabel}
       />
     {/each}
   </div>

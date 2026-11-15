@@ -31,7 +31,17 @@
 <div class="cz-hub-banner">
   <div class="cz-hub-main">
     <div class="cz-hub-heading">
-      <span class="cz-hub-icon" aria-hidden="true">{icon}</span>
+      <span class="cz-hub-icon" aria-hidden="true">
+        {#if /^[a-z0-9_-]+$/.test(icon)}
+          <MacIcon name={icon} size={22} />
+        {:else if icon === "📄"}
+          <MacIcon name="pdf" size={22} />
+        {:else if icon === "🔄"}
+          <MacIcon name="convert" size={22} />
+        {:else}
+          {icon}
+        {/if}
+      </span>
       <div>
         <h1 class="cz-hub-title">{title}</h1>
         <p class="cz-hub-desc">{description}</p>
@@ -45,6 +55,7 @@
           class="cz-hub-tool-chip {activeToolId === tool.id ? 'is-active' : ''}"
           role="tab"
           aria-selected={activeToolId === tool.id}
+          tabindex={activeToolId === tool.id ? 0 : -1}
           onclick={() => onSelectTool?.(tool.id)}
         >
           <span class="cz-hub-tool-icon" aria-hidden="true">
@@ -77,6 +88,8 @@
     border-radius: var(--r-xl);
     margin-bottom: 1.5rem;
     box-shadow: var(--shadow-sm);
+    min-width: 0;
+    max-width: 100%;
   }
   @media (max-width: 768px) {
     .cz-hub-banner {
@@ -123,8 +136,24 @@
   }
   .cz-hub-tools-row {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 0.45rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+    mask-image: linear-gradient(to right, black calc(100% - 24px), transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, black calc(100% - 24px), transparent 100%);
+    min-width: 0;
+    max-width: 100%;
+  }
+  .cz-hub-tools-row::-webkit-scrollbar {
+    height: 4px;
+  }
+  .cz-hub-tools-row::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
   }
   .cz-hub-tool-chip {
     display: inline-flex;
@@ -138,6 +167,8 @@
     font-weight: 600;
     color: var(--text-2);
     cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
     transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
   }
   .cz-hub-tool-chip:hover {
