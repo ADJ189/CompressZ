@@ -9,10 +9,22 @@ import { openPdfDocument } from "../pdfLibs";
 import { reconstructReadingOrder, type ExtractedBlock } from "../pdfToMarkdown";
 
 /**
+ * Strips XML 1.0 disallowed control characters that cause Word, Excel, and PowerPoint
+ * to prompt for repair on file open.
+ * Allowed: \u0009 (tab), \u000A (LF), \u000D (CR).
+ * Disallowed: \u0000-\u0008, \u000B, \u000C, \u000E-\u001F, \uFFFE, \uFFFF.
+ */
+export function stripInvalidXml(str: string): string {
+  // eslint-disable-next-line no-control-regex -- explicitly stripping disallowed XML 1.0 control characters
+  return str.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, "");
+}
+
+/**
  * Escape XML special characters for OpenXML (.docx, .pptx, .xlsx).
+ * Strips invalid XML control characters and encodes XML entities.
  */
 export function escapeXml(str: string): string {
-  return str
+  return stripInvalidXml(str)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")

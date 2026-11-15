@@ -138,8 +138,13 @@ export function parseWorksheetXml(
           val = sharedStrings[sIdx] ?? "";
         }
       } else if (type === "inlineStr") {
-        const tMatch = /<t\b[^>]*>(.*?)<\/t>/.exec(cellBody);
-        val = tMatch ? decodeXmlEntities(tMatch[1]) : "";
+        const tRegex = /<t\b[^>]*>(.*?)<\/t>/gs;
+        let tMatch: RegExpExecArray | null;
+        let combined = "";
+        while ((tMatch = tRegex.exec(cellBody)) !== null) {
+          combined += decodeXmlEntities(tMatch[1]);
+        }
+        val = combined;
       } else {
         const vMatch = /<v>(.*?)<\/v>/.exec(cellBody);
         val = vMatch ? decodeXmlEntities(vMatch[1]) : "";

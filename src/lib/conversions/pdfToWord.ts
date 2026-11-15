@@ -8,8 +8,8 @@
 
 import { writeZip, type ZipEntryIn } from "../zip";
 import type { ExtractedBlock } from "../pdfToMarkdown";
-import { escapeXml, extractPdfPageBlocks } from "./common";
-export { escapeXml };
+import { escapeXml, extractPdfPageBlocks, stripInvalidXml } from "./common";
+export { escapeXml, stripInvalidXml };
 
 export interface PdfToWordOptions {
   title?: string;

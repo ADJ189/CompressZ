@@ -8,6 +8,9 @@
 
 import { writeZip, type ZipEntryIn } from "../zip";
 import { openPdfDocument } from "../pdfLibs";
+import { escapeXml, stripInvalidXml } from "./common";
+
+export { escapeXml, stripInvalidXml };
 
 export interface PdfToExcelOptions {
   onProgress?: (pct: number) => void;
@@ -95,17 +98,7 @@ export function clusterTextIntoGrid(
   return grid;
 }
 
-/**
- * Escape XML special characters.
- */
-function escapeXml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
+
 
 /**
  * Generate SpreadsheetML worksheet XML from 2D data matrix.
