@@ -1,27 +1,21 @@
 import { test, expect } from "@playwright/test";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { makeTestImage, upload } from "./helpers";
+import { makeTestImage, upload, createE2eFixture, createPageErrorCollector } from "./helpers";
 
 const CDN_TIMEOUT = 120_000;
 
 let fixtureImg: string;
 
 test.beforeAll(async () => {
-  const tmp = join(process.cwd(), ".test-dist", "ocr-e2e");
-  mkdirSync(tmp, { recursive: true });
-  fixtureImg = join(tmp, "ocr-input.png");
-  writeFileSync(fixtureImg, makeTestImage());
+  fixtureImg = createE2eFixture("ocr-e2e", "ocr-input.png", makeTestImage());
 });
 
 test.describe("OCR workbench", () => {
-  let pageErrors: string[] = [];
+  let getErrors: () => string[];
   test.beforeEach(({ page }) => {
-    pageErrors = [];
-    page.on("pageerror", (e) => pageErrors.push(e.message));
+    getErrors = createPageErrorCollector(page);
   });
   test.afterEach(() => {
-    expect(pageErrors, "uncaught exception in the page").toEqual([]);
+    expect(getErrors(), "uncaught exception in the page").toEqual([]);
   });
 
   test("OCR: image input stages with Recognise action and output mode selector", async ({ page }) => {

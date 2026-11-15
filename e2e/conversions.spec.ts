@@ -309,6 +309,28 @@ async function clickDownload(page: Page, index = 0): Promise<{ name: string; byt
   return { name: download.suggestedFilename(), bytes: await readDownload(download) };
 }
 
+async function runConvertPipeline(
+  page: Page,
+  cat: string,
+  targetFormat: string | RegExp,
+  fixtureFile: string,
+  exactBtn = false,
+): Promise<{ download: Download; bytes: Buffer }> {
+  test.setTimeout(CDN_TIMEOUT);
+  await page.goto("/convert");
+  await category(page, cat).click();
+  await page.getByRole("button", { name: targetFormat, exact: exactBtn }).click();
+  await upload(page, fixtureFile);
+  await page.getByRole("button", { name: "Convert All" }).click();
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    convertDownload(page).click({ timeout: CDN_TIMEOUT }),
+  ]);
+  const bytes = await readDownload(download);
+  return { download, bytes };
+}
+
 async function clickConvertDownload(
   page: Page,
   timeout = CDN_TIMEOUT,
@@ -498,35 +520,13 @@ test.describe("conversion matrix", () => {
   });
 
   test("Convert: DOCX → TXT", async ({ page }) => {
-    test.setTimeout(CDN_TIMEOUT);
-    await page.goto("/convert");
-    await category(page, "DOCX").click();
-    await page.getByRole("button", { name: "Plain Text" }).click();
-    await upload(page, fixtures.docx);
-    await page.getByRole("button", { name: "Convert All" }).click();
-
-    const [download] = await Promise.all([
-      page.waitForEvent("download"),
-      convertDownload(page).click({ timeout: CDN_TIMEOUT }),
-    ]);
-    const bytes = await readDownload(download);
+    const { download, bytes } = await runConvertPipeline(page, "DOCX", "Plain Text", fixtures.docx);
     expect(download.suggestedFilename()).toMatch(/\.txt$/);
     expect(bytes.toString("utf8")).toContain("CompressZ document text");
   });
 
   test("Convert: DOCX → HTML", async ({ page }) => {
-    test.setTimeout(CDN_TIMEOUT);
-    await page.goto("/convert");
-    await category(page, "DOCX").click();
-    await page.getByRole("button", { name: "HTML", exact: true }).click();
-    await upload(page, fixtures.docx);
-    await page.getByRole("button", { name: "Convert All" }).click();
-
-    const [download] = await Promise.all([
-      page.waitForEvent("download"),
-      convertDownload(page).click({ timeout: CDN_TIMEOUT }),
-    ]);
-    const bytes = await readDownload(download);
+    const { download, bytes } = await runConvertPipeline(page, "DOCX", "HTML", fixtures.docx, true);
     expect(download.suggestedFilename()).toMatch(/\.html$/);
     expect(bytes.toString("utf8")).toContain("CompressZ document text");
   });
@@ -607,18 +607,7 @@ test.describe("conversion matrix", () => {
   });
 
   test("Convert: Audio WAV → MP3", async ({ page }) => {
-    test.setTimeout(CDN_TIMEOUT);
-    await page.goto("/convert");
-    await category(page, "Audio").click();
-    await page.getByRole("button", { name: "MP3" }).click();
-    await upload(page, fixtures.wav);
-    await page.getByRole("button", { name: "Convert All" }).click();
-
-    const [download] = await Promise.all([
-      page.waitForEvent("download"),
-      convertDownload(page).click({ timeout: CDN_TIMEOUT }),
-    ]);
-    const bytes = await readDownload(download);
+    const { download, bytes } = await runConvertPipeline(page, "Audio", "MP3", fixtures.wav);
     expect(download.suggestedFilename()).toMatch(/\.mp3$/);
     const id3 = bytes.subarray(0, 3).toString("latin1") === "ID3";
     const frameSync = bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0;
@@ -626,18 +615,7 @@ test.describe("conversion matrix", () => {
   });
 
   test("Convert: XLSX → CSV", async ({ page }) => {
-    test.setTimeout(CDN_TIMEOUT);
-    await page.goto("/convert");
-    await category(page, "Excel").click();
-    await page.getByRole("button", { name: "CSV (.csv)" }).click();
-    await upload(page, fixtures.xlsx);
-    await page.getByRole("button", { name: "Convert All" }).click();
-
-    const [download] = await Promise.all([
-      page.waitForEvent("download"),
-      convertDownload(page).click({ timeout: CDN_TIMEOUT }),
-    ]);
-    const bytes = await readDownload(download);
+    const { download, bytes } = await runConvertPipeline(page, "Excel", "CSV (.csv)", fixtures.xlsx);
     expect(download.suggestedFilename()).toMatch(/\.csv$/);
     const csvContent = bytes.toString("utf8");
     expect(csvContent).toContain("Widget A");
@@ -645,18 +623,7 @@ test.describe("conversion matrix", () => {
   });
 
   test("Convert: PPTX → TXT", async ({ page }) => {
-    test.setTimeout(CDN_TIMEOUT);
-    await page.goto("/convert");
-    await category(page, "PPTX").click();
-    await page.getByRole("button", { name: "Plain Text" }).click();
-    await upload(page, fixtures.pptx);
-    await page.getByRole("button", { name: "Convert All" }).click();
-
-    const [download] = await Promise.all([
-      page.waitForEvent("download"),
-      convertDownload(page).click({ timeout: CDN_TIMEOUT }),
-    ]);
-    const bytes = await readDownload(download);
+    const { download, bytes } = await runConvertPipeline(page, "PPTX", "Plain Text", fixtures.pptx);
     expect(download.suggestedFilename()).toMatch(/\.txt$/);
     expect(bytes.toString("utf8")).toContain("Slide One Header");
   });

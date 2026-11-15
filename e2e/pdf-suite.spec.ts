@@ -1,7 +1,12 @@
-import { test, expect } from "@playwright/test";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { makePdf, makeTruncatedPdf, upload, readDownload } from "./helpers";
+import { test, expect, type Page } from "@playwright/test";
+import {
+  makePdf,
+  makeTruncatedPdf,
+  upload,
+  triggerDownload,
+  createE2eFixture,
+  createPageErrorCollector,
+} from "./helpers";
 
 const CDN_TIMEOUT = 120_000;
 
@@ -11,79 +16,66 @@ let fixtures: {
 };
 
 test.beforeAll(async () => {
-  const tmp = join(process.cwd(), ".test-dist", "pdf-suite-e2e");
-  mkdirSync(tmp, { recursive: true });
   fixtures = {
-    pdf: join(tmp, "suite-sample.pdf"),
-    truncated: join(tmp, "corrupt-sample.pdf"),
+    pdf: createE2eFixture("pdf-suite-e2e", "suite-sample.pdf", makePdf("PDF Suite Test Document")),
+    truncated: createE2eFixture("pdf-suite-e2e", "corrupt-sample.pdf", makeTruncatedPdf()),
   };
-  writeFileSync(fixtures.pdf, makePdf("PDF Suite Test Document"));
-  writeFileSync(fixtures.truncated, makeTruncatedPdf());
 });
 
+async function executeSuiteWorkbench(
+  page: Page,
+  route: string,
+  fixturePath: string,
+  buttonText: string,
+) {
+  test.setTimeout(CDN_TIMEOUT);
+  await page.goto(route);
+  await upload(page, fixturePath);
+  await expect(page.locator(".cz-suite-file-bar")).toBeVisible({ timeout: CDN_TIMEOUT });
+
+  const action = page.getByRole("button", { name: buttonText });
+  await expect(action).toBeVisible({ timeout: CDN_TIMEOUT });
+  return await triggerDownload(page, () => action.click());
+}
+
 test.describe("PDF Suite workstation", () => {
-  let pageErrors: string[] = [];
+  let getErrors: () => string[];
   test.beforeEach(({ page }) => {
-    pageErrors = [];
-    page.on("pageerror", (e) => pageErrors.push(e.message));
+    getErrors = createPageErrorCollector(page);
   });
   test.afterEach(() => {
-    expect(pageErrors, "uncaught exception in the page").toEqual([]);
+    expect(getErrors(), "uncaught exception in the page").toEqual([]);
   });
 
   test("PDF Suite: split document extracts and downloads", async ({ page }) => {
-    test.setTimeout(CDN_TIMEOUT);
-    await page.goto("/pdf/split");
-    await upload(page, fixtures.pdf);
-    await expect(page.locator(".cz-suite-file-bar")).toBeVisible({ timeout: CDN_TIMEOUT });
-
-    const execBtn = page.getByRole("button", { name: "Execute PDF Split" });
-    await expect(execBtn).toBeVisible({ timeout: CDN_TIMEOUT });
-
-    const [download] = await Promise.all([
-      page.waitForEvent("download"),
-      execBtn.click(),
-    ]);
-
-    const bytes = await readDownload(download);
+    const { download, bytes } = await executeSuiteWorkbench(
+      page,
+      "/pdf/split",
+      fixtures.pdf,
+      "Execute PDF Split",
+    );
     expect(bytes.length).toBeGreaterThan(100);
     expect(download.suggestedFilename()).toMatch(/(\.pdf|\.zip)$/);
   });
 
   test("PDF Suite: watermark document applies and downloads", async ({ page }) => {
-    test.setTimeout(CDN_TIMEOUT);
-    await page.goto("/pdf/watermark");
-    await upload(page, fixtures.pdf);
-    await expect(page.locator(".cz-suite-file-bar")).toBeVisible({ timeout: CDN_TIMEOUT });
-
-    const execBtn = page.getByRole("button", { name: "Apply Watermark" });
-    await expect(execBtn).toBeVisible({ timeout: CDN_TIMEOUT });
-
-    const [download] = await Promise.all([
-      page.waitForEvent("download"),
-      execBtn.click(),
-    ]);
-
-    const bytes = await readDownload(download);
+    const { download, bytes } = await executeSuiteWorkbench(
+      page,
+      "/pdf/watermark",
+      fixtures.pdf,
+      "Apply Watermark",
+    );
     expect(bytes.subarray(0, 4).toString("latin1")).toBe("%PDF");
     expect(download.suggestedFilename()).toMatch(/-watermarked\.pdf$/);
   });
 
   test("PDF Suite: repair truncated PDF salvages valid document", async ({ page }) => {
-    test.setTimeout(CDN_TIMEOUT);
-    await page.goto("/pdf/repair");
-    await upload(page, fixtures.truncated);
-    await expect(page.locator(".cz-suite-file-bar")).toBeVisible({ timeout: CDN_TIMEOUT });
-
-    const execBtn = page.getByRole("button", { name: "Execute Deep Repair" });
-    await expect(execBtn).toBeVisible({ timeout: CDN_TIMEOUT });
-
-    const [download] = await Promise.all([
-      page.waitForEvent("download"),
-      execBtn.click(),
-    ]);
-
-    const bytes = await readDownload(download);
+    const { download, bytes } = await executeSuiteWorkbench(
+      page,
+      "/pdf/repair",
+      fixtures.truncated,
+      "Execute Deep Repair",
+    );
     expect(bytes.subarray(0, 4).toString("latin1")).toBe("%PDF");
     expect(download.suggestedFilename()).toMatch(/repaired-.*\.pdf$/);
   });

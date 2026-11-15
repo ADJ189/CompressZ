@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Download, Page } from "@playwright/test";
 
 /** Shared minimal PDF generator for e2e tests */
@@ -59,4 +61,33 @@ export async function readDownload(download: Download): Promise<Buffer> {
     chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
   }
   return Buffer.concat(chunks);
+}
+
+/** Synchronously persists a temporary test fixture and returns its absolute path */
+export function createE2eFixture(subfolder: string, filename: string, data: Buffer | string): string {
+  const dir = join(process.cwd(), ".test-dist", subfolder);
+  mkdirSync(dir, { recursive: true });
+  const fullPath = join(dir, filename);
+  writeFileSync(fullPath, data);
+  return fullPath;
+}
+
+/** Attaches a listener to track unhandled page errors and returns an accessor */
+export function createPageErrorCollector(page: Page): () => string[] {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (e) => pageErrors.push(e.message));
+  return () => pageErrors;
+}
+
+/** Awaits a Playwright download triggered by `triggerAction` and returns the download and buffered bytes */
+export async function triggerDownload(
+  page: Page,
+  triggerAction: () => Promise<unknown>,
+): Promise<{ download: Download; bytes: Buffer }> {
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    triggerAction(),
+  ]);
+  const bytes = await readDownload(download);
+  return { download, bytes };
 }
