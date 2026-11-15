@@ -129,6 +129,7 @@ export async function writeZip(entries: ZipEntryIn[]): Promise<Uint8Array> {
   const { time, date } = dosDateTime();
   const chunks: Uint8Array[] = [];
   const central: Uint8Array[] = [];
+  const usedNames = new Set<string>();
   let offset = 0;
 
   // Preflight check: prevent exceeding 32-bit / 4GiB ZIP limit
@@ -143,7 +144,21 @@ export async function writeZip(entries: ZipEntryIn[]): Promise<Uint8Array> {
   }
 
   for (const { name, data } of entries) {
-    const safeName = sanitizeZipPath(name);
+    // Two source names can sanitise to the same path (`a/../b` and `b`), so
+    // de-duplicate before writing or the central directory would contain two
+    // entries with identical names.
+    let safeName = sanitizeZipPath(name);
+    if (usedNames.has(safeName)) {
+      const slash = safeName.lastIndexOf("/");
+      const dot = safeName.lastIndexOf(".");
+      const hasExt = dot > slash;
+      const base = hasExt ? safeName.slice(0, dot) : safeName;
+      const ext = hasExt ? safeName.slice(dot) : "";
+      let n = 2;
+      while (usedNames.has(`${base} (${n})${ext}`)) n++;
+      safeName = `${base} (${n})${ext}`;
+    }
+    usedNames.add(safeName);
     const nameBytes = new TextEncoder().encode(safeName);
     const crc = crc32(data);
     const compressed = await deflateRaw(data);
@@ -318,7 +333,11 @@ export async function readZip(
           `"${name}" failed CRC check (expected ${expectedCrc.toString(16)}, got ${actualCrc.toString(16)}) — archive may be corrupt`,
         );
       }
-      out.set(name, data);
+      // Entry names are attacker-controlled. Sanitise before exposing them as
+      // map keys so a caller writing these paths back to disk (ZIP bundle
+      // export, OOXML extraction) can never be tricked into `../` traversal.
+      const safeName = sanitizeZipPath(name);
+      if (!out.has(safeName)) out.set(safeName, data);
     }
     p += 46 + nameLen + extraLen + commentLen;
   }

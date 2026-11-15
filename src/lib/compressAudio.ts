@@ -1,5 +1,5 @@
 import type { CompressOptions, CompressResult, AudioFormat } from "./types";
-import { getFFmpeg, ffFetch, ffJob, setProgressHandler } from "./ffmpeg";
+import { getFFmpeg, ffFetch, ffJob, setProgressHandler, ffExec } from "./ffmpeg";
 
 const DEFAULT_BITRATE: Record<AudioFormat, number> = {
   mp3: 192,
@@ -93,7 +93,7 @@ async function runCompressAudio(
   if (options.stripMetadata) args.push("-map_metadata", "-1");
   args.push("-vn", "-y", outN);
 
-  await ff.exec(args);
+  await ffExec(ff, args, "compress the audio");
 
   const data = await ff.readFile(outN);
   await ff.deleteFile(`input${ext}`).catch(() => {});
@@ -135,7 +135,7 @@ async function passthroughAudio(
   if (stripMetadata) args.push("-map_metadata", "-1");
   args.push("-vn", "-y", outN);
 
-  await ff.exec(args);
+  await ffExec(ff, args, "repackage the audio stream");
 
   const data = await ff.readFile(outN);
   await ff.deleteFile(`input${ext}`).catch(() => {});

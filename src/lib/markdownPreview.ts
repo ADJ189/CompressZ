@@ -14,25 +14,65 @@ function escapeHtml(str: string): string {
     .replace(/'/g, "&#039;");
 }
 
-function sanitizeUrl(rawUrl: string): string {
-  const trimmed = rawUrl.trim();
-  if (/^(https?:|mailto:|\/)/i.test(trimmed)) {
-    return escapeHtml(trimmed);
+/**
+ * Validate a link target that has already been HTML-escaped by `renderInline`.
+ *
+ * Only explicit web/mail schemes, single-slash site-relative paths and in-page
+ * anchors are accepted. Everything else — `javascript:`, `data:`,
+ * protocol-relative `//host`, bare words — is rejected. The URL must NOT be
+ * escaped again here: it already went through `escapeHtml`, so escaping twice
+ * turns `&` into `&amp;amp;` and breaks legitimate query strings.
+ */
+function safeHref(escapedUrl: string): string | null {
+  const url = escapedUrl.trim();
+  if (/^https?:\/\/[^\s]+/i.test(url)) return url;
+  if (/^mailto:[^\s@]+@[^\s@]+/i.test(url)) return url;
+  if (/^\/(?!\/)/.test(url)) return url; // "/x" but not "//evil.com"
+  if (/^#[^\s]*$/.test(url)) return url;
+  return null;
+}
+
+function safeImgSrc(escapedUrl: string): string | null {
+  const url = escapedUrl.trim();
+  if (
+    /^data:image\/(?:png|jpeg|jpg|webp|gif|svg\+xml);base64,[A-Za-z0-9+/=]+$/i.test(
+      url,
+    )
+  ) {
+    return url;
   }
-  return "#";
+  if (/^https?:\/\/[^\s]+/i.test(url)) return url;
+  if (/^(?:\.\/|\/)?assets\/[^\s]+/i.test(url)) return url;
+  return null;
 }
 
 function renderInline(text: string): string {
   let result = escapeHtml(text);
 
+  const tokens: string[] = [];
+  const stash = (html: string) => {
+    const idx = tokens.length;
+    tokens.push(html);
+    return `%%CZ_TOKEN_${idx}%%`;
+  };
+
   // LaTeX inline math $ ... $
   result = result.replace(/\$([^$\n]+?)\$/g, (_match, math) => {
-    return `<code class="cz-math-inline">${math}</code>`;
+    return stash(`<code class="cz-math-inline">${math}</code>`);
   });
 
   // Inline code `...`
   result = result.replace(/`([^`\n]+?)`/g, (_match, code) => {
-    return `<code>${code}</code>`;
+    return stash(`<code>${code}</code>`);
+  });
+
+  // Images ![alt](src) (handled before links)
+  result = result.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_match, alt, src) => {
+    const safe = safeImgSrc(src);
+    if (!safe) return `<!-- [image: ${escapeHtml(alt)}] -->`;
+    return stash(
+      `<img src="${safe}" alt="${escapeHtml(alt)}" class="cz-rendered-img" />`,
+    );
   });
 
   // Bold **...**
@@ -47,11 +87,15 @@ function renderInline(text: string): string {
 
   // Links [text](url)
   result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label, href) => {
-    const safeHref = sanitizeUrl(href);
-    return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+    const safeHrefValue = safeHref(href) ?? "#";
+    return `<a href="${safeHrefValue}" target="_blank" rel="noopener noreferrer">${label}</a>`;
   });
 
-  return result;
+  // Restore stashed code/math/image tokens
+  return result.replace(
+    /%%CZ_TOKEN_(\d+)%%/g,
+    (_m, idx) => tokens[Number(idx)] ?? "",
+  );
 }
 
 export function renderMarkdownToHtml(markdown: string): string {
@@ -63,6 +107,9 @@ export function renderMarkdownToHtml(markdown: string): string {
   let inCodeBlock = false;
   let codeBuffer: string[] = [];
   let codeLang = "";
+
+  let inMathBlock = false;
+  let mathBuffer: string[] = [];
 
   let inTable = false;
   let tableRows: string[][] = [];
@@ -84,17 +131,22 @@ export function renderMarkdownToHtml(markdown: string): string {
     }
 
     const header = tableRows[0];
-    const dataRows = tableRows.slice(1).filter((r) => !r.every((c) => /^:?-+:?$/.test(c.trim())));
+    const dataRows = tableRows
+      .slice(1)
+      .filter((r) => !r.every((c) => /^:?-+:?$/.test(c.trim())));
+    const maxCols = Math.max(1, ...tableRows.map((r) => r.length));
 
-    let tableHtml = '<div class="cz-table-wrap"><table class="cz-rendered-table"><thead><tr>';
-    for (const col of header) {
-      tableHtml += `<th>${renderInline(col.trim())}</th>`;
+    let tableHtml =
+      '<div class="cz-table-wrap"><table class="cz-rendered-table"><thead><tr>';
+    for (let i = 0; i < maxCols; i++) {
+      const col = header[i] ? header[i].trim() : "";
+      tableHtml += `<th>${renderInline(col)}</th>`;
     }
     tableHtml += "</tr></thead><tbody>";
 
     for (const row of dataRows) {
       tableHtml += "<tr>";
-      for (let i = 0; i < header.length; i++) {
+      for (let i = 0; i < maxCols; i++) {
         const cell = row[i] ? row[i].trim() : "";
         tableHtml += `<td>${renderInline(cell)}</td>`;
       }
@@ -123,8 +175,12 @@ export function renderMarkdownToHtml(markdown: string): string {
       } else {
         inCodeBlock = false;
         const codeContent = escapeHtml(codeBuffer.join("\n"));
-        const langAttr = codeLang ? ` data-lang="${escapeHtml(codeLang)}"` : "";
-        out.push(`<pre class="cz-code-block"${langAttr}><code>${codeContent}</code></pre>`);
+        const langAttr = codeLang
+          ? ` data-lang="${escapeHtml(codeLang)}"`
+          : "";
+        out.push(
+          `<pre class="cz-code-block"${langAttr}><code>${codeContent}</code></pre>`,
+        );
         codeBuffer = [];
         codeLang = "";
       }
@@ -136,12 +192,46 @@ export function renderMarkdownToHtml(markdown: string): string {
       continue;
     }
 
-    // LaTeX Display math block $$ ... $$
-    if (trimmed.startsWith("$$") && trimmed.endsWith("$$") && trimmed.length > 4) {
+    // Multi-line LaTeX math block toggle/content
+    if (inMathBlock) {
+      if (
+        trimmed === "$$" ||
+        (trimmed.endsWith("$$") && !trimmed.startsWith("$$"))
+      ) {
+        if (trimmed !== "$$") {
+          mathBuffer.push(trimmed.slice(0, -2).trim());
+        }
+        out.push(
+          `<div class="cz-rendered-math-block"><code>${escapeHtml(mathBuffer.join("\n").trim())}</code></div>`,
+        );
+        inMathBlock = false;
+        mathBuffer = [];
+        continue;
+      }
+      mathBuffer.push(line);
+      continue;
+    }
+
+    if (trimmed === "$$") {
+      closeList();
+      flushTable();
+      inMathBlock = true;
+      mathBuffer = [];
+      continue;
+    }
+
+    // Single-line LaTeX Display math block $$ ... $$
+    if (
+      trimmed.startsWith("$$") &&
+      trimmed.endsWith("$$") &&
+      trimmed.length > 4
+    ) {
       closeList();
       flushTable();
       const math = trimmed.slice(2, -2).trim();
-      out.push(`<div class="cz-rendered-math-block"><code>${escapeHtml(math)}</code></div>`);
+      out.push(
+        `<div class="cz-rendered-math-block"><code>${escapeHtml(math)}</code></div>`,
+      );
       continue;
     }
 
@@ -151,8 +241,8 @@ export function renderMarkdownToHtml(markdown: string): string {
       inTable = true;
       const cells = trimmed
         .slice(1, -1)
-        .split("|")
-        .map((c) => c.trim());
+        .split(/(?<!\\)\|/)
+        .map((c) => c.replace(/\\\|/g, "|").trim());
       tableRows.push(cells);
       continue;
     } else if (inTable) {
@@ -236,6 +326,12 @@ export function renderMarkdownToHtml(markdown: string): string {
   if (inCodeBlock && codeBuffer.length > 0) {
     const codeContent = escapeHtml(codeBuffer.join("\n"));
     out.push(`<pre class="cz-code-block"><code>${codeContent}</code></pre>`);
+  }
+
+  if (inMathBlock && mathBuffer.length > 0) {
+    out.push(
+      `<div class="cz-rendered-math-block"><code>${escapeHtml(mathBuffer.join("\n").trim())}</code></div>`,
+    );
   }
 
   return out.join("\n");

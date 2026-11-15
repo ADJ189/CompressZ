@@ -1,6 +1,8 @@
 // FFmpeg.wasm singleton — loaded once per session, reused for all compressions.
 // Uses multithreaded core when SharedArrayBuffer is available (requires COOP/COEP headers).
 
+import { EngineError, cleanLogLines, engineFailure, toErrorMessage } from "./engineError";
+
 const FFMPEG_PKG = "https://esm.sh/@ffmpeg/ffmpeg@0.12.10";
 const FFMPEG_UTIL = "https://esm.sh/@ffmpeg/util@0.12.2";
 // The single-threaded core is self-contained and loads reliably via blob URLs.
@@ -35,8 +37,9 @@ async function classWorkerURL(): Promise<string> {
   ];
   const failed = responses.find((r) => !r.res.ok);
   if (failed) {
-    throw new Error(
+    throw new EngineError(
       `Could not download the FFmpeg worker runtime asset "${failed.name}" from ${failed.url} (HTTP ${failed.res.status})`,
+      "ffmpeg",
     );
   }
 
@@ -94,7 +97,7 @@ export async function getFFmpeg(): Promise<unknown> {
             new Promise<never>((_, reject) => {
               // Allow slower devices time to compile the WASM core. Worker
               // startup errors can leave the wrapper's load promise pending.
-              timer = setTimeout(() => reject(new Error("FFmpeg initialization timed out")), 120_000);
+              timer = setTimeout(() => reject(new EngineError("FFmpeg initialization timed out", "ffmpeg")), 120_000);
             }),
           ]);
         } finally {
@@ -102,7 +105,11 @@ export async function getFFmpeg(): Promise<unknown> {
         }
       } catch (error) {
         ff.terminate();
-        throw error;
+        if (error instanceof EngineError) throw error;
+        throw new EngineError(
+          `FFmpeg could not be initialised: ${toErrorMessage(error, "core failed to start")}`,
+          "ffmpeg",
+        );
       } finally {
         for (const url of coreURLs) URL.revokeObjectURL(url);
         URL.revokeObjectURL(workerBlob);
@@ -121,8 +128,51 @@ export async function getFFmpeg(): Promise<unknown> {
   return _loading;
 }
 
-// ── Serialised jobs + guaranteed temp-file cleanup ──────────────
-// Every FFmpeg-backed tool writes fixed names ("input.gif", "vin.mp4", ...)
+// ── Command execution with a real failure reason ───────────────
+// `@ffmpeg/ffmpeg` resolves `exec()` with the process exit status; it does not
+// reject on a non-zero status. Every caller used to ignore that number, so a
+// failed command silently produced a missing or zero-byte output file and the
+// UI reported an unrelated "file not found". This wrapper captures the
+// command's log (bounded) and throws an EngineError that names the cause.
+const FFMPEG_LOG_LIMIT = 200;
+
+export async function ffExec(
+  ff: any,
+  args: string[],
+  task = "finish the media operation",
+): Promise<void> {
+  const lines: string[] = [];
+  const onLog = ({ message }: { message: string }) => {
+    lines.push(message);
+    if (lines.length > FFMPEG_LOG_LIMIT) {
+      lines.splice(0, lines.length - FFMPEG_LOG_LIMIT);
+    }
+  };
+  ff.on("log", onLog);
+
+  let exitCode: number | undefined;
+  try {
+    exitCode = await ff.exec(args);
+  } catch (err) {
+    throw new EngineError(
+      `FFmpeg could not ${task}: ${toErrorMessage(err, "the FFmpeg worker stopped unexpectedly")}`,
+      "ffmpeg",
+      { log: cleanLogLines(lines.join("\n")) },
+    );
+  } finally {
+    ff.off("log", onLog);
+  }
+
+  if (typeof exitCode === "number" && exitCode !== 0) {
+    throw engineFailure("ffmpeg", task, {
+      exitCode,
+      output: lines.join("\n"),
+      fallback: "FFmpeg exited without a diagnostic",
+    });
+  }
+}
+
+// ── Serialised jobs + guaranteed temp-file cleanup ──────────────// Every FFmpeg-backed tool writes fixed names ("input.gif", "vin.mp4", ...)
 // into the one shared in-memory filesystem. The page-level "Compress all"
 // loops are sequential, but a per-card Compress button (or Compress-all
 // while a card job is running) could still start two jobs at once — they'd

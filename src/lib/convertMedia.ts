@@ -10,7 +10,7 @@
  * compression tier. Audio conversion is already fully format-parameterised
  * in compressAudio.ts, so it's reused directly with a high-quality bitrate.
  */
-import { getFFmpeg, ffFetch, ffJob, setProgressHandler } from "./ffmpeg";
+import { getFFmpeg, ffFetch, ffJob, setProgressHandler, ffExec } from "./ffmpeg";
 
 export type VideoContainer = "mp4" | "webm" | "mov" | "mkv" | "avi" | "gif";
 
@@ -73,24 +73,32 @@ async function runConvertVideo(
       outN = "cvout.gif";
       const fps = options?.fps && options.fps > 0 ? options.fps : 12;
       const scale = options?.resolution === "480p" ? 480 : 720;
-      await ff.exec([
-        "-i",
-        inN,
-        "-vf",
-        `fps=${fps},scale=${scale}:-1:flags=lanczos,palettegen=max_colors=192:stats_mode=diff`,
-        "-y",
-        "cvpalette.png",
-      ]);
-      await ff.exec([
-        "-i",
-        inN,
-        "-i",
-        "cvpalette.png",
-        "-lavfi",
-        `fps=${fps},scale=${scale}:-1:flags=lanczos,paletteuse=dither=bayer:bayer_scale=5`,
-        "-y",
-        outN,
-      ]);
+      await ffExec(
+        ff,
+        [
+          "-i",
+          inN,
+          "-vf",
+          `fps=${fps},scale=${scale}:-1:flags=lanczos,palettegen=max_colors=192:stats_mode=diff`,
+          "-y",
+          "cvpalette.png",
+        ],
+        "build the GIF colour palette",
+      );
+      await ffExec(
+        ff,
+        [
+          "-i",
+          inN,
+          "-i",
+          "cvpalette.png",
+          "-lavfi",
+          `fps=${fps},scale=${scale}:-1:flags=lanczos,paletteuse=dither=bayer:bayer_scale=5`,
+          "-y",
+          outN,
+        ],
+        "convert the video to GIF",
+      );
       await ff.deleteFile("cvpalette.png").catch(() => {});
       fmtLabel = `GIF · ${fps}fps/${scale}px`;
     } else {
@@ -166,7 +174,7 @@ async function runConvertVideo(
         }
       }
       args.push("-y", outN);
-      await ff.exec(args);
+      await ffExec(ff, args, "convert the video");
       fmtLabel = `${target.toUpperCase()} · ${target === "webm" ? "VP9/Opus" : target === "avi" ? "MPEG-4/MP3" : "H.264/AAC"}`;
     }
 

@@ -10,6 +10,8 @@
  * these instead of redeclaring them.
  */
 
+import { EngineError, toErrorMessage } from "./engineError";
+
 export const PDFJS_VERSION = "4.4.168";
 export const PDFJS_BASE = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}`;
 export const PDFLIB_ESM = "https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm";
@@ -19,10 +21,12 @@ export const PDFLIB_ESM = "https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm";
 export const FONTKIT_ESM =
   "https://cdn.jsdelivr.net/npm/@pdf-lib/fontkit@1.1.1/+esm";
 // Noto Sans covers Latin/Cyrillic/Greek/Vietnamese in one file; it does not
-// cover Arabic, Hindi/Devanagari, Bengali, or CJK — those scripts fall back
-// to Helvetica (best-effort) unless/until per-script fonts are added here.
+// cover Arabic, Hindi/Devanagari, Bengali, or CJK — those scripts are skipped
+// and reported by searchablePdf.ts instead of being drawn as tofu.
+// Pinned to an npm version (immutable) rather than `gh/google/fonts@main`,
+// which is a moving branch — a font swap there would silently change output.
 export const NOTO_SANS_UNICODE_FONT =
-  "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notosans/NotoSans%5Bwdth%2Cwght%5D.ttf";
+  "https://cdn.jsdelivr.net/npm/@expo-google-fonts/noto-sans@0.4.2/400Regular/NotoSans_400Regular.ttf";
 
 // pdf.js module + worker setup used to be re-imported and re-configured
 // (GlobalWorkerOptions.workerSrc) independently in compressPdf.ts,
@@ -34,20 +38,34 @@ export const NOTO_SANS_UNICODE_FONT =
 let _pdfjsLib: any = null;
 export async function getPdfJs(): Promise<any> {
   if (_pdfjsLib) return _pdfjsLib;
-  const lib = (await import(
-    /* @vite-ignore */ `${PDFJS_BASE}/build/pdf.mjs`
-  )) as any;
-  lib.GlobalWorkerOptions.workerSrc = `${PDFJS_BASE}/build/pdf.worker.mjs`;
-  _pdfjsLib = lib;
-  return lib;
+  try {
+    const lib = (await import(
+      /* @vite-ignore */ `${PDFJS_BASE}/build/pdf.mjs`
+    )) as any;
+    lib.GlobalWorkerOptions.workerSrc = `${PDFJS_BASE}/build/pdf.worker.mjs`;
+    _pdfjsLib = lib;
+    return lib;
+  } catch (err) {
+    throw new EngineError(
+      `PDF.js could not be loaded: ${toErrorMessage(err, "library failed to fetch")}`,
+      "pdfjs",
+    );
+  }
 }
 
 let _pdfLib: any = null;
 export async function getPdfLib(): Promise<any> {
   if (_pdfLib) return _pdfLib;
-  const lib = (await import(/* @vite-ignore */ PDFLIB_ESM)) as any;
-  _pdfLib = lib;
-  return lib;
+  try {
+    const lib = (await import(/* @vite-ignore */ PDFLIB_ESM)) as any;
+    _pdfLib = lib;
+    return lib;
+  } catch (err) {
+    throw new EngineError(
+      `pdf-lib could not be loaded: ${toErrorMessage(err, "library failed to fetch")}`,
+      "pdflib",
+    );
+  }
 }
 
 /** Open a PDF document with the standard options every caller here used
@@ -56,13 +74,20 @@ export async function getPdfLib(): Promise<any> {
  * reuse/transfer their own copy of the buffer afterwards. */
 export async function openPdfDocument(bytes: Uint8Array): Promise<any> {
   const lib = await getPdfJs();
-  return lib.getDocument({
-    data: bytes.slice(0),
-    cMapUrl: `${PDFJS_BASE}/cmaps/`,
-    cMapPacked: true,
-    standardFontDataUrl: `${PDFJS_BASE}/standard_fonts/`,
-    useSystemFonts: true,
-    useWorkerFetch: false,
-    isEvalSupported: false,
-  }).promise;
+  try {
+    return await lib.getDocument({
+      data: bytes.slice(0),
+      cMapUrl: `${PDFJS_BASE}/cmaps/`,
+      cMapPacked: true,
+      standardFontDataUrl: `${PDFJS_BASE}/standard_fonts/`,
+      useSystemFonts: true,
+      useWorkerFetch: false,
+      isEvalSupported: false,
+    }).promise;
+  } catch (err) {
+    throw new EngineError(
+      `PDF.js could not open document: ${toErrorMessage(err, "corrupt or invalid PDF")}`,
+      "pdfjs",
+    );
+  }
 }

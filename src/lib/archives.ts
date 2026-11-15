@@ -95,11 +95,32 @@ export async function streamCompressBytes(
 }
 
 /**
- * Pipes a compressed byte buffer through a native Web Streams DecompressionStream.
+ * Upper bound for a single decompressed `.gz` / `.tar.gz` / `.tar` payload.
+ * Matches the ZIP reader's aggregate limit; a gzip bomb must fail in bounded
+ * time and memory rather than filling the heap.
+ */
+export const MAX_DECOMPRESSED_BYTES = 256 * 1024 * 1024;
+
+/**
+ * Reads the uncompressed size recorded in a gzip trailer (ISIZE). The value is
+ * modulo 2^32, so it is only a cheap pre-check: the streaming cap below is the
+ * real guard.
+ */
+export function gzipUncompressedSize(bytes: Uint8Array): number | null {
+  if (bytes.length < 18) return null;
+  if (bytes[0] !== 0x1f || bytes[1] !== 0x8b) return null;
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return dv.getUint32(bytes.length - 4, true);
+}
+
+/**
+ * Pipes a compressed byte buffer through a native Web Streams DecompressionStream,
+ * cancelling as soon as the output passes `maxBytes`.
  */
 export async function streamDecompressBytes(
   bytes: Uint8Array,
   format: "gzip" | "deflate" | "deflate-raw" = "gzip",
+  maxBytes: number = MAX_DECOMPRESSED_BYTES,
 ): Promise<Uint8Array> {
   const ds = new DecompressionStream(format);
   const writer = ds.writable.getWriter();
@@ -122,6 +143,17 @@ export async function streamDecompressBytes(
     if (done) break;
     outChunks.push(value);
     decompressedTotal += value.length;
+    if (decompressedTotal > maxBytes) {
+      try {
+        await reader.cancel();
+      } catch {
+        // Ignored: cancellation error
+      }
+      void writePromise;
+      throw new Error(
+        `Decompressed data exceeds ${Math.round(maxBytes / (1024 * 1024))} MB limit.`,
+      );
+    }
   }
 
   await writePromise;
@@ -134,6 +166,15 @@ export async function streamDecompressBytes(
   }
 
   return combined;
+}
+
+function assertGzipWithinLimit(bytes: Uint8Array): void {
+  const declared = gzipUncompressedSize(bytes);
+  if (declared !== null && declared > MAX_DECOMPRESSED_BYTES) {
+    throw new Error(
+      `Decompressed data exceeds ${Math.round(MAX_DECOMPRESSED_BYTES / (1024 * 1024))} MB limit.`,
+    );
+  }
 }
 
 /**
@@ -247,6 +288,7 @@ export async function extractArchive(
   }
 
   if (lower.endsWith(".tar.gz") || lower.endsWith(".tgz")) {
+    assertGzipWithinLimit(archiveBytes);
     const rawTar = await streamDecompressBytes(archiveBytes, "gzip");
     const tarEntries = readTar(rawTar);
     return tarEntries.map((t) => ({ name: t.name, data: t.data }));
@@ -258,6 +300,7 @@ export async function extractArchive(
   }
 
   if (lower.endsWith(".gz")) {
+    assertGzipWithinLimit(archiveBytes);
     const decompressed = await streamDecompressBytes(archiveBytes, "gzip");
     const cleanName = filename.replace(/\.gz$/i, "");
     return [{ name: cleanName, data: decompressed }];

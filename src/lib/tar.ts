@@ -11,6 +11,27 @@ export interface TarEntry {
   mtime?: number;
 }
 
+export interface ReadTarOptions {
+  /** Maximum number of file entries to return. */
+  maxEntries?: number;
+  /** Maximum number of uncompressed bytes across all returned entries. */
+  maxTotalBytes?: number;
+}
+
+/**
+ * Sanitize a TAR entry path to prevent directory traversal or absolute path
+ * injection. Mirrors `sanitizeZipPath()` in zip.ts: entry names are
+ * attacker-controlled, and a caller may write them back to disk.
+ */
+export function sanitizeTarPath(raw: string): string {
+  let safe = raw.replace(/^[a-zA-Z]:[\\/]/, "").replace(/^[\\/]+/, "");
+  safe = safe
+    .split(/[\\/]/)
+    .filter((part) => part !== ".." && part !== "." && part.length > 0)
+    .join("/");
+  return safe || "file";
+}
+
 function writeString(buf: Uint8Array, offset: number, str: string, length: number): void {
   const enc = new TextEncoder();
   const encoded = enc.encode(str);
@@ -81,7 +102,7 @@ export function writeTar(entries: TarEntry[]): Uint8Array {
   let totalLength = 0;
 
   for (const entry of entries) {
-    const cleanName = entry.name.replace(/\\/g, "/").replace(/^\/+/, "");
+    const cleanName = sanitizeTarPath(entry.name);
     const header = createUstarHeader(cleanName, entry.data.length, entry.mtime);
     chunks.push(header);
     totalLength += 512;
@@ -117,15 +138,23 @@ export function writeTar(entries: TarEntry[]): Uint8Array {
 
 /**
  * Unpacks a POSIX UStar tar byte array into entries.
+ *
+ * Entry sizes are validated before they reach the offset math: a negative or
+ * non-octal size field used to make the next header offset equal the current
+ * one, which hung the tab in a synchronous infinite loop. Entry count and total
+ * size are bounded as well, mirroring the ZIP reader's bomb limits.
  */
-export function readTar(tarBytes: Uint8Array): TarEntry[] {
+export function readTar(tarBytes: Uint8Array, options: ReadTarOptions = {}): TarEntry[] {
+  const { maxEntries = 10_000, maxTotalBytes = 512 * 1024 * 1024 } = options;
   const entries: TarEntry[] = [];
   let offset = 0;
+  let headerCount = 0;
+  let totalBytes = 0;
   const dec = new TextDecoder();
   let pendingName: string | null = null;
 
   while (offset + 512 <= tarBytes.length) {
-    // Check for two consecutive 512 zero blocks (EOF)
+    // A zero block ends the archive (EOF is two, but one is conclusive).
     let isZero = true;
     for (let i = 0; i < 512; i++) {
       if (tarBytes[offset + i] !== 0) {
@@ -134,6 +163,13 @@ export function readTar(tarBytes: Uint8Array): TarEntry[] {
       }
     }
     if (isZero) break;
+
+    headerCount++;
+    if (headerCount > maxEntries * 2) {
+      throw new Error(
+        `TAR contains more than ${maxEntries} entries, exceeding the safety limit.`,
+      );
+    }
 
     // Read name (0..100)
     let nameEnd = offset;
@@ -144,7 +180,20 @@ export function readTar(tarBytes: Uint8Array): TarEntry[] {
     let sizeEnd = offset + 124;
     while (sizeEnd < offset + 136 && tarBytes[sizeEnd] !== 0 && tarBytes[sizeEnd] !== 0x20) sizeEnd++;
     const sizeStr = dec.decode(tarBytes.subarray(offset + 124, sizeEnd)).trim();
-    const size = Number.parseInt(sizeStr, 8) || 0;
+
+    // POSIX octal. An empty field is treated as 0 only because some historic
+    // writers leave it blank; anything else malformed is rejected outright.
+    if (sizeStr !== "" && !/^[0-7]+$/.test(sizeStr)) {
+      throw new Error(
+        `Invalid TAR header: size field "${sizeStr}" is not a nonnegative octal integer.`,
+      );
+    }
+    const size = sizeStr === "" ? 0 : Number.parseInt(sizeStr, 8);
+    if (!Number.isSafeInteger(size) || size < 0) {
+      throw new Error(
+        `Invalid TAR header: size field "${sizeStr}" is not a nonnegative integer.`,
+      );
+    }
 
     // Read typeflag (byte 156)
     const typeflagByte = tarBytes[offset + 156];
@@ -164,28 +213,31 @@ export function readTar(tarBytes: Uint8Array): TarEntry[] {
     }
 
     const dataOffset = offset + 512;
-    const padding = size % 512 === 0 ? 0 : 512 - (size % 512);
+    const padding = (512 - (size % 512)) % 512;
     const nextHeaderOffset = dataOffset + size + padding;
+
+    // Every header must advance and stay inside the buffer. Without this a
+    // crafted size can point backwards (or nowhere), looping forever.
+    if (nextHeaderOffset <= offset || nextHeaderOffset > tarBytes.length) {
+      throw new Error("Corrupt TAR: entry size points outside the archive.");
+    }
 
     // GNU long filename extension ('L')
     if (typeflag === "L") {
-      if (dataOffset + size <= tarBytes.length) {
-        const rawLongName = dec.decode(tarBytes.subarray(dataOffset, dataOffset + size));
-        pendingName = rawLongName.replace(/\0.*$/, "").trim();
-      }
+      const rawLongName = dec.decode(tarBytes.subarray(dataOffset, dataOffset + size));
+      const nul = rawLongName.indexOf("\0");
+      pendingName = (nul === -1 ? rawLongName : rawLongName.slice(0, nul)).trim();
       offset = nextHeaderOffset;
       continue;
     }
 
     // PAX extended header ('x')
     if (typeflag === "x") {
-      if (dataOffset + size <= tarBytes.length) {
-        const paxText = dec.decode(tarBytes.subarray(dataOffset, dataOffset + size));
-        for (const line of paxText.split("\n")) {
-          const match = /^\d+\s+path=(.*)$/.exec(line);
-          if (match) {
-            pendingName = match[1].trim();
-          }
+      const paxText = dec.decode(tarBytes.subarray(dataOffset, dataOffset + size));
+      for (const line of paxText.split("\n")) {
+        const match = /^\d+\s+path=(.*)$/.exec(line);
+        if (match) {
+          pendingName = match[1].trim();
         }
       }
       offset = nextHeaderOffset;
@@ -207,11 +259,24 @@ export function readTar(tarBytes: Uint8Array): TarEntry[] {
 
     // Regular file: '0' (0x30) or NUL (0x00)
     if (typeflag === "0" || typeflagByte === 0) {
-      const finalName = pendingName || name;
+      const rawName = pendingName || name;
       pendingName = null;
-      if (finalName && dataOffset + size <= tarBytes.length) {
-        const data = tarBytes.subarray(dataOffset, dataOffset + size);
-        entries.push({ name: finalName, data: new Uint8Array(data) });
+      if (rawName) {
+        if (entries.length >= maxEntries) {
+          throw new Error(
+            `TAR contains more than ${maxEntries} entries, exceeding the safety limit.`,
+          );
+        }
+        totalBytes += size;
+        if (totalBytes > maxTotalBytes) {
+          throw new Error(
+            `Decompressed data exceeds ${Math.round(maxTotalBytes / (1024 * 1024))} MB limit.`,
+          );
+        }
+        entries.push({
+          name: sanitizeTarPath(rawName),
+          data: new Uint8Array(tarBytes.subarray(dataOffset, dataOffset + size)),
+        });
       }
     }
 

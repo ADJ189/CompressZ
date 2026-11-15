@@ -39,6 +39,7 @@ export interface MarkdownFormattingOptions {
   stripHeadersFooters?: boolean;
   pageDelimiters?: PageDelimiter;
   includeFrontmatter?: boolean;
+  repeatedHeadersFooters?: Set<string>;
 }
 
 export interface PdfMarkdownOptions extends MarkdownFormattingOptions {
@@ -323,21 +324,29 @@ export function formatGfmTable(text: string): string {
 
   // Already pipe-delimited
   if (rawRows.every((r) => r.includes("|"))) {
-    // Determine column count by splitting header on '|' after trimming leading and trailing pipe
-    const cleanHeader = rawRows[0].replace(/^\|/, "").replace(/\|$/, "");
-    const headerCols = cleanHeader.split("|").map((c) => c.trim());
-    const colCount = Math.max(2, headerCols.length);
-
-    const normalizedRows: string[] = [];
+    const parsedRows: string[][] = [];
     for (let i = 0; i < rawRows.length; i++) {
       const row = rawRows[i];
       // Skip redundant or existing separator row
       if (i === 1 && /^\|?\s*:?-+:?\s*\|/.test(row)) {
         continue;
       }
-      const cells = row.replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
-      while (cells.length < colCount) cells.push("");
-      normalizedRows.push("| " + cells.slice(0, colCount).join(" | ") + " |");
+      const cells = row
+        .replace(/^\|/, "")
+        .replace(/\|$/, "")
+        .split(/(?<!\\)\|/)
+        .map((c) => c.trim().replace(/(?<!\\)\|/g, "\\|"));
+      parsedRows.push(cells);
+    }
+
+    if (!parsedRows.length) return text;
+    const colCount = Math.max(2, ...parsedRows.map((r) => r.length));
+
+    const normalizedRows: string[] = [];
+    for (const cells of parsedRows) {
+      const padded = [...cells];
+      while (padded.length < colCount) padded.push("");
+      normalizedRows.push("| " + padded.slice(0, colCount).join(" | ") + " |");
     }
 
     const sep = "|" + Array(colCount).fill(" --- |").join("");
@@ -345,8 +354,12 @@ export function formatGfmTable(text: string): string {
   }
 
   // Convert tab or multi-space separated columns
-  const parsedRows = rawRows.map((r) => r.split(/[\t ]{3,}|\t+/).map((c) => c.trim()));
-  const maxCols = Math.max(...parsedRows.map((r) => r.length));
+  const parsedRows = rawRows.map((r) =>
+    r
+      .split(/[\t ]{2,}|\t+/)
+      .map((c) => c.trim().replace(/(?<!\\)\|/g, "\\|")),
+  );
+  const maxCols = Math.max(2, ...parsedRows.map((r) => r.length));
   if (maxCols < 2) return text;
 
   const padRows = parsedRows.map((r) => {
@@ -356,6 +369,104 @@ export function formatGfmTable(text: string): string {
   });
   const sep = "| " + Array(maxCols).fill("---").join(" | ") + " |";
   return [padRows[0], sep, ...padRows.slice(1)].join("\n");
+}
+
+export function formatHtmlTable(text: string): string {
+  const rawRows = text.split("\n").map((r) => r.trim()).filter(Boolean);
+  if (!rawRows.length) return "";
+
+  let parsedRows: string[][];
+  if (rawRows.every((r) => r.includes("|"))) {
+    parsedRows = rawRows
+      .filter((r, i) => !(i === 1 && /^\|?\s*:?-+:?\s*\|/.test(r)))
+      .map((r) =>
+        r
+          .replace(/^\|/, "")
+          .replace(/\|$/, "")
+          .split(/(?<!\\)\|/)
+          .map((c) => c.replace(/\\\|/g, "|").trim()),
+      );
+  } else {
+    parsedRows = rawRows.map((r) =>
+      r.split(/[\t ]{2,}|\t+/).map((c) => c.trim()),
+    );
+  }
+
+  if (!parsedRows.length) return "";
+  const maxCols = Math.max(1, ...parsedRows.map((r) => r.length));
+
+  const esc = (s: string) =>
+    s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+
+  const headerCells = [...(parsedRows[0] || [])];
+  while (headerCells.length < maxCols) headerCells.push("");
+  const thead = `  <thead>\n    <tr>\n${headerCells
+    .map((c) => `      <th>${esc(c)}</th>`)
+    .join("\n")}\n    </tr>\n  </thead>`;
+
+  const bodyRows = parsedRows.slice(1);
+  const tbodyRows = bodyRows.map((row) => {
+    const cells = [...row];
+    while (cells.length < maxCols) cells.push("");
+    return `    <tr>\n${cells.map((c) => `      <td>${esc(c)}</td>`).join("\n")}\n    </tr>`;
+  });
+
+  const tbody = tbodyRows.length
+    ? `\n  <tbody>\n${tbodyRows.join("\n")}\n  </tbody>`
+    : "";
+
+  return `<table>\n${thead}${tbody}\n</table>`;
+}
+
+/**
+ * Compares candidate header/footer blocks across pages by normalized text
+ * in the top and bottom bands, returning the set of confirmed repetitions.
+ */
+export function detectRepeatedHeadersFooters(pages: ExtractedBlock[][]): Set<string> {
+  const repeated = new Set<string>();
+  if (pages.length < 2) return repeated;
+
+  const topCounts = new Map<string, number>();
+  const bottomCounts = new Map<string, number>();
+
+  for (const pageBlocks of pages) {
+    if (!pageBlocks.length) continue;
+    // Top candidates: first 1 or 2 blocks
+    const topCandidates = pageBlocks.slice(0, Math.min(2, pageBlocks.length));
+    const seenTopThisPage = new Set<string>();
+    for (const b of topCandidates) {
+      const norm = b.text.trim().toLowerCase().replace(/\s+/g, " ");
+      if (norm.length >= 2 && !seenTopThisPage.has(norm)) {
+        seenTopThisPage.add(norm);
+        topCounts.set(norm, (topCounts.get(norm) ?? 0) + 1);
+      }
+    }
+
+    // Bottom candidates: last 1 or 2 blocks
+    const bottomCandidates = pageBlocks.slice(Math.max(0, pageBlocks.length - 2));
+    const seenBottomThisPage = new Set<string>();
+    for (const b of bottomCandidates) {
+      const norm = b.text.trim().toLowerCase().replace(/\s+/g, " ");
+      if (norm.length >= 2 && !seenBottomThisPage.has(norm)) {
+        seenBottomThisPage.add(norm);
+        bottomCounts.set(norm, (bottomCounts.get(norm) ?? 0) + 1);
+      }
+    }
+  }
+
+  for (const [norm, count] of topCounts.entries()) {
+    if (count >= 2) repeated.add(norm);
+  }
+  for (const [norm, count] of bottomCounts.entries()) {
+    if (count >= 2) repeated.add(norm);
+  }
+
+  return repeated;
 }
 
 /**
@@ -373,28 +484,45 @@ export function blocksToMarkdown(
     tableFormat = "gfm",
     stripHeadersFooters = true,
     pageDelimiters = "rule",
+    repeatedHeadersFooters,
   } = options;
 
   const lines: string[] = [];
 
+  // F1: Page-break markers are owned exclusively by document join (at :669),
+  // not duplicated inside blocksToMarkdown.
   if (includePageAnchors) {
-    if (pageDelimiters === "pagebreak") {
-      lines.push(`<!-- pagebreak -->\n## Page ${pageNumber}\n`);
-    } else if (pageDelimiters === "none") {
+    if (pageDelimiters === "none") {
       lines.push(`<!-- Page ${pageNumber} -->\n`);
     } else {
       lines.push(`## Page ${pageNumber}\n`);
     }
   }
 
-  // Filter out running headers and standalone page numbers if requested (discrete non-backtracking checks)
+  // Filter out running headers, footers and standalone page numbers if requested
   const isPageNum = (t: string) =>
     /^\d{1,6}$/.test(t) ||
     /^\d{1,6}\s*\/\s*\d{1,6}$/.test(t) ||
     /^page\s+\d{1,6}(?:\s+of\s+\d{1,6})?$/i.test(t);
 
+  const isRepeatedHeaderFooter = (
+    b: ExtractedBlock,
+    index: number,
+    total: number,
+  ) => {
+    if (!repeatedHeadersFooters || repeatedHeadersFooters.size === 0) return false;
+    const isBand = index < 2 || index >= total - 2;
+    if (!isBand) return false;
+    const norm = b.text.trim().toLowerCase().replace(/\s+/g, " ");
+    return repeatedHeadersFooters.has(norm);
+  };
+
   const filteredBlocks = stripHeadersFooters
-    ? blocks.filter((b) => !isPageNum(b.text.trim()))
+    ? blocks.filter(
+        (b, idx) =>
+          !isPageNum(b.text.trim()) &&
+          !isRepeatedHeaderFooter(b, idx, blocks.length),
+      )
     : blocks;
 
   for (const b of filteredBlocks) {
@@ -413,7 +541,12 @@ export function blocksToMarkdown(
         break;
       }
       case "table": {
-        const tableText = tableFormat === "gfm" ? formatGfmTable(b.text) : b.text;
+        let tableText = b.text;
+        if (tableFormat === "gfm") {
+          tableText = formatGfmTable(b.text);
+        } else if (tableFormat === "html") {
+          tableText = formatHtmlTable(b.text);
+        }
         lines.push(`\n${tableText}\n`);
         break;
       }
@@ -428,14 +561,23 @@ export function blocksToMarkdown(
       case "formula": {
         if (includeVisualAssets && b.assetPath) {
           lines.push(`\n<!-- Preserved formula visual -->\n![Formula on page ${pageNumber}](${b.assetPath})\n`);
-        } else if (formulaFormat === "latex") {
+        } else {
           let cleanEq = b.text.trim();
           while (cleanEq.startsWith("`")) cleanEq = cleanEq.slice(1);
           while (cleanEq.endsWith("`")) cleanEq = cleanEq.slice(0, -1);
           cleanEq = cleanEq.trim();
-          lines.push(`\n$$\n${cleanEq}\n$$\n`);
-        } else {
-          lines.push(`\n\`${b.text}\`\n`);
+
+          if (formulaFormat === "latex") {
+            lines.push(`\n$$\n${cleanEq}\n$$\n`);
+          } else if (formulaFormat === "html") {
+            const esc = cleanEq
+              .replace(/&/g, "&amp;")
+              .replace(/</g, "&lt;")
+              .replace(/>/g, "&gt;");
+            lines.push(`\n<math display="block"><mrow><mtext>${esc}</mtext></mrow></math>\n`);
+          } else {
+            lines.push(`\n\`\`\`math\n${cleanEq}\n\`\`\`\n`);
+          }
         }
         break;
       }
@@ -494,7 +636,7 @@ export async function convertPdfToMarkdown(
   const assets: Array<{ path: string; bytes: Uint8Array }> = [];
   const warnings: string[] = [];
   const allBlocks: ExtractedBlock[] = [];
-  const pageMarkdownParts: string[] = [];
+  const pagesBlockList: Array<{ pageNum: number; blocks: ExtractedBlock[] }> = [];
 
   try {
     for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
@@ -620,14 +762,7 @@ export async function convertPdfToMarkdown(
         if (!b.confidence) b.confidence = pageConfidence;
       }
 
-      const pageMd = blocksToMarkdown(pageBlocks, pageNum, {
-        ...options,
-        formulaFormat,
-        tableFormat,
-        stripHeadersFooters,
-        includeVisualAssets: exportMode === "bundle-zip" ? includeVisuals : false,
-      });
-      pageMarkdownParts.push(pageMd);
+      pagesBlockList.push({ pageNum, blocks: pageBlocks });
       allBlocks.push(...pageBlocks);
 
       // Clean up page canvas
@@ -644,6 +779,23 @@ export async function convertPdfToMarkdown(
       // Ignored
     }
   }
+
+  // Detect repeated headers and footers across pages if stripping is requested
+  const repeatedHeadersFooters =
+    stripHeadersFooters && pagesBlockList.length > 1
+      ? detectRepeatedHeadersFooters(pagesBlockList.map((p) => p.blocks))
+      : new Set<string>();
+
+  const pageMarkdownParts = pagesBlockList.map(({ pageNum, blocks }) =>
+    blocksToMarkdown(blocks, pageNum, {
+      ...options,
+      formulaFormat,
+      tableFormat,
+      stripHeadersFooters,
+      repeatedHeadersFooters,
+      includeVisualAssets: exportMode === "bundle-zip" ? includeVisuals : false,
+    }),
+  );
 
   // 5. Build full document.md with optional frontmatter
   const documentTitle = cleanBaseName.replace(/_/g, " ");

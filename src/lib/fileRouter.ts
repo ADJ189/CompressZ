@@ -199,7 +199,7 @@ const PDF_ACTION_DEFS: ActionTuple[] = [
   ["crop-pdf", "Crop PDF", "📐", "Trim margins and adjust visual CropBox boundary", "pdf/crop", "pdf"],
   ["redact-pdf", "Redact Content", "⬛", "Permanently purge sensitive text & image regions", "pdf/redact", "pdf"],
   ["protect-pdf", "Protect with Password", "🛡️", "AES-256 encryption with user and owner passwords", "pdf/protect", "pdf"],
-  ["ocr-pdf", "PDF OCR", "🔍", "Make scanned PDF searchable with Tesseract or PaddleOCR", "compress/ocr", "ai"],
+  ["ocr-pdf", "PDF OCR", "🔍", "Add a searchable text layer to scanned PDFs and images with Tesseract.js", "compress/ocr", "ai"],
   ["pdf-markdown", "PDF to Markdown", "📝", "Structured layout parser to Markdown and assets ZIP", "convert/pdf-markdown", "ai"],
   ["repair-pdf", "Repair Corrupt PDF", "🩹", "Rebuild broken XREF tables and trailer dictionaries", "pdf/repair", "pdf"],
 ];
