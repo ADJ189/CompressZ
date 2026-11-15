@@ -54,6 +54,8 @@
   }
 </script>
 
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
   id="dz-mount"
   class="cz-dropzone {isDragActive ? 'is-drag-active' : ''} {hasFiles ? 'is-compact' : ''}"
