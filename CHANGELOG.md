@@ -15,10 +15,28 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 
 ## [Unreleased]
 
+### Added
+
+- **Legible Engine Failures (`engineError.ts`)**: Replaced generic error messages with informative, engine-specific diagnostic reports (`EngineError`) across FFmpeg, QPDF, PDF.js, pdf-lib, and Tesseract. Failures carry process exit codes and bounded logs rendered in expandable "Details" blocks on file cards and toasts.
+- **Searchable PDF output for OCR (`searchablePdf.ts`)**: printed-text OCR now
+  produces a real searchable PDF — each rasterised page plus an invisible,
+  selectable text layer positioned from the engine's word boxes. PDFs and
+  images are accepted, pages are rendered, recognised and embedded one at a
+  time, and the route can also export plain text or both files. The text layer
+  uses an embedded Noto Sans subset, so Latin, Cyrillic, Greek and Vietnamese
+  are searchable; characters outside that coverage are reported instead of
+  being drawn as tofu.
+
 ### Fixed
 
+- **UI polish, responsive layout & accessibility (`Navigation.svelte`, `HubHeader.svelte`, `Convert.svelte`, `PdfSuite.svelte`, `index.html`, `init.ts`)**: Resolved top navigation label clipping on viewports <= 820px with smooth horizontal scrolling, scroll-snap, and CSS edge fade mask; converted HubHeader tool chips into a non-wrapping horizontal scroll strip; replaced emoji tofu and stray symbols with crisp vector `<MacIcon>` glyphs; removed all-caps "MACOS PRO", "POWERFUL", and "Inspector" badge framing; removed glued arrows from action links; enhanced accessibility with `role="tab"`, `role="group"`, `aria-selected`, `aria-pressed`, and `tabindex` attributes; added early theme initialization module in `init.ts` before DOM paint to prevent dark-mode white flashes; and added `<noscript>` fallback and a 10s splash screen watchdog recovery.
+- **Output fidelity & extraction improvements (`pdfToMarkdown.ts`, `markdownPreview.ts`, `cropPdf.ts`, `watermarkPdf.ts`, `excelToPdf.ts`, `common.ts`)**: Deduplicated page-break markers to strictly `pageCount - 1` delimiters; implemented cross-page repeated running header and footer detection; implemented HTML table and MathML equation generation; upgraded markdown preview to render multi-line math blocks, padded tables with escaped pipes, safe images, and protected code spans; preserved MediaBox during page cropping by targeting CropBox and TrimBox; corrected watermark placement by accounting for CropBox origin offsets; collected multi-run rich text strings in inline Excel cells; stripped invalid XML control characters across Office document generators; and guarded bundle zip downloads in standalone markdown mode.
+- **Convert page correctness (`Convert.svelte`)**: Persisted target formats in user profiles and restored them only when valid for the active category; clamped quality and scale DPI inputs; prevented route change listeners from clobbering active user formats; sanitized file drops by validating extensions across conversion categories and rejecting unsupported formats with an explanatory error toast; keyed conversion results by file instance to prevent prefix collisions; and wrapped batch execution in `try/finally` blocks so controls are never locked on failure.
 - Preserve submitted settings and file order in queued conversions, and schedule DOCX HTML/text and PPTX text jobs.
 - Match PDF image output metadata to encoded bytes, correct video CRF slider direction, and clean up FFmpeg loading resources with a bounded initialization timeout.
+- **Archive extraction is bounded**: a malformed TAR size field can no longer hang the tab, entry names are sanitised on read and write, entry counts and total bytes are capped, and a gzip bomb is cancelled at the 256 MB limit instead of exhausting memory.
+- **PDF repair rebuilds a usable file**: the salvaged xref now points at the real document catalog, accounts for a prepended `%PDF-` header, and refuses to emit a file whose catalog is missing. QPDF's diagnostics are captured instead of leaking to the console.
+- **MP4 “repair” is honest**: a recording without a MOOV index is reported as unrecoverable rather than downloaded unchanged, and an already-valid MP4 is no longer re-exported as “repaired”.
 
 ## [1.15.0] - 2026-11-14
 

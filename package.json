@@ -11,7 +11,7 @@
     "dev": "vite dev",
     "build": "vite build && node scripts/strip-oversized-assets.mjs",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && svelte-check --tsconfig ./tsconfig.json",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test": "node scripts/test.mjs",

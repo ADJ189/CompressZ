@@ -79,6 +79,12 @@ privacy-relevant summary is:
   be decoded natively.
 - **onnxruntime-web** — loaded from `cdn.jsdelivr.net` for local AI
   inference.
+- **QPDF WASM** — loaded from `cdn.jsdelivr.net` for AES-256 PDF encryption,
+  password removal and deep cross-reference repair in PDF Suite. The PDF bytes
+  are processed inside the WebAssembly module in this tab; nothing is uploaded.
+- **Noto Sans (OCR text layer)** — the Unicode font embedded into searchable
+  PDFs is fetched from `cdn.jsdelivr.net` on the first OCR run. Only the font
+  file is downloaded; OCR text and page images stay in this tab.
 
 These CDN requests are for static assets (JavaScript, WebAssembly and
 model weights) only. Your file content is never included in these
@@ -108,6 +114,10 @@ CompressZ stores these keys in your browser's `localStorage`:
 - `cz-recent-tools` — the route names of tools you opened recently, used for
   the "Pinned & recent" panel on the home page.
 - `cz-favourite-tools` — the route names you pinned on the home page.
+- `cz-convert-profile` — the last category, target format and quality settings you
+  used on the Multi-Format Converter (format names only, never file names).
+- `cz-pdfsuite-profile` — the encryption standard, render DPI and permission
+  toggles you last picked in PDF Suite.
 
 These values never leave your device. Contextual suggestions are evaluated
 locally from metadata that is already in the page (file names, byte sizes,

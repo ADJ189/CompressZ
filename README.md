@@ -96,6 +96,15 @@ favourites, and see recently opened tools (`cz-favourite-tools`, `cz-recent-tool
 
 ## OCR Engines
 
+The OCR route (`/compress/ocr`) accepts scanned PDFs and images. For printed
+text it can output a **searchable PDF** (page raster + invisible, selectable
+text layer), plain `.txt`, or both; handwriting mode is plain text only. The
+text layer is built from freshly rasterised pages with an embedded Noto Sans
+subset, so search/selection covers Latin, Cyrillic, Greek and Vietnamese.
+Words whose glyphs fall outside that subset (CJK, Arabic, Indic) are skipped and
+reported instead of being written incorrectly, and pages are processed one at a
+time so memory stays near a single page.
+
 ### Tesseract.js 5 — Default Engine ⭐
 
 | Attribute   | Detail                                                                                                                        |
@@ -281,6 +290,7 @@ compressz/
 │       ├── types.ts
 │       ├── pdfToMarkdown.ts  # Column-aware PDF to Markdown + ZIP bundle
 │       ├── ocrEngines.ts     # Unified OCR engine interfaces (Tesseract + Paddle)
+│       ├── searchablePdf.ts  # Page raster + invisible OCR text layer → searchable PDF
 │       ├── ocrHandwriting.ts # English handwriting recognition (TrOCR candidate)
 │       ├── motion.ts         # Native Web Animations API (animejs removed)
 │       ├── zip.ts            # Traversal-safe zero-dep ZIP engine

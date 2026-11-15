@@ -21,7 +21,7 @@ const chromiumLaunch = executablePath ? { executablePath } : {};
 // Node/npm is the default runtime for CI and Cloudflare Pages.
 // When npm is absent (e.g. running under Deno), fallback to Deno running Vite directly.
 const buildAndPreview = hasNpm
-  ? `npm run build && npm run preview -- --host 127.0.0.1 --port ${PORT} --strictPort`
+  ? `node node_modules/vite/bin/vite.js build && node scripts/strip-oversized-assets.mjs && node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port ${PORT} --strictPort`
   : `deno run -A node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port ${PORT} --strictPort`;
 
 // Two opt-in suites import the real TypeScript engine modules, so they need
@@ -34,7 +34,7 @@ const isBench = !!process.env.BENCH;
 const isWebCodecsE2E = !!process.env.WEBCODECS_E2E;
 const usesDevServer = isBench || isWebCodecsE2E;
 const webServerCommand = process.env.PW_WEB_SERVER_CMD || (usesDevServer
-  ? (hasNpm ? `npm run dev -- --host 127.0.0.1 --port ${PORT} --strictPort` : `deno run -A node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${PORT} --strictPort`)
+  ? (hasNpm ? `node node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${PORT} --strictPort` : `deno run -A node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${PORT} --strictPort`)
   : buildAndPreview);
 
 const ignored = [

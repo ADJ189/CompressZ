@@ -17,8 +17,9 @@ try {
   // Fallback if node_modules is not present
 }
 
-// App version for Settings → General.
-let appVersion = "1.14.1";
+// App version for Settings → General. The fallback only matters when
+// package.json cannot be read; keep it in sync with package.json's version.
+let appVersion = "1.15.0";
 try {
   appVersion =
     (JSON.parse(
@@ -30,6 +31,28 @@ try {
 } catch {
   // Fallback if package.json read fails
 }
+
+// Content-Security-Policy. `public/_headers` ships the enforcing copy to
+// Cloudflare Pages; the dev server sends the same policy as Report-Only so a
+// violation shows up in the console without blocking HMR, and `vite preview`
+// enforces it so the built bundle can be checked before deploy.
+// `tests/securityCsp.test.ts` asserts the two copies stay identical.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'wasm-unsafe-eval' blob: https://cdn.jsdelivr.net https://esm.sh",
+  "worker-src 'self' blob: https://cdn.jsdelivr.net",
+  "child-src 'self' blob:",
+  "connect-src 'self' blob: data: https://cdn.jsdelivr.net https://esm.sh https://tessdata.projectnaptha.com https://paddlejs.bj.bcebos.com https://huggingface.co https://cdn-lfs.huggingface.co https://fonts.googleapis.com https://fonts.gstatic.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "img-src 'self' blob: data:",
+  "media-src 'self' blob: data:",
+  "frame-src 'self' blob: data:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'none'",
+  "frame-ancestors 'none'",
+].join("; ");
 
 export default defineConfig({
   root: ".",
@@ -52,12 +75,14 @@ export default defineConfig({
     headers: {
       "Cross-Origin-Opener-Policy": "same-origin",
       "Cross-Origin-Embedder-Policy": "require-corp",
+      "Content-Security-Policy-Report-Only": CSP,
     },
   },
   preview: {
     headers: {
       "Cross-Origin-Opener-Policy": "same-origin",
       "Cross-Origin-Embedder-Policy": "require-corp",
+      "Content-Security-Policy": CSP,
     },
   },
   optimizeDeps: {

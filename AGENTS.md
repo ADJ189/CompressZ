@@ -29,7 +29,7 @@ npm ci                       # install from package-lock.json
 npm run dev                  # http://localhost:5173
 npm run build                # dist/ + strip >25 MiB assets
 npm run preview              # serve dist/
-npm run typecheck            # tsc --noEmit
+npm run typecheck            # tsc --noEmit + svelte-check (covers .svelte)
 npm run lint                 # ESLint (0 errors expected; warnings tolerated)
 npm run test:e2e             # Playwright, Chromium + WebKit + Firefox, desktop + mobile
 npm run test:webcodecs       # opt-in real Mediabunny encode (needs esm.sh + WebCodecs)
@@ -50,8 +50,10 @@ GitHub re-review and Cloudflare Pages deployment specification, see
 
 ### Verification checklist (run all before calling work done)
 
-1. `npm test` (or `deno test --allow-read` locally) — runs all 29 unit and compliance tests offline (quality guard, recommendations, resource manager, zip security, settings, OCR engines, PDF to Markdown, package standards, and Hallmark anti-slop rules).
-2. `npm run typecheck` — must be clean.
+1. `npm test` (or `deno test --allow-read` locally) — runs all 29 suites (138 tests) offline (quality guard, recommendations, resource manager, zip/tar security, settings, OCR engines, searchable PDF, PDF to Markdown, output fidelity, engine errors, privacy parity, package standards, and Hallmark anti-slop rules).
+2. `npm run typecheck` — must be clean. This runs `tsc --noEmit` **and**
+   `svelte-check`; `tsc` alone never inspects `.svelte` files, so a clean
+   `tsc` is not evidence that the UI type-checks.
 3. `npm run lint` — must be **0 errors**. The repo currently has ~100
    pre-existing `@typescript-eslint/no-explicit-any` warnings; do not add new
    ones, but do not treat the existing count as failure.
@@ -106,13 +108,14 @@ src/routes/                route components (Svelte 5)
   Home.svelte             workbench: search, filter, pins, queue panel
   Images.svelte           image compression with format and quality controls
   Pdf.svelte              PDF compression (structural & raster)
+  PdfSuite.svelte         comprehensive PDF workstation (split, organize, studio, watermark, crop, forms, protect, repair, redact)
   Video.svelte            video compression (WebCodecs & FFmpeg)
   Audio.svelte            audio compression & bitrate selection
   Gif.svelte              GIF optimization & WebM conversion
-  Ocr.svelte              printed & handwriting OCR engine workbench
+  Ocr.svelte              printed & handwriting OCR engine workbench + searchable PDF export
   MergePdf.svelte         PDF merger with reordering
   ImagesToPdf.svelte      images to PDF with optional local AI sort
-  Convert.svelte          multi-format converter
+  Convert.svelte          multi-format converter (video, audio, office, images)
   PdfMarkdown.svelte      PDF → Markdown extraction & ZIP export
   About.svelte, Docs.svelte, Privacy.svelte, Settings.svelte
 src/components/            reusable UI atoms (Svelte 5)
@@ -120,14 +123,26 @@ src/components/            reusable UI atoms (Svelte 5)
   FileCard.svelte         compact job item with status, size & action
   FileQueue.svelte        ordered list of jobs with batch actions
   ProgressStatus.svelte   real-time progress bar and status line
+  HubHeader.svelte        unified horizontal scrolling hub tool strip
+  MacIcon.svelte          macOS-style vector icon glyphs & squircles
 src/router.ts              History API router, dispatches to store
 src/store.ts               pure TypeScript reactive store (Svelte 5 contract)
 src/toast.ts               toast notifications
 src/style.css              app stylesheet: tokens + floor rules
 src/styles/workbench.css   scoped utility styles (`.cz-*`)
 src/lib/                   pure framework-independent TypeScript engines
+  pdfTools/                modular PDF suite utilities (split, organize, crop, watermark, forms, redact, security, repair)
+  conversions/             multi-format conversions (pdfToWord, pdfToExcel, pdfToPpt, excelToPdf, libreOfficeWasm, common)
+  archives.ts              multi-file archive packing & unpacking (.tar.gz, .tgz, .tar, .zip)
+  tar.ts                   bounded streaming UStar TAR writer & reader with traversal guards
+  fileRouter.ts            binary magic signature detection & routing
+  fileEncryption.ts        hardware-accelerated WebCrypto AES-256-GCM vault encryption
+  qpdfWasm.ts              isolated QPDF WebAssembly execution bridge
+  engineError.ts           typed EngineError diagnostic reports & bounded logging
   pdfToMarkdown.ts         column-aware PDF to Markdown + ZIP bundle
+  markdownPreview.ts       safe Markdown & math preview renderer with XSS sanitization
   ocrEngines.ts            unified OCR engines (Tesseract.js 5 + PaddleOCR)
+  searchablePdf.ts         invisible OCR text layer + page raster → searchable PDF
   ocrHandwriting.ts        English handwriting recognition (TrOCR candidate)
   motion.ts                native Web Animations API (zero dependencies)
   zip.ts                   secure ZIP read/write with path sanitization
@@ -153,7 +168,7 @@ src/lib/                   pure framework-independent TypeScript engines
   convertPdf.ts / imagesToPdf.ts / mergePdf.ts / types.ts
   options.ts               UI state → engine option builders (the single
                            mapping layer for every route; see below)
-tests/                     Deno test suite (verified 100% passing)
+tests/                     test suite (verified 100% passing)
   assert.ts                zero-dependency test assertions
   hallmark.test.ts         anti-slop and CSS floor compliance tests
   ocr.test.ts              OCR engine & handwriting disclosure tests
@@ -164,6 +179,11 @@ tests/                     Deno test suite (verified 100% passing)
   resourceManager.test.ts  workload estimation and allocation failure tests
   settings.test.ts         default settings and profile resolution tests
   zip.test.ts              ZIP path traversal and round-trip tests
+  archives.test.ts         TAR/GZIP round-trip, malformed-header and bomb limits
+  securityAndRepair.test.ts PDF encryption args, xref salvage, MP4 honesty
+  searchablePdf.test.ts    raster-to-point coordinate math and coverage
+  engineError.test.ts      engine error classification, logs, and diagnostics
+  privacy-parity.test.ts   storage-key / CDN-host parity with PRIVACY.md
 ```
 
 ## UI → engine options
@@ -280,9 +300,17 @@ match. Several were previously wrong; don't regress them.
   - OCR page seeds engine/language from Settings → Compression → OCR defaults
     and render DPI from the resolved resource mode: Memory Saver 200, Balanced
     250, Maximum 300.
-  - OCR renders and embeds one page at a time (`openPageRenderer()` +
-    incremental `createSearchablePdfBuilder()`), releasing each page blob after
-    recognition. Don't go back to rendering every page up front.
+  - OCR renders and embeds one page at a time (`openPdfDocument()` + a
+    per-page canvas, then `addPage()`), releasing each page blob and canvas
+    after recognition. Don't go back to rendering every page up front.
+  - **Output** is `searchablePdf.ts`: each page raster plus an invisible
+    (`opacity: 0`) text layer placed from the engine's word boxes, with
+    px→pt/page-height conversion. Words below 30 confidence are not placed, and
+    a word containing a glyph the embedded Noto Sans subset lacks is skipped and
+    reported (`describeTextLayerGap`), never drawn as tofu. Coverage is
+    Latin/Cyrillic/Greek/Vietnamese only; CJK/Arabic/Indic stay image-only.
+  - The route accepts PDFs **and** images, and offers searchable PDF, plain
+    text, or both. Handwriting mode is plain text only.
   - Batch OCR is sequential and awaits each file; a bare `forEach()` here was a
     real crash bug.
 - **English Handwriting Recognition:**
@@ -329,6 +357,18 @@ match. Several were previously wrong; don't regress them.
   `.doc`/`.ppt` are unsupported.
 - ZIP read/write is zero-dependency, built on `CompressionStream` /
   `DecompressionStream('deflate-raw')`.
+- TAR/GZIP (`tar.ts`, `archives.ts`) are untrusted-input parsers: the size field
+  is validated before the offset math (a negative size used to hang the tab),
+  entry names go through `sanitizeTarPath()` on read **and** write, entry count
+  and total bytes are capped, and decompression is cancelled at
+  `MAX_DECOMPRESSED_BYTES` (256 MB). Do not remove those guards to "simplify".
+- PDF repair (`pdfTools/repairPdf.ts`) rebuilds the xref around the recovered
+  `/Type /Catalog` object and shifts offsets for any prepended header. MP4 repair
+  only restores a missing `ftyp`; a recording with no MOOV index is reported as
+  unrecoverable, never handed back as "repaired".
+- qpdf-wasm 0.3.0 binds `console.*` when its factory runs and ignores
+  `print`/`printErr`, so `qpdfWasm.ts` bridges console across `initQpdf()` and
+  captures output during `callMain()`. Keep that bridge or diagnostics vanish.
 
 ## Settings and the execution profile
 
@@ -355,7 +395,7 @@ match. Several were previously wrong; don't regress them.
   ultrafast/fast/medium. `resourceLimits.*: 'auto'` defers to the tier.
 - GPU toggles are seeded from device detection on first run only; after that
   they are explicit user choices. `GPU_CAPABLE` is images/pdf/ocr/video.
-- Settings is a sectioned dialog (`src/pages/settings.ts`): General,
+- Settings is a sectioned dialog (`src/app/SettingsDialog.svelte`): General,
   Appearance, Performance, AI engine, Suggestions, Compression, Privacy &
   data, Diagnostics. Tests must click `#settings-nav` before asserting
   section content.
@@ -411,18 +451,21 @@ match. Several were previously wrong; don't regress them.
 - No backend, no uploads, no analytics, no tracking cookies. Never add a
   feature that sends file bytes to a server.
 - CDN hosts currently used at runtime: `cdn.jsdelivr.net` (PDF.js, pdf-lib,
-  Tesseract.js, PaddleOCR, mammoth.js, html2canvas, heic2any,
+  Tesseract.js, PaddleOCR, QPDF WASM, mammoth.js, html2canvas, heic2any,
   onnxruntime-web), `esm.sh` (FFmpeg.wasm, Mediabunny, heic2any),
   `tessdata.projectnaptha.com`
   (Tesseract language data), `paddlejs.bj.bcebos.com` (PaddleOCR weights),
   `fonts.googleapis.com` (typography), and Hugging Face for model weights.
 - Only static assets/model weights leave the device; never file content.
 - localStorage keys: `theme` (`light`/`dark`/`system`), `cz-settings-v2`,
-  `cz-recommendations-v1`, `cz-recent-tools`, `cz-favourite-tools`, and
-  legacy `cz-settings-v1`. Recent/pinned lists store tool route names only —
-  never file names or contents.
+  `cz-recommendations-v1`, `cz-recent-tools`, `cz-favourite-tools`,
+  `cz-convert-profile`, `cz-pdfsuite-profile`, and legacy `cz-settings-v1`.
+  Recent/pinned lists and the per-tool profiles store route names and option
+  values only — never file names or contents.
 - If you add a CDN host, storage key, or data flow, update **both**
-  `PRIVACY.md` and the `/privacy` template in `index.html` in the same change.
+  `PRIVACY.md` and the in-app page at `src/routes/Privacy.svelte` in the same
+  change. `tests/privacy-parity.test.ts` fails the suite when a key, host or
+  lazily loaded CDN package is missing from `PRIVACY.md`.
 - `CREDITS.md` must credit any new third-party code with its license
   (Apache-2.0-compatible only; no GPL/AGPL).
 
@@ -479,8 +522,7 @@ match. Several were previously wrong; don't regress them.
 Do not claim these ship until they do:
 
 - Real-device Safari/iOS parity. Playwright's WebKit projects are not Safari;
-  run `docs/SAFARI_DEVICE_CHECKLIST.md` on physical hardware before release
-  claims.
+  physical hardware verification remains a separate manual release step.
 - AST-aware SVG optimisation (current optimiser is regex/token based).
 - Embedding-based visual-similarity grouping for Smart Analyze.
 - Pinned model revisions / offline model packs.
