@@ -5,15 +5,16 @@
   import { compressPdf } from "../lib/compressPdf";
   import { pdfOptions } from "../lib/options";
   import { runScheduled } from "../lib/resourceManager";
+import { entryError } from "../lib/engineError";
   import { uid, type FileEntry, type PdfLevel, outputFilename } from "../lib/types";
   import { toast } from "../toast";
 
-  let state = $state<PdfState>(pdfStore.get());
+  let pdfState = $state<PdfState>(pdfStore.get());
   let isBusy = $state(false);
 
   $effect(() => {
     const unsub = pdfStore.subscribe((val) => {
-      state = val;
+      pdfState = val;
     });
     return unsub;
   });
@@ -31,27 +32,27 @@
       status: "idle",
       type: "pdf",
     }));
-    updateStore({ files: [...state.files, ...newEntries] });
+    updateStore({ files: [...pdfState.files, ...newEntries] });
   }
 
   async function compressSingle(entry: FileEntry) {
     if (entry.status === "compressing") return;
 
     updateStore({
-      files: state.files.map((f) =>
+      files: pdfState.files.map((f) =>
         f.id === entry.id ? { ...f, status: "compressing", error: undefined } : f,
       ),
     });
 
     try {
-      const options = pdfOptions(state);
+      const options = pdfOptions(pdfState);
       const res = await runScheduled(
         { kind: "pdf", label: entry.name, bytes: entry.file.size },
         () => compressPdf(entry.file, options),
       );
 
       updateStore({
-        files: state.files.map((f) =>
+        files: pdfState.files.map((f) =>
           f.id === entry.id
             ? {
                 ...f,
@@ -65,24 +66,28 @@
       toast(`Compressed ${entry.name}`, "success");
     } catch (err) {
       console.error("[pdfCompress] error:", err);
+      const failure = entryError(err, "PDF compression failed");
       updateStore({
-        files: state.files.map((f) =>
+        files: pdfState.files.map((f) =>
           f.id === entry.id
             ? {
                 ...f,
                 status: "error",
-                error: (err as Error).message || "PDF compression failed",
+                error: failure.error,
+                errorLog: failure.errorLog,
               }
             : f,
         ),
       });
-      toast(`Failed to compress ${entry.name}`, "error");
+      toast(`${entry.name}: ${failure.error}`, "error", undefined, {
+        log: failure.errorLog,
+      });
     }
   }
 
   async function handleCompressAll() {
     isBusy = true;
-    const idleEntries = state.files.filter((f) => f.status === "idle" || f.status === "error");
+    const idleEntries = pdfState.files.filter((f) => f.status === "idle" || f.status === "error");
     for (const entry of idleEntries) {
       await compressSingle(entry);
     }
@@ -103,14 +108,14 @@
   }
 
   function handleDownloadAll() {
-    const doneEntries = state.files.filter((f) => f.status === "done");
+    const doneEntries = pdfState.files.filter((f) => f.status === "done");
     for (const entry of doneEntries) {
       handleDownloadSingle(entry);
     }
   }
 
   function handleRemove(id: string) {
-    updateStore({ files: state.files.filter((f) => f.id !== id) });
+    updateStore({ files: pdfState.files.filter((f) => f.id !== id) });
   }
 
   function handleClear() {
@@ -133,21 +138,21 @@
       <div class="cz-segmented-track" role="radiogroup" aria-label="PDF Compression Level">
         <button
           type="button"
-          class="cz-segmented-item {state.level === 'low' ? 'is-active' : ''}"
+          class="cz-segmented-item {pdfState.level === 'low' ? 'is-active' : ''}"
           onclick={() => updateStore({ level: 'low' })}
         >
           Low (220 DPI)
         </button>
         <button
           type="button"
-          class="cz-segmented-item {state.level === 'recommended' ? 'is-active' : ''}"
+          class="cz-segmented-item {pdfState.level === 'recommended' ? 'is-active' : ''}"
           onclick={() => updateStore({ level: 'recommended' })}
         >
           Balanced (150 DPI)
         </button>
         <button
           type="button"
-          class="cz-segmented-item {state.level === 'extreme' ? 'is-active' : ''}"
+          class="cz-segmented-item {pdfState.level === 'extreme' ? 'is-active' : ''}"
           onclick={() => updateStore({ level: 'extreme' })}
         >
           Extreme (96 DPI)
@@ -160,21 +165,21 @@
       <div class="cz-segmented-track" role="radiogroup" aria-label="PDF Metadata">
         <button
           type="button"
-          class="cz-segmented-item {state.stripMeta === 'auto' ? 'is-active' : ''}"
+          class="cz-segmented-item {pdfState.stripMeta === 'auto' ? 'is-active' : ''}"
           onclick={() => updateStore({ stripMeta: 'auto' })}
         >
           Auto
         </button>
         <button
           type="button"
-          class="cz-segmented-item {state.stripMeta === 'on' ? 'is-active' : ''}"
+          class="cz-segmented-item {pdfState.stripMeta === 'on' ? 'is-active' : ''}"
           onclick={() => updateStore({ stripMeta: 'on' })}
         >
           Strip Privacy Tags
         </button>
         <button
           type="button"
-          class="cz-segmented-item {state.stripMeta === 'off' ? 'is-active' : ''}"
+          class="cz-segmented-item {pdfState.stripMeta === 'off' ? 'is-active' : ''}"
           onclick={() => updateStore({ stripMeta: 'off' })}
         >
           Preserve
@@ -188,13 +193,13 @@
     icon="📄"
     title="Drop PDF documents here"
     subtitle="Single or multi-page documents"
-    hasFiles={state.files.length > 0}
+    hasFiles={pdfState.files.length > 0}
     onFiles={handleFilesAdded}
   />
 
-  {#if state.files.length > 0}
+  {#if pdfState.files.length > 0}
     <FileQueue
-      files={state.files}
+      files={pdfState.files}
       {isBusy}
       onCompressAll={handleCompressAll}
       onDownloadAll={handleDownloadAll}

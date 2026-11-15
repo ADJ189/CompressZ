@@ -1,3 +1,8 @@
+<script lang="ts">
+  // Static content page: no reactive state, but the empty script block keeps
+  // Svelte's generated module declaration available to TypeScript.
+</script>
+
 <div class="page-enter cz-content-page">
   <div class="cz-content-header">
     <span class="cz-content-badge" aria-hidden="true">📖</span>
@@ -24,6 +29,7 @@
     <h2 class="cz-content-heading">OCR Profiles</h2>
     <ul>
       <li><strong>Printed text:</strong> Tesseract.js 5 LSTM neural OCR running in WebAssembly. Supports 100+ languages.</li>
+      <li><strong>Searchable PDF:</strong> PDFs and images are accepted. Each page is rasterised, recognised and embedded one at a time with an invisible, selectable text layer, and the route can also export plain text or both. The text layer uses an embedded Noto Sans subset, so Latin, Cyrillic, Greek and Vietnamese are searchable; characters outside that coverage are reported rather than written as tofu.</li>
       <li><strong>Handwriting (English):</strong> Dedicated line-oriented recognition powered by TrOCR (Xenova/trocr-small-handwritten). Runs locally via Transformers.js with WebGPU or WASM fallback.</li>
       <li><strong>Math & Technical formulas:</strong> Handwritten formulas and equations are visually preserved as crops to prevent synthetic LaTeX hallucinations.</li>
     </ul>

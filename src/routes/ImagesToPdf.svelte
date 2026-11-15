@@ -15,7 +15,7 @@
     type Recommendation,
   } from "../lib/recommendations";
 
-  let state = $state<ImagesToPdfState>(imagesToPdfStore.get());
+  let imagesToPdfState = $state<ImagesToPdfState>(imagesToPdfStore.get());
   let isConverting = $state(false);
   let convertedBlob = $state<Blob | null>(null);
   let dismissTrigger = $state(0);
@@ -42,7 +42,7 @@
 
   $effect(() => {
     const unsub = imagesToPdfStore.subscribe((val) => {
-      state = val;
+      imagesToPdfState = val;
     });
     return unsub;
   });
@@ -51,8 +51,8 @@
     void dismissTrigger;
     return recommendFor({
       scope: "images-to-pdf",
-      files: state.files.map((f) => ({ name: f.name, size: f.size })),
-      pageSize: state.pageSize,
+      files: imagesToPdfState.files.map((f) => ({ name: f.name, size: f.size })),
+      pageSize: imagesToPdfState.pageSize,
     });
   });
 
@@ -60,7 +60,7 @@
 
   function applyRecommendation(rec: Recommendation) {
     if (rec.action.type === "reorder") {
-      const prevFiles = [...state.files];
+      const prevFiles = [...imagesToPdfState.files];
       const sorted = rec.action.order.map((i) => prevFiles[i]);
       updateStore({ files: sorted });
       toast("Sorted files by filename", "success", {
@@ -71,7 +71,7 @@
         },
       });
     } else if (rec.action.type === "page-size") {
-      const prevSize = state.pageSize;
+      const prevSize = imagesToPdfState.pageSize;
       updateStore({ pageSize: rec.action.pageSize });
       toast("Applied Auto page size", "success", {
         label: "Undo",
@@ -93,11 +93,11 @@
   }
 
   function handleFilesAdded(newFiles: File[]) {
-    updateStore({ files: [...state.files, ...newFiles] });
+    updateStore({ files: [...imagesToPdfState.files, ...newFiles] });
   }
 
   function handleRemove(index: number) {
-    const next = [...state.files];
+    const next = [...imagesToPdfState.files];
     const removed = next.splice(index, 1)[0];
     if (removed && thumbnailUrls.has(removed)) {
       URL.revokeObjectURL(thumbnailUrls.get(removed)!);
@@ -108,7 +108,7 @@
 
   function moveUp(index: number) {
     if (index <= 0) return;
-    const next = [...state.files];
+    const next = [...imagesToPdfState.files];
     const temp = next[index];
     next[index] = next[index - 1];
     next[index - 1] = temp;
@@ -116,8 +116,8 @@
   }
 
   function moveDown(index: number) {
-    if (index >= state.files.length - 1) return;
-    const next = [...state.files];
+    if (index >= imagesToPdfState.files.length - 1) return;
+    const next = [...imagesToPdfState.files];
     const temp = next[index];
     next[index] = next[index + 1];
     next[index + 1] = temp;
@@ -125,13 +125,13 @@
   }
 
   function sortNatural() {
-    const sorted = [...state.files].sort((a, b) => naturalCompare(a.name, b.name));
+    const sorted = [...imagesToPdfState.files].sort((a, b) => naturalCompare(a.name, b.name));
     updateStore({ files: sorted });
     toast("Sorted images numerically", "success");
   }
 
   function reverseOrder() {
-    updateStore({ files: [...state.files].reverse() });
+    updateStore({ files: [...imagesToPdfState.files].reverse() });
     toast("Reversed image order", "success");
   }
 
@@ -151,7 +151,7 @@
   function handleDrop(targetIndex: number, e: DragEvent) {
     e.preventDefault();
     if (draggedIndex === null || draggedIndex === targetIndex) return;
-    const next = [...state.files];
+    const next = [...imagesToPdfState.files];
     const [moved] = next.splice(draggedIndex, 1);
     next.splice(targetIndex, 0, moved);
     draggedIndex = null;
@@ -163,22 +163,22 @@
   }
 
   async function handleConvert() {
-    if (state.files.length === 0) {
+    if (imagesToPdfState.files.length === 0) {
       toast("Please add images to convert", "error");
       return;
     }
 
     isConverting = true;
     try {
-      const files = [...state.files];
+      const files = [...imagesToPdfState.files];
       const pageSizePt =
-        state.pageSize === "a4"
+        imagesToPdfState.pageSize === "a4"
           ? { w: 595.28, h: 841.89 }
-          : state.pageSize === "letter"
+          : imagesToPdfState.pageSize === "letter"
             ? { w: 612, h: 792 }
             : undefined;
       const options = {
-        ...imagesToPdfOptions(state),
+        ...imagesToPdfOptions(imagesToPdfState),
         pageSize: pageSizePt,
       };
       const bytes = files.reduce((sum, f) => sum + f.size, 0);
@@ -235,8 +235,8 @@
         <button
           type="button"
           role="radio"
-          class="cz-btn cz-btn-sm pdf-preset {state.pageSize === 'auto' ? 'is-active' : ''}"
-          aria-checked={state.pageSize === 'auto' ? 'true' : 'false'}
+          class="cz-btn cz-btn-sm pdf-preset {imagesToPdfState.pageSize === 'auto' ? 'is-active' : ''}"
+          aria-checked={imagesToPdfState.pageSize === 'auto' ? 'true' : 'false'}
           onclick={() => updateStore({ pageSize: 'auto' })}
         >
           Auto
@@ -244,8 +244,8 @@
         <button
           type="button"
           role="radio"
-          class="cz-btn cz-btn-sm pdf-preset {state.pageSize === 'a4' ? 'is-active' : ''}"
-          aria-checked={state.pageSize === 'a4' ? 'true' : 'false'}
+          class="cz-btn cz-btn-sm pdf-preset {imagesToPdfState.pageSize === 'a4' ? 'is-active' : ''}"
+          aria-checked={imagesToPdfState.pageSize === 'a4' ? 'true' : 'false'}
           onclick={() => updateStore({ pageSize: 'a4' })}
         >
           A4
@@ -253,8 +253,8 @@
         <button
           type="button"
           role="radio"
-          class="cz-btn cz-btn-sm pdf-preset {state.pageSize === 'letter' ? 'is-active' : ''}"
-          aria-checked={state.pageSize === 'letter' ? 'true' : 'false'}
+          class="cz-btn cz-btn-sm pdf-preset {imagesToPdfState.pageSize === 'letter' ? 'is-active' : ''}"
+          aria-checked={imagesToPdfState.pageSize === 'letter' ? 'true' : 'false'}
           onclick={() => updateStore({ pageSize: 'letter' })}
         >
           Letter
@@ -263,13 +263,13 @@
     </div>
 
     <div class="cz-setting-item">
-      <label class="cz-setting-label" for="img-pdf-q">Quality ({state.quality}%)</label>
+      <label class="cz-setting-label" for="img-pdf-q">Quality ({imagesToPdfState.quality}%)</label>
       <input
         id="img-pdf-q"
         type="range"
         min="10"
         max="100"
-        value={state.quality}
+        value={imagesToPdfState.quality}
         class="cz-range"
         oninput={(e) => updateStore({ quality: Number((e.target as HTMLInputElement).value) })}
       />
@@ -310,15 +310,15 @@
     icon="🧩"
     title="Drop images to compile into PDF"
     subtitle="JPEG, PNG, WebP, AVIF photos"
-    hasFiles={state.files.length > 0}
+    hasFiles={imagesToPdfState.files.length > 0}
     onFiles={handleFilesAdded}
   />
 
-  {#if state.files.length > 0}
+  {#if imagesToPdfState.files.length > 0}
     <div class="cz-merge-queue">
       <div class="cz-merge-toolbar">
         <div class="cz-merge-count-wrap">
-          <span class="cz-merge-count">{state.files.length} images queued for PDF pages</span>
+          <span class="cz-merge-count">{imagesToPdfState.files.length} images queued for PDF pages</span>
         </div>
         <div class="cz-merge-actions">
           <button
@@ -366,7 +366,7 @@
       </div>
 
       <div id="itp-list" class="cz-merge-grid">
-        {#each state.files as file, idx (file)}
+        {#each imagesToPdfState.files as file, idx (file)}
           <div
             class="cz-reorder-card file-card {draggedIndex === idx ? 'is-dragging' : ''}"
             draggable="true"
@@ -406,7 +406,7 @@
               <button
                 type="button"
                 class="cz-icon-btn"
-                disabled={idx === state.files.length - 1 || isConverting}
+                disabled={idx === imagesToPdfState.files.length - 1 || isConverting}
                 onclick={() => moveDown(idx)}
                 aria-label="Move later"
                 title="Move later"

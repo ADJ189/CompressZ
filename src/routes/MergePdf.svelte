@@ -8,14 +8,14 @@
   import { flip } from "svelte/animate";
   import { naturalCompare } from "../lib/recommendations";
 
-  let state = $state<MergeState>(mergeStore.get());
+  let mergeState = $state<MergeState>(mergeStore.get());
   let isMerging = $state(false);
   let mergedBlob = $state<Blob | null>(null);
   let draggedIndex = $state<number | null>(null);
 
   $effect(() => {
     const unsub = mergeStore.subscribe((val) => {
-      state = val;
+      mergeState = val;
     });
     return unsub;
   });
@@ -25,18 +25,18 @@
   }
 
   function handleFilesAdded(newFiles: File[]) {
-    updateStore({ files: [...state.files, ...newFiles] });
+    updateStore({ files: [...mergeState.files, ...newFiles] });
   }
 
   function handleRemove(index: number) {
-    const next = [...state.files];
+    const next = [...mergeState.files];
     next.splice(index, 1);
     updateStore({ files: next });
   }
 
   function moveUp(index: number) {
     if (index <= 0) return;
-    const next = [...state.files];
+    const next = [...mergeState.files];
     const temp = next[index];
     next[index] = next[index - 1];
     next[index - 1] = temp;
@@ -44,8 +44,8 @@
   }
 
   function moveDown(index: number) {
-    if (index >= state.files.length - 1) return;
-    const next = [...state.files];
+    if (index >= mergeState.files.length - 1) return;
+    const next = [...mergeState.files];
     const temp = next[index];
     next[index] = next[index + 1];
     next[index + 1] = temp;
@@ -53,13 +53,13 @@
   }
 
   function sortNatural() {
-    const sorted = [...state.files].sort((a, b) => naturalCompare(a.name, b.name));
+    const sorted = [...mergeState.files].sort((a, b) => naturalCompare(a.name, b.name));
     updateStore({ files: sorted });
     toast("Sorted documents numerically", "success");
   }
 
   function reverseOrder() {
-    updateStore({ files: [...state.files].reverse() });
+    updateStore({ files: [...mergeState.files].reverse() });
     toast("Reversed document order", "success");
   }
 
@@ -79,7 +79,7 @@
   function handleDrop(targetIndex: number, e: DragEvent) {
     e.preventDefault();
     if (draggedIndex === null || draggedIndex === targetIndex) return;
-    const next = [...state.files];
+    const next = [...mergeState.files];
     const [moved] = next.splice(draggedIndex, 1);
     next.splice(targetIndex, 0, moved);
     draggedIndex = null;
@@ -91,14 +91,14 @@
   }
 
   async function handleMerge() {
-    if (state.files.length < 2) {
+    if (mergeState.files.length < 2) {
       toast("Please add at least 2 PDF files to merge", "error");
       return;
     }
 
     isMerging = true;
     try {
-      const files = [...state.files];
+      const files = [...mergeState.files];
       const bytes = files.reduce((sum, f) => sum + f.size, 0);
       const result = await runScheduled(
         { kind: "pdf", label: `Merge PDF (${files.length} files)`, bytes },
@@ -147,14 +147,14 @@
     icon="🧷"
     title="Drop PDF documents to merge"
     subtitle="Select two or more PDF files"
-    hasFiles={state.files.length > 0}
+    hasFiles={mergeState.files.length > 0}
     onFiles={handleFilesAdded}
   />
 
-  {#if state.files.length > 0}
+  {#if mergeState.files.length > 0}
     <div class="cz-merge-queue">
       <div class="cz-merge-toolbar">
-        <span class="cz-merge-count">{state.files.length} documents in merge sequence</span>
+        <span class="cz-merge-count">{mergeState.files.length} documents in merge sequence</span>
         <div class="cz-merge-actions">
           <button
             type="button"
@@ -175,7 +175,7 @@
           <button
             type="button"
             class="cz-btn cz-btn-primary cz-btn-sm"
-            disabled={isMerging || state.files.length < 2}
+            disabled={isMerging || mergeState.files.length < 2}
             onclick={handleMerge}
           >
             {isMerging ? "Merging..." : "Merge documents"}
@@ -201,7 +201,7 @@
       </div>
 
       <div class="cz-merge-grid">
-        {#each state.files as file, idx (file)}
+        {#each mergeState.files as file, idx (file)}
           <div
             class="cz-reorder-card file-card {draggedIndex === idx ? 'is-dragging' : ''}"
             draggable="true"
@@ -236,7 +236,7 @@
               <button
                 type="button"
                 class="cz-icon-btn"
-                disabled={idx === state.files.length - 1 || isMerging}
+                disabled={idx === mergeState.files.length - 1 || isMerging}
                 onclick={() => moveDown(idx)}
                 aria-label="Move later"
                 title="Move later"

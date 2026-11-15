@@ -119,8 +119,8 @@
   }
 
   function handleDownloadBundle() {
-    if (!bundleResult || !selectedFile) return;
-    const blob = new Blob([bundleResult.zipBytes as any], { type: "application/zip" });
+    if (!bundleResult?.zipBytes || !selectedFile) return;
+    const blob = new Blob([new Uint8Array(bundleResult.zipBytes)], { type: "application/zip" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     const baseName = selectedFile.name.replace(/\.pdf$/i, "");
@@ -438,15 +438,17 @@
           </button>
 
           <!-- Secondary Action: Download complete ZIP bundle -->
-          <button
-            type="button"
-            class="cz-btn cz-btn-secondary cz-btn-sm"
-            onclick={handleDownloadBundle}
-            title="Download complete archive (.zip) with assets and manifest"
-          >
-            <MacIcon name="download" size={14} />
-            <span>Download Bundle (.zip)</span>
-          </button>
+          {#if bundleResult?.zipBytes}
+            <button
+              type="button"
+              class="cz-btn cz-btn-secondary cz-btn-sm"
+              onclick={handleDownloadBundle}
+              title="Download complete archive (.zip) with assets and manifest"
+            >
+              <MacIcon name="download" size={14} />
+              <span>Download Bundle (.zip)</span>
+            </button>
+          {/if}
 
           <button
             type="button"

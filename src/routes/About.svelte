@@ -1,3 +1,8 @@
+<script lang="ts">
+  // Static content page: no reactive state, but the empty script block keeps
+  // Svelte's generated module declaration available to TypeScript.
+</script>
+
 <div class="page-enter cz-content-page">
   <div class="cz-content-header">
     <span class="cz-content-badge" aria-hidden="true">ℹ️</span>

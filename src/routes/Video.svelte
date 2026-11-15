@@ -5,15 +5,16 @@
   import { compressVideo } from "../lib/compressVideo";
   import { videoOptions, videoQualityFromCrf, videoCrfFromQuality } from "../lib/options";
   import { runScheduled } from "../lib/resourceManager";
+import { entryError } from "../lib/engineError";
   import { uid, type FileEntry, type VideoCodec, outputFilename } from "../lib/types";
   import { toast } from "../toast";
 
-  let state = $state<VideoState>(videoStore.get());
+  let videoState = $state<VideoState>(videoStore.get());
   let isBusy = $state(false);
 
   $effect(() => {
     const unsub = videoStore.subscribe((val) => {
-      state = val;
+      videoState = val;
     });
     return unsub;
   });
@@ -31,27 +32,27 @@
       status: "idle",
       type: "video",
     }));
-    updateStore({ files: [...state.files, ...newEntries] });
+    updateStore({ files: [...videoState.files, ...newEntries] });
   }
 
   async function compressSingle(entry: FileEntry) {
     if (entry.status === "compressing") return;
 
     updateStore({
-      files: state.files.map((f) =>
+      files: videoState.files.map((f) =>
         f.id === entry.id ? { ...f, status: "compressing", error: undefined } : f,
       ),
     });
 
     try {
-      const options = videoOptions(state);
+      const options = videoOptions(videoState);
       const res = await runScheduled(
         { kind: "video", label: entry.name, bytes: entry.file.size },
         () => compressVideo(entry.file, options),
       );
 
       updateStore({
-        files: state.files.map((f) =>
+        files: videoState.files.map((f) =>
           f.id === entry.id
             ? {
                 ...f,
@@ -65,24 +66,28 @@
       toast(`Compressed ${entry.name}`, "success");
     } catch (err) {
       console.error("[videoCompress] error:", err);
+      const failure = entryError(err, "Video compression failed");
       updateStore({
-        files: state.files.map((f) =>
+        files: videoState.files.map((f) =>
           f.id === entry.id
             ? {
                 ...f,
                 status: "error",
-                error: (err as Error).message || "Video compression failed",
+                error: failure.error,
+                errorLog: failure.errorLog,
               }
             : f,
         ),
       });
-      toast(`Failed to compress ${entry.name}`, "error");
+      toast(`${entry.name}: ${failure.error}`, "error", undefined, {
+        log: failure.errorLog,
+      });
     }
   }
 
   async function handleCompressAll() {
     isBusy = true;
-    const idleEntries = state.files.filter((f) => f.status === "idle" || f.status === "error");
+    const idleEntries = videoState.files.filter((f) => f.status === "idle" || f.status === "error");
     for (const entry of idleEntries) {
       await compressSingle(entry);
     }
@@ -96,21 +101,21 @@
     a.href = url;
     a.download = outputFilename(entry.name, entry.compressedBlob, {
       suffix: "-compressed",
-      fallbackExt: state.codec.includes("vp") ? "webm" : "mp4",
+      fallbackExt: videoState.codec.includes("vp") ? "webm" : "mp4",
     });
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   }
 
   function handleDownloadAll() {
-    const doneEntries = state.files.filter((f) => f.status === "done");
+    const doneEntries = videoState.files.filter((f) => f.status === "done");
     for (const entry of doneEntries) {
       handleDownloadSingle(entry);
     }
   }
 
   function handleRemove(id: string) {
-    updateStore({ files: state.files.filter((f) => f.id !== id) });
+    updateStore({ files: videoState.files.filter((f) => f.id !== id) });
   }
 
   function handleClear() {
@@ -133,7 +138,7 @@
       <select
         id="vid-codec"
         class="cz-select"
-        value={state.codec}
+        value={videoState.codec}
         onchange={(e) => updateStore({ codec: (e.target as HTMLSelectElement).value as VideoCodec })}
       >
         <option value="h264">H.264 (MP4, Universal)</option>
@@ -144,13 +149,13 @@
     </div>
 
     <div class="cz-setting-item">
-      <label class="cz-setting-label" for="vid-crf">CRF ({videoCrfFromQuality(state.crfQuality)})</label>
+      <label class="cz-setting-label" for="vid-crf">CRF ({videoCrfFromQuality(videoState.crfQuality)})</label>
       <input
         id="vid-crf"
         type="range"
         min="16"
         max="38"
-        value={videoCrfFromQuality(state.crfQuality)}
+        value={videoCrfFromQuality(videoState.crfQuality)}
         class="cz-range"
         oninput={(e) => updateStore({ crfQuality: videoQualityFromCrf(Number((e.target as HTMLInputElement).value)) })}
       />
@@ -161,7 +166,7 @@
       <select
         id="vid-preset"
         class="cz-select"
-        value={state.preset}
+        value={videoState.preset}
         onchange={(e) => updateStore({ preset: (e.target as HTMLSelectElement).value as any })}
       >
         <option value="ultrafast">Ultrafast</option>
@@ -176,7 +181,7 @@
       <select
         id="vid-res"
         class="cz-select"
-        value={state.maxWidth}
+        value={videoState.maxWidth}
         onchange={(e) => updateStore({ maxWidth: Number((e.target as HTMLSelectElement).value) })}
       >
         <option value="0">Original (No downscale)</option>
@@ -192,13 +197,13 @@
     icon="🎬"
     title="Drop video files here"
     subtitle="MP4, WebM, MOV, MKV, AVI"
-    hasFiles={state.files.length > 0}
+    hasFiles={videoState.files.length > 0}
     onFiles={handleFilesAdded}
   />
 
-  {#if state.files.length > 0}
+  {#if videoState.files.length > 0}
     <FileQueue
-      files={state.files}
+      files={videoState.files}
       {isBusy}
       onCompressAll={handleCompressAll}
       onDownloadAll={handleDownloadAll}

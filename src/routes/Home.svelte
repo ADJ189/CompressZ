@@ -103,7 +103,7 @@
       icon: "🔍",
       iconName: "ocr",
       name: "PDF OCR",
-      desc: "Make scanned PDFs searchable. Tesseract.js LSTM neural OCR running in WebAssembly (100+ langs).",
+      desc: "Turn scanned PDFs and images into searchable PDFs. Tesseract.js LSTM neural OCR in WebAssembly (100+ langs).",
       tags: ["Tesseract", "WASM", "Searchable PDF"],
       keywords: "ocr pdf searchable tesseract scanned text document extract",
     },

@@ -15,6 +15,7 @@
   import { openPdfDocument, getPdfLib } from "../lib/pdfLibs";
   import { consumeStagedUniversalFile, currentRoute } from "../store";
   import { formatBytes } from "../lib/types";
+import { entryError } from "../lib/engineError";
   import { toast } from "../toast";
   import { onMount } from "svelte";
   import { navigate } from "../router";
@@ -147,15 +148,15 @@
   let showStudio = $state<boolean>(false);
 
   const TOOLS = [
-    { id: "split", name: "Split PDF", icon: "✂️" },
-    { id: "organize", name: "Organize & Rotate", icon: "📑" },
-    { id: "studio", name: "PDF Studio", icon: "✏️" },
-    { id: "watermark", name: "Watermark", icon: "💧" },
-    { id: "crop", name: "Crop Margins", icon: "📐" },
-    { id: "forms", name: "Fill Forms", icon: "📋" },
-    { id: "security", name: "Protect & Unlock", icon: "🔐" },
-    { id: "repair", name: "Repair File", icon: "🩹" },
-    { id: "redact", name: "Redaction", icon: "⬛" },
+    { id: "split", name: "Split PDF", icon: "split" },
+    { id: "organize", name: "Organize & Rotate", icon: "organize" },
+    { id: "studio", name: "PDF Studio", icon: "studio" },
+    { id: "watermark", name: "Watermark", icon: "watermark" },
+    { id: "crop", name: "Crop Margins", icon: "crop" },
+    { id: "forms", name: "Fill Forms", icon: "forms" },
+    { id: "security", name: "Protect & Unlock", icon: "security" },
+    { id: "repair", name: "Repair File", icon: "repair" },
+    { id: "redact", name: "Redaction", icon: "redact" },
   ];
 
   let loadSeq = 0;
@@ -218,6 +219,15 @@
     }
   }
 
+  /**
+   * Wrap engine output in a Blob. The bytes are copied into a fresh
+   * ArrayBuffer because pdf-lib/pdf.js return `Uint8Array<ArrayBufferLike>`
+   * (possibly over a SharedArrayBuffer), which is not a valid `BlobPart`.
+   */
+  function bytesBlob(bytes: Uint8Array, type: string): Blob {
+    return new Blob([new Uint8Array(bytes)], { type });
+  }
+
   function downloadBlob(blob: Blob, filename: string) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -250,7 +260,7 @@
           toast(`Split into ${result.files.length} PDFs (packaged in ZIP)`, "success");
         } else if (result.files.length === 1) {
           downloadBlob(
-            new Blob([result.files[0].bytes], { type: "application/pdf" }),
+            bytesBlob(result.files[0].bytes, "application/pdf"),
             result.files[0].name,
           );
           toast("PDF split completed", "success");
@@ -258,7 +268,7 @@
       } else if (activeTool === "organize") {
         const out = await reorganizePdf(pdfBytes!, pageSpecs, (p) => (progressPct = p));
         downloadBlob(
-          new Blob([out], { type: "application/pdf" }),
+          bytesBlob(out, "application/pdf"),
           `${selectedFile?.name.replace(/\.pdf$/i, "")}-organized.pdf`,
         );
         toast("Pages reorganized successfully", "success");
@@ -280,7 +290,7 @@
           (p) => (progressPct = p),
         );
         downloadBlob(
-          new Blob([out], { type: "application/pdf" }),
+          bytesBlob(out, "application/pdf"),
           `${selectedFile?.name.replace(/\.pdf$/i, "")}-watermarked.pdf`,
         );
         toast("Watermark applied successfully", "success");
@@ -299,18 +309,31 @@
           (p) => (progressPct = p),
         );
         downloadBlob(
-          new Blob([out], { type: "application/pdf" }),
+          bytesBlob(out, "application/pdf"),
           `${selectedFile?.name.replace(/\.pdf$/i, "")}-cropped.pdf`,
         );
         toast("PDF cropped successfully", "success");
       } else if (activeTool === "forms") {
         const updates = Object.entries(formValues).map(([name, value]) => ({ name, value }));
-        const out = await fillPdfForm(pdfBytes!, updates, flattenForm, (p) => (progressPct = p));
+        const { bytes: out, failed } = await fillPdfForm(
+          pdfBytes!,
+          updates,
+          flattenForm,
+          (p) => (progressPct = p),
+        );
         downloadBlob(
-          new Blob([out], { type: "application/pdf" }),
+          bytesBlob(out, "application/pdf"),
           `${selectedFile?.name.replace(/\.pdf$/i, "")}-filled.pdf`,
         );
-        toast("Form filled and saved successfully", "success");
+        if (failed.length > 0) {
+          const names = failed.map((f) => `"${f.name}"`).join(", ");
+          toast(
+            `Form saved, but ${failed.length} field${failed.length === 1 ? "" : "s"} could not be filled: ${names}. ${failed[0].message}`,
+            "warn",
+          );
+        } else {
+          toast("Form filled and saved successfully", "success");
+        }
       } else if (activeTool === "security") {
         if (securityMode === "protect") {
           const out = await protectPdf(pdfBytes!, {
@@ -322,17 +345,23 @@
             onProgress: (p) => (progressPct = p),
           });
           downloadBlob(
-            new Blob([out], { type: "application/pdf" }),
+            bytesBlob(out, "application/pdf"),
             `${selectedFile?.name.replace(/\.pdf$/i, "")}-protected.pdf`,
           );
-          toast("PDF encrypted with AES-256 password", "success");
+          const cipherLabel =
+            encryptionStandard === "aes-128"
+              ? "AES-128"
+              : encryptionStandard === "aes-256-r5"
+                ? "AES-256-CBC"
+                : "AES-256";
+          toast(`PDF encrypted with ${cipherLabel} password`, "success");
         } else {
           const out = await unlockPdf(pdfBytes!, {
             password: userPassword,
             onProgress: (p) => (progressPct = p),
           });
           downloadBlob(
-            new Blob([out], { type: "application/pdf" }),
+            bytesBlob(out, "application/pdf"),
             `${selectedFile?.name.replace(/\.pdf$/i, "")}-unlocked.pdf`,
           );
           toast("PDF decrypted successfully", "success");
@@ -344,15 +373,19 @@
           /\.(mp4|mov|m4v)$/i.test(selectedFile?.name || "");
         if (isVideo) {
           const rep = inspectAndRepairMp4Moov(bytes);
+          if (!rep.ok) {
+            toast(rep.reason, rep.alreadyValid ? "info" : "error");
+            return;
+          }
           downloadBlob(
-            new Blob([rep.repairedBytes], { type: selectedFile?.type || "video/mp4" }),
+            bytesBlob(rep.repairedBytes, selectedFile?.type || "video/mp4"),
             `repaired-${selectedFile?.name || "video.mp4"}`,
           );
-          toast(rep.message, rep.fixed ? "success" : "info");
+          toast(rep.message, "success");
         } else {
           const rep = await repairCorruptPdf(bytes, (p) => (progressPct = p));
           downloadBlob(
-            new Blob([rep.repairedBytes], { type: "application/pdf" }),
+            bytesBlob(rep.repairedBytes, "application/pdf"),
             `repaired-${selectedFile?.name || "document.pdf"}`,
           );
           toast(rep.message, "success");
@@ -364,18 +397,21 @@
         }
         const out = await applyTrueRedaction(pdfBytes!, {
           regions: redactionList,
-          renderDpi: archivalDpi,
+          renderDpi,
           onProgress: (p) => (progressPct = p),
         });
         downloadBlob(
-          new Blob([out], { type: "application/pdf" }),
+          bytesBlob(out, "application/pdf"),
           `${selectedFile?.name.replace(/\.pdf$/i, "")}-redacted.pdf`,
         );
         toast("True redaction applied and sanitized", "success");
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error("[PdfSuite] error:", err);
-      toast(`Action failed: ${err.message}`, "error");
+      const failure = entryError(err, "the tool did not complete");
+      toast(`Action failed: ${failure.error}`, "error", undefined, {
+        log: failure.errorLog,
+      });
     } finally {
       isProcessing = false;
       progressPct = 0;
@@ -434,7 +470,7 @@
   <HubHeader
     title="PDF Suite & Studio"
     description="Browser-native workstation for organizing, splitting, editing, signing, watermarking, filling, and securing PDF documents."
-    icon="📄"
+    icon="pdf"
     activeToolId={activeTool}
     tools={TOOLS}
     onSelectTool={(id) => (activeTool = id as SubTool)}
@@ -446,6 +482,8 @@
         <FileDropzone
           accept="application/pdf,.pdf"
           multiple={false}
+          title="Drop a PDF here"
+          subtitle="or click to browse · PDF only"
           onFiles={(files) => files[0] && loadFile(files[0])}
         />
         <div class="cz-suite-quick-links">
@@ -455,7 +493,7 @@
             class="cz-link-btn"
             onclick={() => navigate("compress/merge-pdf")}
           >
-            Open Merge PDF →
+            Open Merge PDF
           </button>
         </div>
       </div>
@@ -464,7 +502,7 @@
         <!-- Top File Summary Bar -->
         <div class="cz-suite-file-bar">
           <div class="cz-file-meta-pill">
-            <span class="cz-file-icon">📄</span>
+            <span class="cz-file-icon"><MacIcon name="pdf" size={16} /></span>
             <span class="cz-file-name">{selectedFile.name}</span>
             <span class="cz-file-size">{formatBytes(selectedFile.size)}</span>
             {#if totalPages > 0}
@@ -559,7 +597,7 @@
               {#key selectedFile ? `${selectedFile.name}-${selectedFile.size}-${selectedFile.lastModified}` : "studio-editor"}
                 <PdfCanvasEditor
                   pdfBytes={pdfBytes}
-                  onExport={(mod) => downloadBlob(new Blob([mod], { type: "application/pdf" }), `${selectedFile?.name.replace(/\.pdf$/i, "")}-annotated.pdf`)}
+                  onExport={(mod) => downloadBlob(bytesBlob(mod, "application/pdf"), `${selectedFile?.name.replace(/\.pdf$/i, "")}-annotated.pdf`)}
                 />
               {/key}
             {/if}
@@ -783,7 +821,9 @@
                         <input
                           id={`field-${field.name}`}
                           type="checkbox"
-                          bind:checked={formValues[field.name]}
+                          checked={formValues[field.name] === true}
+                          onchange={(e) =>
+                            (formValues[field.name] = e.currentTarget.checked)}
                         />
                       {:else if field.type === "dropdown" && field.options}
                         <select id={`field-${field.name}`} class="cz-input" bind:value={formValues[field.name]}>
@@ -911,14 +951,14 @@
             <div class="cz-panel-section">
               <div class="cz-section-header">
                 <h3>File Recovery & Repair</h3>
-                <p>Rebuilds damaged xref tables, repairs broken trailers, and restores unfinalized MP4 videos.</p>
+                <p>Rebuilds damaged PDF xref tables and trailers, and inspects MP4 containers for a missing index.</p>
               </div>
 
               <div class="cz-repair-status-box">
-                <div class="cz-repair-icon">🩹</div>
+                <div class="cz-repair-icon"><MacIcon name="repair" size={32} /></div>
                 <div class="cz-repair-info">
                   <strong>Deep Document Repair Engine</strong>
-                  <p>Analyzes byte streams, discovers orphan PDF objects, reconstructs cross-reference indexes, and fixes truncated container atoms.</p>
+                  <p>Analyzes byte streams, discovers orphan PDF objects, and reconstructs cross-reference indexes. MP4 recovery restores a missing header box; a recording with no index (MOOV) cannot be rebuilt and is reported instead.</p>
                 </div>
               </div>
 
