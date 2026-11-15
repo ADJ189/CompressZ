@@ -208,6 +208,8 @@ export interface OcrState {
   extractText: boolean;
   symbolMode: boolean;
   busy: boolean;
+  /** Primary download produced by the OCR run. */
+  outputKind: "pdf" | "txt" | "both";
 }
 export const ocrStore = createStore<OcrState>({
   files: [],
@@ -219,6 +221,7 @@ export const ocrStore = createStore<OcrState>({
   extractText: true,
   symbolMode: false,
   busy: false,
+  outputKind: "pdf",
 });
 
 // ── PDF → Markdown Workspace Store ────────────────────────────
@@ -264,6 +267,90 @@ export function consumeStagedUniversalFile(): UniversalStagedItem | null {
     stagedUniversalFile.set(null);
   }
   return item;
+}
+
+// ── Convert Store ─────────────────────────────────────────────
+export type ConvertCategory =
+  | "video"
+  | "audio"
+  | "image"
+  | "pdf2office"
+  | "pdf2img"
+  | "img2pdf"
+  | "docx"
+  | "xlsx"
+  | "pptx"
+  | "html";
+
+export interface ConvertState {
+  activeCat: ConvertCategory;
+  targetFormat: string;
+  convertQuality: number;
+  convertScaleDpi: number;
+}
+
+function loadInitialConvertProfile(): ConvertState {
+  const fallback: ConvertState = {
+    activeCat: "video",
+    targetFormat: "mp4",
+    convertQuality: 82,
+    convertScaleDpi: 150,
+  };
+  if (typeof localStorage === "undefined") return fallback;
+  try {
+    const saved = localStorage.getItem("cz-convert-profile");
+    if (!saved) return fallback;
+    const p = JSON.parse(saved);
+    const validCats = new Set<string>([
+      "video",
+      "audio",
+      "image",
+      "pdf2office",
+      "pdf2img",
+      "img2pdf",
+      "docx",
+      "xlsx",
+      "pptx",
+      "html",
+    ]);
+    const activeCat = validCats.has(p.activeCat)
+      ? (p.activeCat as ConvertCategory)
+      : fallback.activeCat;
+    const convertQuality =
+      typeof p.convertQuality === "number" && Number.isFinite(p.convertQuality)
+        ? Math.max(1, Math.min(100, Math.round(p.convertQuality)))
+        : fallback.convertQuality;
+    const convertScaleDpi =
+      typeof p.convertScaleDpi === "number" && Number.isFinite(p.convertScaleDpi)
+        ? Math.max(72, Math.min(600, Math.round(p.convertScaleDpi)))
+        : fallback.convertScaleDpi;
+    const targetFormat =
+      typeof p.targetFormat === "string" && p.targetFormat.trim()
+        ? p.targetFormat.trim()
+        : fallback.targetFormat;
+    return { activeCat, targetFormat, convertQuality, convertScaleDpi };
+  } catch {
+    return fallback;
+  }
+}
+
+export const convertStore = createStore<ConvertState>(loadInitialConvertProfile());
+
+export function saveConvertProfile(state: ConvertState): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(
+      "cz-convert-profile",
+      JSON.stringify({
+        activeCat: state.activeCat,
+        targetFormat: state.targetFormat,
+        convertQuality: state.convertQuality,
+        convertScaleDpi: state.convertScaleDpi,
+      }),
+    );
+  } catch {
+    // storage quota or unavailable
+  }
 }
 
 /**
