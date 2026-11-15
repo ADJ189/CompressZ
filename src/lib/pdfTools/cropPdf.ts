@@ -1,8 +1,8 @@
 /**
  * cropPdf.ts — Permanent, lossless PDF page cropping.
  *
- * Sets CropBox, MediaBox, BleedBox, and TrimBox coordinates on targeted pages
- * in accordance with the PDF ISO-32000 standard.
+ * Sets CropBox and TrimBox coordinates on targeted pages in accordance with the
+ * PDF ISO-32000 standard without destructive mutation of underlying MediaBox.
  */
 
 import { getPdfLib } from "../pdfLibs";
@@ -99,7 +99,7 @@ export async function applyPdfCrop(
   for (let i = 0; i < targetIndices.length; i++) {
     const pageIndex = targetIndices[i];
     const page = pdfDoc.getPage(pageIndex);
-    const origBox = page.getMediaBox();
+    const origBox = page.getCropBox();
 
     const cropped = calculateCroppedBox(
       {
@@ -111,10 +111,8 @@ export async function applyPdfCrop(
       options,
     );
 
-    // Apply uniformly to all standard PDF bounding boxes for universal viewer compatibility
+    // Set CropBox and TrimBox per PDF standard without mutating underlying MediaBox
     page.setCropBox(cropped.x, cropped.y, cropped.width, cropped.height);
-    page.setMediaBox(cropped.x, cropped.y, cropped.width, cropped.height);
-    page.setBleedBox(cropped.x, cropped.y, cropped.width, cropped.height);
     page.setTrimBox(cropped.x, cropped.y, cropped.width, cropped.height);
 
     const pct = Math.round(15 + ((i + 1) / targetIndices.length) * 75);

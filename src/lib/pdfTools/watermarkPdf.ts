@@ -52,17 +52,19 @@ export function calculateWatermarkPositions(
   pageHeight: number,
   tiled: boolean,
   spacing: number = 220,
+  originX: number = 0,
+  originY: number = 0,
 ): { x: number; y: number }[] {
   if (!tiled) {
-    return [{ x: pageWidth / 2, y: pageHeight / 2 }];
+    return [{ x: originX + pageWidth / 2, y: originY + pageHeight / 2 }];
   }
 
   const step = Math.max(80, spacing);
   const positions: { x: number; y: number }[] = [];
 
   // Start with offset to cover edges gracefully
-  for (let y = step / 2; y < pageHeight + step / 2; y += step) {
-    for (let x = step / 2; x < pageWidth + step / 2; x += step) {
+  for (let y = originY + step / 2; y < originY + pageHeight + step / 2; y += step) {
+    for (let x = originX + step / 2; x < originX + pageWidth + step / 2; x += step) {
       positions.push({ x, y });
     }
   }
@@ -165,8 +167,15 @@ export async function applyPdfWatermark(
   for (let i = 0; i < targetIndices.length; i++) {
     const pageIndex = targetIndices[i];
     const page = pdfDoc.getPage(pageIndex);
-    const { width, height } = page.getSize();
-    const positions = calculateWatermarkPositions(width, height, isTiled, spacing);
+    const box = page.getCropBox();
+    const positions = calculateWatermarkPositions(
+      box.width,
+      box.height,
+      isTiled,
+      spacing,
+      box.x,
+      box.y,
+    );
 
     for (const pos of positions) {
       if (embeddedImage) {

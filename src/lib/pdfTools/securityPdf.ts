@@ -6,6 +6,7 @@
  */
 
 import { runQpdfCommand } from "../qpdfWasm";
+import { engineFailure } from "../engineError";
 
 export type PdfEncryptionStandard =
   | "aes-256-r6" // PDF 2.0 (V=5, R=6) — Modern Standard (Default & Max Security)
@@ -123,7 +124,11 @@ export async function protectPdf(
 
   const out = result.outputFiles.find((f) => f.name === "encrypted.pdf");
   if (!out || out.data.length === 0) {
-    throw new Error(`Encryption failed: ${result.stdout || "Unknown QPDF error"}`);
+    throw engineFailure("qpdf", "encrypt the PDF", {
+      exitCode: result.exitCode,
+      output: result.stdout,
+      fallback: "QPDF produced no output file",
+    });
   }
 
   options.onProgress?.(100);
@@ -153,9 +158,11 @@ export async function unlockPdf(
   options.onProgress?.(90);
   const out = result.outputFiles.find((f) => f.name === "unlocked.pdf");
   if (!out || out.data.length === 0) {
-    throw new Error(
-      `Decryption failed. Please verify that the password is correct: ${result.stdout}`,
-    );
+    throw engineFailure("qpdf", "decrypt the PDF", {
+      exitCode: result.exitCode,
+      output: result.stdout,
+      fallback: "check that the password is correct",
+    });
   }
 
   options.onProgress?.(100);
