@@ -125,8 +125,9 @@ export function summarizeLog(
   if (!candidate) candidate = lines[lines.length - 1];
 
   // FFmpeg prefixes a lot of lines with "[libx264 @ 0x55f...]"; drop the
-  // pointer noise so the message stays readable in a toast.
-  candidate = candidate.replace(/\[[^\]]*@\s*0x[0-9a-f]+\]\s*/gi, "").trim();
+  // pointer noise so the message stays readable in a toast. Disallowing nested brackets
+  // and `@` prevents superlinear regex backtracking.
+  candidate = candidate.replace(/\[[^[\]\r\n@]*@\s*0x[0-9a-f]+\]\s*/gi, "").trim();
   return trimLine(candidate, MAX_LINE_LENGTH) || fallback;
 }
 

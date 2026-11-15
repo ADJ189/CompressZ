@@ -67,7 +67,7 @@ function renderInline(text: string): string {
   });
 
   // Images ![alt](src) (handled before links)
-  result = result.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_match, alt, src) => {
+  result = result.replace(/!\[([^[\n\]]*)\]\(([^)\n]+)\)/g, (_match, alt, src) => {
     const safe = safeImgSrc(src);
     if (!safe) return `<!-- [image: ${escapeHtml(alt)}] -->`;
     return stash(
@@ -85,8 +85,8 @@ function renderInline(text: string): string {
     return `<em>${italic}</em>`;
   });
 
-  // Links [text](url)
-  result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label, href) => {
+  // Links [text](url) — disallowing nested brackets and newlines prevents superlinear backtracking
+  result = result.replace(/\[([^[\n\]]+)\]\(([^)\n]+)\)/g, (_match, label, href) => {
     const safeHrefValue = safeHref(href) ?? "#";
     return `<a href="${safeHrefValue}" target="_blank" rel="noopener noreferrer">${label}</a>`;
   });
