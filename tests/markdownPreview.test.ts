@@ -52,21 +52,18 @@ Deno.test("markdownPreview: sanitizes link protocols", () => {
 });
 
 Deno.test("markdownPreview: rejects scheme smuggling and protocol-relative hrefs", () => {
-  const dangerousUrls = [
-    "javascript:alert('http://x')",
-    "//evil.com/path",
-    "///evil.com/path",
-    "data:text/html,<b>",
-    "JaVaScRiPt:void(0)",
-    "vbscript:msgbox(1)",
-    "java script:alert(1)",
+  const mdAttacks = [
+    "[smuggle](javascript:alert('http://x'))",
+    "[netloc](//evil.com/path)",
+    "[triple-slash](///evil.com/path)",
+    "[raw-data](data:text/html,<b>)",
+    "[mixed-case](JaVaScRiPt:void(0))",
+    "[vbs](vbscript:msgbox(1))",
+    "[spaces](java script:alert(1))",
   ];
-  for (const target of dangerousUrls) {
-    const html = renderMarkdownToHtml(`[click](${target})`);
-    assert(
-      !/href="(?:javascript|data|vbscript|[/][/])/i.test(html),
-      `Unsafe href survived for ${target}: ${html}`,
-    );
+  for (const attack of mdAttacks) {
+    const html = renderMarkdownToHtml(attack);
+    assert(!/href="(?:javascript|data|vbscript|[/][/])/i.test(html), `Unsafe href: ${html}`);
   }
 });
 
@@ -77,12 +74,11 @@ Deno.test("markdownPreview: escapes href ampersands exactly once", () => {
 });
 
 Deno.test("markdownPreview: allows mailto and site-relative links", () => {
-  const mail = renderMarkdownToHtml("[email](mailto:support@compressz.test)");
-  const rel = renderMarkdownToHtml("[page](/guide/overview)");
-  const anchor = renderMarkdownToHtml("[jump](#summary)");
-  assert(mail.includes('href="mailto:support@compressz.test"'), "mailto kept");
-  assert(rel.includes('href="/guide/overview"'), "relative path kept");
-  assert(anchor.includes('href="#summary"'), "in-page anchor kept");
+  const doc = "[contact](mailto:support@compressz.test)\n[docs](/guide/overview)\n[top](#summary)";
+  const html = renderMarkdownToHtml(doc);
+  assert(html.includes('href="mailto:support@compressz.test"'));
+  assert(html.includes('href="/guide/overview"'));
+  assert(html.includes('href="#summary"'));
 });
 
 Deno.test("markdownPreview: F4 renders multi-line math blocks", () => {
@@ -102,15 +98,14 @@ Deno.test("markdownPreview: F4 table escapes pipes and pads ragged rows", () => 
 });
 
 Deno.test("markdownPreview: F4 renders safe image tags", () => {
-  const dataImg = "![Sample](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)";
-  const html = renderMarkdownToHtml(dataImg);
-  assert(html.includes('<img src="data:image/png;base64,'));
-  assert(html.includes('alt="Sample"'));
+  const pixel = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+  const ok = renderMarkdownToHtml(`![Preview](${pixel})`);
+  assert(ok.includes('<img src="data:image/gif;base64,'));
+  assert(ok.includes('alt="Preview"'));
 
-  const badImg = "![Exploit](javascript:alert(1))";
-  const badHtml = renderMarkdownToHtml(badImg);
-  assert(!badHtml.includes("<img"));
-  assert(badHtml.includes("<!-- [image: Exploit] -->"));
+  const filtered = renderMarkdownToHtml("![Blocked](javascript:alert(1))");
+  assert(!filtered.includes("<img"));
+  assert(filtered.includes("<!-- [image: Blocked] -->"));
 });
 
 Deno.test("markdownPreview: F4 does not create emphasis inside code spans", () => {
