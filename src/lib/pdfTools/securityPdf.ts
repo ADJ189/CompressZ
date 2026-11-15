@@ -31,12 +31,41 @@ export interface UnlockPdfOptions {
 }
 
 function generateSecureOwnerPassword(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+  const gCrypto = typeof globalThis !== "undefined" ? globalThis.crypto : undefined;
+  if (typeof gCrypto?.getRandomValues === "function") {
     const bytes = new Uint8Array(24);
-    crypto.getRandomValues(bytes);
+    gCrypto.getRandomValues(bytes);
     return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
   }
-  return `cz_owner_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  if (typeof gCrypto?.randomUUID === "function") {
+    return `cz_owner_${gCrypto.randomUUID().replace(/-/g, "")}`;
+  }
+  throw new Error("Cryptographically secure random number generator is unavailable.");
+}
+
+async function runQpdfFileTransform(
+  inputName: string,
+  outputName: string,
+  pdfBytes: Uint8Array,
+  args: string[],
+  actionLabel: string,
+  fallbackMsg: string,
+  onProgress?: (pct: number) => void,
+  startPct = 30,
+): Promise<Uint8Array> {
+  onProgress?.(startPct);
+  const result = await runQpdfCommand(args, [{ name: inputName, data: pdfBytes }]);
+  onProgress?.(90);
+  const out = result.outputFiles.find((f) => f.name === outputName);
+  if (!out || out.data.length === 0) {
+    throw engineFailure("qpdf", actionLabel, {
+      exitCode: result.exitCode,
+      output: result.stdout,
+      fallback: fallbackMsg,
+    });
+  }
+  onProgress?.(100);
+  return out.data;
 }
 
 /**
@@ -114,25 +143,16 @@ export async function protectPdf(
 
   options.onProgress?.(15);
   const args = buildQpdfEncryptionArgs(options, "source.pdf", "encrypted.pdf");
-
-  options.onProgress?.(40);
-  const result = await runQpdfCommand(args, [
-    { name: "source.pdf", data: pdfBytes },
-  ]);
-
-  options.onProgress?.(90);
-
-  const out = result.outputFiles.find((f) => f.name === "encrypted.pdf");
-  if (!out || out.data.length === 0) {
-    throw engineFailure("qpdf", "encrypt the PDF", {
-      exitCode: result.exitCode,
-      output: result.stdout,
-      fallback: "QPDF produced no output file",
-    });
-  }
-
-  options.onProgress?.(100);
-  return out.data;
+  return runQpdfFileTransform(
+    "source.pdf",
+    "encrypted.pdf",
+    pdfBytes,
+    args,
+    "encrypt the PDF",
+    "QPDF produced no output file",
+    options.onProgress,
+    40,
+  );
 }
 
 /**
@@ -150,21 +170,14 @@ export async function unlockPdf(
   }
   args.push("--", "locked.pdf", "unlocked.pdf");
 
-  options.onProgress?.(50);
-  const result = await runQpdfCommand(args, [
-    { name: "locked.pdf", data: pdfBytes },
-  ]);
-
-  options.onProgress?.(90);
-  const out = result.outputFiles.find((f) => f.name === "unlocked.pdf");
-  if (!out || out.data.length === 0) {
-    throw engineFailure("qpdf", "decrypt the PDF", {
-      exitCode: result.exitCode,
-      output: result.stdout,
-      fallback: "check that the password is correct",
-    });
-  }
-
-  options.onProgress?.(100);
-  return out.data;
+  return runQpdfFileTransform(
+    "locked.pdf",
+    "unlocked.pdf",
+    pdfBytes,
+    args,
+    "decrypt the PDF",
+    "check that the password is correct",
+    options.onProgress,
+    50,
+  );
 }
