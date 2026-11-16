@@ -114,3 +114,27 @@ Deno.test("markdownPreview: F4 does not create emphasis inside code spans", () =
   assert(html.includes("<code>foo * bar * baz</code>"));
   assert(!html.includes("<em>bar</em>"));
 });
+
+Deno.test("markdownPreview: safeHref rejects tokens preventing event handler injection", () => {
+  const input = "[t](https://a/![x](https://onmouseover=alert//))";
+  const html = renderMarkdownToHtml(input);
+  assert(!html.includes("onmouseover"), `Output must not contain onmouseover handler: ${html}`);
+});
+
+Deno.test("markdownPreview: renders converter HTML table and MathML without visible tag escaping", () => {
+  const tableInput = `<table>\n  <thead>\n    <tr><th>Col 1</th><th>Col 2</th></tr>\n  </thead>\n  <tbody>\n    <tr><td>Val 1</td><td>Val 2</td></tr>\n  </tbody>\n</table>`;
+  const tableHtml = renderMarkdownToHtml(tableInput);
+  assert(tableHtml.includes("<table"), `Should render table element: ${tableHtml}`);
+  assert(!tableHtml.includes("&lt;table"), `Should not escape table into &lt;table: ${tableHtml}`);
+
+  const mathInput = `<math display="block"><mrow><mtext>E = mc^2</mtext></mrow></math>`;
+  const mathHtml = renderMarkdownToHtml(mathInput);
+  assert(mathHtml.includes("<math"), `Should render math element: ${mathHtml}`);
+  assert(!mathHtml.includes("&lt;math"), `Should not escape math into &lt;math: ${mathHtml}`);
+
+  // Disallowed arbitrary HTML (like script or iframe) must still be escaped
+  const scriptInput = `<script>alert(1)</script>`;
+  const scriptHtml = renderMarkdownToHtml(scriptInput);
+  assert(!scriptHtml.includes("<script>"));
+  assert(scriptHtml.includes("&lt;script&gt;"));
+});

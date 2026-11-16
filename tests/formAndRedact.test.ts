@@ -5,6 +5,7 @@
 import { assertEquals } from "./assert.ts";
 import {
   groupRedactionsByPage,
+  transformVisualRectToPdf,
   type RedactionRegion,
 } from "../src/lib/pdfTools/redactPdf.ts";
 
@@ -28,4 +29,33 @@ Deno.test("redactPdf: groupRedactionsByPage filters out-of-bounds regions and gr
   const page0Redactions = grouped.get(0)!;
   assertEquals(page0Redactions.length, 2);
   assertEquals(page0Redactions[0].reason, "PII");
+});
+
+Deno.test("redactPdf: transformVisualRectToPdf properly sizes non-square regions at 90 and 270 degrees", () => {
+  const pageWidth = 612;
+  const pageHeight = 792;
+  const visualX = 50;
+  const visualY = 100;
+  const visualWidth = 200; // non-square: width 200, height 40
+  const visualHeight = 40;
+
+  // 0 degrees: width stays 200, height stays 40
+  const box0 = transformVisualRectToPdf(visualX, visualY, visualWidth, visualHeight, pageWidth, pageHeight, 0);
+  assertEquals(box0.width, 200);
+  assertEquals(box0.height, 40);
+
+  // 90 degrees: quarter-turned, dimensions swap
+  const box90 = transformVisualRectToPdf(visualX, visualY, visualWidth, visualHeight, pageWidth, pageHeight, 90);
+  assertEquals(box90.width, 40);
+  assertEquals(box90.height, 200);
+
+  // 180 degrees: upside-down, dimensions remain
+  const box180 = transformVisualRectToPdf(visualX, visualY, visualWidth, visualHeight, pageWidth, pageHeight, 180);
+  assertEquals(box180.width, 200);
+  assertEquals(box180.height, 40);
+
+  // 270 degrees: quarter-turned, dimensions swap
+  const box270 = transformVisualRectToPdf(visualX, visualY, visualWidth, visualHeight, pageWidth, pageHeight, 270);
+  assertEquals(box270.width, 40);
+  assertEquals(box270.height, 200);
 });

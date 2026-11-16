@@ -66,3 +66,16 @@ Deno.test("zip: readZip sanitises traversal names coming from the archive", asyn
   assertEquals(archive.has("etc/a.txt"), true, "Traversal name must be sanitised");
   assertEquals(archive.has("../../etc/a.txt"), false, "Raw traversal name must not survive");
 });
+
+Deno.test("zip: stored entry exceeding maxEntryBytes is rejected before allocation", async () => {
+  const data = new TextEncoder().encode("Hello Stored ZIP Entry");
+  const zipBytes = await writeZip([{ name: "test.txt", data }]);
+
+  let message = "";
+  try {
+    await readZip(zipBytes.buffer as ArrayBuffer, { maxEntryBytes: 5 });
+  } catch (err) {
+    message = String((err as Error).message);
+  }
+  assertEquals(/safety limit/.test(message), true);
+});

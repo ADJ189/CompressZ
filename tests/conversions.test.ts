@@ -3,7 +3,7 @@
  */
 
 import { assertEquals } from "./assert.ts";
-import { readZip } from "../src/lib/zip.ts";
+import { readZip, writeZip } from "../src/lib/zip.ts";
 import {
   buildHeadingXml,
   buildParagraphXml,
@@ -26,6 +26,7 @@ import {
   parseWorksheetXml,
   gridToHtmlTable,
   gridToCsv,
+  convertExcelToCsv,
 } from "../src/lib/conversions/excelToPdf.ts";
 import {
   getLibreOfficeStatus,
@@ -222,7 +223,7 @@ Deno.test("conversions: F11 excelToPdf collects multi-run <t> in inlineStr", () 
   assertEquals(grid[0][0], "Hello Beautiful World");
 });
 
-Deno.test("conversions: F12 stripInvalidXml strips disallowed control chars from OOXML", () => {
+Deno.test("conversions: F12 stripInvalidXml strips disallowed control chars from OOXML", async () => {
   // Disallowed: 0x00 through 0x08, 0x0B, 0x0C, 0x0E through 0x1F, 0xFFFE, 0xFFFF
   // Allowed: \t (\u0009), \n (\u000A), \r (\u000D)
   const input = "Valid text\twith tab\nand newline\r\u0000\u0001\u0008\u000B\u000C\u001F\uFFFE\uFFFFend";
@@ -231,4 +232,115 @@ Deno.test("conversions: F12 stripInvalidXml strips disallowed control chars from
 
   const escaped = escapeXml("<test>\u0000&foo</test>");
   assertEquals(escaped, "&lt;test&gt;&amp;foo&lt;/test&gt;");
+
+  // Validate that packageDocx, packageXlsx, packagePptx handle disallowed control characters safely
+  const textWithControls = "Hello\u0000\u0008\u000B\u001F World";
+  const docx = await packageDocx([[{ type: "paragraph", text: textWithControls, readingOrder: 0, pageNumber: 1, source: "native" }]]);
+  const docxZip = await readZip(docx.buffer as ArrayBuffer);
+  const docXml = new TextDecoder().decode(docxZip.get("word/document.xml")!);
+  assertEquals(docXml.includes("Hello World"), true);
+  // eslint-disable-next-line no-control-regex
+  assertEquals(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(docXml), false);
+
+  const pptx = await packagePptx([[{ type: "paragraph", text: textWithControls, readingOrder: 0, pageNumber: 1, source: "native" }]]);
+  const pptxZip = await readZip(pptx.buffer as ArrayBuffer);
+  const sldXml = new TextDecoder().decode(pptxZip.get("ppt/slides/slide1.xml")!);
+  assertEquals(sldXml.includes("Hello World"), true);
+  // eslint-disable-next-line no-control-regex
+  assertEquals(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(sldXml), false);
+
+  const xlsx = await packageXlsx([[textWithControls]]);
+  const xlsxZip = await readZip(xlsx.buffer as ArrayBuffer);
+  const sheetXml = new TextDecoder().decode(xlsxZip.get("xl/worksheets/sheet1.xml")!);
+  assertEquals(sheetXml.includes("Hello World"), true);
+  // eslint-disable-next-line no-control-regex
+  assertEquals(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(sheetXml), false);
+});
+
+Deno.test("conversions: parseWorksheetXml handles self-closing rows and cells", () => {
+  const wsXml = `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+    <sheetData>
+      <row r="1">
+        <c r="A1" s="1"/>
+        <c r="B1" t="s"><v>0</v></c>
+      </row>
+      <row r="2"/>
+      <row r="3">
+        <c r="A3"><v>42</v></c>
+      </row>
+    </sheetData>
+  </worksheet>`;
+
+  const grid = parseWorksheetXml(wsXml, ["Shared String Value"]);
+  assertEquals(grid.length, 3);
+  assertEquals(grid[0][0], "");
+  assertEquals(grid[0][1], "Shared String Value");
+  assertEquals(grid[2][0], "42");
+});
+
+Deno.test("conversions: parseWorksheetXml enforces bounds on untrusted row and col indices", () => {
+  const badRow = `<worksheet><sheetData><row r="9999999"><c r="A1"><v>1</v></c></row></sheetData></worksheet>`;
+  let msg = "";
+  try {
+    parseWorksheetXml(badRow, []);
+  } catch (e) {
+    msg = (e as Error).message;
+  }
+  assertEquals(/exceeds safety maximum/.test(msg), true);
+
+  const badCol = `<worksheet><sheetData><row r="1"><c r="ZZZZZ1"><v>1</v></c></row></sheetData></worksheet>`;
+  msg = "";
+  try {
+    parseWorksheetXml(badCol, []);
+  } catch (e) {
+    msg = (e as Error).message;
+  }
+  assertEquals(/exceeds safety maximum/.test(msg), true);
+});
+
+Deno.test("conversions: convertExcelToCsv respects workbook tab order and excludes hidden sheets", async () => {
+  const enc = new TextEncoder();
+  const relsXml = `<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/>
+</Relationships>`;
+
+  // Tab order in workbook.xml: Sheet2 (rId2) first, Sheet1 (rId1) hidden, Sheet3 (rId3) second
+  const wbXml = `<?xml version="1.0" encoding="UTF-8"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    <sheet name="TabTwo" sheetId="2" r:id="rId2"/>
+    <sheet name="SecretHidden" sheetId="1" r:id="rId1" state="hidden"/>
+    <sheet name="TabThree" sheetId="3" r:id="rId3"/>
+  </sheets>
+</workbook>`;
+
+  const sheet1Xml = `<worksheet><sheetData><row r="1"><c r="A1"><v>HiddenData</v></c></row></sheetData></worksheet>`;
+  const sheet2Xml = `<worksheet><sheetData><row r="1"><c r="A1"><v>SecondTabFirst</v></c></row></sheetData></worksheet>`;
+  const sheet3Xml = `<worksheet><sheetData><row r="1"><c r="A1"><v>ThirdTabSecond</v></c></row></sheetData></worksheet>`;
+
+  const zipData = await writeZip([
+    { name: "xl/_rels/workbook.xml.rels", data: enc.encode(relsXml) },
+    { name: "xl/workbook.xml", data: enc.encode(wbXml) },
+    { name: "xl/worksheets/sheet1.xml", data: enc.encode(sheet1Xml) },
+    { name: "xl/worksheets/sheet2.xml", data: enc.encode(sheet2Xml) },
+    { name: "xl/worksheets/sheet3.xml", data: enc.encode(sheet3Xml) },
+  ]);
+
+  const file = new File([zipData as unknown as BlobPart], "test.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const csvBlob = await convertExcelToCsv(file);
+  const csvText = await csvBlob.text();
+
+  // Hidden sheet must NOT be present
+  assertEquals(csvText.includes("HiddenData"), false);
+  assertEquals(csvText.includes("SecretHidden"), false);
+
+  // TabTwo must come before TabThree
+  assertEquals(csvText.includes("SecondTabFirst"), true);
+  assertEquals(csvText.includes("ThirdTabSecond"), true);
+  const idx2 = csvText.indexOf("SecondTabFirst");
+  const idx3 = csvText.indexOf("ThirdTabSecond");
+  assertEquals(idx2 < idx3, true);
 });

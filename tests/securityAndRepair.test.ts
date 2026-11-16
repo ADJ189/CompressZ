@@ -12,6 +12,7 @@ import {
 } from "../src/lib/qpdfWasm.ts";
 import {
   buildQpdfEncryptionArgs,
+  protectPdf,
   type ProtectPdfOptions,
 } from "../src/lib/pdfTools/securityPdf.ts";
 import {
@@ -305,4 +306,70 @@ Deno.test("qpdfWasm: captures stdout/stderr and restores the instance handlers",
   assertEquals(originalCalls.length, 1);
 
   resetQpdfForTesting();
+});
+
+Deno.test("repairPdf: rejects malformed large object number exceeding xref limit", () => {
+  const enc = new TextEncoder();
+  const bytes = enc.encode("%PDF-1.4\n999999999 0 obj\n<< /Type /Catalog >>\nendobj\n");
+  let message = "";
+  try {
+    salvagePdfObjects(bytes);
+  } catch (err) {
+    message = String((err as Error).message);
+  }
+  assertEquals(/exceeds safety limit/.test(message), true);
+});
+
+Deno.test("repairPdf: salvagePdfObjects excludes stream contents when locating objects", () => {
+  const enc = new TextEncoder();
+  const text =
+    "%PDF-1.4\n" +
+    "1 0 obj\n" +
+    "<< /Type /Catalog /Pages 2 0 R /Length 20 >>\n" +
+    "stream\n" +
+    "1 0 obj\n" +
+    "garbage stream\n" +
+    "endstream\n" +
+    "endobj\n" +
+    "2 0 obj\n" +
+    "<< /Type /Pages /Kids [] /Count 0 >>\n" +
+    "endobj\n";
+
+  const bytes = enc.encode(text);
+  const { objectOffsets } = salvagePdfObjects(bytes);
+
+  const realObj1Idx = text.indexOf("1 0 obj\n<< /Type /Catalog");
+  assertEquals(objectOffsets.get(1), realObj1Idx);
+});
+
+Deno.test("securityPdf: protectPdf rejects nonempty QPDF output when exit status is nonzero", async () => {
+  resetQpdfForTesting();
+
+  const virtualFs = new Map<string, Uint8Array>();
+  setQpdfInstance({
+    callMain: (args: string[]) => {
+      const outTarget = args[args.length - 1];
+      virtualFs.set(outTarget, new TextEncoder().encode("partial broken output"));
+      return 2; // Error
+    },
+    FS: {
+      writeFile: (name: string, data: Uint8Array) => virtualFs.set(name, data),
+      readFile: (name: string) => virtualFs.get(name) || new Uint8Array(),
+      analyzePath: (name: string) => ({ exists: virtualFs.has(name) }),
+      unlink: (name: string) => virtualFs.delete(name),
+    },
+    print: () => {},
+    printErr: () => {},
+  });
+
+  let threw = false;
+  try {
+    await protectPdf(new Uint8Array([0x25, 0x50, 0x44, 0x46]), { userPassword: "test" });
+  } catch {
+    threw = true;
+  } finally {
+    resetQpdfForTesting();
+  }
+
+  assertEquals(threw, true);
 });

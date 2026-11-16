@@ -111,3 +111,18 @@ Deno.test("fileRouter: detectFileTypeAndActions handles Office documents", () =>
   assertEquals(pptxResult.category, "pptx");
   assertEquals(pptxResult.actions.some((a) => a.id === "pptx-to-pdf"), true);
 });
+
+Deno.test("fileRouter: MPEG audio sync detection and UTF-16LE BOM rejection", () => {
+  // Raw MP3 sync frame (MPEG-1 Layer 3, 128 kbps, 44.1 kHz)
+  const mp3Frame = new Uint8Array([0xff, 0xfb, 0x90, 0x64]);
+  assertEquals(identifyHeader(mp3Frame), "audio");
+
+  // UTF-16LE BOM: 0xFF, 0xFE must NOT be identified as audio
+  const utf16Le = new Uint8Array([0xff, 0xfe, 0x54, 0x00]);
+  assertEquals(identifyHeader(utf16Le), "unknown");
+
+  // All 1s: 0xFF, 0xFF must NOT be identified as audio
+  const allOnes = new Uint8Array([0xff, 0xff, 0xff, 0xff]);
+  assertEquals(identifyHeader(allOnes), "unknown");
+});
+

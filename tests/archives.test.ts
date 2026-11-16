@@ -10,6 +10,7 @@ import {
   streamCompressBytes,
   streamDecompressBytes,
   gzipUncompressedSize,
+  MAX_DECOMPRESSED_BYTES,
 } from "../src/lib/archives.ts";
 
 Deno.test("tar: writeTar and readTar round-trip multiple files with exact data", () => {
@@ -225,4 +226,15 @@ Deno.test("archives: gzip pre-check rejects a declared size above the limit", as
     message = String((err as Error).message);
   }
   assertEquals(/exceeds/.test(message), true);
+});
+
+Deno.test("archives: plain tar extraction enforces MAX_DECOMPRESSED_BYTES limit", async () => {
+  const fakeTar = new Uint8Array(MAX_DECOMPRESSED_BYTES + 1024);
+  let message = "";
+  try {
+    await extractArchive(fakeTar, "huge.tar");
+  } catch (err) {
+    message = String((err as Error).message);
+  }
+  assertEquals(/exceeds 256 MB limit/.test(message), true);
 });
