@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import FileDropzone from "../components/FileDropzone.svelte";
   import FileQueue from "../components/FileQueue.svelte";
-  import { imageStore, type ImageState } from "../store";
+  import { imageStore, type ImageState, consumeStagedUniversalFile, currentRoute } from "../store";
   import { compressImage } from "../lib/compressImage";
   import { imageOptions } from "../lib/options";
   import { runScheduled } from "../lib/resourceManager";
@@ -92,6 +93,24 @@ import { entryError } from "../lib/engineError";
     }));
     updateStore({ files: [...imageState.files, ...newEntries] });
   }
+
+  function applyStagedFile() {
+    const staged = consumeStagedUniversalFile();
+    if (staged?.file) {
+      handleFilesAdded([staged.file]);
+    }
+  }
+
+  onMount(() => {
+    applyStagedFile();
+  });
+
+  $effect(() => {
+    const unsub = currentRoute.subscribe(() => {
+      applyStagedFile();
+    });
+    return unsub;
+  });
 
   /** Quick Natural Sort action */
   function handleNaturalSort() {

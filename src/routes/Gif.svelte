@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import FileDropzone from "../components/FileDropzone.svelte";
   import FileQueue from "../components/FileQueue.svelte";
-  import { gifStore, type GifState } from "../store";
+  import { gifStore, type GifState, consumeStagedUniversalFile, currentRoute } from "../store";
   import { compressGif } from "../lib/compressGif";
   import { gifOptions } from "../lib/options";
   import { runScheduled } from "../lib/resourceManager";
@@ -34,6 +35,24 @@ import { entryError } from "../lib/engineError";
     }));
     updateStore({ files: [...gifState.files, ...newEntries] });
   }
+
+  function applyStagedFile() {
+    const staged = consumeStagedUniversalFile();
+    if (staged?.file) {
+      handleFilesAdded([staged.file]);
+    }
+  }
+
+  onMount(() => {
+    applyStagedFile();
+  });
+
+  $effect(() => {
+    const unsub = currentRoute.subscribe(() => {
+      applyStagedFile();
+    });
+    return unsub;
+  });
 
   async function compressSingle(entry: FileEntry) {
     if (entry.status === "compressing") return;

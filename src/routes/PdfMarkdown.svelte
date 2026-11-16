@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import FileDropzone from "../components/FileDropzone.svelte";
   import ProgressStatus from "../components/ProgressStatus.svelte";
   import MacIcon from "../components/MacIcon.svelte";
+  import { consumeStagedUniversalFile, currentRoute } from "../store";
   import { renderMarkdownToHtml } from "../lib/markdownPreview";
   import {
     convertPdfToMarkdown,
@@ -48,6 +50,24 @@
       activePageIndex = 0;
     }
   }
+
+  function applyStagedFile() {
+    const staged = consumeStagedUniversalFile();
+    if (staged?.file) {
+      handleFileSelected([staged.file]);
+    }
+  }
+
+  onMount(() => {
+    applyStagedFile();
+  });
+
+  $effect(() => {
+    const unsub = currentRoute.subscribe(() => {
+      applyStagedFile();
+    });
+    return unsub;
+  });
 
   function handleClear() {
     selectedFile = null;

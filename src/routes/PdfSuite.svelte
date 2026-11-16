@@ -149,14 +149,16 @@ import { entryError } from "../lib/engineError";
 
   const TOOLS = [
     { id: "split", name: "Split PDF", icon: "split" },
-    { id: "organize", name: "Organize & Rotate", icon: "organize" },
+    { id: "merge", name: "Merge PDF", icon: "merge" },
+    { id: "markdown", name: "PDF to Markdown", icon: "markdown" },
+    { id: "organize", name: "Organize Pages", icon: "organize" },
     { id: "studio", name: "PDF Studio", icon: "studio" },
     { id: "watermark", name: "Watermark", icon: "watermark" },
     { id: "crop", name: "Crop Margins", icon: "crop" },
     { id: "forms", name: "Fill Forms", icon: "forms" },
     { id: "security", name: "Protect & Unlock", icon: "security" },
-    { id: "repair", name: "Repair File", icon: "repair" },
-    { id: "redact", name: "Redaction", icon: "redact" },
+    { id: "repair", name: "Repair PDF", icon: "repair" },
+    { id: "redact", name: "Redact PDF", icon: "redact" },
   ];
 
   let loadSeq = 0;
@@ -473,7 +475,15 @@ import { entryError } from "../lib/engineError";
     icon="pdf"
     activeToolId={activeTool}
     tools={TOOLS}
-    onSelectTool={(id) => (activeTool = id as SubTool)}
+    onSelectTool={(id) => {
+      if (id === "merge") {
+        navigate("compress/merge-pdf");
+      } else if (id === "markdown") {
+        navigate("convert/pdf-markdown");
+      } else {
+        activeTool = id as SubTool;
+      }
+    }}
   />
 
   <div class="cz-pdf-suite-content">

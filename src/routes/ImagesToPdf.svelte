@@ -1,6 +1,7 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import FileDropzone from "../components/FileDropzone.svelte";
-  import { imagesToPdfStore, type ImagesToPdfState } from "../store";
+  import { imagesToPdfStore, type ImagesToPdfState, consumeStagedUniversalFile, currentRoute } from "../store";
   import { imagesToPdf } from "../lib/imagesToPdf";
   import { imagesToPdfOptions } from "../lib/options";
   import { runScheduled } from "../lib/resourceManager";
@@ -95,6 +96,24 @@
   function handleFilesAdded(newFiles: File[]) {
     updateStore({ files: [...imagesToPdfState.files, ...newFiles] });
   }
+
+  function applyStagedFile() {
+    const staged = consumeStagedUniversalFile();
+    if (staged?.file) {
+      handleFilesAdded([staged.file]);
+    }
+  }
+
+  onMount(() => {
+    applyStagedFile();
+  });
+
+  $effect(() => {
+    const unsub = currentRoute.subscribe(() => {
+      applyStagedFile();
+    });
+    return unsub;
+  });
 
   function handleRemove(index: number) {
     const next = [...imagesToPdfState.files];

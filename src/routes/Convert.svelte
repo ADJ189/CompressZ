@@ -12,6 +12,7 @@
   import { convertPdfToPpt } from "../lib/conversions/pdfToPpt";
   import { convertExcelToPdf, convertExcelToCsv } from "../lib/conversions/excelToPdf";
   import { convertWithLibreOfficeWasm, isLibreOfficeAvailable } from "../lib/conversions/libreOfficeWasm";
+  import { convertPdfToMarkdown } from "../lib/pdfToMarkdown";
   import {
     consumeStagedUniversalFile,
     currentRoute,
@@ -80,13 +81,14 @@
       ],
     },
     pdf2office: {
-      label: "PDF to Office",
+      label: "PDF to Office & Text",
       icon: "word",
       accept: "application/pdf,.pdf",
       targets: [
         { value: "docx", label: "Word (.docx)" },
         { value: "xlsx", label: "Excel (.xlsx)" },
         { value: "pptx", label: "PowerPoint (.pptx)" },
+        { value: "md", label: "Markdown (.md)" },
       ],
     },
     pdf2img: {
@@ -143,11 +145,14 @@
     },
   };
 
-  // The hub tool row is generated from CATS so the labels/icons can never drift
-  // out of sync with the segmented category bar below the banner.
-  const CONVERT_TOOLS: HubToolItem[] = Object.entries(CATS).map(
-    ([id, meta]) => ({ id, name: meta.label, icon: meta.icon }),
-  );
+  // The hub tool row is generated from CATS and augmented with quick navigation tools
+  const CONVERT_TOOLS: HubToolItem[] = [
+    ...Object.entries(CATS).map(
+      ([id, meta]) => ({ id, name: meta.label, icon: meta.icon }),
+    ),
+    { id: "pdf2md", name: "PDF to Markdown", icon: "markdown" },
+    { id: "merge", name: "Merge PDF", icon: "merge" },
+  ];
 
   const fileIds = new WeakMap<File, string>();
   let nextFileId = 0;
@@ -573,6 +578,11 @@
               if (targetFormat === "docx") blob = await convertPdfToWord(file);
               else if (targetFormat === "xlsx") blob = await convertPdfToExcel(file);
               else if (targetFormat === "pptx") blob = await convertPdfToPpt(file);
+              else if (targetFormat === "md") {
+                const bytes = new Uint8Array(await file.arrayBuffer());
+                const mdRes = await convertPdfToMarkdown(bytes, file.name);
+                blob = new Blob([mdRes.markdown], { type: "text/markdown;charset=utf-8" });
+              }
             }
           } else if (activeCat === "pdf2img") {
             const res = await runScheduled(
@@ -691,7 +701,15 @@
     icon="convert"
     tools={CONVERT_TOOLS}
     activeToolId={activeCat}
-    onSelectTool={(id) => handleCatChange(id as Category)}
+    onSelectTool={(id) => {
+      if (id === "pdf2md") {
+        navigate("convert/pdf-markdown");
+      } else if (id === "merge") {
+        navigate("compress/merge-pdf");
+      } else {
+        handleCatChange(id as Category);
+      }
+    }}
   />
 
   <!-- Left Main Column: Converter Workspace -->

@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import FileDropzone from "../components/FileDropzone.svelte";
-  import { mergeStore, type MergeState } from "../store";
+  import MacIcon from "../components/MacIcon.svelte";
+  import { mergeStore, type MergeState, consumeStagedUniversalFile, currentRoute } from "../store";
   import { mergePdf } from "../lib/mergePdf";
   import { runScheduled } from "../lib/resourceManager";
   import { formatBytes } from "../lib/types";
@@ -12,6 +14,24 @@
   let isMerging = $state(false);
   let mergedBlob = $state<Blob | null>(null);
   let draggedIndex = $state<number | null>(null);
+
+  function applyStagedFile() {
+    const staged = consumeStagedUniversalFile();
+    if (staged?.file) {
+      handleFilesAdded([staged.file]);
+    }
+  }
+
+  onMount(() => {
+    applyStagedFile();
+  });
+
+  $effect(() => {
+    const unsub = currentRoute.subscribe(() => {
+      applyStagedFile();
+    });
+    return unsub;
+  });
 
   $effect(() => {
     const unsub = mergeStore.subscribe((val) => {
@@ -162,7 +182,8 @@
             onclick={sortNatural}
             title="Sort documents numerically by name"
           >
-            Sort 1-9
+            <MacIcon name="organize" size={14} />
+            <span>Sort by Name</span>
           </button>
           <button
             type="button"
@@ -170,7 +191,8 @@
             onclick={reverseOrder}
             title="Reverse sequence order"
           >
-            Reverse
+            <MacIcon name="convert" size={14} />
+            <span>Reverse</span>
           </button>
           <button
             type="button"
@@ -178,7 +200,8 @@
             disabled={isMerging || mergeState.files.length < 2}
             onclick={handleMerge}
           >
-            {isMerging ? "Merging..." : "Merge documents"}
+            <MacIcon name="merge" size={14} />
+            <span>{isMerging ? "Merging..." : "Merge PDFs"}</span>
           </button>
           {#if mergedBlob}
             <button
@@ -186,7 +209,8 @@
               class="cz-btn cz-btn-success cz-btn-sm"
               onclick={handleDownload}
             >
-              Download merged PDF
+              <MacIcon name="download" size={14} />
+              <span>Download Merged PDF</span>
             </button>
           {/if}
           <button
@@ -195,7 +219,8 @@
             onclick={handleClear}
             disabled={isMerging}
           >
-            Clear
+            <MacIcon name="close" size={13} />
+            <span>Clear</span>
           </button>
         </div>
       </div>
@@ -213,7 +238,7 @@
             role="listitem"
           >
             <div class="cz-reorder-doc-cover">
-              <span class="cz-doc-icon" aria-hidden="true">📄</span>
+              <span class="cz-doc-icon" aria-hidden="true"><MacIcon name="pdf" size={22} /></span>
               <span class="cz-reorder-badge">#{idx + 1}</span>
             </div>
 
@@ -231,7 +256,7 @@
                 aria-label="Move earlier"
                 title="Move earlier"
               >
-                ▲
+                <MacIcon name="chevron-up" size={12} />
               </button>
               <button
                 type="button"
@@ -241,7 +266,7 @@
                 aria-label="Move later"
                 title="Move later"
               >
-                ▼
+                <MacIcon name="chevron-down" size={12} />
               </button>
               <button
                 type="button"
@@ -251,7 +276,7 @@
                 aria-label="Remove document"
                 title="Remove"
               >
-                ✕
+                <MacIcon name="close" size={12} />
               </button>
             </div>
           </div>

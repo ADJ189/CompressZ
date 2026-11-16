@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import FileDropzone from "../components/FileDropzone.svelte";
   import FileQueue from "../components/FileQueue.svelte";
-  import { ocrStore, type OcrState } from "../store";
+  import { ocrStore, type OcrState, consumeStagedUniversalFile, currentRoute } from "../store";
   import {
     runPrintedOcr,
     type OcrLanguage,
@@ -59,6 +60,24 @@ import { entryError } from "../lib/engineError";
     updateStore({ files: [...ocrState.files, ...newEntries] });
   }
 
+  function applyStagedFile() {
+    const staged = consumeStagedUniversalFile();
+    if (staged?.file) {
+      handleFilesAdded([staged.file]);
+    }
+  }
+
+  onMount(() => {
+    applyStagedFile();
+  });
+
+  $effect(() => {
+    const unsub = currentRoute.subscribe(() => {
+      applyStagedFile();
+    });
+    return unsub;
+  });
+
   function toBlob(
     canvas: HTMLCanvasElement,
     type: string,
@@ -92,19 +111,6 @@ import { entryError } from "../lib/engineError";
     return canvas;
   }
 
-  interface PageRun {
-    text: string;
-    words: OcrWordBox[];
-    /** Raster dimensions the word boxes are relative to. */
-    widthPx: number;
-    heightPx: number;
-    /** DPI the raster was produced at. Images use their native pixels at 96. */
-    dpi: number;
-    blob: Blob;
-    imageType: "image/jpeg" | "image/png";
-    unsupportedCodePoints: number[];
-  }
-
   async function processOcrSingle(entry: FileEntry) {
     if (entry.status === "compressing") return;
 
@@ -126,13 +132,13 @@ import { entryError } from "../lib/engineError";
           const builder = wantsPdf
             ? await createSearchablePdfBuilder({ title: entry.name })
             : null;
-          const rasterised: PageRun[] = [];
+          let skipped = 0;
+          const unsupported = new Set<number>();
           const textPages: string[] = [];
 
           let pdfDoc: any = null;
           try {
             const image = isImageFile(entry.file);
-            const totalPages = image ? 1 : undefined;
 
             const runRecognition = async (
               canvas: HTMLCanvasElement,
@@ -165,20 +171,27 @@ import { entryError } from "../lib/engineError";
               if (builder) {
                 // PNG keeps a screenshot/photograph crisp; it is already on disk,
                 // so recompressing to JPEG would only add artefacts.
+                const widthPx = canvas.width;
+                const heightPx = canvas.height;
                 const blob = await toBlob(canvas, "image/png");
-                rasterised.push({
-                  text,
-                  words,
-                  widthPx: canvas.width,
-                  heightPx: canvas.height,
-                  dpi: 96,
-                  blob,
+                canvas.width = 0;
+                canvas.height = 0;
+                const imageBytes = new Uint8Array(await blob.arrayBuffer());
+                const stats = await builder.addPage({
+                  imageBytes,
                   imageType: "image/png",
-                  unsupportedCodePoints: [],
+                  widthPx,
+                  heightPx,
+                  dpi: 96,
+                  words,
                 });
+                skipped += stats.skippedWords;
+                for (const cp of stats.unsupportedCodePoints) unsupported.add(cp);
+                patchEntry(entry.id, { progress: 99 });
+              } else {
+                canvas.width = 0;
+                canvas.height = 0;
               }
-              canvas.width = 0;
-              canvas.height = 0;
             } else {
               const pdfBytes = new Uint8Array(await entry.file.arrayBuffer());
               pdfDoc = await openPdfDocument(pdfBytes);
@@ -207,47 +220,31 @@ import { entryError } from "../lib/engineError";
                 textPages.push(`--- Page ${pageNum} ---\n${text}`);
 
                 if (builder) {
+                  const widthPx = canvas.width;
+                  const heightPx = canvas.height;
                   const blob = await toBlob(canvas, "image/jpeg", 0.92);
-                  rasterised.push({
-                    text,
-                    words,
-                    widthPx: canvas.width,
-                    heightPx: canvas.height,
-                    dpi: ocrState.renderDpi,
-                    blob,
+                  canvas.width = 0;
+                  canvas.height = 0;
+                  const imageBytes = new Uint8Array(await blob.arrayBuffer());
+                  const stats = await builder.addPage({
+                    imageBytes,
                     imageType: "image/jpeg",
-                    unsupportedCodePoints: [],
+                    widthPx,
+                    heightPx,
+                    dpi: ocrState.renderDpi,
+                    words,
                   });
+                  skipped += stats.skippedWords;
+                  for (const cp of stats.unsupportedCodePoints) unsupported.add(cp);
+                  patchEntry(entry.id, {
+                    progress: 90 + Math.round((pageNum / numPages) * 9),
+                  });
+                } else {
+                  canvas.width = 0;
+                  canvas.height = 0;
                 }
 
-                canvas.width = 0;
-                canvas.height = 0;
                 page.cleanup();
-              }
-            }
-
-            // Second pass: embed each page and drop its raster immediately, so
-            // peak memory stays near one page instead of the whole document.
-            let skipped = 0;
-            const unsupported = new Set<number>();
-            if (builder) {
-              for (let i = 0; i < rasterised.length; i++) {
-                const run = rasterised[i];
-                const imageBytes = new Uint8Array(await run.blob.arrayBuffer());
-                const stats = await builder.addPage({
-                  imageBytes,
-                  imageType: run.imageType,
-                  widthPx: run.widthPx,
-                  heightPx: run.heightPx,
-                  dpi: run.dpi,
-                  words: run.words,
-                });
-                skipped += stats.skippedWords;
-                for (const cp of stats.unsupportedCodePoints) unsupported.add(cp);
-                rasterised[i] = null as unknown as PageRun; // release raster
-                patchEntry(entry.id, {
-                  progress: 90 + Math.round(((i + 1) / (rasterised.length || 1)) * 9),
-                });
               }
             }
 
