@@ -25,7 +25,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@lhci/cli": "^0.16.0",
+    "@lhci/cli": "^0.16.1",
     "@playwright/test": "^1.65.0",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "eslint": "^10.14.0",
@@ -34,6 +34,8 @@
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.72.1",
     "vite": "^8.3.8"
+    "typescript-eslint": "^8.72.2",
+    "vite": "^8.3.6"
   },
   "overrides": {
     "tmp": "^0.2.7",
