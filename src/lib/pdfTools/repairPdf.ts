@@ -23,8 +23,11 @@ export interface SalvagedPdf {
   rootObject: number | null;
 }
 
+export const MAX_RECOVERABLE_OBJECTS = 200_000;
+
 /**
  * Pure JS fallback: scan byte stream for PDF objects and construct a clean synthetic XREF.
+ * Excludes stream contents to prevent mistaking stream payload text for real objects.
  */
 export function salvagePdfObjects(bytes: Uint8Array): SalvagedPdf {
   const objectOffsets = new Map<number, number>();
@@ -36,12 +39,41 @@ export function salvagePdfObjects(bytes: Uint8Array): SalvagedPdf {
   const hasHeader = headerIndex >= 0 && headerIndex < 1024;
   const hasEof = text.includes("%%EOF");
 
+  // Exclude stream contents so embedded markers (e.g. duplicate object headers) are skipped
+  const streamRanges: [number, number][] = [];
+  const streamRegex = /\bstream(?:\r\n|\r|\n)/g;
+  let sMatch: RegExpExecArray | null;
+  while ((sMatch = streamRegex.exec(text)) !== null) {
+    const contentStart = streamRegex.lastIndex;
+    const endIdx = text.indexOf("endstream", contentStart);
+    if (endIdx !== -1) {
+      streamRanges.push([sMatch.index, endIdx + 9]);
+      streamRegex.lastIndex = endIdx + 9;
+    }
+  }
+
+  function isInStream(idx: number): boolean {
+    for (const [start, end] of streamRanges) {
+      if (idx >= start && idx < end) return true;
+    }
+    return false;
+  }
+
   const objRegex = /\b(\d{1,10})\s+\d{1,5}\s+obj\b/g;
   let rootObject: number | null = null;
   let match: RegExpExecArray | null;
 
   while ((match = objRegex.exec(text)) !== null) {
+    if (isInStream(match.index)) {
+      continue;
+    }
+
     const objNum = Number.parseInt(match[1], 10);
+    if (objNum > MAX_RECOVERABLE_OBJECTS) {
+      throw new Error(
+        `Object number ${objNum} exceeds safety limit of ${MAX_RECOVERABLE_OBJECTS}.`,
+      );
+    }
 
     // Last occurrence wins: incremental updates append replacement objects,
     // and the newest definition is the live one.
@@ -74,6 +106,11 @@ export function buildSyntheticXrefTrailer(
   let maxObj = 1;
   for (const key of offsets.keys()) {
     if (key > maxObj) maxObj = key;
+  }
+  if (maxObj > MAX_RECOVERABLE_OBJECTS) {
+    throw new Error(
+      `Cross-reference table size ${maxObj + 1} exceeds safety limit of ${MAX_RECOVERABLE_OBJECTS}.`,
+    );
   }
   let xref = `xref\n0 ${maxObj + 1}\n0000000000 65535 f \n`;
 
@@ -173,6 +210,12 @@ export async function repairCorruptPdf(
   for (const c of chunks) {
     combined.set(c, pos);
     pos += c.length;
+  }
+
+  // Validate the resulting PDF before reporting success
+  const resultText = new TextDecoder("latin1").decode(combined);
+  if (!resultText.includes("%PDF-") || !resultText.includes("%%EOF") || !resultText.includes("startxref")) {
+    throw new EngineError("Synthesized PDF failed structural validation.", "qpdf");
   }
 
   onProgress?.(100);

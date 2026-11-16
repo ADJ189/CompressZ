@@ -57,7 +57,8 @@ async function runQpdfFileTransform(
   const result = await runQpdfCommand(args, [{ name: inputName, data: pdfBytes }]);
   onProgress?.(90);
   const out = result.outputFiles.find((f) => f.name === outputName);
-  if (!out || out.data.length === 0) {
+  const isSuccess = result.exitCode === 0 || result.exitCode === 3;
+  if (!out || out.data.length === 0 || !isSuccess) {
     throw engineFailure("qpdf", actionLabel, {
       exitCode: result.exitCode,
       output: result.stdout,

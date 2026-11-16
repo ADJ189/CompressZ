@@ -20,6 +20,62 @@ export interface RedactionRegion {
   overlayText?: string; // Backward-compatible alias for reason
 }
 
+/**
+ * Transform a visual coordinate (from top-left of rotated viewport)
+ * to unrotated PDF coordinate space (from bottom-left).
+ */
+export function transformVisualPointToPdf(
+  vx: number,
+  vy: number,
+  pageWidth: number,
+  pageHeight: number,
+  rotation: number,
+): { x: number; y: number } {
+  const rot = ((rotation % 360) + 360) % 360;
+  switch (rot) {
+    case 90:
+      return { x: pageWidth - vy, y: vx };
+    case 180:
+      return { x: pageWidth - vx, y: vy };
+    case 270:
+      return { x: vy, y: pageHeight - vx };
+    case 0:
+    default:
+      return { x: vx, y: pageHeight - vy };
+  }
+}
+
+/**
+ * Transform a visual rectangle to an upright bounding box in PDF coordinate space.
+ * Correctly computes bounding box dimensions for quarter-turned (90° and 270°) pages.
+ */
+export function transformVisualRectToPdf(
+  vx: number,
+  vy: number,
+  vw: number,
+  vh: number,
+  pageWidth: number,
+  pageHeight: number,
+  rotation: number,
+): { x: number; y: number; width: number; height: number } {
+  const p1 = transformVisualPointToPdf(vx, vy, pageWidth, pageHeight, rotation);
+  const p2 = transformVisualPointToPdf(vx + vw, vy, pageWidth, pageHeight, rotation);
+  const p3 = transformVisualPointToPdf(vx, vy + vh, pageWidth, pageHeight, rotation);
+  const p4 = transformVisualPointToPdf(vx + vw, vy + vh, pageWidth, pageHeight, rotation);
+
+  const minX = Math.min(p1.x, p2.x, p3.x, p4.x);
+  const maxX = Math.max(p1.x, p2.x, p3.x, p4.x);
+  const minY = Math.min(p1.y, p2.y, p3.y, p4.y);
+  const maxY = Math.max(p1.y, p2.y, p3.y, p4.y);
+
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+  };
+}
+
 export interface RedactionOptions {
   regions: RedactionRegion[];
   onProgress?: (pct: number) => void;
