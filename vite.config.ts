@@ -45,7 +45,7 @@ const CSP = [
   "connect-src 'self' blob: data: https://cdn.jsdelivr.net https://esm.sh https://tessdata.projectnaptha.com https://paddlejs.bj.bcebos.com https://huggingface.co https://cdn-lfs.huggingface.co https://fonts.googleapis.com https://fonts.gstatic.com",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
-  "img-src 'self' blob: data:",
+  "img-src 'self' blob: data: https:",
   "media-src 'self' blob: data:",
   "frame-src 'self' blob: data:",
   "object-src 'none'",
