@@ -84,35 +84,44 @@ export function parseSharedStringsXml(xmlStr: string): string[] {
   return strings;
 }
 
+export const MAX_WORKSHEET_ROWS = 100_000;
+export const MAX_WORKSHEET_COLS = 1_000;
+export const MAX_WORKSHEET_CELLS = 2_000_000;
+
 /**
  * Parse a worksheet XML string into a 2D string grid.
- * Safely handles rows and cells whether or not explicit 'r' references are present.
+ * Safely handles rows and cells whether or not explicit 'r' references are present,
+ * including self-closing empty rows and cells.
  */
 export function parseWorksheetXml(
   xmlStr: string,
   sharedStrings: string[],
 ): string[][] {
   const grid: string[][] = [];
-  const rowRegex = /<row\b([^>]*)>(.*?)<\/row>/gs;
+  const rowRegex = /<row\b([^>]*?)(?:\/>|>(.*?)<\/row>)/gs;
   let rowMatch: RegExpExecArray | null;
   let fallbackRowIdx = 0;
+  let totalMaterializedCells = 0;
 
   while ((rowMatch = rowRegex.exec(xmlStr)) !== null) {
     const rowAttrs = rowMatch[1];
-    const rowContent = rowMatch[2];
+    const rowContent = rowMatch[2] ?? "";
 
     const rAttrMatch = /\br="(\d+)"/.exec(rowAttrs);
     const rowIdx = rAttrMatch ? Number.parseInt(rAttrMatch[1], 10) - 1 : fallbackRowIdx;
+    if (rowIdx < 0 || rowIdx >= MAX_WORKSHEET_ROWS) {
+      throw new Error(`Worksheet row index ${rowIdx + 1} exceeds safety maximum (${MAX_WORKSHEET_ROWS}).`);
+    }
     fallbackRowIdx = Math.max(fallbackRowIdx + 1, rowIdx + 1);
 
-    const cellRegex = /<c\b([^>]*)>(.*?)<\/c>/gs;
+    const cellRegex = /<c\b([^>]*?)(?:\/>|>(.*?)<\/c>)/gs;
     let cMatch: RegExpExecArray | null;
     const rowCells: { col: number; val: string }[] = [];
     let fallbackColIdx = 0;
 
     while ((cMatch = cellRegex.exec(rowContent)) !== null) {
       const cellAttrs = cMatch[1];
-      const cellBody = cMatch[2];
+      const cellBody = cMatch[2] ?? "";
 
       const cellRMatch = /\br="([A-Z]+)\d*"/.exec(cellAttrs);
       let colIdx = fallbackColIdx;
@@ -123,6 +132,9 @@ export function parseWorksheetXml(
           computed = computed * 26 + (colLetters.charCodeAt(i) - 64);
         }
         colIdx = computed - 1; // 0-based
+      }
+      if (colIdx < 0 || colIdx >= MAX_WORKSHEET_COLS) {
+        throw new Error(`Worksheet column index ${colIdx + 1} exceeds safety maximum (${MAX_WORKSHEET_COLS}).`);
       }
       fallbackColIdx = Math.max(fallbackColIdx + 1, colIdx + 1);
 
@@ -155,6 +167,10 @@ export function parseWorksheetXml(
 
     if (rowCells.length > 0) {
       const maxCol = Math.max(...rowCells.map((c) => c.col));
+      totalMaterializedCells += (maxCol + 1);
+      if (totalMaterializedCells > MAX_WORKSHEET_CELLS) {
+        throw new Error(`Worksheet total materialized cells exceed safety limit (${MAX_WORKSHEET_CELLS}).`);
+      }
       const cells: string[] = Array(maxCol + 1).fill("");
       for (const c of rowCells) {
         cells[c.col] = c.val;
@@ -208,6 +224,7 @@ export function gridToHtmlTable(grid: string[][], title?: string): string {
  */
 interface ParsedWorksheet {
   key: string;
+  name?: string;
   grid: string[][];
 }
 
@@ -236,29 +253,84 @@ async function extractWorksheetGrids(
     sharedStrings = parseSharedStringsXml(sstXml);
   }
 
-  const sheetKeys: string[] = [];
-  for (const k of entries.keys()) {
-    if (/^xl\/worksheets\/sheet\d+\.xml$/i.test(k)) {
-      sheetKeys.push(k);
+  // Parse workbook relationships to resolve sheet r:id -> worksheet part path
+  const relsBytes = entries.get("xl/_rels/workbook.xml.rels");
+  const relsMap = new Map<string, string>();
+  if (relsBytes) {
+    const relsXml = new TextDecoder().decode(relsBytes);
+    const relRegex = /<Relationship\b([^>]*?)(?:\/>|>(.*?)<\/Relationship>)/gs;
+    let relMatch: RegExpExecArray | null;
+    while ((relMatch = relRegex.exec(relsXml)) !== null) {
+      const attrs = relMatch[1];
+      const idMatch = /\bId="([^"]+)"/.exec(attrs);
+      const targetMatch = /\bTarget="([^"]+)"/.exec(attrs);
+      if (idMatch && targetMatch) {
+        let target = targetMatch[1].replace(/\\/g, "/");
+        if (target.startsWith("/")) target = target.slice(1);
+        if (!target.toLowerCase().startsWith("xl/")) {
+          target = `xl/${target}`;
+        }
+        relsMap.set(idMatch[1], target);
+      }
     }
   }
 
-  sheetKeys.sort((a, b) => {
-    const numA = Number.parseInt(a.match(/\d+/)![0], 10);
-    const numB = Number.parseInt(b.match(/\d+/)![0], 10);
-    return numA - numB;
-  });
+  // Parse workbook.xml to get tab order and filter out hidden/veryHidden sheets
+  const wbBytes = entries.get("xl/workbook.xml");
+  const orderedParts: { key: string; name: string }[] = [];
+  if (wbBytes) {
+    const wbXml = new TextDecoder().decode(wbBytes);
+    const sheetRegex = /<sheet\b([^>]*?)(?:\/>|>(.*?)<\/sheet>)/gs;
+    let sMatch: RegExpExecArray | null;
+    while ((sMatch = sheetRegex.exec(wbXml)) !== null) {
+      const attrs = sMatch[1];
+      const stateMatch = /\bstate="([^"]+)"/i.exec(attrs);
+      const state = stateMatch ? stateMatch[1].toLowerCase() : "visible";
+      if (state === "hidden" || state === "veryhidden") {
+        continue;
+      }
+      const nameMatch = /\bname="([^"]+)"/.exec(attrs);
+      const name = nameMatch ? decodeXmlEntities(nameMatch[1]) : "Sheet";
 
-  if (sheetKeys.length === 0) {
+      const rIdMatch = /\br:id="([^"]+)"/i.exec(attrs) || /\bid="([^"]+)"/i.exec(attrs);
+      if (rIdMatch) {
+        const target = relsMap.get(rIdMatch[1]);
+        if (target && entries.has(target)) {
+          orderedParts.push({ key: target, name });
+        }
+      }
+    }
+  }
+
+  let sheetTargets: { key: string; name?: string }[] = orderedParts;
+
+  // Fallback if workbook.xml was missing or had no valid sheets
+  if (sheetTargets.length === 0) {
+    const sheetKeys: string[] = [];
+    for (const k of entries.keys()) {
+      if (/^xl\/worksheets\/sheet\d+\.xml$/i.test(k)) {
+        sheetKeys.push(k);
+      }
+    }
+    sheetKeys.sort((a, b) => {
+      const numA = Number.parseInt(a.match(/\d+/)![0], 10);
+      const numB = Number.parseInt(b.match(/\d+/)![0], 10);
+      return numA - numB;
+    });
+    sheetTargets = sheetKeys.map((k) => ({ key: k }));
+  }
+
+  if (sheetTargets.length === 0) {
     throw new Error("No worksheet found in Excel file.");
   }
 
   const worksheets: ParsedWorksheet[] = [];
-  for (const k of sheetKeys) {
-    const bytes = entries.get(k)!;
+  for (const target of sheetTargets) {
+    const bytes = entries.get(target.key);
+    if (!bytes) continue;
     const sheetXml = new TextDecoder().decode(bytes);
     const grid = parseWorksheetXml(sheetXml, sharedStrings);
-    worksheets.push({ key: k, grid });
+    worksheets.push({ key: target.key, name: target.name, grid });
   }
 
   return worksheets;
@@ -277,8 +349,8 @@ export async function convertExcelToPdf(
   let combinedHtml = "";
 
   for (let i = 0; i < worksheets.length; i++) {
-    const { grid } = worksheets[i];
-    const sheetTitle = worksheets.length > 1 ? `${baseTitle} — Sheet ${i + 1}` : baseTitle;
+    const { grid, name } = worksheets[i];
+    const sheetTitle = name || (worksheets.length > 1 ? `${baseTitle} — Sheet ${i + 1}` : baseTitle);
     const pageBreak = i > 0 ? "page-break-before: always; margin-top: 32px;" : "";
     combinedHtml += `<div style="${pageBreak}">${gridToHtmlTable(grid, sheetTitle)}</div>`;
   }
@@ -342,7 +414,7 @@ export async function convertExcelToCsv(
     const { grid } = worksheets[i];
     if (grid.length > 0) {
       if (worksheets.length > 1 && masterGrid.length > 0) {
-        masterGrid.push([`--- Sheet ${i + 1} ---`]);
+        masterGrid.push([`--- ${worksheets[i].name || `Sheet ${i + 1}`} ---`]);
       }
       masterGrid.push(...grid);
     }
