@@ -36,17 +36,19 @@
     {
       category: "Compression",
       items: [
-        { route: "compress/images", name: "Images", desc: "Compress WebP, JPEG, PNG, AVIF with quality guard", icon: "🖼️", iconName: "image" },
-        { route: "compress/pdf", name: "PDF", desc: "Reduce document size via downsampling and deduplication", icon: "📄", iconName: "pdf" },
-        { route: "compress/video", name: "Video", desc: "WebCodecs hardware acceleration and FFmpeg transcoding", icon: "🎬", iconName: "video" },
-        { route: "compress/audio", name: "Audio", desc: "Optimize MP3, AAC, OGG, Opus, FLAC, and WAV", icon: "🎵", iconName: "audio" },
-        { route: "compress/gif", name: "GIF", desc: "Lossy LZW compression and GIF-to-video conversion", icon: "🎞️", iconName: "gif" },
+        { route: "compress/images", name: "Compress Images", desc: "Compress WebP, JPEG, PNG, AVIF with quality guard", icon: "🖼️", iconName: "image" },
+        { route: "compress/pdf", name: "Compress PDF", desc: "Reduce document size via downsampling and deduplication", icon: "📄", iconName: "pdf" },
+        { route: "compress/video", name: "Compress Video", desc: "WebCodecs hardware acceleration and FFmpeg transcoding", icon: "🎬", iconName: "video" },
+        { route: "compress/audio", name: "Compress Audio", desc: "Optimize MP3, AAC, OGG, Opus, FLAC, and WAV", icon: "🎵", iconName: "audio" },
+        { route: "compress/gif", name: "Compress GIF", desc: "Lossy LZW compression and GIF-to-video conversion", icon: "🎞️", iconName: "gif" },
       ],
     },
     {
       category: "Conversions & Document Engines",
       items: [
         { route: "convert", name: "Format Converter", desc: "Two-way Office (Word, Excel, PPT), Video, Audio & Images", icon: "🔁", iconName: "convert" },
+        { route: "convert/pdf-markdown", name: "PDF to Markdown", desc: "Extract structured markdown with math & tables", icon: "📝", iconName: "markdown", isNew: true },
+        { route: "compress/merge-pdf", name: "Merge PDF", desc: "Combine multiple PDF documents into one sequence", icon: "🧷", iconName: "merge" },
         { route: "convert?type=pdf-word", name: "PDF to Word (DOCX)", desc: "Export PDF layout directly into formatted Word document", icon: "📘", iconName: "word", isNew: true },
         { route: "convert?type=pdf-excel", name: "PDF to Excel (XLSX)", desc: "Extract tabular coordinates into editable spreadsheet sheets", icon: "📗", iconName: "excel", isNew: true },
         { route: "convert?type=pdf-ppt", name: "PDF to PowerPoint (PPTX)", desc: "Render slide decks with vector text and visual assets", icon: "📙", iconName: "ppt", isNew: true },
