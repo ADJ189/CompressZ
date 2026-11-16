@@ -56,7 +56,6 @@
   function startDrawing(e: MouseEvent | TouchEvent) {
     if (!ctx) return;
     isDrawing = true;
-    hasInk = true;
     const pos = getCanvasPos(e);
     ctx.beginPath();
     ctx.moveTo(pos.x, pos.y);
@@ -70,6 +69,7 @@
     const pos = getCanvasPos(e);
     ctx.lineTo(pos.x, pos.y);
     ctx.stroke();
+    hasInk = true;
   }
 
   function stopDrawing() {

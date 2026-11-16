@@ -1,4 +1,9 @@
+<script module lang="ts">
+  const activePickers: Array<() => void> = [];
+</script>
+
 <script lang="ts">
+  import { onMount } from "svelte";
   import ActionPalette from "./ActionPalette.svelte";
   import MacIcon from "./MacIcon.svelte";
 
@@ -22,6 +27,25 @@
   function triggerPicker() {
     fileInput?.click();
   }
+
+  function handleKeydown(e: KeyboardEvent) {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "u") {
+      if (activePickers[0] === triggerPicker) {
+        e.preventDefault();
+        triggerPicker();
+      }
+    }
+  }
+
+  onMount(() => {
+    activePickers.push(triggerPicker);
+    return () => {
+      const idx = activePickers.indexOf(triggerPicker);
+      if (idx !== -1) {
+        activePickers.splice(idx, 1);
+      }
+    };
+  });
 
   function handleFileChange(e: Event) {
     const input = e.target as HTMLInputElement;
@@ -56,6 +80,8 @@
     onActionSelected?.();
   }
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <input
   bind:this={fileInput}

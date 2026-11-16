@@ -1,7 +1,12 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { openPdfDocument, getPdfLib } from "../lib/pdfLibs";
-  import type { RedactionRegion } from "../lib/pdfTools/redactPdf";
+  import { openPdfDocument, getPdfLib, FONTKIT_ESM, NOTO_SANS_UNICODE_FONT } from "../lib/pdfLibs";
+  import {
+    type RedactionRegion,
+    transformVisualPointToPdf,
+    transformVisualRectToPdf,
+  } from "../lib/pdfTools/redactPdf";
+  import { sanitizeWinAnsi } from "../lib/pdfTools/watermarkPdf";
   import SignaturePad from "./SignaturePad.svelte";
 
   interface Props {
@@ -49,27 +54,6 @@
 
   let currentRenderTask: any = null;
   let renderSeq = 0;
-
-  function transformVisualPointToPdf(
-    vx: number,
-    vy: number,
-    pageWidth: number,
-    pageHeight: number,
-    rotation: number,
-  ): { x: number; y: number } {
-    const rot = ((rotation % 360) + 360) % 360;
-    switch (rot) {
-      case 90:
-        return { x: pageWidth - vy, y: vx };
-      case 180:
-        return { x: pageWidth - vx, y: vy };
-      case 270:
-        return { x: vy, y: pageHeight - vx };
-      case 0:
-      default:
-        return { x: vx, y: pageHeight - vy };
-    }
-  }
 
   async function renderPage(pageNum: number) {
     if (!pdfDocInstance || !canvasEl || !overlayCanvasEl) return;
@@ -277,7 +261,44 @@
   async function handleExportPdf() {
     const { PDFDocument, rgb, degrees, StandardFonts } = await getPdfLib();
     const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
-    const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+    let font: any = null;
+    let coverageFont: any = null;
+    try {
+      const fontkitMod = (await import(/* @vite-ignore */ FONTKIT_ESM)) as any;
+      const fontkit = fontkitMod.default ?? fontkitMod;
+      pdfDoc.registerFontkit(fontkit);
+      const res = await fetch(NOTO_SANS_UNICODE_FONT, { cache: "force-cache" });
+      if (res.ok) {
+        const fontBytes = new Uint8Array(await res.arrayBuffer());
+        font = await pdfDoc.embedFont(fontBytes, { subset: true });
+        coverageFont = fontkit.create(fontBytes);
+      }
+    } catch {
+      // Ignored: fallback to Helvetica
+    }
+
+    if (!font) {
+      font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    }
+
+    const sanitizeText = (str: string): string => {
+      if (coverageFont) {
+        let safe = "";
+        for (const ch of str) {
+          const cp = ch.codePointAt(0) ?? 0;
+          let ok = false;
+          try {
+            ok = coverageFont.hasGlyphForCodePoint(cp) === true;
+          } catch {
+            ok = false;
+          }
+          safe += ok ? ch : "?";
+        }
+        return safe;
+      }
+      return sanitizeWinAnsi(str);
+    };
 
     const trueRedactionRegions: RedactionRegion[] = [];
 
@@ -292,7 +313,7 @@
       for (const ann of pageAnns) {
         if (ann.type === "text" && ann.text) {
           const pt = transformVisualPointToPdf(ann.x, ann.y + (ann.fontSize || 16), width, height, rotation);
-          page.drawText(ann.text, {
+          page.drawText(sanitizeText(ann.text), {
             x: pt.x,
             y: pt.y,
             size: ann.fontSize || 16,
@@ -301,24 +322,24 @@
             rotate: degrees(rotation),
           });
         } else if (ann.type === "redact") {
-          const pt = transformVisualPointToPdf(ann.x, ann.y + ann.height, width, height, rotation);
+          const bbox = transformVisualRectToPdf(ann.x, ann.y, ann.width, ann.height, width, height, rotation);
           trueRedactionRegions.push({
             pageIndex: p - 1,
-            x: pt.x,
-            y: pt.y,
-            width: ann.width,
-            height: ann.height,
+            x: bbox.x,
+            y: bbox.y,
+            width: bbox.width,
+            height: bbox.height,
             reason: "[REDACTED]",
           });
         } else if (ann.type === "stamp" && ann.dataUrl) {
           const imgBytes = Uint8Array.from(atob(ann.dataUrl.split(",")[1]), (c) => c.charCodeAt(0));
           const embedded = await pdfDoc.embedPng(imgBytes);
-          const pt = transformVisualPointToPdf(ann.x, ann.y + ann.height, width, height, rotation);
+          const bbox = transformVisualRectToPdf(ann.x, ann.y, ann.width, ann.height, width, height, rotation);
           page.drawImage(embedded, {
-            x: pt.x,
-            y: pt.y,
-            width: ann.width,
-            height: ann.height,
+            x: bbox.x,
+            y: bbox.y,
+            width: bbox.width,
+            height: bbox.height,
             rotate: degrees(rotation),
           });
         } else if ((ann.type === "ink" || ann.type === "highlighter") && ann.points && ann.points.length > 1) {

@@ -61,6 +61,8 @@
       icon: "convert",
       items: [
         { id: "conv-hub", route: "convert", name: "Universal Converter", desc: "Video, audio, images, office, and PDF cross-format", icon: "convert" },
+        { id: "conv-md", route: "convert/pdf-markdown", name: "PDF to Markdown", desc: "Extract structured markdown with equations & tables", icon: "markdown", badge: "New" },
+        { id: "conv-merge", route: "compress/merge-pdf", name: "Merge PDF", desc: "Combine multiple PDF documents into one sequence", icon: "merge" },
         { id: "conv-word", route: "convert?type=pdf-word", name: "PDF to Word (DOCX)", desc: "Export formatted Word document from PDF layout", icon: "word", badge: "Office" },
         { id: "conv-excel", route: "convert?type=pdf-excel", name: "PDF to Excel (XLSX)", desc: "Extract tabular coordinates into editable spreadsheet", icon: "excel", badge: "Office" },
         { id: "conv-ppt", route: "convert?type=pdf-ppt", name: "PDF to PowerPoint (PPTX)", desc: "Vector slides and layout deck generation", icon: "ppt", badge: "Office" },
