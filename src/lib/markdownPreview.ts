@@ -25,6 +25,10 @@ function escapeHtml(str: string): string {
  */
 function safeHref(escapedUrl: string): string | null {
   const url = escapedUrl.trim();
+  // Reject placeholder tokens or delimiters
+  if (url.includes("\u0000") || url.includes("%%") || url.includes("CZ_TOKEN_")) {
+    return null;
+  }
   if (/^https?:\/\/[^\s]+/i.test(url)) return url;
   if (/^mailto:[^\s@]+@[^\s@]+/i.test(url)) return url;
   if (/^\/(?!\/)/.test(url)) return url; // "/x" but not "//evil.com"
@@ -34,6 +38,10 @@ function safeHref(escapedUrl: string): string | null {
 
 function safeImgSrc(escapedUrl: string): string | null {
   const url = escapedUrl.trim();
+  // Reject placeholder tokens or delimiters
+  if (url.includes("\u0000") || url.includes("%%") || url.includes("CZ_TOKEN_")) {
+    return null;
+  }
   if (
     /^data:image\/(?:png|jpeg|jpg|webp|gif|svg\+xml);base64,[A-Za-z0-9+/=]+$/i.test(
       url,
@@ -46,14 +54,58 @@ function safeImgSrc(escapedUrl: string): string | null {
   return null;
 }
 
+function renderSupportedHtmlTable(tableHtml: string): string | null {
+  const tagRegex = /<\/?([a-zA-Z0-9_-]+)([^>]*)>/g;
+  let match: RegExpExecArray | null;
+  const allowedTags = new Set(["table", "thead", "tbody", "tr", "th", "td"]);
+
+  while ((match = tagRegex.exec(tableHtml)) !== null) {
+    const tagName = match[1].toLowerCase();
+    if (!allowedTags.has(tagName)) {
+      return null;
+    }
+    const attrs = match[2];
+    if (/on\w+\s*=/i.test(attrs) || /javascript:/i.test(attrs)) {
+      return null;
+    }
+  }
+
+  const inner = tableHtml.replace(/^<table\b[^>]*>/i, "").replace(/<\/table>$/i, "");
+  return `<div class="cz-table-wrap"><table class="cz-rendered-table">${inner}</table></div>`;
+}
+
+function renderSupportedHtmlMath(mathHtml: string): string | null {
+  const tagRegex = /<\/?([a-zA-Z0-9_-]+)([^>]*)>/g;
+  let match: RegExpExecArray | null;
+  const allowedMathTags = new Set([
+    "math", "mrow", "mtext", "mo", "mi", "mn", "msup", "msub", "msubsup",
+    "mfrac", "msqrt", "mroot", "mtable", "mtr", "mtd", "mspace",
+  ]);
+
+  while ((match = tagRegex.exec(mathHtml)) !== null) {
+    const tagName = match[1].toLowerCase();
+    if (!allowedMathTags.has(tagName)) {
+      return null;
+    }
+    const attrs = match[2];
+    if (/on\w+\s*=/i.test(attrs) || /javascript:/i.test(attrs)) {
+      return null;
+    }
+  }
+
+  return `<div class="cz-rendered-math-block">${mathHtml}</div>`;
+}
+
+/* eslint-disable no-control-regex */
 function renderInline(text: string): string {
-  let result = escapeHtml(text);
+  // Disallow null bytes in input so user-crafted text cannot match \u0000N\u0000
+  let result = escapeHtml(text.replace(/\u0000/g, ""));
 
   const tokens: string[] = [];
   const stash = (html: string) => {
     const idx = tokens.length;
     tokens.push(html);
-    return `%%CZ_TOKEN_${idx}%%`;
+    return `\u0000${idx}\u0000`;
   };
 
   // LaTeX inline math $ ... $
@@ -88,14 +140,18 @@ function renderInline(text: string): string {
   // Links [text](url) — disallowing nested brackets and newlines prevents superlinear backtracking
   result = result.replace(/\[([^[\n\]]+)\]\(([^)\n]+)\)/g, (_match, label, href) => {
     const safeHrefValue = safeHref(href) ?? "#";
-    return `<a href="${safeHrefValue}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+    return stash(`<a href="${safeHrefValue}" target="_blank" rel="noopener noreferrer">${label}</a>`);
   });
 
-  // Restore stashed code/math/image tokens
-  return result.replace(
-    /%%CZ_TOKEN_(\d+)%%/g,
-    (_m, idx) => tokens[Number(idx)] ?? "",
-  );
+  // Restore stashed tokens (loop handles tokens nested inside labels, e.g. [<code>](url))
+  while (/\u0000(\d+)\u0000/.test(result)) {
+    result = result.replace(
+      /\u0000(\d+)\u0000/g,
+      (_m, idx) => tokens[Number(idx)] ?? "",
+    );
+  }
+
+  return result;
 }
 
 export function renderMarkdownToHtml(markdown: string): string {
@@ -247,6 +303,54 @@ export function renderMarkdownToHtml(markdown: string): string {
       continue;
     } else if (inTable) {
       flushTable();
+    }
+
+    // Converter HTML Table
+    if (trimmed.toLowerCase().startsWith("<table")) {
+      closeList();
+      flushTable();
+      const tableLines: string[] = [line];
+      if (!trimmed.toLowerCase().includes("</table>")) {
+        while (i + 1 < lines.length) {
+          i++;
+          tableLines.push(lines[i]);
+          if (lines[i].toLowerCase().includes("</table>")) break;
+        }
+      }
+      const rawTable = tableLines.join("\n").trim();
+      const renderedTable = renderSupportedHtmlTable(rawTable);
+      if (renderedTable) {
+        out.push(renderedTable);
+        continue;
+      }
+      for (const tLine of tableLines) {
+        if (tLine.trim()) out.push(`<p>${renderInline(tLine.trim())}</p>`);
+      }
+      continue;
+    }
+
+    // Converter MathML Block
+    if (trimmed.toLowerCase().startsWith("<math")) {
+      closeList();
+      flushTable();
+      const mathLines: string[] = [line];
+      if (!trimmed.toLowerCase().includes("</math>")) {
+        while (i + 1 < lines.length) {
+          i++;
+          mathLines.push(lines[i]);
+          if (lines[i].toLowerCase().includes("</math>")) break;
+        }
+      }
+      const rawMath = mathLines.join("\n").trim();
+      const renderedMath = renderSupportedHtmlMath(rawMath);
+      if (renderedMath) {
+        out.push(renderedMath);
+        continue;
+      }
+      for (const mLine of mathLines) {
+        if (mLine.trim()) out.push(`<p>${renderInline(mLine.trim())}</p>`);
+      }
+      continue;
     }
 
     // Empty line
