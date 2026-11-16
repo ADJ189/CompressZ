@@ -26,9 +26,13 @@ if (typeof window !== "undefined") {
         inner.innerHTML = `
           <div class="sp-fail" style="text-align: center; color: var(--text, #fff); font-family: system-ui, sans-serif;">
             <p style="margin-bottom: 12px; font-weight: 500;">CompressZ failed to start.</p>
-            <button type="button" style="padding: 8px 18px; border-radius: 99px; background: #3b5bdb; color: #fff; border: none; cursor: pointer; font-weight: 600;" onclick="window.location.reload()">Reload Application</button>
+            <button type="button" class="sp-reload-btn" style="padding: 8px 18px; border-radius: 99px; background: #3b5bdb; color: #fff; border: none; cursor: pointer; font-weight: 600;">Reload Application</button>
           </div>
         `;
+        const btn = inner.querySelector<HTMLButtonElement>(".sp-reload-btn");
+        btn?.addEventListener("click", () => {
+          window.location.reload();
+        });
       }
     }
   }, 10_000);
