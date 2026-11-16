@@ -290,12 +290,17 @@ export async function extractArchive(
   if (lower.endsWith(".tar.gz") || lower.endsWith(".tgz")) {
     assertGzipWithinLimit(archiveBytes);
     const rawTar = await streamDecompressBytes(archiveBytes, "gzip");
-    const tarEntries = readTar(rawTar);
+    const tarEntries = readTar(rawTar, { maxTotalBytes: MAX_DECOMPRESSED_BYTES });
     return tarEntries.map((t) => ({ name: t.name, data: t.data }));
   }
 
   if (lower.endsWith(".tar")) {
-    const tarEntries = readTar(archiveBytes);
+    if (archiveBytes.byteLength > MAX_DECOMPRESSED_BYTES) {
+      throw new Error(
+        `Decompressed data exceeds ${Math.round(MAX_DECOMPRESSED_BYTES / (1024 * 1024))} MB limit.`,
+      );
+    }
+    const tarEntries = readTar(archiveBytes, { maxTotalBytes: MAX_DECOMPRESSED_BYTES });
     return tarEntries.map((t) => ({ name: t.name, data: t.data }));
   }
 

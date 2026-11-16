@@ -114,10 +114,18 @@ export function identifyHeader(bytes: Uint8Array): DetectedCategory {
     if (tag === "WAVE") return "audio";
   }
 
-  // MP3: ID3 or MPEG sync
+  // MP3: ID3 or MPEG sync (exclude UTF-16LE BOM and enforce valid MPEG bits)
+  if (bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) {
+    return "audio";
+  }
   if (
-    (bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) ||
-    (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)
+    bytes[0] === 0xff &&
+    (bytes[1] & 0xe0) === 0xe0 &&
+    bytes[1] !== 0xfe &&
+    bytes[1] !== 0xff &&
+    (bytes[1] & 0x18) !== 0x08 &&
+    (bytes[1] & 0x06) !== 0 &&
+    (bytes.length < 3 || (bytes[2] & 0xf0) !== 0xf0)
   ) {
     return "audio";
   }
