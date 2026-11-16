@@ -170,6 +170,63 @@
       <path d="M4 7V4h3M17 4h3v3M4 17v3h3M20 17v3h-3" />
       <line x1="9" y1="12" x2="15" y2="12" />
       <line x1="12" y1="9" x2="12" y2="15" />
+    {:else if name === "gif"}
+      <rect x="2" y="4" width="20" height="16" rx="3" />
+      <path d="M6 12h2a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1h3" />
+      <line x1="12" y1="9" x2="12" y2="15" />
+      <path d="M16 15V9h3M16 12h2" />
+    {:else if name === "merge"}
+      <path d="M8 7v10a4 4 0 0 0 8 0V5a2.5 2.5 0 0 0-5 0v11a1 1 0 0 0 2 0V7" />
+    {:else if name === "split"}
+      <circle cx="6" cy="6" r="3" />
+      <circle cx="6" cy="18" r="3" />
+      <line x1="20" y1="4" x2="8.12" y2="15.88" />
+      <line x1="14.47" y1="14.48" x2="20" y2="20" />
+      <line x1="8.12" y1="8.12" x2="12" y2="12" />
+    {:else if name === "organize"}
+      <rect x="3" y="3" width="7" height="9" rx="1.5" />
+      <rect x="14" y="3" width="7" height="5" rx="1.5" />
+      <rect x="14" y="12" width="7" height="9" rx="1.5" />
+      <rect x="3" y="16" width="7" height="5" rx="1.5" />
+    {:else if name === "studio"}
+      <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+    {:else if name === "sign"}
+      <path d="M20 19.5c-3 0-5-2-7-2s-4 2-7 2M4 11s1.5-3 4-3 4 5 7 5 3-4 5-4" />
+    {:else if name === "watermark"}
+      <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+    {:else if name === "crop"}
+      <path d="M6 2v14a2 2 0 0 0 2 2h14M18 22V8a2 2 0 0 0-2-2H2" />
+    {:else if name === "forms"}
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+      <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+      <path d="M9 12l2 2 4-4" />
+    {:else if name === "redact"}
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <line x1="3" y1="12" x2="21" y2="12" stroke-width="3" />
+    {:else if name === "security"}
+      <rect x="3" y="11" width="18" height="11" rx="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    {:else if name === "repair"}
+      <path d="M12 2v20M2 12h20" stroke-width="3" />
+      <circle cx="12" cy="12" r="9" />
+    {:else if name === "word"}
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M9 16l2-6 2 6 2-6" />
+    {:else if name === "excel"}
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M9 10l6 6M15 10l-6 6" />
+    {:else if name === "ppt"}
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <circle cx="12" cy="14" r="3" />
+    {:else if name === "markdown" || name === "pdf-markdown"}
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M7 15V9l2.5 3L12 9v6M17 12l-2 3M15 12l2-3" />
+    {:else if name === "archive"}
+      <polyline points="21 8 21 21 3 21 3 8" />
+      <rect x="1" y="3" width="22" height="5" />
+      <line x1="10" y1="12" x2="14" y2="12" />
+    {:else if name === "chevron-up"}
+      <polyline points="18 15 12 9 6 15" />
     {:else if name === "docs"}
       <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15z" />
     {:else if name === "search"}

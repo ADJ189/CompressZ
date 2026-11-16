@@ -54,15 +54,11 @@
 
   function handleSelectAction(action: FileAction) {
     if (!file) return;
-    if (action.route.startsWith("convert") || action.route.startsWith("pdf")) {
-      stagedUniversalFile.set({
-        file,
-        actionId: action.id,
-        sourceHub: action.hub,
-      });
-    } else {
-      stagedUniversalFile.set(null);
-    }
+    stagedUniversalFile.set({
+      file,
+      actionId: action.id,
+      sourceHub: action.hub,
+    });
     onActionSelected?.(action);
     onClose();
     navigate(action.route);
