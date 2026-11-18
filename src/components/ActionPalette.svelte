@@ -116,18 +116,29 @@
     if (hub === "ai") return "ocr";
     return "tools";
   }
+  function portal(node: HTMLElement) {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        if (node.parentNode) {
+          node.parentNode.removeChild(node);
+        }
+      },
+    };
+  }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
 {#if open && file}
-  <div class="cz-palette-backdrop" onclick={onClose} role="presentation"></div>
-  <div
-    class="cz-palette-dialog"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="cz-palette-title"
-  >
+  <div class="cz-palette-portal" use:portal>
+    <div class="cz-palette-backdrop" onclick={onClose} role="presentation"></div>
+    <div
+      class="cz-palette-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="cz-palette-title"
+    >
     <div class="cz-palette-header">
       <div class="cz-palette-file-info">
         <span class="cz-palette-icon" aria-hidden="true">
@@ -186,15 +197,20 @@
       {/if}
     </div>
   </div>
+  </div>
 {/if}
 
 <style>
+  .cz-palette-portal {
+    display: contents;
+  }
   .cz-palette-backdrop {
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.55);
     backdrop-filter: blur(6px);
-    z-index: 1100;
+    -webkit-backdrop-filter: blur(6px);
+    z-index: 1200;
   }
   .cz-palette-dialog {
     position: fixed;
@@ -207,7 +223,7 @@
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--r-xl);
-    z-index: 1101;
+    z-index: 1201;
     display: flex;
     flex-direction: column;
     box-shadow: var(--shadow-xl);
