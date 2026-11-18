@@ -121,32 +121,41 @@ Deno.test("markdownPreview: safeHref rejects tokens preventing event handler inj
   assert(!html.includes("onmouseover"), `Output must not contain onmouseover handler: ${html}`);
 });
 
-Deno.test("markdownPreview: renders converter HTML table and MathML without visible tag escaping", () => {
-  const tableInput = `<table>\n  <thead>\n    <tr><th>Col 1</th><th>Col 2</th></tr>\n  </thead>\n  <tbody>\n    <tr><td>Val 1</td><td>Val 2</td></tr>\n  </tbody>\n</table>`;
-  const tableHtml = renderMarkdownToHtml(tableInput);
-  assert(tableHtml.includes("<table"), `Should render table element: ${tableHtml}`);
-  assert(!tableHtml.includes("&lt;table"), `Should not escape table into &lt;table: ${tableHtml}`);
+Deno.test("markdownPreview: renders converter HTML table and MathML with strict sanitization", () => {
+  const scenarios = [
+    {
+      label: "HTML table structure",
+      raw: "<table><thead><tr><th>Col 1</th><th>Col 2</th></tr></thead><tbody><tr><td>Val 1</td><td>Val 2</td></tr></tbody></table>",
+      contains: ["<table", "<th>Col 1</th>", "<td>Val 1</td>"],
+      excludes: ["&lt;table"],
+    },
+    {
+      label: "MathML block equation",
+      raw: '<math display="block"><mrow><mtext>E = mc^2</mtext></mrow></math>',
+      contains: ["<math", 'display="block"', "E = mc^2"],
+      excludes: ["&lt;math"],
+    },
+    {
+      label: "Hostile MathML attributes",
+      raw: '<math><mtext href="&#106;&#97;&#118;&#97;&#115;&#99;&#114;&#105;&#112;&#116;&#58;alert(1)">foo</mtext></math>',
+      contains: ["<math>", "<mtext>foo</mtext>"],
+      excludes: ["javascript:", "<mtext href=", "alert(1)"],
+    },
+    {
+      label: "Hostile HTML table attributes",
+      raw: '<table><tr><td title=">" onmouseover="alert(1)">Cell</td></tr></table>',
+      contains: ["<table", "<td>Cell</td>"],
+      excludes: ["onmouseover", "alert(1)", "title="],
+    },
+  ];
 
-  const mathInput = `<math display="block"><mrow><mtext>E = mc^2</mtext></mrow></math>`;
-  const mathHtml = renderMarkdownToHtml(mathInput);
-  assert(mathHtml.includes("<math"), `Should render math element: ${mathHtml}`);
-  assert(!mathHtml.includes("&lt;math"), `Should not escape math into &lt;math: ${mathHtml}`);
-
-  // Disallowed arbitrary HTML (like script or iframe) must still be escaped
-  const scriptInput = `<script>alert(1)</script>`;
-  const scriptHtml = renderMarkdownToHtml(scriptInput);
-  assert(!scriptHtml.includes("<script>"));
-  assert(scriptHtml.includes("&lt;script&gt;"));
-
-  // MathML with entity-encoded or unauthorized attributes must not leak raw attributes
-  const hostileMath = `<math><mtext href="&#106;&#97;&#118;&#97;&#115;&#99;&#114;&#105;&#112;&#116;&#58;alert(1)">foo</mtext></math>`;
-  const hostileMathHtml = renderMarkdownToHtml(hostileMath);
-  assert(!hostileMathHtml.includes("javascript:"));
-  assert(!hostileMathHtml.includes("<mtext href="));
-
-  // Table with quoted '>' hiding event handlers must not leak handlers or raw markup
-  const hostileTable = `<table><tr><td title=">" onmouseover="alert(1)">Cell</td></tr></table>`;
-  const hostileTableHtml = renderMarkdownToHtml(hostileTable);
-  assert(!hostileTableHtml.includes("onmouseover"));
-  assert(!hostileTableHtml.includes("alert(1)"));
+  for (const { label, raw, contains, excludes } of scenarios) {
+    const html = renderMarkdownToHtml(raw);
+    for (const match of contains) {
+      assert(html.includes(match), `${label} missing '${match}': ${html}`);
+    }
+    for (const forbidden of excludes) {
+      assert(!html.includes(forbidden), `${label} leaked forbidden '${forbidden}': ${html}`);
+    }
+  }
 });

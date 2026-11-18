@@ -344,3 +344,38 @@ Deno.test("conversions: convertExcelToCsv respects workbook tab order and exclud
   const idx3 = csvText.indexOf("ThirdTabSecond");
   assertEquals(idx2 < idx3, true);
 });
+
+Deno.test("conversions: XML escaping strips invalid XML 1.0 control characters from OOXML output", () => {
+  // Disallowed control chars: \u0000-\u0008, \u000B, \u000C, \u000E-\u001F, \uFFFE, \uFFFF
+  // Allowed whitespace: \u0009 (tab), \u000A (LF), \u000D (CR)
+  const hostileString = "Safe\u0000Text\u0007With\u0008Chars\u000BAnd\u000CMore\u001FEnd\uFFFE\uFFFF\t\n\r<>&'\"";
+  const stripped = stripInvalidXml(hostileString);
+  // eslint-disable-next-line no-control-regex -- testing XML 1.0 disallowed control character stripping
+  assertEquals(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/.test(stripped), false);
+  assertEquals(stripped.includes("\t\n\r"), true);
+
+  const escaped = escapeXml(hostileString);
+  // eslint-disable-next-line no-control-regex -- testing XML 1.0 disallowed control character stripping
+  assertEquals(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/.test(escaped), false);
+  assertEquals(escaped.includes("&lt;&gt;&amp;&apos;&quot;"), true);
+
+  // Check Word XML builders
+  const headingXml = buildHeadingXml("Heading\u0003Title", 1);
+  assertEquals(headingXml.includes("\u0003"), false);
+  const paraXml = buildParagraphXml("Para\u000CBody");
+  assertEquals(paraXml.includes("\u000C"), false);
+  const itemXml = buildListItemXml("- Bullet\u001BItem");
+  assertEquals(itemXml.includes("\u001B"), false);
+
+  // Check Excel XML builder
+  const sheetXml = generateWorksheetXml([["Cell\u0001Data", "Valid"]]);
+  assertEquals(sheetXml.includes("\u0001"), false);
+
+  // Check PPT XML builder
+  const slideXml = generateSlideXml([
+    { type: "heading", text: "Slide\u0005Title", readingOrder: 0, pageNumber: 1, source: "native" },
+    { type: "paragraph", text: "Slide\u0007Body", readingOrder: 1, pageNumber: 1, source: "native" },
+  ], 1);
+  assertEquals(slideXml.includes("\u0005"), false);
+  assertEquals(slideXml.includes("\u0007"), false);
+});
