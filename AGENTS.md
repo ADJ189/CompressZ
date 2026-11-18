@@ -50,7 +50,7 @@ GitHub re-review and Cloudflare Pages deployment specification, see
 
 ### Verification checklist (run all before calling work done)
 
-1. `npm test` (or `deno test --allow-read` locally) — runs all 29 suites (138 tests) offline (quality guard, recommendations, resource manager, zip/tar security, settings, OCR engines, searchable PDF, PDF to Markdown, output fidelity, engine errors, privacy parity, package standards, and Hallmark anti-slop rules).
+1. `npm test` (or `deno test --allow-read` locally) — runs all 30 suites (153 tests) offline (quality guard, recommendations, resource manager, zip/tar security, settings, OCR engines, searchable PDF, PDF to Markdown, output fidelity, engine errors, privacy parity, package standards, tool landing, and Hallmark anti-slop rules).
 2. `npm run typecheck` — must be clean. This runs `tsc --noEmit` **and**
    `svelte-check`; `tsc` alone never inspects `.svelte` files, so a clean
    `tsc` is not evidence that the UI type-checks.
@@ -125,6 +125,8 @@ src/components/            reusable UI atoms (Svelte 5)
   ProgressStatus.svelte   real-time progress bar and status line
   HubHeader.svelte        unified horizontal scrolling hub tool strip
   MacIcon.svelte          macOS-style vector icon glyphs & squircles
+  ToolCard.svelte         rectangular interactive tool card with squircle icon
+  ToolGrid.svelte         responsive CSS grid container for tool discovery
 src/router.ts              History API router, dispatches to store
 src/store.ts               pure TypeScript reactive store (Svelte 5 contract)
 src/toast.ts               toast notifications
@@ -184,6 +186,7 @@ tests/                     test suite (verified 100% passing)
   searchablePdf.test.ts    raster-to-point coordinate math and coverage
   engineError.test.ts      engine error classification, logs, and diagnostics
   privacy-parity.test.ts   storage-key / CDN-host parity with PRIVACY.md
+  toolLanding.test.ts      tool-first landing grids & CSS floor compliance
 ```
 
 ## UI → engine options
