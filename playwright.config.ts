@@ -86,7 +86,7 @@ export default defineConfig({
       },
     },
   ],
-  webServer: {
+  webServer: process.env.PW_NO_SERVER ? undefined : {
     // Production build by default (COOP/COEP headers included). The opt-in
     // benchmark and WebCodecs suites use `vite dev` so they can import
     // src/lib modules directly. Those suites normally start their own server

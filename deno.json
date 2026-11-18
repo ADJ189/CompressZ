@@ -8,6 +8,7 @@
   "compilerOptions": {
     "lib": ["deno.ns", "dom", "esnext"]
   },
+  "nodeModulesDir": "none",
   "lint": {
     "include": ["src/", "tests/"],
     "rules": {
@@ -17,7 +18,8 @@
         "no-window-prefix",
         "require-await",
         "no-sloppy-imports",
-        "prefer-const"
+        "prefer-const",
+        "no-control-regex"
       ]
     }
   },
