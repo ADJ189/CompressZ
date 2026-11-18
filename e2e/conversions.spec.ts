@@ -646,4 +646,29 @@ test.describe("conversion matrix", () => {
     await page.getByRole("button", { name: "Clear" }).click();
     await expect(page.locator("#file-list .cz-inset-row")).toHaveCount(0);
   });
+
+  test("Convert: staging an upload while earlier conversion is pending cancels previous run and isolates staged queue", async ({ page }) => {
+    await page.goto("/convert");
+    await category(page, "Audio").click();
+    await upload(page, fixtures.wav);
+
+    // Click Convert All
+    await page.getByRole("button", { name: "Convert All" }).click();
+
+    // Immediately stage a new universal upload while previous run is in-flight/pending
+    await page.evaluate(() => {
+      const file = new File(["minimal docx text content"], "staged-new.docx", {
+        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      });
+      window.dispatchEvent(
+        new CustomEvent("compressz:stage-universal-file", {
+          detail: { file, actionId: "docx-to-txt", targetRoute: "convert" },
+        }),
+      );
+    });
+
+    // Staging the new file must reset the queue to only contain the new staged file
+    await expect(page.locator("#file-list .cz-inset-row")).toHaveCount(1);
+    await expect(page.locator("#file-list .cz-inset-row")).toContainText("staged-new.docx");
+  });
 });

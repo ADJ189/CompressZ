@@ -45,4 +45,38 @@ test.describe("PDF to Markdown extractor", () => {
     const md = bytes.toString("utf8");
     expect(md.length).toBeGreaterThan(10);
   });
+
+  test("Markdown Preview: remote images without CORS headers render successfully", async ({ page }) => {
+    const testRemoteUrl = "https://cdn.remote-media.test/sample-photo.png";
+    const png1x1 = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      "base64",
+    );
+    await page.route(testRemoteUrl, (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: "image/png",
+        body: png1x1,
+        // Explicitly omit Access-Control-Allow-Origin to verify no-CORS mode
+      });
+    });
+
+    await page.goto("/convert/pdf-markdown");
+    const loaded = await page.evaluate(async (url) => {
+      const img = document.createElement("img");
+      img.className = "cz-rendered-img";
+      img.alt = "Remote non-CORS test";
+      const loadPromise = new Promise<boolean>((resolve) => {
+        img.onload = () => resolve(true);
+        img.onerror = () => resolve(false);
+      });
+      img.src = url;
+      document.body.appendChild(img);
+      const ok = await loadPromise;
+      img.remove();
+      return ok;
+    }, testRemoteUrl);
+
+    expect(loaded).toBe(true);
+  });
 });

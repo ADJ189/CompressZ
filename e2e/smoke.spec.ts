@@ -71,10 +71,15 @@ test.describe("deep links render without errors", () => {
 
 test("document title and cross-origin isolation (COOP/COEP)", async ({
   page,
+  browserName,
 }) => {
   await page.goto("/");
   await expect(page).toHaveTitle(/CompressZ/);
-  expect(await page.evaluate(() => window.crossOriginIsolated)).toBe(true);
+  // WebKit (Safari) does not yet implement COEP: credentialless (WebKit bug 241512).
+  // Chromium and Firefox support credentialless and enable cross-origin isolation.
+  if (browserName !== "webkit") {
+    expect(await page.evaluate(() => window.crossOriginIsolated)).toBe(true);
+  }
 });
 
 test("splash overlay is removed from the click path", async ({ page }) => {
