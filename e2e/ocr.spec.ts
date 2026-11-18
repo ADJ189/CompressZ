@@ -36,4 +36,24 @@ test.describe("OCR workbench", () => {
     await outputKind.selectOption("pdf");
     expect(await outputKind.inputValue()).toBe("pdf");
   });
+
+  test("OCR: navigating from handwriting shortcut to bare route restores printed profile and PDF output", async ({ page }) => {
+    // 1. Enter via handwriting shortcut
+    await page.goto("/compress/ocr?profile=handwriting");
+    const profSelect = page.locator("#ocr-prof");
+    await expect(profSelect).toBeVisible();
+    expect(await profSelect.inputValue()).toBe("handwriting");
+
+    // In handwriting mode, the PDF output selector is hidden
+    await expect(page.locator("#ocr-output")).toHaveCount(0);
+
+    // 2. Navigate to bare Searchable PDF OCR route (simulating shortcut click)
+    await page.goto("/compress/ocr");
+    await expect(profSelect).toHaveValue("printed");
+
+    // Output selector must now be restored with PDF selected
+    const outputKind = page.locator("#ocr-output");
+    await expect(outputKind).toBeVisible();
+    expect(await outputKind.inputValue()).toBe("pdf");
+  });
 });
