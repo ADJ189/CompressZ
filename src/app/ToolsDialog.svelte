@@ -79,7 +79,7 @@
       icon: "ocr",
       items: [
         { route: "compress/ocr", name: "Searchable PDF OCR", desc: "Generate searchable PDFs or plain text via Tesseract.js", icon: "ocr", badge: "AI" },
-        { route: "convert/pdf-markdown", name: "Handwriting Recognition", desc: "TrOCR English neural line recognition for handwriting", icon: "studio", badge: "TrOCR" },
+        { route: "compress/ocr?profile=handwriting", name: "Handwriting Recognition", desc: "TrOCR English neural line recognition for handwriting", icon: "studio", badge: "TrOCR" },
       ],
     },
     {
@@ -575,7 +575,7 @@
   /* Grid of Mac-like Cards */
   .cz-tools-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
     gap: 0.75rem;
   }
 
@@ -735,6 +735,42 @@
     background: var(--surface2);
     color: var(--text);
     cursor: pointer;
+  }
+
+  /* Narrow-screen mobile responsiveness */
+  @media (max-width: 520px) {
+    .cz-dialog {
+      width: 95%;
+      max-height: 90vh;
+      border-radius: var(--r-lg, 16px);
+    }
+    .cz-dialog-header {
+      padding: 0.85rem 0.85rem 0.75rem;
+    }
+    .cz-dialog-universal-upload {
+      padding: 0.65rem 0.85rem 0.45rem;
+    }
+    .cz-dialog-toolbar {
+      padding: 0.55rem 0.85rem;
+    }
+    .cz-dialog-body {
+      padding: 0.85rem 0.85rem 1.25rem;
+      overflow-x: hidden;
+      gap: 1.15rem;
+    }
+    .cz-tools-grid {
+      grid-template-columns: 1fr;
+      gap: 0.55rem;
+    }
+    .cz-tool-card {
+      padding: 0.65rem 0.8rem;
+    }
+    .cz-mac-traffic-lights {
+      width: 48px;
+    }
+    .cz-dialog-search-wrap {
+      min-width: 100%;
+    }
   }
 
   /* Reduced motion */
