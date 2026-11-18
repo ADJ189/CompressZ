@@ -342,6 +342,30 @@ Deno.test("repairPdf: salvagePdfObjects excludes stream contents when locating o
   assertEquals(objectOffsets.get(1), realObj1Idx);
 });
 
+Deno.test("repairPdf: salvagePdfObjects does not treat /Type /Catalog inside stream payload as root object", () => {
+  const enc = new TextEncoder();
+  const text =
+    "%PDF-1.4\n" +
+    "1 0 obj\n" +
+    "<< /Type /Catalog /Pages 2 0 R >>\n" +
+    "endobj\n" +
+    "2 0 obj\n" +
+    "<< /Type /Pages /Kids [] /Count 0 >>\n" +
+    "endobj\n" +
+    "3 0 obj\n" +
+    "<< /Type /XObject /Subtype /Form >>\n" +
+    "stream\n" +
+    "Random text inside stream containing /Type /Catalog in data\n" +
+    "endstream\n" +
+    "endobj\n";
+
+  const bytes = enc.encode(text);
+  const { rootObject, objectOffsets } = salvagePdfObjects(bytes);
+
+  assertEquals(rootObject, 1);
+  assertEquals(objectOffsets.size, 3);
+});
+
 Deno.test("securityPdf: protectPdf rejects nonempty QPDF output when exit status is nonzero", async () => {
   resetQpdfForTesting();
 

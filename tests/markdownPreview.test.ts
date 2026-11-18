@@ -137,4 +137,16 @@ Deno.test("markdownPreview: renders converter HTML table and MathML without visi
   const scriptHtml = renderMarkdownToHtml(scriptInput);
   assert(!scriptHtml.includes("<script>"));
   assert(scriptHtml.includes("&lt;script&gt;"));
+
+  // MathML with entity-encoded or unauthorized attributes must not leak raw attributes
+  const hostileMath = `<math><mtext href="&#106;&#97;&#118;&#97;&#115;&#99;&#114;&#105;&#112;&#116;&#58;alert(1)">foo</mtext></math>`;
+  const hostileMathHtml = renderMarkdownToHtml(hostileMath);
+  assert(!hostileMathHtml.includes("javascript:"));
+  assert(!hostileMathHtml.includes("<mtext href="));
+
+  // Table with quoted '>' hiding event handlers must not leak handlers or raw markup
+  const hostileTable = `<table><tr><td title=">" onmouseover="alert(1)">Cell</td></tr></table>`;
+  const hostileTableHtml = renderMarkdownToHtml(hostileTable);
+  assert(!hostileTableHtml.includes("onmouseover"));
+  assert(!hostileTableHtml.includes("alert(1)"));
 });

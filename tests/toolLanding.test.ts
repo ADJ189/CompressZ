@@ -1,4 +1,4 @@
-import { assert, assertEquals } from "./assert.ts";
+import { assert } from "./assert.ts";
 
 Deno.test("tool landing: ToolCard and ToolGrid components exist and comply with CSS floor", async () => {
   const cardSvelte = await Deno.readTextFile(
