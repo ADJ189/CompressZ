@@ -22,18 +22,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        project:
-          - chromium-desktop
-          - chromium-mobile
-          - webkit-desktop
-          - webkit-mobile
-          - firefox-desktop
+        include:
+          - project: chromium-desktop
+            browser: chromium
+          - project: chromium-mobile
+            browser: chromium
+          - project: webkit-desktop
+            browser: webkit
+          - project: webkit-mobile
+            browser: webkit
+          - project: firefox-desktop
+            browser: firefox
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
@@ -41,12 +46,22 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
-      # Chromium backs the two desktop/mobile Chromium projects; WebKit is the
-      # second real engine (Safari); Firefox is the third. All three are worth
-      # the download because the app leans on OffscreenCanvas/WebGL2/
-      # WebAssembly/WebCodecs feature detection, which differs by engine.
-      - name: Install Playwright browsers
-        run: npx --no-install playwright install --with-deps chromium webkit firefox
+      # Download and cache only the browser binary required for the current matrix project,
+      # rather than installing all three browser engines in every job.
+      - name: Cache Playwright browser
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ matrix.browser }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Playwright browser
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx --no-install playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Install Playwright OS dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx --no-install playwright install-deps ${{ matrix.browser }}
 
       # playwright.config.ts webServer already runs `npm run build` + preview.
       - name: Run E2E tests
