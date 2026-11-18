@@ -67,13 +67,30 @@ import { entryError } from "../lib/engineError";
     }
   }
 
+  let lastSearch = "";
+  function applyQueryParams() {
+    if (typeof window === "undefined") return;
+    if (window.location.search === lastSearch) return;
+    lastSearch = window.location.search;
+
+    const params = new URLSearchParams(window.location.search);
+    const prof = params.get("profile") || params.get("engine");
+    if (prof === "handwriting" || prof === "trocr") {
+      updateStore({ profile: "handwriting" });
+    } else if (prof === "printed" || prof === "tesseract") {
+      updateStore({ profile: "printed" });
+    }
+  }
+
   onMount(() => {
+    applyQueryParams();
     applyStagedFile();
   });
 
   $effect(() => {
     const unsub = currentRoute.subscribe((r) => {
       if (r === "compress/ocr") {
+        applyQueryParams();
         applyStagedFile();
       }
     });
