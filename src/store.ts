@@ -255,17 +255,26 @@ export interface UniversalStagedItem {
   file: File;
   actionId?: string;
   sourceHub?: string;
+  targetRoute?: string;
 }
 export const stagedUniversalFile = createStore<UniversalStagedItem | null>(null);
 
 /**
  * Retrieve and consume the staged universal file (clears the store after reading).
+ * If routePrefix is provided, returns and clears the item only when the staged target
+ * matches the calling page's route.
  */
-export function consumeStagedUniversalFile(): UniversalStagedItem | null {
+export function consumeStagedUniversalFile(routePrefix?: string): UniversalStagedItem | null {
   const item = stagedUniversalFile.get();
-  if (item) {
-    stagedUniversalFile.set(null);
+  if (!item) return null;
+  if (routePrefix && item.targetRoute) {
+    const normTarget = item.targetRoute.replace(/^\//, "").split("?")[0];
+    const normPrefix = routePrefix.replace(/^\//, "").split("?")[0];
+    if (!normTarget.startsWith(normPrefix) && !normPrefix.startsWith(normTarget)) {
+      return null;
+    }
   }
+  stagedUniversalFile.set(null);
   return item;
 }
 
