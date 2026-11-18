@@ -241,12 +241,12 @@ import { entryError } from "../lib/engineError";
     pageThumbnails = {};
     pageSpecs = [];
 
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    if (mySeq !== loadSeq) return;
-    pdfBytes = bytes;
-
     let pdfJs: any = null;
     try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      if (mySeq !== loadSeq) return;
+      pdfBytes = bytes;
+
       pdfJs = await openPdfDocument(bytes);
       if (mySeq !== loadSeq) return;
       totalPages = pdfJs.numPages;

@@ -15,6 +15,7 @@
   import { convertPdfToMarkdown } from "../lib/pdfToMarkdown";
   import {
     consumeStagedUniversalFile,
+    stagedUniversalFile,
     currentRoute,
     convertStore,
     saveConvertProfile as saveStoreProfile,
@@ -426,6 +427,10 @@
     const staged = consumeStagedUniversalFile("convert");
     if (!staged?.file) return;
 
+    // Invalidate and cancel prior run so a new conversion can start for the staged file
+    conversionGeneration++;
+    isConverting = false;
+
     // C4: Staging a new file clears stale convertedResults
     convertedResults = [];
 
@@ -496,7 +501,7 @@
 
   $effect(() => {
     // Keep mounted Convert page reactive to route navigation & staged files
-    const unsub = currentRoute.subscribe((r) => {
+    const unsubRoute = currentRoute.subscribe((r) => {
       if (r === "convert" || r?.startsWith("convert/")) {
         if (typeof window !== "undefined" && window.location.search !== lastSearch) {
           applyQueryParams();
@@ -504,7 +509,15 @@
         applyStagedFile();
       }
     });
-    return unsub;
+    const unsubStaged = stagedUniversalFile.subscribe((item) => {
+      if (item) {
+        applyStagedFile();
+      }
+    });
+    return () => {
+      unsubRoute();
+      unsubStaged();
+    };
   });
 
   let conversionGeneration = 0;
@@ -565,13 +578,16 @@
   async function handleConvertAll() {
     if (!selectedFiles.length || isConverting) return;
     const currentGen = ++conversionGeneration;
+    const cat = activeCat;
+    const target = targetFormat;
+    const filesToConvert = [...selectedFiles];
     isConverting = true;
     convertedResults = [];
 
     try {
       // Images → PDF produces one ordered document, not one output per file.
-      if (activeCat === "img2pdf") {
-        const files = [...selectedFiles];
+      if (cat === "img2pdf") {
+        const files = [...filesToConvert];
         try {
           const bytes = files.reduce((sum, f) => sum + f.size, 0);
           const blob = await runScheduled(
@@ -607,17 +623,17 @@
         return;
       }
 
-      for (const file of selectedFiles) {
+      for (const file of filesToConvert) {
         if (currentGen !== conversionGeneration) return;
         try {
           let blob: Blob | null = null;
           let suffix = "";
 
-          if (activeCat === "video") {
+          if (cat === "video") {
             const res = await runScheduled(
               { kind: "video", label: file.name, bytes: file.size },
               () =>
-                convertVideo(file, targetFormat as VideoContainer, {
+                convertVideo(file, target as VideoContainer, {
                   crf: videoCrf,
                   resolution: videoResolution,
                   fps: videoFps,
@@ -628,7 +644,7 @@
                 }),
             );
             blob = res.blob;
-          } else if (activeCat === "audio") {
+          } else if (cat === "audio") {
             const kbps = Number(audioBitrate.replace(/k$/i, ""));
             const res = await runScheduled(
               { kind: "audio", label: file.name, bytes: file.size },
@@ -636,19 +652,19 @@
                 compressAudio(
                   file,
                   audioOptions({
-                    fmt: targetFormat as AudioFormat,
+                    fmt: target as AudioFormat,
                     bitrate: Number.isFinite(kbps) ? kbps : 192,
                   }),
                 ),
             );
             blob = res.blob;
-          } else if (activeCat === "image") {
+          } else if (cat === "image") {
             const mime: ImageFormat =
-              targetFormat === "jpeg"
+              target === "jpeg"
                 ? "image/jpeg"
-                : targetFormat === "png"
+                : target === "png"
                   ? "image/png"
-                  : targetFormat === "avif"
+                  : target === "avif"
                     ? "image/avif"
                     : "image/webp";
             const res = await runScheduled(
@@ -657,38 +673,38 @@
                 compressImage(file, imageOptions({ quality: convertQuality, format: mime })),
             );
             blob = res.blob;
-          } else if (activeCat === "pdf2office") {
+          } else if (cat === "pdf2office") {
             if (selectedEngine === "libreoffice" && isLibreOfficeAvailable()) {
               const bytes = new Uint8Array(await file.arrayBuffer());
-              const outBytes = await convertWithLibreOfficeWasm(bytes, "pdf", targetFormat);
+              const outBytes = await convertWithLibreOfficeWasm(bytes, "pdf", target);
               blob = new Blob([new Uint8Array(outBytes)]);
             } else {
               if (selectedEngine === "libreoffice" && !isLibreOfficeAvailable()) {
                 toast("LibreOffice WASM not loaded in this runtime. Using fast web-native engine.", "info");
               }
-              if (targetFormat === "docx") blob = await convertPdfToWord(file);
-              else if (targetFormat === "xlsx") blob = await convertPdfToExcel(file);
-              else if (targetFormat === "pptx") blob = await convertPdfToPpt(file);
-              else if (targetFormat === "md") {
+              if (target === "docx") blob = await convertPdfToWord(file);
+              else if (target === "xlsx") blob = await convertPdfToExcel(file);
+              else if (target === "pptx") blob = await convertPdfToPpt(file);
+              else if (target === "md") {
                 const bytes = new Uint8Array(await file.arrayBuffer());
                 const mdRes = await convertPdfToMarkdown(bytes, file.name);
                 blob = new Blob([mdRes.markdown], { type: "text/markdown;charset=utf-8" });
               }
             }
-          } else if (activeCat === "pdf2img") {
+          } else if (cat === "pdf2img") {
             const res = await runScheduled(
               { kind: "pdf", label: file.name, bytes: file.size },
               () =>
                 pdfToImages(
                   file,
-                  targetFormat as "png" | "jpeg" | "webp",
+                  target as "png" | "jpeg" | "webp",
                   convertScaleDpi,
                 ),
             );
             blob = res.blob;
             suffix = "-images";
-          } else if (activeCat === "docx") {
-            if (targetFormat === "pdf") {
+          } else if (cat === "docx") {
+            if (target === "pdf") {
               if (selectedEngine === "libreoffice" && isLibreOfficeAvailable()) {
                 const bytes = new Uint8Array(await file.arrayBuffer());
                 const outBytes = await convertWithLibreOfficeWasm(bytes, "docx", "pdf");
@@ -699,13 +715,13 @@
                 }
                 blob = await docxToPdf(file);
               }
-            } else if (targetFormat === "html") {
+            } else if (target === "html") {
               blob = new Blob([await docxToHtml(file)], { type: "text/html" });
             } else {
               blob = new Blob([await docxToText(file)], { type: "text/plain" });
             }
-          } else if (activeCat === "xlsx") {
-            if (targetFormat === "csv") {
+          } else if (cat === "xlsx") {
+            if (target === "csv") {
               blob = await runScheduled(
                 { kind: "document", label: file.name, bytes: file.size },
                 () => convertExcelToCsv(file),
@@ -720,8 +736,8 @@
               }
               blob = await convertExcelToPdf(file);
             }
-          } else if (activeCat === "pptx") {
-            if (targetFormat === "pdf") {
+          } else if (cat === "pptx") {
+            if (target === "pdf") {
               if (selectedEngine === "libreoffice" && isLibreOfficeAvailable()) {
                 const bytes = new Uint8Array(await file.arrayBuffer());
                 const outBytes = await convertWithLibreOfficeWasm(bytes, "pptx", "pdf");
@@ -735,7 +751,7 @@
             } else {
               blob = new Blob([await pptxToText(file)], { type: "text/plain" });
             }
-          } else if (activeCat === "html") {
+          } else if (cat === "html") {
             const htmlText = await file.text();
             blob = await htmlToPdf(htmlText);
           }
@@ -748,7 +764,7 @@
                 fileId: getFileId(file),
                 name: outputFilename(file.name, blob, {
                   suffix,
-                  fallbackExt: targetFormat === "jpeg" ? "jpg" : targetFormat,
+                  fallbackExt: target === "jpeg" ? "jpg" : target,
                 }),
                 blob,
               },
@@ -855,7 +871,13 @@
               aria-selected={activeCat === catKey}
               tabindex={activeCat === catKey ? 0 : -1}
               disabled={isConverting}
-              onclick={() => handleCatChange(catKey as Category)}
+              onclick={() => {
+                handleCatChange(catKey as Category);
+                if (typeof document !== "undefined") {
+                  const el = document.getElementById("convert-workspace-target");
+                  if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                }
+              }}
             >
               <MacIcon name={meta.icon} size={15} />
               <span>{meta.label}</span>
@@ -1050,7 +1072,13 @@
               aria-selected={activeCat === catKey}
               tabindex={activeCat === catKey ? 0 : -1}
               disabled={isConverting}
-              onclick={() => handleCatChange(catKey as Category)}
+              onclick={() => {
+                handleCatChange(catKey as Category);
+                if (typeof document !== "undefined") {
+                  const el = document.getElementById("convert-workspace-target");
+                  if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                }
+              }}
             >
               <MacIcon name={meta.icon} size={15} />
               <span>{meta.label}</span>
@@ -1173,7 +1201,7 @@
           </div>
         </div>
 
-        <div class="cz-inset-table">
+        <div id="file-list" class="cz-inset-table">
           {#each selectedFiles as file, idx}
             {@const fileId = getFileId(file)}
             {@const res = activeCat === "img2pdf" ? convertedResults[0] : convertedResults.find((r) => r.fileId === fileId)}
@@ -1681,6 +1709,8 @@
     border-radius: 100px;
     border: 1px solid var(--border);
     gap: 2px;
+    flex-wrap: wrap;
+    max-width: 100%;
   }
   .cz-segmented-item {
     display: inline-flex;
@@ -2233,6 +2263,22 @@
     .cz-apple-workbench {
       grid-template-columns: minmax(0, 1fr);
       padding: 1.25rem 1rem 3.5rem;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .cz-convert-active-header {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.75rem;
+    }
+    .cz-options-pill-bar {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 0.5rem 0.75rem;
+    }
+    .cz-opt-group {
+      width: 100%;
     }
   }
 </style>
