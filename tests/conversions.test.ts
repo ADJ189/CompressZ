@@ -373,6 +373,12 @@ Deno.test("conversions: XML escaping strips invalid XML 1.0 control characters f
   assertEquals(sheetXml.includes("\u0008"), false);
   assertEquals(sheetXml.includes("\u0000"), false);
 
+  // Check null/undefined/empty handling
+  assertEquals(stripInvalidXml(null), "");
+  assertEquals(stripInvalidXml(undefined), "");
+  assertEquals(escapeXml(null), "");
+  assertEquals(escapeXml(undefined), "");
+
   // Check PPT XML builder
   const slideXml = generateSlideXml([
     { type: "heading", text: "Slide\u0005Title", readingOrder: 0, pageNumber: 1, source: "native" },

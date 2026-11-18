@@ -99,3 +99,41 @@ Deno.test("tool landing: ToolsMegaMenu aligns with plain-English naming", async 
     );
   }
 });
+
+Deno.test("tool landing: ActionPalette portals to viewport and escapes transformed dialog", async () => {
+  const actionPalette = await Deno.readTextFile(
+    new URL("../src/components/ActionPalette.svelte", import.meta.url)
+  );
+
+  assert(actionPalette.includes("use:portal"), "ActionPalette must portal itself outside transformed ancestors");
+  assert(actionPalette.includes("document.body.appendChild"), "Portal must append to document.body");
+});
+
+Deno.test("tool landing: ToolsDialog responsive grid and handwriting route verification", async () => {
+  const toolsDialog = await Deno.readTextFile(
+    new URL("../src/app/ToolsDialog.svelte", import.meta.url)
+  );
+  const ocrSvelte = await Deno.readTextFile(
+    new URL("../src/routes/Ocr.svelte", import.meta.url)
+  );
+
+  // Responsive grid
+  assert(
+    toolsDialog.includes("min(100%"),
+    "ToolsDialog must bound grid minimum by available width"
+  );
+  assert(
+    toolsDialog.includes("@media (max-width: 520px)"),
+    "ToolsDialog must provide narrow mobile responsive rules"
+  );
+
+  // Handwriting route
+  assert(
+    toolsDialog.includes('route: "compress/ocr?profile=handwriting"'),
+    "ToolsDialog Handwriting Recognition must route to OCR with handwriting profile"
+  );
+  assert(
+    ocrSvelte.includes("applyQueryParams"),
+    "Ocr.svelte must read query params and select handwriting profile on entry"
+  );
+});
