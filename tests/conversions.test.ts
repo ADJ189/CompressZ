@@ -367,9 +367,11 @@ Deno.test("conversions: XML escaping strips invalid XML 1.0 control characters f
   const itemXml = buildListItemXml("- Bullet\u001BItem");
   assertEquals(itemXml.includes("\u001B"), false);
 
-  // Check Excel XML builder
-  const sheetXml = generateWorksheetXml([["Cell\u0001Data", "Valid"]]);
+  // Check Excel XML builder with control chars in numbers and strings
+  const sheetXml = generateWorksheetXml([["Cell\u0001Data", "Valid", "12\u000834", "\u000042"]]);
   assertEquals(sheetXml.includes("\u0001"), false);
+  assertEquals(sheetXml.includes("\u0008"), false);
+  assertEquals(sheetXml.includes("\u0000"), false);
 
   // Check PPT XML builder
   const slideXml = generateSlideXml([
