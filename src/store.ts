@@ -278,6 +278,17 @@ export function consumeStagedUniversalFile(routePrefix?: string): UniversalStage
   return item;
 }
 
+if (typeof window !== "undefined") {
+  (window as unknown as { __CZ_STAGED_FILE__?: typeof stagedUniversalFile }).__CZ_STAGED_FILE__ = stagedUniversalFile;
+  window.addEventListener("compressz:stage-universal-file", (e: Event) => {
+    const detail = (e as CustomEvent<UniversalStagedItem>).detail;
+    if (detail?.file) {
+      stagedUniversalFile.set(detail);
+      currentRoute.set(detail.targetRoute || "convert");
+    }
+  });
+}
+
 // ── Convert Store ─────────────────────────────────────────────
 export type ConvertCategory =
   | "video"
