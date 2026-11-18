@@ -61,7 +61,7 @@ import { entryError } from "../lib/engineError";
   }
 
   function applyStagedFile() {
-    const staged = consumeStagedUniversalFile();
+    const staged = consumeStagedUniversalFile("compress/ocr");
     if (staged?.file) {
       handleFilesAdded([staged.file]);
     }
@@ -72,8 +72,10 @@ import { entryError } from "../lib/engineError";
   });
 
   $effect(() => {
-    const unsub = currentRoute.subscribe(() => {
-      applyStagedFile();
+    const unsub = currentRoute.subscribe((r) => {
+      if (r === "compress/ocr") {
+        applyStagedFile();
+      }
     });
     return unsub;
   });

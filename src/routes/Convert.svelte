@@ -423,7 +423,7 @@
   }
 
   function applyStagedFile() {
-    const staged = consumeStagedUniversalFile();
+    const staged = consumeStagedUniversalFile("convert");
     if (!staged?.file) return;
 
     // C4: Staging a new file clears stale convertedResults
@@ -497,17 +497,21 @@
   $effect(() => {
     // Keep mounted Convert page reactive to route navigation & staged files
     const unsub = currentRoute.subscribe((r) => {
-      if (r) {
+      if (r === "convert" || r?.startsWith("convert/")) {
         if (typeof window !== "undefined" && window.location.search !== lastSearch) {
           applyQueryParams();
         }
+        applyStagedFile();
       }
-      applyStagedFile();
     });
     return unsub;
   });
 
+  let conversionGeneration = 0;
+
   function handleCatChange(cat: Category) {
+    if (isConverting) return;
+    conversionGeneration++;
     activeCat = cat;
     selectedFiles = [];
     convertedResults = [];
@@ -559,7 +563,8 @@
   }
 
   async function handleConvertAll() {
-    if (!selectedFiles.length) return;
+    if (!selectedFiles.length || isConverting) return;
+    const currentGen = ++conversionGeneration;
     isConverting = true;
     convertedResults = [];
 
@@ -577,6 +582,7 @@
             },
             () => imagesToPdf(files, { quality: 0.9 }),
           );
+          if (currentGen !== conversionGeneration) return;
           convertedResults = [
             {
               fileId: "combined",
@@ -588,17 +594,21 @@
             },
           ];
         } catch (err) {
+          if (currentGen !== conversionGeneration) return;
           console.error("[convert] img2pdf error:", err);
           const failure = entryError(err, "conversion failed");
           toast(`Failed to combine images: ${failure.error}`, "error", undefined, {
             log: failure.errorLog,
           });
         }
-        if (convertedResults.length > 0) toast("Conversion completed", "success");
+        if (currentGen === conversionGeneration && convertedResults.length > 0) {
+          toast("Conversion completed", "success");
+        }
         return;
       }
 
       for (const file of selectedFiles) {
+        if (currentGen !== conversionGeneration) return;
         try {
           let blob: Blob | null = null;
           let suffix = "";
@@ -730,6 +740,7 @@
             blob = await htmlToPdf(htmlText);
           }
 
+          if (currentGen !== conversionGeneration) return;
           if (blob) {
             convertedResults = [
               ...convertedResults,
@@ -744,6 +755,7 @@
             ];
           }
         } catch (err) {
+          if (currentGen !== conversionGeneration) return;
           console.error("[convert] error:", err);
           const failure = entryError(err, "conversion failed");
           toast(`Failed to convert ${file.name}: ${failure.error}`, "error", undefined, {
@@ -752,11 +764,13 @@
         }
       }
 
-      if (convertedResults.length > 0) {
+      if (currentGen === conversionGeneration && convertedResults.length > 0) {
         toast("Conversion completed", "success");
       }
     } finally {
-      isConverting = false;
+      if (currentGen === conversionGeneration) {
+        isConverting = false;
+      }
     }
   }
 
@@ -770,6 +784,8 @@
   }
 
   function handleClear() {
+    if (isConverting) return;
+    conversionGeneration++;
     selectedFiles = [];
     convertedResults = [];
   }
@@ -783,6 +799,7 @@
     tools={CONVERT_TOOLS}
     activeToolId={activeCat}
     onSelectTool={(id) => {
+      if (isConverting) return;
       if (id === "pdf2md") {
         navigate("convert/pdf-markdown");
       } else if (id === "merge") {
@@ -837,6 +854,7 @@
               role="tab"
               aria-selected={activeCat === catKey}
               tabindex={activeCat === catKey ? 0 : -1}
+              disabled={isConverting}
               onclick={() => handleCatChange(catKey as Category)}
             >
               <MacIcon name={meta.icon} size={15} />
@@ -853,6 +871,7 @@
             tools={DOC_CONVERT_TOOLS}
             activeToolId={activeCat}
             onSelectTool={(id, tool) => {
+              if (isConverting) return;
               if (tool.route) {
                 navigate(tool.route);
               } else {
@@ -1014,6 +1033,7 @@
           <button
             type="button"
             class="cz-btn cz-btn-ghost cz-btn-sm"
+            disabled={isConverting}
             onclick={handleClear}
           >
             ← Change Converter
@@ -1029,6 +1049,7 @@
               role="tab"
               aria-selected={activeCat === catKey}
               tabindex={activeCat === catKey ? 0 : -1}
+              disabled={isConverting}
               onclick={() => handleCatChange(catKey as Category)}
             >
               <MacIcon name={meta.icon} size={15} />

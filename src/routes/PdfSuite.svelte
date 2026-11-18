@@ -503,7 +503,7 @@ import { entryError } from "../lib/engineError";
   }
 
   function applyStagedFile() {
-    const staged = consumeStagedUniversalFile();
+    const staged = consumeStagedUniversalFile("pdf");
     if (staged?.file) {
       loadFile(staged.file);
       if (staged.actionId === "split-pdf") activeTool = "split";
@@ -529,8 +529,11 @@ import { entryError } from "../lib/engineError";
   $effect(() => {
     // Keep mounted page reactive to route navigation & staged files
     const unsub = currentRoute.subscribe((r) => {
-      if (r) applyRouteSubpath(r);
-      applyStagedFile();
+      const isPdfRoute = r === "pdf" || r?.startsWith("pdf/") || r?.startsWith("pdf-suite/") || r === "pdf-suite";
+      if (isPdfRoute) {
+        if (r) applyRouteSubpath(r);
+        applyStagedFile();
+      }
     });
     return unsub;
   });
@@ -600,9 +603,9 @@ import { entryError } from "../lib/engineError";
           </div>
 
           <FileDropzone
-            accept="application/pdf,.pdf"
+            accept={activeTool === "repair" ? "application/pdf,.pdf,video/mp4,.mp4" : "application/pdf,.pdf"}
             multiple={false}
-            title="Drop a PDF to {currentToolMeta.name}"
+            title={activeTool === "repair" ? "Drop a PDF or MP4 to Repair File" : `Drop a PDF to ${currentToolMeta.name}`}
             subtitle="or click to browse · Processed locally with zero uploads"
             onFiles={(files) => files[0] && loadFile(files[0])}
           />

@@ -52,7 +52,7 @@
   }
 
   function applyStagedFile() {
-    const staged = consumeStagedUniversalFile();
+    const staged = consumeStagedUniversalFile("convert/pdf-markdown");
     if (staged?.file) {
       handleFileSelected([staged.file]);
     }
@@ -63,8 +63,10 @@
   });
 
   $effect(() => {
-    const unsub = currentRoute.subscribe(() => {
-      applyStagedFile();
+    const unsub = currentRoute.subscribe((r) => {
+      if (r === "convert/pdf-markdown") {
+        applyStagedFile();
+      }
     });
     return unsub;
   });

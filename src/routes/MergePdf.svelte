@@ -16,7 +16,7 @@
   let draggedIndex = $state<number | null>(null);
 
   function applyStagedFile() {
-    const staged = consumeStagedUniversalFile();
+    const staged = consumeStagedUniversalFile("compress/merge-pdf");
     if (staged?.file) {
       handleFilesAdded([staged.file]);
     }
@@ -27,8 +27,10 @@
   });
 
   $effect(() => {
-    const unsub = currentRoute.subscribe(() => {
-      applyStagedFile();
+    const unsub = currentRoute.subscribe((r) => {
+      if (r === "compress/merge-pdf") {
+        applyStagedFile();
+      }
     });
     return unsub;
   });
@@ -199,9 +201,10 @@
             class="cz-btn cz-btn-primary cz-btn-sm"
             disabled={isMerging || mergeState.files.length < 2}
             onclick={handleMerge}
+            aria-label="Merge documents"
           >
             <MacIcon name="merge" size={14} />
-            <span>{isMerging ? "Merging..." : "Merge PDFs"}</span>
+            <span>{isMerging ? "Merging..." : "Merge documents"}</span>
           </button>
           {#if mergedBlob}
             <button

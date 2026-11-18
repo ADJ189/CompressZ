@@ -95,7 +95,7 @@ import { entryError } from "../lib/engineError";
   }
 
   function applyStagedFile() {
-    const staged = consumeStagedUniversalFile();
+    const staged = consumeStagedUniversalFile("compress/images");
     if (staged?.file) {
       handleFilesAdded([staged.file]);
     }
@@ -106,8 +106,10 @@ import { entryError } from "../lib/engineError";
   });
 
   $effect(() => {
-    const unsub = currentRoute.subscribe(() => {
-      applyStagedFile();
+    const unsub = currentRoute.subscribe((r) => {
+      if (r === "compress/images") {
+        applyStagedFile();
+      }
     });
     return unsub;
   });

@@ -98,7 +98,7 @@
   }
 
   function applyStagedFile() {
-    const staged = consumeStagedUniversalFile();
+    const staged = consumeStagedUniversalFile("compress/images-to-pdf");
     if (staged?.file) {
       handleFilesAdded([staged.file]);
     }
@@ -109,8 +109,10 @@
   });
 
   $effect(() => {
-    const unsub = currentRoute.subscribe(() => {
-      applyStagedFile();
+    const unsub = currentRoute.subscribe((r) => {
+      if (r === "compress/images-to-pdf") {
+        applyStagedFile();
+      }
     });
     return unsub;
   });

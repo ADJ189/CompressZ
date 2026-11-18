@@ -37,7 +37,7 @@ import { entryError } from "../lib/engineError";
   }
 
   function applyStagedFile() {
-    const staged = consumeStagedUniversalFile();
+    const staged = consumeStagedUniversalFile("compress/audio");
     if (staged?.file) {
       handleFilesAdded([staged.file]);
     }
@@ -48,8 +48,10 @@ import { entryError } from "../lib/engineError";
   });
 
   $effect(() => {
-    const unsub = currentRoute.subscribe(() => {
-      applyStagedFile();
+    const unsub = currentRoute.subscribe((r) => {
+      if (r === "compress/audio") {
+        applyStagedFile();
+      }
     });
     return unsub;
   });
