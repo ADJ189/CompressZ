@@ -67,30 +67,42 @@ import { entryError } from "../lib/engineError";
     }
   }
 
-  let lastSearch = "";
-  function applyQueryParams() {
+  let lastSearch: string | null = null;
+  function applyQueryParams(force = false) {
     if (typeof window === "undefined") return;
-    if (window.location.search === lastSearch) return;
+    if (!force && window.location.search === lastSearch) return;
     lastSearch = window.location.search;
 
     const params = new URLSearchParams(window.location.search);
     const prof = params.get("profile") || params.get("engine");
+    const current = ocrStore.get();
     if (prof === "handwriting" || prof === "trocr") {
-      updateStore({ profile: "handwriting" });
+      if (current.profile !== "handwriting") {
+        updateStore({ profile: "handwriting" });
+      }
     } else if (prof === "printed" || prof === "tesseract") {
-      updateStore({ profile: "printed" });
+      if (current.profile !== "printed") {
+        updateStore({ profile: "printed" });
+      }
+    } else {
+      // Bare compress/ocr route (e.g. from Searchable PDF OCR shortcut):
+      // select printed profile. If previous profile was handwriting, restore PDF output.
+      if (current.profile !== "printed") {
+        updateStore({
+          profile: "printed",
+          outputKind: "pdf",
+        });
+      }
     }
   }
 
   onMount(() => {
     applyQueryParams();
     applyStagedFile();
-  });
 
-  $effect(() => {
     const unsub = currentRoute.subscribe((r) => {
       if (r === "compress/ocr") {
-        applyQueryParams();
+        applyQueryParams(true);
         applyStagedFile();
       }
     });
