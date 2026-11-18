@@ -1,9 +1,8 @@
 name: CI
 
 on:
-  # Every branch (e.g. `UI`), not just main, so feature branches get checked
-  # before a PR exists. PRs are still checked against main.
   push:
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
