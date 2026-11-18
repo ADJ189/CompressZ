@@ -334,12 +334,12 @@
         } else if (ann.type === "stamp" && ann.dataUrl) {
           const imgBytes = Uint8Array.from(atob(ann.dataUrl.split(",")[1]), (c) => c.charCodeAt(0));
           const embedded = await pdfDoc.embedPng(imgBytes);
-          const bbox = transformVisualRectToPdf(ann.x, ann.y, ann.width, ann.height, width, height, rotation);
+          const pt = transformVisualPointToPdf(ann.x, ann.y + ann.height, width, height, rotation);
           page.drawImage(embedded, {
-            x: bbox.x,
-            y: bbox.y,
-            width: bbox.width,
-            height: bbox.height,
+            x: pt.x,
+            y: pt.y,
+            width: ann.width,
+            height: ann.height,
             rotate: degrees(rotation),
           });
         } else if ((ann.type === "ink" || ann.type === "highlighter") && ann.points && ann.points.length > 1) {

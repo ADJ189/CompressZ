@@ -30,7 +30,7 @@
 
   function handleKeydown(e: KeyboardEvent) {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "u") {
-      if (activePickers[0] === triggerPicker) {
+      if (activePickers[activePickers.length - 1] === triggerPicker) {
         e.preventDefault();
         triggerPicker();
       }
@@ -77,7 +77,6 @@
   function handlePaletteClose() {
     paletteOpen = false;
     activeFile = null;
-    onActionSelected?.();
   }
 </script>
 

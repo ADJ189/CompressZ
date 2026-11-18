@@ -58,6 +58,7 @@
       file,
       actionId: action.id,
       sourceHub: action.hub,
+      targetRoute: action.route,
     });
     onActionSelected?.(action);
     onClose();

@@ -36,7 +36,8 @@
   role="button"
   tabindex="0"
   aria-pressed={active}
-  aria-label="{name}: {description}"
+  aria-label={name}
+  title={description}
   data-tool-id={id}
   {onclick}
   onkeydown={handleKeydown}
