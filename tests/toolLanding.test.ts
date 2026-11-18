@@ -127,7 +127,7 @@ Deno.test("tool landing: ToolsDialog responsive grid and handwriting route verif
     "ToolsDialog must provide narrow mobile responsive rules"
   );
 
-  // Handwriting route
+  // Handwriting route & bare route reset
   assert(
     toolsDialog.includes('route: "compress/ocr?profile=handwriting"'),
     "ToolsDialog Handwriting Recognition must route to OCR with handwriting profile"
@@ -135,5 +135,35 @@ Deno.test("tool landing: ToolsDialog responsive grid and handwriting route verif
   assert(
     ocrSvelte.includes("applyQueryParams"),
     "Ocr.svelte must read query params and select handwriting profile on entry"
+  );
+  assert(
+    ocrSvelte.includes('profile: "printed"'),
+    "Ocr.svelte must restore printed profile on bare route"
+  );
+  assert(
+    ocrSvelte.includes('outputKind: "pdf"'),
+    "Ocr.svelte must restore PDF output on bare route entry"
+  );
+});
+
+Deno.test("tool landing: bare OCR route restores printed profile and PDF output mode", async () => {
+  const ocrSvelte = await Deno.readTextFile(
+    new URL("../src/routes/Ocr.svelte", import.meta.url)
+  );
+
+  // Check explicit query parameter handlers
+  assert(
+    ocrSvelte.includes('prof === "handwriting" || prof === "trocr"'),
+    "Ocr.svelte must recognize handwriting/trocr query params"
+  );
+  assert(
+    ocrSvelte.includes('prof === "printed" || prof === "tesseract"'),
+    "Ocr.svelte must recognize printed/tesseract query params"
+  );
+
+  // Check bare route fallback logic resets profile to printed and outputKind to pdf
+  assert(
+    ocrSvelte.includes('current.profile !== "printed"') && ocrSvelte.includes('outputKind: "pdf"'),
+    "Ocr.svelte must reset profile to printed and restore outputKind to pdf on bare route"
   );
 });
