@@ -14,16 +14,17 @@ import { reconstructReadingOrder, type ExtractedBlock } from "../pdfToMarkdown";
  * Allowed: \u0009 (tab), \u000A (LF), \u000D (CR).
  * Disallowed: \u0000-\u0008, \u000B, \u000C, \u000E-\u001F, \uFFFE, \uFFFF.
  */
-export function stripInvalidXml(str: string): string {
+export function stripInvalidXml(str: string | null | undefined): string {
+  if (!str) return "";
   // eslint-disable-next-line no-control-regex -- explicitly stripping disallowed XML 1.0 control characters
-  return str.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, "");
+  return String(str).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, "");
 }
 
 /**
  * Escape XML special characters for OpenXML (.docx, .pptx, .xlsx).
  * Strips invalid XML control characters and encodes XML entities.
  */
-export function escapeXml(str: string): string {
+export function escapeXml(str: string | null | undefined): string {
   return stripInvalidXml(str)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -35,8 +36,9 @@ export function escapeXml(str: string): string {
 /**
  * Escape HTML special characters to prevent XSS sinks.
  */
-export function escapeHtml(str: string): string {
-  return str
+export function escapeHtml(str: string | null | undefined): string {
+  if (!str) return "";
+  return String(str)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
