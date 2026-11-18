@@ -28,7 +28,15 @@
     if (files.length > 0) {
       onFiles(files);
     }
-    input.value = "";
+    // Delay clearing input.value so WebKit does not invalidate file references
+    // before the caller reads their ArrayBuffer.
+    setTimeout(() => {
+      try {
+        input.value = "";
+      } catch {
+        // ignore
+      }
+    }, 100);
   }
 
   function handleDragOver(e: DragEvent) {
