@@ -28,6 +28,7 @@
   import { naturalOrder } from "../lib/recommendations";
   import { formatBytes, outputFilename } from "../lib/types";
   import MacIcon from "../components/MacIcon.svelte";
+  import ToolGrid, { type ToolItem } from "../components/ToolGrid.svelte";
   import type { AudioFormat, ImageFormat } from "../lib/types";
   import { toast } from "../toast";
   import { getPlatformInfo } from "../lib/platform";
@@ -152,6 +153,86 @@
     ),
     { id: "pdf2md", name: "PDF to Markdown", icon: "markdown" },
     { id: "merge", name: "Merge PDF", icon: "merge" },
+  ];
+
+  const DOC_CONVERT_TOOLS: ToolItem[] = [
+    {
+      id: "pdf2office",
+      name: "PDF to Office Documents",
+      description: "Extract PDF documents into editable Word (.docx), Excel (.xlsx), or PowerPoint (.pptx).",
+      icon: "word",
+      badge: "Fast OOXML",
+    },
+    {
+      id: "pdf2img",
+      name: "PDF to Images",
+      description: "Render PDF pages into sharp PNG, JPEG, or WebP images with custom scale DPI.",
+      icon: "image",
+    },
+    {
+      id: "pdf2md",
+      name: "PDF to Structured Markdown",
+      description: "Convert PDF documents into clean Markdown with preserved tables, formulas, and figures.",
+      icon: "markdown",
+      badge: "New",
+      route: "convert/pdf-markdown",
+    },
+    {
+      id: "img2pdf",
+      name: "Images to Single PDF",
+      description: "Combine multiple photos, scans, or screenshots into one unified PDF document.",
+      icon: "pdf",
+      route: "compress/images-to-pdf",
+    },
+  ];
+
+  const OFFICE_CONVERT_TOOLS: ToolItem[] = [
+    {
+      id: "docx",
+      name: "Word (.docx) to PDF",
+      description: "Convert Microsoft Word documents into searchable PDFs, clean HTML, or plain text.",
+      icon: "word",
+    },
+    {
+      id: "xlsx",
+      name: "Excel (.xlsx) to PDF / CSV",
+      description: "Convert spreadsheet workbooks into printable PDFs or clean tabular CSV files.",
+      icon: "excel",
+    },
+    {
+      id: "pptx",
+      name: "PowerPoint (.pptx) to PDF",
+      description: "Convert presentation slide decks into high-fidelity PDF documents or outline text.",
+      icon: "ppt",
+    },
+    {
+      id: "html",
+      name: "HTML Web Pages to PDF",
+      description: "Render HTML documents and code markup directly into standardized PDF pages.",
+      icon: "docs",
+    },
+  ];
+
+  const MEDIA_CONVERT_TOOLS: ToolItem[] = [
+    {
+      id: "video",
+      name: "Convert Video Formats",
+      description: "Transcode video between MP4, WebM, MOV, MKV, or convert to animated GIF.",
+      icon: "video",
+      badge: "WebCodecs GPU",
+    },
+    {
+      id: "audio",
+      name: "Convert Audio Formats",
+      description: "Transcode audio between MP3, AAC (.m4a), OGG Vorbis, Opus, FLAC, and WAV.",
+      icon: "audio",
+    },
+    {
+      id: "image",
+      name: "Convert Image Formats",
+      description: "Re-encode images between modern WebP, JPEG, PNG, and high-efficiency AVIF.",
+      icon: "image",
+    },
   ];
 
   const fileIds = new WeakMap<File, string>();
@@ -733,112 +814,318 @@
       {/if}
     </div>
 
-    <!-- Category Selector (Apple Segmented Bar) -->
-    <div class="cz-segmented-track cz-cat-segmented" role="tablist" aria-label="Format category">
-      {#each Object.entries(CATS) as [catKey, meta]}
-        <button
-          type="button"
-          class="cz-segmented-item {activeCat === catKey ? 'is-active' : ''}"
-          role="tab"
-          aria-selected={activeCat === catKey}
-          tabindex={activeCat === catKey ? 0 : -1}
-          onclick={() => handleCatChange(catKey as Category)}
-        >
-          <MacIcon name={meta.icon} size={15} />
-          <span>{meta.label}</span>
-        </button>
-      {/each}
-    </div>
+    {#if selectedFiles.length === 0}
+      <!-- Tool-First Interactive Landing -->
+      <div class="cz-convert-landing">
+        <div class="cz-convert-landing-header">
+          <div class="cz-suite-badge-pill">
+            <MacIcon name="convert" size={13} />
+            <span>Universal Browser-Native Converter</span>
+          </div>
+          <h2 class="cz-convert-landing-title">Select Any Conversion Tool</h2>
+          <p class="cz-convert-landing-sub">
+            Choose a converter below to set target format and drop files. All conversions execute 100% locally in your browser memory.
+          </p>
+        </div>
 
-    <!-- Compact Options Bar -->
-    <div class="cz-options-pill-bar">
-      <div class="cz-opt-group">
-        <span class="cz-opt-label">Target Format</span>
-        <div class="cz-segmented-track" role="group" aria-label="Target format">
-          {#each CATS[activeCat].targets as t}
+        <!-- Category Selector (Apple Segmented Bar) -->
+        <div class="cz-segmented-track cz-cat-segmented" role="tablist" aria-label="Format category">
+          {#each Object.entries(CATS) as [catKey, meta]}
             <button
               type="button"
-              class="cz-segmented-item {targetFormat === t.value ? 'is-active' : ''}"
-              aria-pressed={targetFormat === t.value}
-              onclick={() => {
-                targetFormat = t.value;
-                saveConvertProfile();
-              }}
+              class="cz-segmented-item {activeCat === catKey ? 'is-active' : ''}"
+              role="tab"
+              aria-selected={activeCat === catKey}
+              tabindex={activeCat === catKey ? 0 : -1}
+              onclick={() => handleCatChange(catKey as Category)}
             >
-              {t.label}
+              <MacIcon name={meta.icon} size={15} />
+              <span>{meta.label}</span>
             </button>
           {/each}
         </div>
-      </div>
-    </div>
 
-    <!-- Rectangular Collapsible Advanced Options Drawer -->
-    <div class="cz-advanced-drawer {convertDrawerOpen ? 'is-open' : ''}">
-      <button
-        type="button"
-        class="cz-advanced-drawer-toggle"
-        onclick={() => (convertDrawerOpen = !convertDrawerOpen)}
-        aria-expanded={convertDrawerOpen}
-      >
-        <span class="cz-drawer-title">
-          <MacIcon name="settings" size={14} />
-          <span>Conversion Profile & Engine Tuning</span>
-        </span>
-        <span class="cz-drawer-summary">
-          Quality: {convertQuality}% · Scale: {convertScaleDpi} DPI · Category: {CATS[activeCat].label}
-        </span>
-        <span class="cz-drawer-chevron" class:is-rotated={convertDrawerOpen}>
-          <MacIcon name="chevron-down" size={12} />
-        </span>
-      </button>
+        <div class="cz-convert-sections">
+          <!-- Document & PDF Conversions -->
+          <ToolGrid
+            title="Document & PDF Conversions"
+            subtitle="Extract, transcode, and package PDF documents into editable office files or images"
+            tools={DOC_CONVERT_TOOLS}
+            activeToolId={activeCat}
+            onSelectTool={(id, tool) => {
+              if (tool.route) {
+                navigate(tool.route);
+              } else {
+                handleCatChange(id as Category);
+                const el = document.getElementById("convert-workspace-target");
+                if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+              }
+            }}
+          />
 
-      {#if convertDrawerOpen}
-        <div class="cz-advanced-drawer-body">
-          <div class="cz-drawer-grid">
-            <div class="cz-drawer-field">
-              <label for="conv-quality">Encoding Quality: {convertQuality}%</label>
-              <input
-                id="conv-quality"
-                type="range"
-                min="30"
-                max="100"
-                step="1"
-                class="cz-range"
-                bind:value={convertQuality}
-                onchange={saveConvertProfile}
-              />
+          <!-- Office Document Transcoding -->
+          <ToolGrid
+            title="Office Document Transcoding"
+            subtitle="Convert Microsoft Office files, spreadsheets, and HTML markup into standardized PDF pages"
+            tools={OFFICE_CONVERT_TOOLS}
+            activeToolId={activeCat}
+            onSelectTool={(id, tool) => {
+              if (tool.route) {
+                navigate(tool.route);
+              } else {
+                handleCatChange(id as Category);
+                const el = document.getElementById("convert-workspace-target");
+                if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+              }
+            }}
+          />
+
+          <!-- Media & Audio Transcoding -->
+          <ToolGrid
+            title="Media & Audio Transcoding"
+            subtitle="GPU-accelerated and software transcode for video, audio, and image containers"
+            tools={MEDIA_CONVERT_TOOLS}
+            activeToolId={activeCat}
+            onSelectTool={(id, tool) => {
+              if (tool.route) {
+                navigate(tool.route);
+              } else {
+                handleCatChange(id as Category);
+                const el = document.getElementById("convert-workspace-target");
+                if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+              }
+            }}
+          />
+        </div>
+
+        <!-- Scoped Workspace Box for Selected Converter -->
+        <div id="convert-workspace-target" class="cz-convert-active-box">
+          <div class="cz-convert-active-header">
+            <div class="cz-suite-target-info">
+              <MacIcon name={CATS[activeCat].icon} variant="squircle" squircleSize={38} strokeWidth={2.2} />
+              <div class="cz-suite-target-text">
+                <span class="cz-suite-target-label">Selected: <strong>{CATS[activeCat].label}</strong></span>
+                <span class="cz-suite-target-desc">Target: {targetFormat.toUpperCase()} · Drop or browse files below</span>
+              </div>
             </div>
 
-            <div class="cz-drawer-field">
-              <label for="conv-dpi">PDF / Document Raster DPI</label>
-              <select
-                id="conv-dpi"
-                class="cz-select cz-select-sm"
-                bind:value={convertScaleDpi}
-                onchange={saveConvertProfile}
-              >
-                <option value={96}>96 DPI (Web / Fast)</option>
-                <option value={150}>150 DPI (Balanced)</option>
-                <option value={300}>300 DPI (High-Res Print)</option>
-              </select>
+            <!-- Target Format Buttons in Banner -->
+            <div class="cz-options-pill-bar">
+              <div class="cz-opt-group">
+                <span class="cz-opt-label">Target Format</span>
+                <div class="cz-segmented-track" role="group" aria-label="Target format">
+                  {#each CATS[activeCat].targets as t}
+                    <button
+                      type="button"
+                      class="cz-segmented-item {targetFormat === t.value ? 'is-active' : ''}"
+                      aria-pressed={targetFormat === t.value}
+                      onclick={() => {
+                        targetFormat = t.value;
+                        saveConvertProfile();
+                      }}
+                    >
+                      {t.label}
+                    </button>
+                  {/each}
+                </div>
+              </div>
             </div>
           </div>
-          <div class="cz-drawer-footer">
-            <small>Conversion preferences automatically saved to local profile.</small>
+
+          <!-- Rectangular Collapsible Advanced Options Drawer -->
+          <div class="cz-advanced-drawer {convertDrawerOpen ? 'is-open' : ''}">
+            <button
+              type="button"
+              class="cz-advanced-drawer-toggle"
+              onclick={() => (convertDrawerOpen = !convertDrawerOpen)}
+              aria-expanded={convertDrawerOpen}
+            >
+              <span class="cz-drawer-title">
+                <MacIcon name="settings" size={14} />
+                <span>Conversion Profile & Engine Tuning</span>
+              </span>
+              <span class="cz-drawer-summary">
+                Quality: {convertQuality}% · Scale: {convertScaleDpi} DPI · Category: {CATS[activeCat].label}
+              </span>
+              <span class="cz-drawer-chevron" class:is-rotated={convertDrawerOpen}>
+                <MacIcon name="chevron-down" size={12} />
+              </span>
+            </button>
+
+            {#if convertDrawerOpen}
+              <div class="cz-advanced-drawer-body">
+                <div class="cz-drawer-grid">
+                  <div class="cz-drawer-field">
+                    <label for="conv-quality">Encoding Quality: {convertQuality}%</label>
+                    <input
+                      id="conv-quality"
+                      type="range"
+                      min="30"
+                      max="100"
+                      step="1"
+                      class="cz-range"
+                      bind:value={convertQuality}
+                      onchange={saveConvertProfile}
+                    />
+                  </div>
+
+                  <div class="cz-drawer-field">
+                    <label for="conv-dpi">PDF / Document Raster DPI</label>
+                    <select
+                      id="conv-dpi"
+                      class="cz-select cz-select-sm"
+                      bind:value={convertScaleDpi}
+                      onchange={saveConvertProfile}
+                    >
+                      <option value={96}>96 DPI (Web / Fast)</option>
+                      <option value={150}>150 DPI (Balanced)</option>
+                      <option value={300}>300 DPI (High-Res Print)</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="cz-drawer-footer">
+                  <small>Conversion preferences automatically saved to local profile.</small>
+                </div>
+              </div>
+            {/if}
+          </div>
+
+          <!-- Ingestion Dropzone -->
+          <FileDropzone
+            accept={CATS[activeCat].accept}
+            icon={CATS[activeCat].icon}
+            title="Drop {CATS[activeCat].label} files here"
+            subtitle="or click to browse · Converts directly in browser memory"
+            hasFiles={false}
+            onFiles={handleFilesAdded}
+          />
+        </div>
+      </div>
+    {:else}
+      <!-- Active Files Conversion Queue & Controls -->
+      <div class="cz-active-convert-flow">
+        <div class="cz-active-flow-bar">
+          <div class="cz-active-cat-pill">
+            <MacIcon name={CATS[activeCat].icon} size={15} />
+            <span class="cz-active-cat-name">{CATS[activeCat].label}</span>
+            <span class="cz-active-target-badge">Target: {targetFormat.toUpperCase()}</span>
+          </div>
+
+          <button
+            type="button"
+            class="cz-btn cz-btn-ghost cz-btn-sm"
+            onclick={handleClear}
+          >
+            ← Change Converter
+          </button>
+        </div>
+
+        <!-- Category Selector (Apple Segmented Bar) -->
+        <div class="cz-segmented-track cz-cat-segmented" role="tablist" aria-label="Format category">
+          {#each Object.entries(CATS) as [catKey, meta]}
+            <button
+              type="button"
+              class="cz-segmented-item {activeCat === catKey ? 'is-active' : ''}"
+              role="tab"
+              aria-selected={activeCat === catKey}
+              tabindex={activeCat === catKey ? 0 : -1}
+              onclick={() => handleCatChange(catKey as Category)}
+            >
+              <MacIcon name={meta.icon} size={15} />
+              <span>{meta.label}</span>
+            </button>
+          {/each}
+        </div>
+
+        <!-- Compact Options Bar -->
+        <div class="cz-options-pill-bar">
+          <div class="cz-opt-group">
+            <span class="cz-opt-label">Target Format</span>
+            <div class="cz-segmented-track" role="group" aria-label="Target format">
+              {#each CATS[activeCat].targets as t}
+                <button
+                  type="button"
+                  class="cz-segmented-item {targetFormat === t.value ? 'is-active' : ''}"
+                  aria-pressed={targetFormat === t.value}
+                  onclick={() => {
+                    targetFormat = t.value;
+                    saveConvertProfile();
+                  }}
+                >
+                  {t.label}
+                </button>
+              {/each}
+            </div>
           </div>
         </div>
-      {/if}
-    </div>
 
-    <!-- Ingestion Dropzone -->
-    <FileDropzone
-      accept={CATS[activeCat].accept}
-      icon={CATS[activeCat].icon}
-      title="Click or drag {CATS[activeCat].label} files here"
-      subtitle="Convert directly inside browser memory"
-      hasFiles={selectedFiles.length > 0}
-      onFiles={handleFilesAdded}
-    />
+        <!-- Rectangular Collapsible Advanced Options Drawer -->
+        <div class="cz-advanced-drawer {convertDrawerOpen ? 'is-open' : ''}">
+          <button
+            type="button"
+            class="cz-advanced-drawer-toggle"
+            onclick={() => (convertDrawerOpen = !convertDrawerOpen)}
+            aria-expanded={convertDrawerOpen}
+          >
+            <span class="cz-drawer-title">
+              <MacIcon name="settings" size={14} />
+              <span>Conversion Profile & Engine Tuning</span>
+            </span>
+            <span class="cz-drawer-summary">
+              Quality: {convertQuality}% · Scale: {convertScaleDpi} DPI · Category: {CATS[activeCat].label}
+            </span>
+            <span class="cz-drawer-chevron" class:is-rotated={convertDrawerOpen}>
+              <MacIcon name="chevron-down" size={12} />
+            </span>
+          </button>
+
+          {#if convertDrawerOpen}
+            <div class="cz-advanced-drawer-body">
+              <div class="cz-drawer-grid">
+                <div class="cz-drawer-field">
+                  <label for="conv-quality">Encoding Quality: {convertQuality}%</label>
+                  <input
+                    id="conv-quality"
+                    type="range"
+                    min="30"
+                    max="100"
+                    step="1"
+                    class="cz-range"
+                    bind:value={convertQuality}
+                    onchange={saveConvertProfile}
+                  />
+                </div>
+
+                <div class="cz-drawer-field">
+                  <label for="conv-dpi">PDF / Document Raster DPI</label>
+                  <select
+                    id="conv-dpi"
+                    class="cz-select cz-select-sm"
+                    bind:value={convertScaleDpi}
+                    onchange={saveConvertProfile}
+                  >
+                    <option value={96}>96 DPI (Web / Fast)</option>
+                    <option value={150}>150 DPI (Balanced)</option>
+                    <option value={300}>300 DPI (High-Res Print)</option>
+                  </select>
+                </div>
+              </div>
+              <div class="cz-drawer-footer">
+                <small>Conversion preferences automatically saved to local profile.</small>
+              </div>
+            </div>
+          {/if}
+        </div>
+
+        <!-- Ingestion Dropzone -->
+        <FileDropzone
+          accept={CATS[activeCat].accept}
+          icon={CATS[activeCat].icon}
+          title="Add more {CATS[activeCat].label} files"
+          subtitle="Click or drag additional files to the queue"
+          hasFiles={selectedFiles.length > 0}
+          onFiles={handleFilesAdded}
+        />
 
     <!-- Conversion Queue -->
     {#if selectedFiles.length > 0}
@@ -921,6 +1208,8 @@
             </button>
           </div>
         {/if}
+      </div>
+    {/if}
       </div>
     {/if}
   </main>
@@ -1187,6 +1476,158 @@
     flex-direction: column;
     gap: 1.25rem;
     min-width: 0;
+  }
+
+  /* Tool-First Landing Layout */
+  .cz-convert-landing {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    width: 100%;
+  }
+
+  .cz-convert-landing-header {
+    text-align: center;
+    max-width: 680px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .cz-convert-landing-title {
+    margin: 0;
+    font-family: var(--display, var(--sans));
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: var(--text);
+    letter-spacing: -0.025em;
+    line-height: 1.2;
+  }
+
+  .cz-convert-landing-sub {
+    margin: 0;
+    font-size: 0.92rem;
+    color: var(--text-3);
+    line-height: 1.5;
+  }
+
+  .cz-convert-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 1.75rem;
+    width: 100%;
+  }
+
+  .cz-convert-active-box {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl, 24px);
+    padding: 1.25rem;
+    box-shadow: var(--shadow-sm);
+    margin-top: 0.5rem;
+  }
+
+  .cz-convert-active-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding: 0.85rem 1rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--r, 16px);
+  }
+
+  .cz-suite-badge-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 100px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-2);
+  }
+
+  .cz-suite-target-info {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    min-width: 0;
+  }
+
+  .cz-suite-target-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+  }
+
+  .cz-suite-target-label {
+    font-size: 0.88rem;
+    color: var(--text);
+  }
+
+  .cz-suite-target-label strong {
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  .cz-suite-target-desc {
+    font-size: 0.78rem;
+    color: var(--text-3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cz-active-convert-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    width: 100%;
+  }
+
+  .cz-active-flow-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.65rem 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r, 16px);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .cz-active-cat-pill {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .cz-active-cat-name {
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .cz-active-target-badge {
+    padding: 0.15rem 0.5rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    border-radius: 100px;
+    background: var(--accent-soft, rgba(16, 185, 129, 0.1));
+    color: var(--accent);
+    border: 1px solid var(--green-border, rgba(16, 185, 129, 0.24));
   }
   .cz-card-side {
     display: flex;

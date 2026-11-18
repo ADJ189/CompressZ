@@ -20,6 +20,8 @@ import { entryError } from "../lib/engineError";
   import { onMount } from "svelte";
   import { navigate } from "../router";
   import MacIcon from "../components/MacIcon.svelte";
+  import ToolCard from "../components/ToolCard.svelte";
+  import ToolGrid, { type ToolItem } from "../components/ToolGrid.svelte";
 
   type SubTool =
     | "split"
@@ -147,19 +149,85 @@ import { entryError } from "../lib/engineError";
   // Studio state
   let showStudio = $state<boolean>(false);
 
-  const TOOLS = [
-    { id: "split", name: "Split PDF", icon: "split" },
-    { id: "merge", name: "Merge PDF", icon: "merge" },
-    { id: "markdown", name: "PDF to Markdown", icon: "markdown" },
-    { id: "organize", name: "Organize Pages", icon: "organize" },
-    { id: "studio", name: "PDF Studio", icon: "studio" },
-    { id: "watermark", name: "Watermark", icon: "watermark" },
-    { id: "crop", name: "Crop Margins", icon: "crop" },
-    { id: "forms", name: "Fill Forms", icon: "forms" },
-    { id: "security", name: "Protect & Unlock", icon: "security" },
-    { id: "repair", name: "Repair PDF", icon: "repair" },
-    { id: "redact", name: "Redact PDF", icon: "redact" },
+  const TOOLS: ToolItem[] = [
+    {
+      id: "split",
+      name: "Split PDF",
+      description: "Extract page ranges, split into equal chunks, or burst all pages into individual files.",
+      icon: "split",
+      badge: "Fast",
+    },
+    {
+      id: "organize",
+      name: "Organize Pages",
+      description: "Reorder pages visually with drag & drop, rotate 90°, duplicate, or delete unwanted pages.",
+      icon: "organize",
+    },
+    {
+      id: "studio",
+      name: "Edit & Annotate",
+      description: "Annotate directly, draw freehand, add text notes, and stamp digital signatures.",
+      icon: "studio",
+      badge: "Studio",
+    },
+    {
+      id: "watermark",
+      name: "Add Watermark",
+      description: "Stamp customized text or repeating confidential grid patterns across all pages.",
+      icon: "watermark",
+    },
+    {
+      id: "crop",
+      name: "Crop Pages",
+      description: "Trim unwanted page margins or whitespace permanently from all boxes.",
+      icon: "crop",
+    },
+    {
+      id: "forms",
+      name: "Fill & Sign",
+      description: "Complete interactive PDF form fields and flatten them into permanent vectors.",
+      icon: "forms",
+    },
+    {
+      id: "security",
+      name: "Password Protect",
+      description: "Encrypt documents with ISO 32000-2 AES-256 security or decrypt protected files.",
+      icon: "security",
+      badge: "AES-256",
+    },
+    {
+      id: "repair",
+      name: "Repair File",
+      description: "Salvage damaged PDF catalogs, rebuild xref tables, or fix missing MP4 headers.",
+      icon: "repair",
+    },
+    {
+      id: "redact",
+      name: "Redact Content",
+      description: "Permanently burn out confidential text & graphics via true 300 DPI raster purge.",
+      icon: "redact",
+      badge: "True Purge",
+    },
+    {
+      id: "merge",
+      name: "Merge PDFs",
+      description: "Combine multiple PDF documents into a single unified file in any custom order.",
+      icon: "merge",
+      route: "compress/merge-pdf",
+    },
+    {
+      id: "markdown",
+      name: "Extract to Markdown",
+      description: "Convert PDF documents into clean Markdown with preserved tables and LaTeX math.",
+      icon: "markdown",
+      badge: "New",
+      route: "convert/pdf-markdown",
+    },
   ];
+
+  const currentToolMeta = $derived(
+    TOOLS.find((t) => t.id === activeTool) || TOOLS[0]
+  );
 
   let loadSeq = 0;
   async function loadFile(file: File) {
@@ -488,23 +556,56 @@ import { entryError } from "../lib/engineError";
 
   <div class="cz-pdf-suite-content">
     {#if !selectedFile}
-      <div class="cz-suite-upload-box">
-        <FileDropzone
-          accept="application/pdf,.pdf"
-          multiple={false}
-          title="Drop a PDF here"
-          subtitle="or click to browse · PDF only"
-          onFiles={(files) => files[0] && loadFile(files[0])}
+      <div class="cz-suite-landing">
+        <!-- Interactive Tool Grid Hero -->
+        <div class="cz-suite-landing-header">
+          <div class="cz-suite-badge-pill">
+            <MacIcon name="pdf" size={13} />
+            <span>Client-Side PDF Workstation</span>
+          </div>
+          <h2 class="cz-suite-landing-title">Select Any PDF Tool</h2>
+          <p class="cz-suite-landing-sub">
+            Pick a tool to get started immediately, or drag your document into the upload area below. Every action runs 100% locally in your browser.
+          </p>
+        </div>
+
+        <!-- The Tool Grid -->
+        <ToolGrid
+          tools={TOOLS}
+          activeToolId={activeTool}
+          onSelectTool={(id, tool) => {
+            if (tool.route) {
+              navigate(tool.route);
+            } else {
+              activeTool = id as SubTool;
+              const el = document.getElementById("suite-active-dropzone");
+              if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            }
+          }}
         />
-        <div class="cz-suite-quick-links">
-          <span>Looking to merge multiple documents?</span>
-          <button
-            type="button"
-            class="cz-link-btn"
-            onclick={() => navigate("compress/merge-pdf")}
-          >
-            Open Merge PDF
-          </button>
+
+        <!-- Scoped Upload Target Box for the selected tool -->
+        <div id="suite-active-dropzone" class="cz-suite-active-dropzone-box">
+          <div class="cz-suite-target-banner">
+            <div class="cz-suite-target-info">
+              <MacIcon name={currentToolMeta.icon} variant="squircle" squircleSize={38} strokeWidth={2.2} />
+              <div class="cz-suite-target-text">
+                <span class="cz-suite-target-label">Selected: <strong>{currentToolMeta.name}</strong></span>
+                <span class="cz-suite-target-desc">{currentToolMeta.description}</span>
+              </div>
+            </div>
+            {#if currentToolMeta.badge}
+              <span class="cz-suite-target-badge">{currentToolMeta.badge}</span>
+            {/if}
+          </div>
+
+          <FileDropzone
+            accept="application/pdf,.pdf"
+            multiple={false}
+            title="Drop a PDF to {currentToolMeta.name}"
+            subtitle="or click to browse · Processed locally with zero uploads"
+            onFiles={(files) => files[0] && loadFile(files[0])}
+          />
         </div>
       </div>
     {:else}
@@ -1123,30 +1224,119 @@ import { entryError } from "../lib/engineError";
     gap: 1.5rem;
   }
 
-  .cz-suite-upload-box {
-    max-width: 680px;
-    margin: 2rem auto;
+  .cz-suite-landing {
     display: flex;
     flex-direction: column;
-    gap: 1.25rem;
+    gap: 2rem;
+    width: 100%;
   }
 
-  .cz-suite-quick-links {
+  .cz-suite-landing-header {
+    text-align: center;
+    max-width: 680px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .cz-suite-badge-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 100px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-2);
+  }
+
+  .cz-suite-landing-title {
+    margin: 0;
+    font-family: var(--display, var(--sans));
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: var(--text);
+    letter-spacing: -0.025em;
+    line-height: 1.2;
+  }
+
+  .cz-suite-landing-sub {
+    margin: 0;
+    font-size: 0.92rem;
+    color: var(--text-3);
+    line-height: 1.5;
+  }
+
+  .cz-suite-active-dropzone-box {
+    max-width: 740px;
+    width: 100%;
+    margin: 0.5rem auto 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl, 24px);
+    padding: 1.25rem;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .cz-suite-target-banner {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    font-size: 0.85rem;
-    color: var(--text-3);
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--r, 16px);
   }
 
-  .cz-link-btn {
-    background: none;
-    border: none;
+  .cz-suite-target-info {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    min-width: 0;
+  }
+
+  .cz-suite-target-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+  }
+
+  .cz-suite-target-label {
+    font-size: 0.88rem;
+    color: var(--text);
+  }
+
+  .cz-suite-target-label strong {
     color: var(--accent);
-    font-weight: 600;
-    cursor: pointer;
-    font-size: 0.85rem;
+    font-weight: 700;
+  }
+
+  .cz-suite-target-desc {
+    font-size: 0.78rem;
+    color: var(--text-3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cz-suite-target-badge {
+    padding: 0.2rem 0.55rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    border-radius: 100px;
+    background: var(--accent-soft, rgba(16, 185, 129, 0.1));
+    color: var(--accent);
+    border: 1px solid var(--green-border, rgba(16, 185, 129, 0.24));
+    flex-shrink: 0;
   }
 
   .cz-suite-active-layout {
