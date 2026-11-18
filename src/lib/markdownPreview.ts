@@ -263,7 +263,7 @@ function renderInline(text: string): string {
     const safe = safeImgSrc(src);
     if (!safe) return `<!-- [image: ${escapeHtml(alt)}] -->`;
     return stash(
-      `<img src="${safe}" alt="${escapeHtml(alt)}" class="cz-rendered-img" crossorigin="anonymous" />`,
+      `<img src="${safe}" alt="${escapeHtml(alt)}" class="cz-rendered-img" />`,
     );
   });
 

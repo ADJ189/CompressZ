@@ -655,11 +655,9 @@ export async function convertPdfToMarkdown(
 
       // Check native text extraction
       const rawItems: RawTextItem[] = [];
-      let totalChars = 0;
 
       for (const item of textContent.items as any[]) {
         const str = item.str ?? "";
-        totalChars += str.length;
         const tx = item.transform;
         const fontSize = Math.hypot(tx[0], tx[1]);
         rawItems.push({
@@ -673,15 +671,16 @@ export async function convertPdfToMarkdown(
         });
       }
 
-      // Native text heuristic: more than 40 usable characters
-      const isNative = totalChars > 40;
+      // Native text heuristic: digital text content is present
+      const hasNativeText = rawItems.some((item) => item.str.trim().length > 0);
+      const isNative = hasNativeText && profile !== "printed" && profile !== "handwriting";
       let pageBlocks: ExtractedBlock[] = [];
       let pageEngine: "native" | "tesseract" | "trocr" = "native";
       let pageConfidence = 100;
 
       // Render page canvas for visuals or OCR
       let pageCanvas: HTMLCanvasElement | null = null;
-      if (!isNative || includeVisuals || profile === "handwriting") {
+      if (!isNative || includeVisuals) {
         pageCanvas = document.createElement("canvas");
         pageCanvas.width = viewport.width;
         pageCanvas.height = viewport.height;
@@ -691,7 +690,7 @@ export async function convertPdfToMarkdown(
         }
       }
 
-      if (isNative && profile !== "handwriting") {
+      if (isNative) {
         // Native text extraction
         pageBlocks = reconstructReadingOrder(rawItems, viewport.width, viewport.height);
         for (const b of pageBlocks) {
