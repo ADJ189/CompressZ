@@ -9,6 +9,7 @@
   import { stagedUniversalFile } from "../store";
   import { navigate } from "../router";
   import { toast } from "../toast";
+  import MacIcon from "./MacIcon.svelte";
 
   interface Props {
     file: File | null;
@@ -71,6 +72,50 @@
       onClose();
     }
   }
+
+  function getActionIcon(actionId: string, hub: string): string {
+    const MAP: Record<string, string> = {
+      "edit-sign": "studio",
+      "fill-forms": "forms",
+      "compress-pdf": "pdf",
+      "pdf-to-word": "word",
+      "pdf-to-excel": "excel",
+      "pdf-to-ppt": "ppt",
+      "pdf-to-images": "image",
+      "split-pdf": "split",
+      "organize-pdf": "organize",
+      "watermark-pdf": "watermark",
+      "crop-pdf": "crop",
+      "redact-pdf": "redact",
+      "protect-pdf": "security",
+      "ocr-pdf": "ocr",
+      "pdf-markdown": "markdown",
+      "repair-pdf": "repair",
+      "docx-to-pdf": "pdf",
+      "docx-to-txt": "docs",
+      "pptx-to-pdf": "pdf",
+      "pptx-to-txt": "docs",
+      "xlsx-to-pdf": "pdf",
+      "xlsx-to-csv": "excel",
+      "compress-image": "image",
+      "images-to-pdf": "pdf",
+      "convert-image": "convert",
+      "ocr-image": "ocr",
+      "compress-video": "video",
+      "convert-video": "convert",
+      "video-to-gif": "gif",
+      "compress-audio": "audio",
+      "convert-audio": "convert",
+      "repair-general": "repair",
+      "convert-general": "convert",
+    };
+    if (MAP[actionId]) return MAP[actionId];
+    if (hub === "pdf") return "pdf";
+    if (hub === "compress") return "compress";
+    if (hub === "convert") return "convert";
+    if (hub === "ai") return "ocr";
+    return "tools";
+  }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -85,7 +130,9 @@
   >
     <div class="cz-palette-header">
       <div class="cz-palette-file-info">
-        <span class="cz-palette-icon">⇪</span>
+        <span class="cz-palette-icon" aria-hidden="true">
+          <MacIcon name="upload" size={18} strokeWidth={2.4} />
+        </span>
         <div>
           <h2 id="cz-palette-title" class="cz-palette-filename" title={file.name}>
             {file.name}
@@ -104,7 +151,7 @@
         aria-label="Close dialog"
         onclick={onClose}
       >
-        ✕
+        <MacIcon name="close" size={13} strokeWidth={2.4} />
       </button>
     </div>
 
@@ -126,7 +173,9 @@
               onclick={() => handleSelectAction(action)}
             >
               <div class="cz-palette-card-top">
-                <span class="cz-palette-card-icon">{action.icon}</span>
+                <span class="cz-palette-card-icon" aria-hidden="true">
+                  <MacIcon name={getActionIcon(action.id, action.hub)} variant="squircle" squircleSize={32} />
+                </span>
                 <span class="cz-palette-card-hub">{action.hub.toUpperCase()}</span>
               </div>
               <div class="cz-palette-card-name">{action.name}</div>
