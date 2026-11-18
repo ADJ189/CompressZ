@@ -34,11 +34,11 @@ export function transformVisualPointToPdf(
   const rot = ((rotation % 360) + 360) % 360;
   switch (rot) {
     case 90:
-      return { x: pageWidth - vy, y: vx };
+      return { x: vy, y: vx };
     case 180:
       return { x: pageWidth - vx, y: vy };
     case 270:
-      return { x: vy, y: pageHeight - vx };
+      return { x: pageWidth - vy, y: pageHeight - vx };
     case 0:
     default:
       return { x: vx, y: pageHeight - vy };

@@ -320,12 +320,17 @@ export async function readZip(
     const raw = bytes.subarray(dataStart, dataStart + compSize);
 
     if (!name.endsWith("/")) {
-      if (raw.length > maxEntryBytes) {
+      if (method === 0 && raw.length > maxEntryBytes) {
         throw new Error(
           `Decompressed entry exceeds safety limit of ${Math.round(maxEntryBytes / (1024 * 1024))} MB.`,
         );
       }
       const data = method === 8 ? await inflateRaw(raw, maxEntryBytes) : new Uint8Array(raw);
+      if (data.length > maxEntryBytes) {
+        throw new Error(
+          `Decompressed entry exceeds safety limit of ${Math.round(maxEntryBytes / (1024 * 1024))} MB.`,
+        );
+      }
       aggregateBytes += data.length;
       if (aggregateBytes > maxAggregateBytes) {
         throw new Error(

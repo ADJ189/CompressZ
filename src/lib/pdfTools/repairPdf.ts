@@ -8,6 +8,7 @@
 
 import { runQpdfCommand } from "../qpdfWasm";
 import { EngineError, cleanLogLines, summarizeLog, toErrorMessage } from "../engineError";
+import { getPdfLib } from "../pdfLibs";
 
 export interface RepairPdfResult {
   repairedBytes: Uint8Array;
@@ -52,19 +53,17 @@ export function salvagePdfObjects(bytes: Uint8Array): SalvagedPdf {
     }
   }
 
-  function isInStream(idx: number): boolean {
-    for (const [start, end] of streamRanges) {
-      if (idx >= start && idx < end) return true;
-    }
-    return false;
-  }
-
   const objRegex = /\b(\d{1,10})\s+\d{1,5}\s+obj\b/g;
   let rootObject: number | null = null;
   let match: RegExpExecArray | null;
+  let rangeIdx = 0;
 
   while ((match = objRegex.exec(text)) !== null) {
-    if (isInStream(match.index)) {
+    while (rangeIdx < streamRanges.length && streamRanges[rangeIdx][1] <= match.index) {
+      rangeIdx++;
+    }
+    if (rangeIdx < streamRanges.length && match.index >= streamRanges[rangeIdx][0]) {
+      objRegex.lastIndex = streamRanges[rangeIdx][1];
       continue;
     }
 
@@ -80,11 +79,14 @@ export function salvagePdfObjects(bytes: Uint8Array): SalvagedPdf {
     objectOffsets.set(objNum, match.index);
 
     const bodyEnd = text.indexOf("endobj", match.index);
-    const body = text.slice(
+    const rawBody = text.slice(
       match.index,
       bodyEnd === -1 ? Math.min(text.length, match.index + 4096) : bodyEnd,
     );
-    if (/\/Type\s*\/Catalog\b/.test(body)) {
+    // Truncate at the first stream keyword so stream payloads aren't mistaken for object dictionary
+    const streamIdx = rawBody.search(/\bstream(?:\r\n|\r|\n)/);
+    const dictBody = streamIdx !== -1 ? rawBody.slice(0, streamIdx) : rawBody;
+    if (/\/Type\s*\/Catalog\b/.test(dictBody)) {
       // Likewise, an updated document appends a newer catalog.
       rootObject = objNum;
     }
@@ -212,10 +214,18 @@ export async function repairCorruptPdf(
     pos += c.length;
   }
 
-  // Validate the resulting PDF before reporting success
-  const resultText = new TextDecoder("latin1").decode(combined);
-  if (!resultText.includes("%PDF-") || !resultText.includes("%%EOF") || !resultText.includes("startxref")) {
-    throw new EngineError("Synthesized PDF failed structural validation.", "qpdf");
+  // Validate the resulting PDF before reporting success: load with pdf-lib and require at least one page
+  try {
+    const { PDFDocument } = await getPdfLib();
+    const parsedDoc = await PDFDocument.load(combined, { ignoreEncryption: true });
+    if (parsedDoc.getPageCount() < 1) {
+      throw new Error("Salvaged PDF has 0 accessible pages");
+    }
+  } catch (err) {
+    throw new EngineError(
+      `Synthesized PDF failed structural validation: ${(err as Error).message}`,
+      "qpdf",
+    );
   }
 
   onProgress?.(100);

@@ -54,46 +54,186 @@ function safeImgSrc(escapedUrl: string): string | null {
   return null;
 }
 
-function renderSupportedHtmlTable(tableHtml: string): string | null {
-  const tagRegex = /<\/?([a-zA-Z0-9_-]+)([^>]*)>/g;
-  let match: RegExpExecArray | null;
-  const allowedTags = new Set(["table", "thead", "tbody", "tr", "th", "td"]);
+const allowedTableTags = new Set(["table", "thead", "tbody", "tfoot", "tr", "th", "td"]);
+const allowedMathTags = new Set([
+  "math", "mrow", "mtext", "mo", "mi", "mn", "msup", "msub", "msubsup",
+  "mfrac", "msqrt", "mroot", "mtable", "mtr", "mtd", "mspace",
+]);
 
-  while ((match = tagRegex.exec(tableHtml)) !== null) {
-    const tagName = match[1].toLowerCase();
-    if (!allowedTags.has(tagName)) {
-      return null;
-    }
-    const attrs = match[2];
-    if (/on\w+\s*=/i.test(attrs) || /javascript:/i.test(attrs)) {
+function tableAttrChecker(tagName: string, attr: string, val: string): string | null {
+  if (tagName === "th" || tagName === "td") {
+    if (attr === "colspan" || attr === "rowspan") {
+      if (/^\d{1,3}$/.test(val) && Number.parseInt(val, 10) > 0) {
+        return `${attr}="${val}"`;
+      }
       return null;
     }
   }
+  return null;
+}
 
-  const inner = tableHtml.replace(/^<table\b[^>]*>/i, "").replace(/<\/table>$/i, "");
+function mathAttrChecker(tagName: string, attr: string, val: string): string | null {
+  if (tagName === "math") {
+    if (attr === "display") {
+      const lower = val.toLowerCase();
+      if (lower === "block" || lower === "inline") {
+        return `display="${lower}"`;
+      }
+      return null;
+    }
+    if (attr === "xmlns" && val === "http://www.w3.org/1998/Math/MathML") {
+      return `xmlns="${val}"`;
+    }
+  }
+  if (tagName === "mspace") {
+    if (attr === "width" || attr === "height" || attr === "depth") {
+      if (/^[\d.]+(?:px|em|ex|pt)?$/i.test(val)) {
+        return `${attr}="${val}"`;
+      }
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Tokenize and sanitize HTML markup into safe elements without echoing raw strings.
+ * Disallows all unallowed tags, scripts, event handlers, and executable URLs.
+ */
+function sanitizeMarkup(
+  raw: string,
+  allowedTags: Set<string>,
+  allowedAttrChecker: (tagName: string, attr: string, val: string) => string | null,
+): string | null {
+  let pos = 0;
+  const len = raw.length;
+  let out = "";
+  const openTags: string[] = [];
+
+  while (pos < len) {
+    const nextTag = raw.indexOf("<", pos);
+    if (nextTag === -1) {
+      out += escapeHtml(raw.slice(pos));
+      break;
+    }
+
+    if (nextTag > pos) {
+      out += escapeHtml(raw.slice(pos, nextTag));
+      pos = nextTag;
+    }
+
+    if (raw.startsWith("<!--", pos)) {
+      return null;
+    }
+
+    pos++; // skip '<'
+    const isClosing = raw[pos] === "/";
+    if (isClosing) pos++;
+
+    const tagMatch = /^[a-zA-Z0-9_-]+/.exec(raw.slice(pos));
+    if (!tagMatch) return null;
+    const tagName = tagMatch[0].toLowerCase();
+    pos += tagName.length;
+
+    if (!allowedTags.has(tagName)) {
+      return null;
+    }
+
+    if (isClosing) {
+      while (pos < len && /\s/.test(raw[pos])) pos++;
+      if (raw[pos] !== ">") return null;
+      pos++;
+      if (openTags.length === 0 || openTags[openTags.length - 1] !== tagName) {
+        return null;
+      }
+      openTags.pop();
+      out += `</${tagName}>`;
+      continue;
+    }
+
+    const attrs: string[] = [];
+    let isSelfClosing = false;
+
+    while (pos < len) {
+      while (pos < len && /\s/.test(raw[pos])) pos++;
+      if (pos >= len) return null;
+
+      if (raw[pos] === ">") {
+        pos++;
+        break;
+      }
+      if (raw[pos] === "/" && raw[pos + 1] === ">") {
+        isSelfClosing = true;
+        pos += 2;
+        break;
+      }
+
+      const attrMatch = /^[a-zA-Z0-9_:-]+/.exec(raw.slice(pos));
+      if (!attrMatch) return null;
+      const attrName = attrMatch[0].toLowerCase();
+      pos += attrName.length;
+
+      let attrVal = "";
+      while (pos < len && /\s/.test(raw[pos])) pos++;
+      if (pos < len && raw[pos] === "=") {
+        pos++;
+        while (pos < len && /\s/.test(raw[pos])) pos++;
+        if (pos >= len) return null;
+
+        const quote = raw[pos];
+        if (quote === '"' || quote === "'") {
+          pos++;
+          const quoteEnd = raw.indexOf(quote, pos);
+          if (quoteEnd === -1) return null;
+          attrVal = raw.slice(pos, quoteEnd);
+          pos = quoteEnd + 1;
+        } else {
+          const valMatch = /^[^\s>]+/.exec(raw.slice(pos));
+          if (!valMatch) return null;
+          attrVal = valMatch[0];
+          pos += attrVal.length;
+        }
+      }
+
+      const safeAttr = allowedAttrChecker(tagName, attrName, attrVal);
+      if (safeAttr && safeAttr.length > 0) {
+        attrs.push(safeAttr);
+      }
+    }
+
+    if (!isSelfClosing) {
+      openTags.push(tagName);
+    }
+    const attrStr = attrs.length > 0 ? " " + attrs.join(" ") : "";
+    out += isSelfClosing ? `<${tagName}${attrStr}/>` : `<${tagName}${attrStr}>`;
+  }
+
+  if (openTags.length > 0) {
+    return null;
+  }
+
+  return out;
+}
+
+function renderSupportedHtmlTable(tableHtml: string): string | null {
+  if (!/^<table\b/i.test(tableHtml.trim()) || !/<\/table>$/i.test(tableHtml.trim())) {
+    return null;
+  }
+  const sanitized = sanitizeMarkup(tableHtml.trim(), allowedTableTags, tableAttrChecker);
+  if (!sanitized) return null;
+
+  const inner = sanitized.replace(/^<table\b[^>]*>/i, "").replace(/<\/table>$/i, "");
   return `<div class="cz-table-wrap"><table class="cz-rendered-table">${inner}</table></div>`;
 }
 
 function renderSupportedHtmlMath(mathHtml: string): string | null {
-  const tagRegex = /<\/?([a-zA-Z0-9_-]+)([^>]*)>/g;
-  let match: RegExpExecArray | null;
-  const allowedMathTags = new Set([
-    "math", "mrow", "mtext", "mo", "mi", "mn", "msup", "msub", "msubsup",
-    "mfrac", "msqrt", "mroot", "mtable", "mtr", "mtd", "mspace",
-  ]);
-
-  while ((match = tagRegex.exec(mathHtml)) !== null) {
-    const tagName = match[1].toLowerCase();
-    if (!allowedMathTags.has(tagName)) {
-      return null;
-    }
-    const attrs = match[2];
-    if (/on\w+\s*=/i.test(attrs) || /javascript:/i.test(attrs)) {
-      return null;
-    }
+  if (!/^<math\b/i.test(mathHtml.trim()) || !/<\/math>$/i.test(mathHtml.trim())) {
+    return null;
   }
+  const sanitized = sanitizeMarkup(mathHtml.trim(), allowedMathTags, mathAttrChecker);
+  if (!sanitized) return null;
 
-  return `<div class="cz-rendered-math-block">${mathHtml}</div>`;
+  return `<div class="cz-rendered-math-block">${sanitized}</div>`;
 }
 
 /* eslint-disable no-control-regex */
@@ -123,7 +263,7 @@ function renderInline(text: string): string {
     const safe = safeImgSrc(src);
     if (!safe) return `<!-- [image: ${escapeHtml(alt)}] -->`;
     return stash(
-      `<img src="${safe}" alt="${escapeHtml(alt)}" class="cz-rendered-img" />`,
+      `<img src="${safe}" alt="${escapeHtml(alt)}" class="cz-rendered-img" crossorigin="anonymous" />`,
     );
   });
 
