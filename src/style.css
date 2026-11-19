@@ -587,7 +587,7 @@ img, svg { display: block; }
 /* Home Tools Title & Grid */
 .home-tools-title {
   font-family: var(--feature); font-size: .72rem; font-weight: 700;
-  letter-spacing: .06em; text-transform: uppercase; color: var(--text-4);
+  letter-spacing: .06em; text-transform: uppercase; color: var(--text-2);
   margin-bottom: 1rem;
 }
 .home-tools-grid {
@@ -1126,6 +1126,37 @@ input[type="range"].slider::-webkit-slider-thumb:hover {
 }
 .toast-item.success { background: var(--green); color: #fff; }
 .toast-item.error   { background: var(--rose);  color: #fff; }
+/* Informational toasts: neutral surface rather than an alarm colour, but still
+   opaque enough to read over any page background. */
+.toast-item.info {
+  background: var(--surface2); color: var(--text);
+  border: 1px solid var(--border);
+}
+/* Partial success (e.g. a form saved with unfilled fields): amber, not rose. */
+.toast-item.warn { background: var(--amber); color: #2a1d02; }
+/* A toast that carries an engine log has to accept clicks to open "Details". */
+.toast-item.has-details {
+  pointer-events: auto;
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: .35rem .5rem; max-width: min(30rem, 92vw);
+}
+.cz-toast-details { flex-basis: 100%; font-size: .72rem; }
+.cz-toast-details summary { cursor: pointer; font-weight: 600; }
+.cz-toast-details pre {
+  margin: .35rem 0 0; max-height: 30vh; overflow: auto;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  font-family: var(--mono); font-size: .7rem; line-height: 1.45;
+}
+.cz-toast-action,
+.cz-toast-close {
+  pointer-events: auto; cursor: pointer; font: inherit;
+  border: 1px solid currentColor; border-radius: var(--r-sm);
+  background: transparent; color: inherit; padding: .1rem .5rem;
+  font-size: .72rem; font-weight: 600;
+}
+.cz-toast-close { padding: .1rem .35rem; margin-left: auto; }
+.cz-toast-action:hover,
+.cz-toast-close:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
 /* Entrance/exit are driven by anime.js (lib/motion.ts toastIn/toastOut) so
    they can spring/overshoot and be awaited before removal; the old CSS
    @keyframes + transition entrance is gone to avoid double-animating. */

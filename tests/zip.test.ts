@@ -30,3 +30,52 @@ Deno.test("zip: writeZip and readZip round-trip files correctly", async () => {
   const readBin = archive.get("assets/data.bin")!;
   assertEquals(Array.from(readBin), [1, 2, 3, 4, 5, 6, 7, 8]);
 });
+
+Deno.test("zip: writeZip de-duplicates names that sanitise to the same path", async () => {
+  const zipBytes = await writeZip([
+    { name: "b.txt", data: new TextEncoder().encode("first") },
+    { name: "./b.txt", data: new TextEncoder().encode("second") },
+  ]);
+
+  const names = [...(await readZip(zipBytes.buffer as ArrayBuffer)).keys()];
+  assertEquals(names.length, 2, `Expected two distinct entries, got ${names.join(", ")}`);
+  assert(names.includes("b.txt"), `Missing b.txt in ${names.join(", ")}`);
+  assert(names.includes("b (2).txt"), `Missing de-duplicated name in ${names.join(", ")}`);
+});
+
+Deno.test("zip: readZip sanitises traversal names coming from the archive", async () => {
+  // Written normally, then the writer's sanitisation is bypassed by patching the
+  // central-directory name bytes — this is the attacker-controlled path.
+  const payload = new TextEncoder().encode("pwned");
+  const zipBytes = await writeZip([{ name: "placeholder.txt", data: payload }]);
+
+  const hostile = new TextEncoder().encode("../../etc/a.txt");
+  const original = new TextEncoder().encode("placeholder.txt");
+  assertEquals(hostile.length, original.length, "fixture needs equal-length names");
+
+  const patched = new Uint8Array(zipBytes);
+  const haystack = new TextDecoder("latin1").decode(patched);
+  let idx = haystack.indexOf("placeholder.txt");
+  assert(idx >= 0, "fixture name not found");
+  while (idx >= 0) {
+    patched.set(hostile, idx);
+    idx = haystack.indexOf("placeholder.txt", idx + 1);
+  }
+
+  const archive = await readZip(patched.buffer as ArrayBuffer);
+  assertEquals(archive.has("etc/a.txt"), true, "Traversal name must be sanitised");
+  assertEquals(archive.has("../../etc/a.txt"), false, "Raw traversal name must not survive");
+});
+
+Deno.test("zip: stored entry exceeding maxEntryBytes is rejected before allocation", async () => {
+  const data = new TextEncoder().encode("Hello Stored ZIP Entry");
+  const zipBytes = await writeZip([{ name: "test.txt", data }]);
+
+  let message = "";
+  try {
+    await readZip(zipBytes.buffer as ArrayBuffer, { maxEntryBytes: 5 });
+  } catch (err) {
+    message = String((err as Error).message);
+  }
+  assertEquals(/safety limit/.test(message), true);
+});

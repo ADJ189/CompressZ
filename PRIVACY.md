@@ -29,12 +29,14 @@ GitHub.
 
 ## 3. How file processing works
 
-All compression, conversion, PDF to Markdown extraction, OCR (printed and
-English handwriting recognition), and local-AI operations run entirely
-inside your browser using WebAssembly, the Canvas API, and Web platform
-APIs. Your files are read from your device into browser memory (RAM),
-processed locally, and the output is written back to your device. At no
-point do your files traverse a network connection to our infrastructure.
+All compression, conversion, PDF Suite & Studio operations (splitting, permanent cropping,
+watermarking, signing, AcroForm filling, true redaction with 300-DPI raster stream purge,
+AES-256 password protection, and corrupt file recovery), two-way Office document conversions,
+PDF to Markdown extraction, OCR (printed and English handwriting recognition), and local-AI
+operations run entirely inside your browser using WebAssembly, the Canvas API, and Web platform
+APIs. Your files are read from your device into browser memory (RAM), processed locally,
+and the output is written back to your device. At no point do your files traverse a network
+connection to our infrastructure.
 
 When extracting Markdown from a PDF, document layout analysis, reading order
 reconstruction, figure crop generation, and ZIP packaging run entirely client-side.
@@ -53,9 +55,9 @@ first use and cached by your browser thereafter. Full attribution and
 licenses for all of these are in [CREDITS.md](CREDITS.md); the
 privacy-relevant summary is:
 
-- **FFmpeg.wasm** — loaded from `esm.sh` (video/audio/GIF). The CDN serves
+- **FFmpeg.wasm** — loaded from `cdn.jsdelivr.net` (video/audio/GIF). The CDN serves
   the JavaScript wrapper, core scripts, worker, and WebAssembly binaries; no
-  file data is sent to esm.sh.
+  file data is sent to jsDelivr.
 - **Mediabunny** — loaded from `esm.sh` only when the browser supports
   WebCodecs and the requested output codec configuration is encodable
   (video fast path). It demuxes and muxes media in-memory; no file data is
@@ -77,6 +79,12 @@ privacy-relevant summary is:
   be decoded natively.
 - **onnxruntime-web** — loaded from `cdn.jsdelivr.net` for local AI
   inference.
+- **QPDF WASM** — loaded from `cdn.jsdelivr.net` for AES-256 PDF encryption,
+  password removal and deep cross-reference repair in PDF Suite. The PDF bytes
+  are processed inside the WebAssembly module in this tab; nothing is uploaded.
+- **Noto Sans (OCR text layer)** — the Unicode font embedded into searchable
+  PDFs is fetched from `cdn.jsdelivr.net` on the first OCR run. Only the font
+  file is downloaded; OCR text and page images stay in this tab.
 
 These CDN requests are for static assets (JavaScript, WebAssembly and
 model weights) only. Your file content is never included in these
@@ -106,6 +114,10 @@ CompressZ stores these keys in your browser's `localStorage`:
 - `cz-recent-tools` — the route names of tools you opened recently, used for
   the "Pinned & recent" panel on the home page.
 - `cz-favourite-tools` — the route names you pinned on the home page.
+- `cz-convert-profile` — the last category, target format and quality settings you
+  used on the Multi-Format Converter (format names only, never file names).
+- `cz-pdfsuite-profile` — the encryption standard, render DPI and permission
+  toggles you last picked in PDF Suite.
 
 These values never leave your device. Contextual suggestions are evaluated
 locally from metadata that is already in the page (file names, byte sizes,

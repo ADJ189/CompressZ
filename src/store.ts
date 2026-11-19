@@ -208,6 +208,8 @@ export interface OcrState {
   extractText: boolean;
   symbolMode: boolean;
   busy: boolean;
+  /** Primary download produced by the OCR run. */
+  outputKind: "pdf" | "txt" | "both";
 }
 export const ocrStore = createStore<OcrState>({
   files: [],
@@ -219,6 +221,7 @@ export const ocrStore = createStore<OcrState>({
   extractText: true,
   symbolMode: false,
   busy: false,
+  outputKind: "pdf",
 });
 
 // ── PDF → Markdown Workspace Store ────────────────────────────
@@ -246,3 +249,155 @@ export const pdfMarkdownStore = createStore<PdfMarkdownState>({
   activePageIndex: 0,
   editedMarkdown: "",
 });
+
+// ── Universal Staged File Store ───────────────────────────────
+export interface UniversalStagedItem {
+  file: File;
+  actionId?: string;
+  sourceHub?: string;
+  targetRoute?: string;
+}
+export const stagedUniversalFile = createStore<UniversalStagedItem | null>(null);
+
+/**
+ * Retrieve and consume the staged universal file (clears the store after reading).
+ * If routePrefix is provided, returns and clears the item only when the staged target
+ * matches the calling page's route.
+ */
+export function consumeStagedUniversalFile(routePrefix?: string): UniversalStagedItem | null {
+  const item = stagedUniversalFile.get();
+  if (!item) return null;
+  if (routePrefix && item.targetRoute) {
+    const normTarget = item.targetRoute.replace(/^\//, "").split("?")[0];
+    const normPrefix = routePrefix.replace(/^\//, "").split("?")[0];
+    if (!normTarget.startsWith(normPrefix) && !normPrefix.startsWith(normTarget)) {
+      return null;
+    }
+  }
+  stagedUniversalFile.set(null);
+  return item;
+}
+
+if (typeof window !== "undefined") {
+  (window as unknown as { __CZ_STAGED_FILE__?: typeof stagedUniversalFile }).__CZ_STAGED_FILE__ = stagedUniversalFile;
+  window.addEventListener("compressz:stage-universal-file", (e: Event) => {
+    const detail = (e as CustomEvent<UniversalStagedItem>).detail;
+    if (detail?.file) {
+      stagedUniversalFile.set(detail);
+      currentRoute.set(detail.targetRoute || "convert");
+    }
+  });
+}
+
+// ── Convert Store ─────────────────────────────────────────────
+export type ConvertCategory =
+  | "video"
+  | "audio"
+  | "image"
+  | "pdf2office"
+  | "pdf2img"
+  | "img2pdf"
+  | "docx"
+  | "xlsx"
+  | "pptx"
+  | "html";
+
+export interface ConvertState {
+  activeCat: ConvertCategory;
+  targetFormat: string;
+  convertQuality: number;
+  convertScaleDpi: number;
+}
+
+function loadInitialConvertProfile(): ConvertState {
+  const fallback: ConvertState = {
+    activeCat: "video",
+    targetFormat: "mp4",
+    convertQuality: 82,
+    convertScaleDpi: 150,
+  };
+  if (typeof localStorage === "undefined") return fallback;
+  try {
+    const saved = localStorage.getItem("cz-convert-profile");
+    if (!saved) return fallback;
+    const p = JSON.parse(saved);
+    const validCats = new Set<string>([
+      "video",
+      "audio",
+      "image",
+      "pdf2office",
+      "pdf2img",
+      "img2pdf",
+      "docx",
+      "xlsx",
+      "pptx",
+      "html",
+    ]);
+    const activeCat = validCats.has(p.activeCat)
+      ? (p.activeCat as ConvertCategory)
+      : fallback.activeCat;
+    const convertQuality =
+      typeof p.convertQuality === "number" && Number.isFinite(p.convertQuality)
+        ? Math.max(1, Math.min(100, Math.round(p.convertQuality)))
+        : fallback.convertQuality;
+    const convertScaleDpi =
+      typeof p.convertScaleDpi === "number" && Number.isFinite(p.convertScaleDpi)
+        ? Math.max(72, Math.min(600, Math.round(p.convertScaleDpi)))
+        : fallback.convertScaleDpi;
+    const targetFormat =
+      typeof p.targetFormat === "string" && p.targetFormat.trim()
+        ? p.targetFormat.trim()
+        : fallback.targetFormat;
+    return { activeCat, targetFormat, convertQuality, convertScaleDpi };
+  } catch {
+    return fallback;
+  }
+}
+
+export const convertStore = createStore<ConvertState>(loadInitialConvertProfile());
+
+export function saveConvertProfile(state: ConvertState): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(
+      "cz-convert-profile",
+      JSON.stringify({
+        activeCat: state.activeCat,
+        targetFormat: state.targetFormat,
+        convertQuality: state.convertQuality,
+        convertScaleDpi: state.convertScaleDpi,
+      }),
+    );
+  } catch {
+    // storage quota or unavailable
+  }
+}
+
+/**
+ * Propagates updated engine settings (or reset defaults) into live tool stores.
+ */
+export function syncEngineSettingsToStores(): void {
+  const current = getSettings().engines;
+  imageStore.update((s) => ({
+    ...s,
+    quality: current.images.quality,
+    format: current.images.format,
+    maxDim: current.images.maxDim,
+  }));
+  audioStore.update((s) => ({
+    ...s,
+    fmt: current.audio.format,
+    bitrate: current.audio.bitrate,
+  }));
+  videoStore.update((s) => ({
+    ...s,
+    crfQuality: current.video.crfQuality,
+    codec: current.video.codec,
+    preset: current.video.preset,
+  }));
+  pdfStore.update((s) => ({
+    ...s,
+    level: current.pdf.level,
+    renderScale: current.pdf.renderScale,
+  }));
+}

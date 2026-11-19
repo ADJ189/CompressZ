@@ -5,6 +5,7 @@ import {
 } from "./types";
 import {
   getFFmpeg,
+  ffExec,
   ffFetch,
   ffHasMT,
   ffJob,
@@ -230,7 +231,7 @@ async function videoViaFFmpeg(
       "-y",
       "null_out",
     ];
-    await ff.exec(pass1);
+    await ffExec(ff, pass1, "run the first video encoding pass");
   }
 
   // ── Stream mapping: video always, audio per audioTrackMode, subtitles
@@ -269,7 +270,7 @@ async function videoViaFFmpeg(
   if (container === "mp4") finalArgs.push("-movflags", "+faststart");
   finalArgs.push("-y", outN);
 
-  await ff.exec(finalArgs);
+  await ffExec(ff, finalArgs, "compress the video");
 
   const data = await ff.readFile(outN);
   await ff.deleteFile(inN).catch(() => {});

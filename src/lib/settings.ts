@@ -399,6 +399,11 @@ export function defaultSettings(): AppSettings {
   return JSON.parse(JSON.stringify(defaults())) as AppSettings;
 }
 
+/** Device-recommended defaults — applies hardware capabilities and performance tier recommendations. */
+export function deviceDefaultSettings(): AppSettings {
+  return applyAutoDefaults(defaults(), true);
+}
+
 // Lightweight pub/sub, same render()-on-change pattern every page already
 // uses — lets the Settings page (or anything else) react to a change made
 // elsewhere without polling.

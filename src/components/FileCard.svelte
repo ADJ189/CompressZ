@@ -8,9 +8,24 @@
     onDownload: (entry: FileEntry) => void;
     onRemove: (id: string) => void;
     onEdit?: (entry: FileEntry) => void;
+    /** Verb for the idle action button — "Compress" everywhere except OCR. */
+    actionLabel?: string;
+    /** Status text while the job runs. */
+    busyLabel?: string;
+    /** Status text once the job finished. */
+    doneLabel?: string;
   }
 
-  let { entry, onCompress, onDownload, onRemove, onEdit }: Props = $props();
+  let {
+    entry,
+    onCompress,
+    onDownload,
+    onRemove,
+    onEdit,
+    actionLabel = "Compress",
+    busyLabel = "Converting...",
+    doneLabel = "Converted",
+  }: Props = $props();
 
   const fileExt = $derived.by(() => {
     const parts = entry.name.split(".");
@@ -55,6 +70,12 @@
 
       {#if entry.status === "error" && entry.error}
         <div class="cz-card-error-msg">{entry.error}</div>
+        {#if entry.errorLog && entry.errorLog.length > 0}
+          <details class="cz-card-error-log">
+            <summary>Engine log ({entry.errorLog.length} lines)</summary>
+            <pre>{entry.errorLog.join("\n")}</pre>
+          </details>
+        {/if}
       {/if}
     </div>
   </div>
@@ -75,7 +96,7 @@
         class="cz-btn cz-btn-primary cz-btn-sm cz-btn-pill"
         onclick={() => onCompress(entry)}
       >
-        Compress
+        {actionLabel}
       </button>
       <button
         type="button"
@@ -89,14 +110,14 @@
     {:else if entry.status === "compressing"}
       <div class="cz-status-pill is-busy">
         <span class="cz-spin-dot" aria-hidden="true"></span>
-        <span>Converting...</span>
+        <span>{busyLabel}</span>
       </div>
     {:else if entry.status === "done"}
       <div class="cz-status-pill is-done">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="20 6 9 17 4 12"/>
         </svg>
-        <span>Converted</span>
+        <span>{doneLabel}</span>
       </div>
       <button
         type="button"
@@ -165,6 +186,24 @@
   .cz-card-error-msg {
     color: var(--rose);
     font-size: 0.72rem;
+  }
+  .cz-card-error-log {
+    font-size: 0.7rem;
+    color: var(--text-3);
+  }
+  .cz-card-error-log summary {
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .cz-card-error-log pre {
+    margin: 0.25rem 0 0;
+    max-height: 8rem;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    line-height: 1.45;
   }
   .cz-btn-pill {
     border-radius: 9999px;

@@ -1,3 +1,8 @@
+<script lang="ts">
+  // Static content page: no reactive state, but the empty script block keeps
+  // Svelte's generated module declaration available to TypeScript.
+</script>
+
 <div class="page-enter cz-content-page">
   <div class="cz-content-header">
     <span class="cz-content-badge" aria-hidden="true">🔒</span>
@@ -45,9 +50,10 @@
   <section class="cz-content-section">
     <h2 class="cz-content-heading">4. Local Storage</h2>
     <p>
-      CompressZ stores user preferences (theme choice, resource profile, engine defaults) locally in
-      <code>localStorage</code> under <code>cz-settings-v2</code> and <code>theme</code>. No document
-      bytes or filenames are ever persisted in localStorage.
+      CompressZ stores user preferences (theme choice, resource profile, engine defaults,
+      dismissed suggestions, pinned tools and per-tool profiles) locally in
+      <code>localStorage</code> under keys prefixed <code>cz-</code> plus <code>theme</code>.
+      No document bytes or filenames are ever persisted in localStorage.
     </p>
   </section>
 </div>

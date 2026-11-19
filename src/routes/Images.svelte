@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import FileDropzone from "../components/FileDropzone.svelte";
   import FileQueue from "../components/FileQueue.svelte";
-  import { imageStore, type ImageState } from "../store";
+  import { imageStore, type ImageState, consumeStagedUniversalFile, currentRoute } from "../store";
   import { compressImage } from "../lib/compressImage";
   import { imageOptions } from "../lib/options";
   import { runScheduled } from "../lib/resourceManager";
+import { entryError } from "../lib/engineError";
   import { uid, type FileEntry, type ImageFormat, formatBytes, outputFilename } from "../lib/types";
   import { toast } from "../toast";
   import {
@@ -16,8 +18,9 @@
   import { smartAnalyze, sortByPredictedLabel, type AiModelTier } from "../lib/aiEngine";
   import { getPlatformInfo } from "../lib/platform";
   import { getSettings, updateSettings } from "../lib/settings";
+  import MacIcon from "../components/MacIcon.svelte";
 
-  let state = $state<ImageState>(imageStore.get());
+  let imageState = $state<ImageState>(imageStore.get());
   let isBusy = $state(false);
   let isAiSorting = $state(false);
   let dismissTrigger = $state(0);
@@ -27,7 +30,7 @@
 
   $effect(() => {
     const unsub = imageStore.subscribe((val) => {
-      state = val;
+      imageState = val;
     });
     return unsub;
   });
@@ -36,9 +39,9 @@
     void dismissTrigger;
     return recommendFor({
       scope: "images",
-      files: state.files.map((f) => ({ name: f.name, size: f.originalSize })),
-      imageFormat: state.format,
-      imageQuality: state.quality,
+      files: imageState.files.map((f) => ({ name: f.name, size: f.originalSize })),
+      imageFormat: imageState.format,
+      imageQuality: imageState.quality,
     });
   });
 
@@ -46,7 +49,7 @@
 
   function applyRecommendation(rec: Recommendation) {
     if (rec.action.type === "reorder") {
-      const prevFiles = [...state.files];
+      const prevFiles = [...imageState.files];
       const sorted = rec.action.order.map((i) => prevFiles[i]);
       updateStore({ files: sorted });
       toast("Sorted files by natural filename", "success", {
@@ -57,8 +60,8 @@
         },
       });
     } else if (rec.action.type === "image-format") {
-      const prevFormat = state.format;
-      const prevQuality = state.quality;
+      const prevFormat = imageState.format;
+      const prevQuality = imageState.quality;
       updateStore({ format: rec.action.format, quality: rec.action.quality });
       toast(`Switched format to ${rec.action.format}`, "success", {
         label: "Undo",
@@ -88,15 +91,35 @@
       status: "idle",
       type: "image",
     }));
-    updateStore({ files: [...state.files, ...newEntries] });
+    updateStore({ files: [...imageState.files, ...newEntries] });
   }
+
+  function applyStagedFile() {
+    const staged = consumeStagedUniversalFile("compress/images");
+    if (staged?.file) {
+      handleFilesAdded([staged.file]);
+    }
+  }
+
+  onMount(() => {
+    applyStagedFile();
+  });
+
+  $effect(() => {
+    const unsub = currentRoute.subscribe((r) => {
+      if (r === "compress/images") {
+        applyStagedFile();
+      }
+    });
+    return unsub;
+  });
 
   /** Quick Natural Sort action */
   function handleNaturalSort() {
-    if (state.files.length < 2) return;
-    const names = state.files.map((f) => f.name);
+    if (imageState.files.length < 2) return;
+    const names = imageState.files.map((f) => f.name);
     const indices = naturalOrder(names);
-    const prev = [...state.files];
+    const prev = [...imageState.files];
     const sorted = indices.map((i) => prev[i]);
     updateStore({ files: sorted });
     toast("Reordered files by numeric sequence", "success");
@@ -104,15 +127,15 @@
 
   /** Quick AI Smart Sort action */
   async function handleAiSmartSort() {
-    if (state.files.length < 2) return;
+    if (imageState.files.length < 2) return;
     isAiSorting = true;
     toast("Organizing files with on-device AI...");
     try {
-      const rawFiles = state.files.map((f) => f.file);
+      const rawFiles = imageState.files.map((f) => f.file);
       const tier: AiModelTier = (settings.ai?.modelTier as AiModelTier) ?? "efficient";
       const analyses = await smartAnalyze(rawFiles, tier);
       const sortedFiles = sortByPredictedLabel(rawFiles, analyses);
-      const fileMap = new Map(state.files.map((f) => [f.file, f]));
+      const fileMap = new Map(imageState.files.map((f) => [f.file, f]));
       const sortedEntries = sortedFiles.map((f) => fileMap.get(f)!).filter(Boolean);
       updateStore({ files: sortedEntries });
       toast("Organized files by predicted content label", "success");
@@ -136,20 +159,20 @@
     if (entry.status === "compressing") return;
 
     updateStore({
-      files: state.files.map((f) =>
+      files: imageState.files.map((f) =>
         f.id === entry.id ? { ...f, status: "compressing", error: undefined } : f,
       ),
     });
 
     try {
-      const options = imageOptions(state);
+      const options = imageOptions(imageState);
       const res = await runScheduled(
         { kind: "image", label: entry.name, bytes: entry.file.size },
         () => compressImage(entry.file, options),
       );
 
       updateStore({
-        files: state.files.map((f) =>
+        files: imageState.files.map((f) =>
           f.id === entry.id
             ? {
                 ...f,
@@ -163,24 +186,28 @@
       toast(`Compressed ${entry.name}`, "success");
     } catch (err) {
       console.error("[imageCompress] error:", err);
+      const failure = entryError(err, "Compression failed");
       updateStore({
-        files: state.files.map((f) =>
+        files: imageState.files.map((f) =>
           f.id === entry.id
             ? {
                 ...f,
                 status: "error",
-                error: (err as Error).message || "Compression failed",
+                error: failure.error,
+                errorLog: failure.errorLog,
               }
             : f,
         ),
       });
-      toast(`Failed to compress ${entry.name}`, "error");
+      toast(`${entry.name}: ${failure.error}`, "error", undefined, {
+        log: failure.errorLog,
+      });
     }
   }
 
   async function handleCompressAll() {
     isBusy = true;
-    const idleEntries = state.files.filter((f) => f.status === "idle" || f.status === "error");
+    const idleEntries = imageState.files.filter((f) => f.status === "idle" || f.status === "error");
     for (const entry of idleEntries) {
       await compressSingle(entry);
     }
@@ -201,14 +228,14 @@
   }
 
   function handleDownloadAll() {
-    const doneEntries = state.files.filter((f) => f.status === "done");
+    const doneEntries = imageState.files.filter((f) => f.status === "done");
     for (const entry of doneEntries) {
       handleDownloadSingle(entry);
     }
   }
 
   function handleRemove(id: string) {
-    updateStore({ files: state.files.filter((f) => f.id !== id) });
+    updateStore({ files: imageState.files.filter((f) => f.id !== id) });
   }
 
   function handleClear() {
@@ -226,7 +253,7 @@
       </div>
 
       <!-- Quick Fast Organize Actions (Side Options, not a whole rectangular promo box) -->
-      {#if state.files.length > 1}
+      {#if imageState.files.length > 1}
         <div class="cz-organize-bar">
           <button
             type="button"
@@ -234,7 +261,8 @@
             title="Sort naturally by number sequence"
             onclick={handleNaturalSort}
           >
-            🔀 Reorder
+            <MacIcon name="shuffle" size={13} />
+            <span>Reorder</span>
           </button>
           <button
             type="button"
@@ -243,7 +271,12 @@
             disabled={isAiSorting}
             onclick={handleAiSmartSort}
           >
-            {isAiSorting ? "⏳ Organizing…" : "⚡ AI Smart Sort"}
+            {#if isAiSorting}
+              <span>⏳ Organizing…</span>
+            {:else}
+              <MacIcon name="zap" size={13} />
+              <span>AI Smart Sort</span>
+            {/if}
           </button>
         </div>
       {/if}
@@ -257,28 +290,28 @@
         <div class="cz-segmented-track">
           <button
             type="button"
-            class="cz-segmented-item {state.format === 'image/webp' ? 'is-active' : ''}"
+            class="cz-segmented-item {imageState.format === 'image/webp' ? 'is-active' : ''}"
             onclick={() => updateStore({ format: 'image/webp' })}
           >
             WebP
           </button>
           <button
             type="button"
-            class="cz-segmented-item {state.format === 'image/avif' ? 'is-active' : ''}"
+            class="cz-segmented-item {imageState.format === 'image/avif' ? 'is-active' : ''}"
             onclick={() => updateStore({ format: 'image/avif' })}
           >
             AVIF
           </button>
           <button
             type="button"
-            class="cz-segmented-item {state.format === 'image/jpeg' ? 'is-active' : ''}"
+            class="cz-segmented-item {imageState.format === 'image/jpeg' ? 'is-active' : ''}"
             onclick={() => updateStore({ format: 'image/jpeg' })}
           >
             JPEG
           </button>
           <button
             type="button"
-            class="cz-segmented-item {state.format === 'image/png' ? 'is-active' : ''}"
+            class="cz-segmented-item {imageState.format === 'image/png' ? 'is-active' : ''}"
             onclick={() => updateStore({ format: 'image/png' })}
           >
             PNG
@@ -287,7 +320,7 @@
         <select
           id="fmt-sel"
           class="cz-select-pill"
-          value={state.format}
+          value={imageState.format}
           onchange={(e) => updateStore({ format: (e.target as HTMLSelectElement).value as any })}
           aria-label="Format selection"
         >
@@ -303,13 +336,13 @@
       <!-- Quality Slider -->
       <div class="cz-opt-group">
         <span class="cz-opt-label">Quality</span>
-        <span class="cz-quality-badge">{state.quality}%</span>
+        <span class="cz-quality-badge">{imageState.quality}%</span>
         <input
           id="img-q"
           type="range"
           min="20"
           max="100"
-          value={state.quality}
+          value={imageState.quality}
           class="cz-range-slider"
           oninput={(e) => updateStore({ quality: Number((e.target as HTMLInputElement).value) })}
         />
@@ -323,7 +356,7 @@
         <select
           id="img-dim"
           class="cz-select-pill"
-          value={state.maxDim}
+          value={imageState.maxDim}
           onchange={(e) => updateStore({ maxDim: Number((e.target as HTMLSelectElement).value) })}
         >
           <option value="0">Uncapped</option>
@@ -370,14 +403,14 @@
       icon="🖼️"
       title="Click or drag image files here"
       subtitle="Supports PNG, JPG, WebP, HEIC/HEIF, AVIF"
-      hasFiles={state.files.length > 0}
+      hasFiles={imageState.files.length > 0}
       onFiles={handleFilesAdded}
     />
 
     <!-- Inset File Queue Table -->
-    {#if state.files.length > 0}
+    {#if imageState.files.length > 0}
       <FileQueue
-        files={state.files}
+        files={imageState.files}
         {isBusy}
         onCompressAll={handleCompressAll}
         onDownloadAll={handleDownloadAll}
@@ -398,20 +431,24 @@
         <span class="cz-tier-tag">{platform?.tier ?? "balanced"}</span>
       </div>
       <div class="cz-sidebar-body">
-        <div class="cz-segmented-track w-full">
+        <div class="cz-segmented-track w-full" role="group" aria-label="Model tier selection">
           <button
             type="button"
             class="cz-segmented-item flex-1 {settings.ai?.modelTier !== 'powerful' ? 'is-active' : ''}"
+            aria-pressed={settings.ai?.modelTier !== 'powerful'}
             onclick={() => handleAiTierChange('efficient')}
           >
-            ⚡ Efficient
+            <MacIcon name="zap" size={13} />
+            <span>Efficient</span>
           </button>
           <button
             type="button"
             class="cz-segmented-item flex-1 {settings.ai?.modelTier === 'powerful' ? 'is-active' : ''}"
+            aria-pressed={settings.ai?.modelTier === 'powerful'}
             onclick={() => handleAiTierChange('powerful')}
           >
-            🧠 Powerful
+            <MacIcon name="cpu" size={13} />
+            <span>Powerful</span>
           </button>
         </div>
         <div class="cz-sidebar-meta">
@@ -428,8 +465,8 @@
         <span class="cz-sidebar-title">Recent Files</span>
       </div>
       <div class="cz-history-list">
-        {#if state.files.filter(f => f.status === 'done').length > 0}
-          {#each state.files.filter(f => f.status === 'done').slice(0, 4) as f}
+        {#if imageState.files.filter(f => f.status === 'done').length > 0}
+          {#each imageState.files.filter(f => f.status === 'done').slice(0, 4) as f}
             <div class="cz-history-item">
               <span class="cz-history-badge">IMG</span>
               <div class="cz-history-meta">

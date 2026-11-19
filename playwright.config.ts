@@ -21,7 +21,7 @@ const chromiumLaunch = executablePath ? { executablePath } : {};
 // Node/npm is the default runtime for CI and Cloudflare Pages.
 // When npm is absent (e.g. running under Deno), fallback to Deno running Vite directly.
 const buildAndPreview = hasNpm
-  ? `npm run build && npm run preview -- --host 127.0.0.1 --port ${PORT} --strictPort`
+  ? `node node_modules/vite/bin/vite.js build && node scripts/strip-oversized-assets.mjs && node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port ${PORT} --strictPort`
   : `deno run -A node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port ${PORT} --strictPort`;
 
 // Two opt-in suites import the real TypeScript engine modules, so they need
@@ -34,7 +34,7 @@ const isBench = !!process.env.BENCH;
 const isWebCodecsE2E = !!process.env.WEBCODECS_E2E;
 const usesDevServer = isBench || isWebCodecsE2E;
 const webServerCommand = process.env.PW_WEB_SERVER_CMD || (usesDevServer
-  ? (hasNpm ? `npm run dev -- --host 127.0.0.1 --port ${PORT} --strictPort` : `deno run -A node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${PORT} --strictPort`)
+  ? (hasNpm ? `node node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${PORT} --strictPort` : `deno run -A node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${PORT} --strictPort`)
   : buildAndPreview);
 
 const ignored = [
@@ -48,9 +48,8 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  // Eight local Chromium workers overloaded constrained machines and produced
-  // 30s timeouts in mobile tests; two is plenty for a smoke suite this size.
-  workers: process.env.CI ? 4 : 2,
+  // Capped at max 3 workers as requested for balanced concurrency and zero timeout flakes
+  workers: process.env.PW_WORKERS ? Number(process.env.PW_WORKERS) : 3,
   reporter: process.env.CI ? [["github"], ["list"]] : "list",
   use: {
     baseURL: BASE_URL,
@@ -87,7 +86,7 @@ export default defineConfig({
       },
     },
   ],
-  webServer: {
+  webServer: process.env.PW_NO_SERVER ? undefined : {
     // Production build by default (COOP/COEP headers included). The opt-in
     // benchmark and WebCodecs suites use `vite dev` so they can import
     // src/lib modules directly. Those suites normally start their own server

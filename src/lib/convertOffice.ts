@@ -324,8 +324,110 @@ function wrapText(
   return lines;
 }
 
+// ── Shared: sanitise untrusted HTML before it touches the live DOM ──
+//
+// The HTML here comes from a user-supplied .html file or from mammoth's DOCX
+// output. It must never be injected into the app's own document: `<img
+// onerror>` and `<iframe srcdoc>` execute in the app origin, and `useCORS:
+// true` would let a remote `<img>` fetch from the user's machine. The
+// DOMParser below renders the markup in an inert document (no script
+// execution, no resource loads), and the allowlist keeps only presentational
+// tags and attributes that cannot carry behaviour.
+const ALLOWED_TAGS = new Set([
+  "a", "b", "blockquote", "br", "caption", "code", "col", "colgroup",
+  "dd", "div", "dl", "dt", "em", "figcaption", "figure", "h1", "h2", "h3",
+  "h4", "h5", "h6", "hr", "i", "img", "li", "mark", "ol", "p", "pre", "s",
+  "small", "span", "strike", "strong", "sub", "sup", "table", "tbody", "td",
+  "tfoot", "th", "thead", "tr", "u", "ul",
+]);
+
+// Layout attributes worth keeping; everything else (class, id, data-*,
+// style, on*) is dropped so no attribute can smuggle behaviour.
+const ALLOWED_ATTRS = new Set([
+  "align", "colspan", "height", "rowspan", "valign", "width",
+]);
+
+// Tags removed together with their content: they are either executable,
+// remote-fetching, or able to restyle the whole render.
+const DROP_WITH_CONTENT =
+  "script,style,iframe,frame,frameset,object,embed,applet,link,meta,base,form,input,button,select,textarea,noscript,template,svg,math,audio,video,source,track";
+
+export function isSafeLinkTarget(value: string): boolean {
+  const url = value.trim();
+  return (
+    /^https?:\/\/[^\s]+/i.test(url) ||
+    /^mailto:[^\s@]+@[^\s@]+/i.test(url) ||
+    /^\/(?!\/)/.test(url) ||
+    /^#/.test(url)
+  );
+}
+
+export function isSafeImageSource(value: string): boolean {
+  // Data images only: a remote <img> would (a) leak the user's IP to a third
+  // party and (b) taint the canvas so the PDF could not be written.
+  return /^data:image\/(?:png|jpe?g|gif|webp|bmp);base64,/i.test(value.trim());
+}
+
+export function sanitizeHtmlForRender(html: string): string {
+  if (typeof DOMParser === "undefined") {
+    // This is a browser-only path; failing loudly beats emitting a blank PDF.
+    throw new Error("sanitizeHtmlForRender() requires a DOM (DOMParser)");
+  }
+  const doc = new DOMParser().parseFromString(html, "text/html");
+
+  doc.body.querySelectorAll(DROP_WITH_CONTENT).forEach((el) => el.remove());
+
+  for (const el of Array.from(doc.body.querySelectorAll("*"))) {
+    const tag = el.tagName.toLowerCase();
+    if (!ALLOWED_TAGS.has(tag)) {
+      // Keep the text, lose the element (e.g. <font>, <o:p>).
+      el.replaceWith(...Array.from(el.childNodes));
+      continue;
+    }
+    for (const attr of Array.from(el.attributes)) {
+      const name = attr.name.toLowerCase();
+      if (name === "href") {
+        if (!isSafeLinkTarget(attr.value)) el.removeAttribute(attr.name);
+        continue;
+      }
+      if (name === "src") {
+        if (!isSafeImageSource(attr.value)) el.removeAttribute(attr.name);
+        continue;
+      }
+      if (!ALLOWED_ATTRS.has(name)) el.removeAttribute(attr.name);
+    }
+  }
+
+  return doc.body.innerHTML;
+}
+
+function renderDocumentForHtml(html: string): string {
+  return `<!doctype html><html><head><meta charset="utf-8"><style>
+    html,body{margin:0;padding:0;background:#fff}
+    body{font-family:Georgia,'Times New Roman',serif;color:#111;font-size:15px;line-height:1.55;
+      padding:56px 60px;box-sizing:border-box;}
+    img{max-width:100%;height:auto}
+    table{border-collapse:collapse;width:100%}
+    td,th{border:1px solid #ccc;padding:4px 8px}
+    h1,h2,h3{color:#111;margin-top:1.2em}
+  </style></head><body>${html}</body></html>`;
+}
+
+function waitForImages(doc: Document): Promise<void> {
+  const pending = Array.from(doc.images)
+    .filter((img) => !img.complete)
+    .map(
+      (img) =>
+        new Promise<void>((resolve) => {
+          img.addEventListener("load", () => resolve(), { once: true });
+          img.addEventListener("error", () => resolve(), { once: true });
+        }),
+    );
+  return Promise.all(pending).then(() => undefined);
+}
+
 // ── Shared: HTML → PDF via html2canvas + pdf-lib ────────────────
-async function htmlToPdf(
+export async function htmlToPdf(
   html: string,
   onProgress?: (pct: number) => void,
   startPct = 0,
@@ -339,28 +441,35 @@ async function htmlToPdf(
   // page-slicing math below lines up with real A4 proportions.
   const PAGE_W_PX = 794,
     PAGE_H_PX = 1123;
-  const container = document.createElement("div");
-  container.style.cssText = `position:fixed;left:-99999px;top:0;width:${PAGE_W_PX}px;background:#fff;
-    font-family:Georgia,'Times New Roman',serif;color:#111;font-size:15px;line-height:1.55;
-    padding:56px 60px;box-sizing:border-box;`;
-  container.innerHTML = `<style>
-    img{max-width:100%;height:auto}
-    table{border-collapse:collapse;width:100%}
-    td,th{border:1px solid #ccc;padding:4px 8px}
-    h1,h2,h3{color:#111;margin-top:1.2em}
-  </style>${html}`;
-  document.body.appendChild(container);
+
+  // Render inside a sandboxed iframe: `allow-same-origin` lets html2canvas read
+  // the document, while the absent `allow-scripts` guarantees that no script,
+  // event handler or `javascript:` URL in the markup can execute even if the
+  // allowlist above ever misses a vector.
+  const frame = document.createElement("iframe");
+  frame.setAttribute("sandbox", "allow-same-origin");
+  frame.setAttribute("aria-hidden", "true");
+  frame.tabIndex = -1;
+  frame.style.cssText = `position:fixed;left:-99999px;top:0;width:${PAGE_W_PX}px;height:10px;border:0;`;
+  document.body.appendChild(frame);
 
   let canvas: HTMLCanvasElement;
   try {
-    canvas = await html2canvas(container, {
+    const frameDoc = frame.contentDocument;
+    if (!frameDoc) throw new Error("Sandboxed render frame is unavailable");
+    frameDoc.open();
+    frameDoc.write(renderDocumentForHtml(sanitizeHtmlForRender(html)));
+    frameDoc.close();
+    await waitForImages(frameDoc);
+
+    canvas = await html2canvas(frameDoc.body, {
       scale: 2,
       backgroundColor: "#ffffff",
-      useCORS: true,
+      useCORS: false,
       logging: false,
     });
   } finally {
-    document.body.removeChild(container);
+    frame.remove();
   }
   onProgress?.(startPct + 40);
 
