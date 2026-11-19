@@ -385,9 +385,15 @@ import { entryError } from "../lib/engineError";
 
   function handleDownloadAll() {
     const doneEntries = ocrState.files.filter((f) => f.status === "done");
+    let delay = 0;
     for (const entry of doneEntries) {
-      handleDownloadSingle(entry);
-      if (entry.extraBlob) handleDownloadExtra(entry);
+      const currentEntry = entry;
+      setTimeout(() => handleDownloadSingle(currentEntry), delay);
+      delay += 200;
+      if (currentEntry.extraBlob) {
+        setTimeout(() => handleDownloadExtra(currentEntry), delay);
+        delay += 200;
+      }
     }
   }
 

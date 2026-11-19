@@ -229,9 +229,9 @@ import { entryError } from "../lib/engineError";
 
   function handleDownloadAll() {
     const doneEntries = imageState.files.filter((f) => f.status === "done");
-    for (const entry of doneEntries) {
-      handleDownloadSingle(entry);
-    }
+    doneEntries.forEach((entry, idx) => {
+      setTimeout(() => handleDownloadSingle(entry), idx * 200);
+    });
   }
 
   function handleRemove(id: string) {
