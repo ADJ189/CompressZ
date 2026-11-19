@@ -21,6 +21,12 @@
   import { toast } from "../toast";
   import { onMount } from "svelte";
   import MacIcon from "../components/MacIcon.svelte";
+  import {
+    isTelemetryOptedOut,
+    setTelemetryOptOut,
+    disableTelemetry,
+    enableTelemetry,
+  } from "../lib/telemetry";
 
   interface Props {
     open: boolean;
@@ -46,40 +52,39 @@
   let resetArmed = $state(false);
   let clearArmed = $state(false);
   let optOutArmed = $state(false);
-  let telemetryEnabled = $state(
-    typeof window !== "undefined"
-      ? window.localStorage?.getItem("cz-telemetry-opt-out") !== "true"
-      : true,
-  );
+  let telemetryEnabled = $state(!isTelemetryOptedOut());
   let dismissedCount = $state(0);
 
   function reloadSettings() {
     settings = getSettings();
     themePref = getThemePreference();
     dismissedCount = dismissedRecommendationCount();
-    telemetryEnabled =
-      typeof window !== "undefined"
-        ? window.localStorage?.getItem("cz-telemetry-opt-out") !== "true"
-        : true;
+    telemetryEnabled = !isTelemetryOptedOut();
     optOutArmed = false;
   }
 
-  function handleConfirmOptOut() {
+  async function handleConfirmOptOut() {
     telemetryEnabled = false;
     optOutArmed = false;
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("cz-telemetry-opt-out", "true");
+    const saved = setTelemetryOptOut(true);
+    await disableTelemetry();
+    if (saved) {
+      toast("Anonymous error diagnostics disabled", "info");
+    } else {
+      toast("Diagnostics disabled for session (storage unavailable)", "info");
     }
-    toast("Anonymous error diagnostics disabled", "info");
   }
 
   function handleEnableTelemetry() {
     telemetryEnabled = true;
     optOutArmed = false;
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem("cz-telemetry-opt-out");
+    const saved = setTelemetryOptOut(false);
+    enableTelemetry();
+    if (saved) {
+      toast("Anonymous error diagnostics enabled", "success");
+    } else {
+      toast("Diagnostics enabled for session (storage unavailable)", "success");
     }
-    toast("Anonymous error diagnostics enabled", "success");
   }
 
   function getDiagnosticReport(): string {
