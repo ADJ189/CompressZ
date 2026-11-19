@@ -26,6 +26,7 @@
     setTelemetryOptOut,
     disableTelemetry,
     enableTelemetry,
+    clearStoragePreservingTelemetry,
   } from "../lib/telemetry";
 
   interface Props {
@@ -63,11 +64,15 @@
     optOutArmed = false;
   }
 
+  let telemetryTransitionId = 0;
+
   async function handleConfirmOptOut() {
     telemetryEnabled = false;
     optOutArmed = false;
+    const currentId = ++telemetryTransitionId;
     const saved = setTelemetryOptOut(true);
     await disableTelemetry();
+    if (currentId !== telemetryTransitionId || telemetryEnabled) return;
     if (saved) {
       toast("Anonymous error diagnostics disabled", "info");
     } else {
@@ -76,6 +81,7 @@
   }
 
   function handleEnableTelemetry() {
+    telemetryTransitionId++;
     telemetryEnabled = true;
     optOutArmed = false;
     const saved = setTelemetryOptOut(false);
@@ -112,10 +118,12 @@
   async function handleCopyDiagnostics() {
     try {
       const text = getDiagnosticReport();
-      if (navigator.clipboard) {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
         await navigator.clipboard.writeText(text);
+        toast("Diagnostic information copied to clipboard", "success");
+      } else {
+        toast("Clipboard API unavailable", "error");
       }
-      toast("Diagnostic information copied to clipboard", "success");
     } catch {
       toast("Failed to copy to clipboard", "error");
     }
@@ -392,11 +400,16 @@
                   type="button"
                   class="cz-btn cz-btn-danger cz-btn-sm cz-btn-pill"
                   onclick={() => {
-                    localStorage.clear();
-                    resetSettings();
-                    settings = getSettings();
+                    try {
+                      localStorage.removeItem("cz-recent-tools");
+                      localStorage.removeItem("cz-favourite-tools");
+                      localStorage.removeItem("cz-recommendations-v1");
+                    } catch {
+                      /* storage access restricted */
+                    }
+                    dismissedCount = 0;
                     clearArmed = false;
-                    toast("Local data cleared", "success");
+                    toast("Local cache cleared", "success");
                   }}
                 >
                   Confirm Clear
