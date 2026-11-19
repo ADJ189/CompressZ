@@ -34,3 +34,16 @@ Deno.test("optimizeSvg: rounds long decimals and preserves clean structure", asy
   assert(text.includes("12.35"), "Should format rounded numbers cleanly");
   assert(result.format.includes("SVG"), "Format note should describe SVG output");
 });
+
+Deno.test("optimizeSvg: creates valid unitless viewBox from dimensions with units", async () => {
+  const rawSvg = `<svg width="150px" height="250pt" xmlns="http://www.w3.org/2000/svg">
+    <rect width="100%" height="100%" fill="blue"/>
+  </svg>`;
+
+  const file = new File([rawSvg], "units.svg", { type: "image/svg+xml" });
+  const result = await optimizeSvg(file);
+  const text = await result.blob.text();
+
+  assert(text.includes('viewBox="0 0 150 250"'), "viewBox must contain numeric unitless coordinates");
+  assert(!text.includes('viewBox="0 0 150px 250pt"'), "viewBox must not contain raw CSS unit strings");
+});
