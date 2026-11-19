@@ -100,10 +100,17 @@ offline pack yet.
 
 - **Anonymous Error Diagnostics (Sentry)** — to detect crashes, unhandled
   exceptions, and WASM engine failures, anonymous diagnostics are sent to
-  `sentry.io`. This is enabled by default. No personal data, IP addresses,
-  filenames, file paths, or document contents are ever transmitted. Users
-  can opt out anytime in Settings under Privacy & data (persisted locally
-  via `cz-telemetry-opt-out`).
+  `sentry.io`. This is enabled by default. Client-side error payloads strictly
+  scrub and exclude user identifiers, filenames, file paths, and document contents.
+  Client IP addresses are deleted from the event payload; as with all web requests,
+  the ingestion endpoint briefly processes socket transport metadata during the HTTPS handshake.
+  Users can opt out anytime in Settings under Privacy & data (persisted locally via `cz-telemetry-opt-out`),
+  which stops reporting immediately without requiring a reload. For complete details, see [docs/TELEMETRY_POLICY.md](docs/TELEMETRY_POLICY.md).
+
+For comprehensive technical specifications on each processing engine and on-device AI inference, see:
+- [docs/ENGINE_POLICY.md](docs/ENGINE_POLICY.md) — Media, PDF, Office, and Archive engine specifications
+- [docs/AI_ENGINE_POLICY.md](docs/AI_ENGINE_POLICY.md) — On-device AI/ML runtime and privacy policy
+- [docs/TELEMETRY_POLICY.md](docs/TELEMETRY_POLICY.md) — Complete error reporting and anonymization pipeline
 
 ## 5. Local storage
 

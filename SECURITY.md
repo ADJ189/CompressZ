@@ -51,12 +51,14 @@ In scope:
 - Cross-site scripting or HTML injection through file names, OCR text, SVG
   content, extracted office-document text, or error messages.
 - Any path that transmits file bytes or file-derived content to a server.
-- Leaks of localStorage settings beyond the documented `theme`,
-  `cz-settings-v2`, and legacy `cz-settings-v1` keys.
+- Leaks of localStorage settings beyond the documented keys in [PRIVACY.md](PRIVACY.md#5-local-storage)
+  (`theme`, `cz-settings-v2`, `cz-settings-v1`, `cz-recommendations-v1`, `cz-recent-tools`,
+  `cz-favourite-tools`, `cz-convert-profile`, `cz-pdfsuite-profile`, and `cz-telemetry-opt-out`).
 - Supply-chain issues in dependencies that actually ship in the browser
   bundle or are loaded from the documented CDNs.
 - Denial-of-service bugs in the app's own parsers/engines that are reachable
-  from a normal file drop.
+  from a normal file drop (see [docs/ENGINE_POLICY.md](docs/ENGINE_POLICY.md)).
+- Disclosures, telemetry sanitization or opt-out defects violating [docs/TELEMETRY_POLICY.md](docs/TELEMETRY_POLICY.md).
 
 Out of scope:
 

@@ -1,6 +1,6 @@
 # Browser Engine & Architecture Limitations
 
-CompressZ executes **100% locally inside your web browser** using WebAssembly (WASM), WebCodecs, WebGL2, and HTML5 canvas APIs. No files, metadata, or telemetry are ever uploaded to an external server or cloud service.
+CompressZ executes **100% locally inside your web browser** using WebAssembly (WASM), WebCodecs, WebGL2, and HTML5 canvas APIs. No files, documents, or personal data are ever uploaded to an external server or cloud service. Anonymous crash diagnostics are enabled by default and can be opted out of in Settings (see [docs/TELEMETRY_POLICY.md](docs/TELEMETRY_POLICY.md)).
 
 Because computation takes place entirely on client hardware within the browser sandbox, specific platform and memory boundaries apply. The matrix below outlines the safe operating thresholds for in-browser execution, followed by the advanced technical breakdown.
 
@@ -73,3 +73,16 @@ Because computation takes place entirely on client hardware within the browser s
 
 - **Zero Direct Filesystem Access**: The browser security sandbox prevents direct arbitrary writes to host disk folders. All converted files are accumulated in temporary memory Blobs and downloaded via browser download triggers or packaged into a standard ZIP archive.
 - **Blob Storage Limits**: Browser storage quotas restrict how much temporary blob data can be kept active simultaneously before being downloaded or revoked. CompressZ automatically revokes unused object URLs once jobs complete or are dismissed.
+
+---
+
+### 7. ZIP Archive 4 GiB (32-Bit) Boundaries
+
+- **Classic ZIP Specification Ceiling**: Standard single-disk ZIP archives store byte counts and central directory offsets in 32-bit unsigned integers (`0xffffffff` or 4 GiB).
+- **Overhead Pre-flight Verification**: Generating an archive whose data plus local/central headers exceed 4 GiB corrupts standard ZIP readers. CompressZ calculates total projected archive size (including 30-byte local headers, 46-byte central headers, filename lengths, and EOCD records) before reading blobs into memory.
+- **Graceful Download Fallback**: When a batch is estimated to exceed 4 GiB, CompressZ immediately falls back to sequential individual file downloads within the active user click gesture, preventing browser popup blocking and memory exhaustion.
+
+For in-depth operational policies, see:
+- [docs/ENGINE_POLICY.md](docs/ENGINE_POLICY.md) — Comprehensive engine breakdown
+- [docs/AI_ENGINE_POLICY.md](docs/AI_ENGINE_POLICY.md) — On-device AI/ML runtime specifications
+- [docs/TELEMETRY_POLICY.md](docs/TELEMETRY_POLICY.md) — Error reporting and anonymization pipeline
