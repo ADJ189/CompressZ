@@ -294,7 +294,7 @@
   <div class="priv-highlight">
     <div class="ph-title">🔒 Your files never leave your device</div>
     <p class="ph-sub">
-      CompressZ has no backend servers. All compression, transcoding, and OCR processing takes place 100% locally using WebAssembly, WebCodecs, and HTML5 Web APIs. We don't collect personal data, run zero ad tracking, and never touch your files.
+      CompressZ has no backend servers. All compression, transcoding, and OCR processing takes place 100% locally using WebAssembly, WebCodecs, and HTML5 Web APIs. Files never leave your device, with zero ad tracking. When anonymous error diagnostics are enabled, crash reports are sent to Sentry (which receives the user's public IP address with HTTP requests) without any file contents.
     </p>
     <div class="ph-actions">
       <a
