@@ -44,6 +44,29 @@ Deno.test("optimizeSvg: creates valid unitless viewBox from dimensions with unit
   const result = await optimizeSvg(file);
   const text = await result.blob.text();
 
-  assert(text.includes('viewBox="0 0 150 250"'), "viewBox must contain numeric unitless coordinates");
+  // 150px -> 150, 250pt -> 250 * 4/3 = 333.33
+  assert(text.includes('viewBox="0 0 150 333.33"'), "viewBox must convert pt to CSS pixels (approx 333.33)");
+  assert(!text.includes('viewBox="0 0 150 250"'), "viewBox must not naively strip units without conversion");
   assert(!text.includes('viewBox="0 0 150px 250pt"'), "viewBox must not contain raw CSS unit strings");
+});
+
+Deno.test("optimizeSvg: does not invent viewBox for percentage or em dimensions", async () => {
+  const percentSvg = `<svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="50" cy="50" r="40" fill="green"/>
+  </svg>`;
+
+  const file = new File([percentSvg], "percent.svg", { type: "image/svg+xml" });
+  const result = await optimizeSvg(file);
+  const text = await result.blob.text();
+
+  assert(!text.includes("viewBox="), "Must not invent a viewBox for percentage dimensions");
+
+  const emSvg = `<svg width="10em" height="5em" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="50" cy="50" r="40" fill="green"/>
+  </svg>`;
+  const emFile = new File([emSvg], "em.svg", { type: "image/svg+xml" });
+  const emResult = await optimizeSvg(emFile);
+  const emText = await emResult.blob.text();
+
+  assert(!emText.includes("viewBox="), "Must not invent a viewBox for em dimensions");
 });
