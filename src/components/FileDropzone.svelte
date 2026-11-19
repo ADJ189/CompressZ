@@ -28,7 +28,15 @@
     if (files.length > 0) {
       onFiles(files);
     }
-    input.value = "";
+    // Delay clearing input.value so WebKit does not invalidate file references
+    // before the caller reads their ArrayBuffer.
+    setTimeout(() => {
+      try {
+        input.value = "";
+      } catch {
+        // ignore
+      }
+    }, 100);
   }
 
   function handleDragOver(e: DragEvent) {
@@ -54,6 +62,8 @@
   }
 </script>
 
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
   id="dz-mount"
   class="cz-dropzone {isDragActive ? 'is-drag-active' : ''} {hasFiles ? 'is-compact' : ''}"

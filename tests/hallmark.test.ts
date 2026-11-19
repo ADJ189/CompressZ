@@ -82,3 +82,31 @@ Deno.test("package standards: package.json has zero deno mentions in scripts & g
   const nodeVersionStr = await Deno.readTextFile(new URL("../.node-version", import.meta.url));
   assert(nodeVersionStr.trim().length > 0, ".node-version must exist to pin Node runtime for Cloudflare Pages");
 });
+
+Deno.test("ci standards: GitHub Actions workflows are resource-efficient and non-redundant", async () => {
+  const ciYml = await Deno.readTextFile(new URL("../.github/workflows/ci.yml", import.meta.url));
+  const e2eYml = await Deno.readTextFile(new URL("../.github/workflows/e2e.yml", import.meta.url));
+  const lhYml = await Deno.readTextFile(new URL("../.github/workflows/lighthouse.yml", import.meta.url));
+
+  // Concurrency cancel-in-progress to avoid burning runner minutes on outdated pushes
+  assert(ciYml.includes("cancel-in-progress: true"), "ci.yml must cancel in-progress runs");
+  assert(e2eYml.includes("cancel-in-progress: true"), "e2e.yml must cancel in-progress runs");
+  assert(lhYml.includes("cancel-in-progress: true"), "lighthouse.yml must cancel in-progress runs");
+
+  // Valid official action pins
+  for (const [name, yml] of [["ci.yml", ciYml], ["e2e.yml", e2eYml], ["lighthouse.yml", lhYml]]) {
+    assert(yml.includes("actions/checkout@v4"), `${name} must use actions/checkout@v4`);
+    assert(yml.includes("actions/setup-node@v4"), `${name} must use actions/setup-node@v4`);
+    assert(!yml.includes("@v7"), `${name} must not reference nonexistent @v7 actions`);
+  }
+
+  // Playwright matrix efficiency: scoped browser downloads rather than installing all 3 per job
+  assert(
+    e2eYml.includes("${{ matrix.browser }}"),
+    "e2e.yml must only install the scoped browser required for each matrix project"
+  );
+  assert(
+    e2eYml.includes("playwright-cache"),
+    "e2e.yml must cache Playwright browsers across runs"
+  );
+});

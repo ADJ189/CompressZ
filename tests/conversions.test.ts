@@ -1,0 +1,389 @@
+/**
+ * conversions.test.ts — Unit tests for two-way Office conversion logic.
+ */
+
+import { assertEquals } from "./assert.ts";
+import { readZip, writeZip } from "../src/lib/zip.ts";
+import {
+  buildHeadingXml,
+  buildParagraphXml,
+  buildListItemXml,
+  generateDocumentXml,
+  packageDocx,
+} from "../src/lib/conversions/pdfToWord.ts";
+import {
+  columnToLetter,
+  clusterTextIntoGrid,
+  generateWorksheetXml,
+  packageXlsx,
+} from "../src/lib/conversions/pdfToExcel.ts";
+import {
+  generateSlideXml,
+  packagePptx,
+} from "../src/lib/conversions/pdfToPpt.ts";
+import {
+  parseSharedStringsXml,
+  parseWorksheetXml,
+  gridToHtmlTable,
+  gridToCsv,
+  convertExcelToCsv,
+} from "../src/lib/conversions/excelToPdf.ts";
+import {
+  getLibreOfficeStatus,
+  isLibreOfficeLoaded,
+} from "../src/lib/conversions/libreOfficeWasm.ts";
+import { stripInvalidXml, escapeXml } from "../src/lib/conversions/common.ts";
+
+Deno.test("conversions: pdfToWord generates valid WordprocessingML tags and packages .docx", async () => {
+  const heading = buildHeadingXml("Test Title", 1);
+  assertEquals(heading.includes("Test Title"), true);
+  assertEquals(heading.includes("Heading1"), true);
+
+  const para = buildParagraphXml("This is paragraph content.");
+  assertEquals(para.includes("This is paragraph content."), true);
+
+  const bullet = buildListItemXml("- First item");
+  assertEquals(bullet.includes("First item"), true);
+  assertEquals(bullet.includes("&#8226;"), true);
+
+  const docXml = generateDocumentXml([
+    [
+      { type: "heading" as const, text: "Doc Heading", readingOrder: 0, pageNumber: 1, source: "native" as const },
+      { type: "paragraph" as const, text: "Body text", readingOrder: 1, pageNumber: 1, source: "native" as const },
+    ],
+  ]);
+  assertEquals(docXml.includes("<w:document"), true);
+  assertEquals(docXml.includes("Doc Heading"), true);
+
+  // Package into binary OOXML DOCX
+  const docxBytes = await packageDocx([
+    [{ type: "paragraph" as const, text: "Hello Docx", readingOrder: 0, pageNumber: 1, source: "native" as const }],
+  ]);
+  // DOCX begins with PK\x03\x04 zip signature
+  assertEquals(docxBytes[0], 0x50);
+  assertEquals(docxBytes[1], 0x4b);
+  assertEquals(docxBytes[2], 0x03);
+  assertEquals(docxBytes[3], 0x04);
+});
+
+Deno.test("conversions: pdfToExcel column mapping, text clustering, and .xlsx packaging", async () => {
+  assertEquals(columnToLetter(0), "A");
+  assertEquals(columnToLetter(1), "B");
+  assertEquals(columnToLetter(25), "Z");
+  assertEquals(columnToLetter(26), "AA");
+
+  const sampleItems = [
+    { str: "Product", x: 50, y: 700, w: 60, h: 12 },
+    { str: "Price", x: 200, y: 700, w: 40, h: 12 },
+    { str: "Widget", x: 50, y: 680, w: 50, h: 12 },
+    { str: "19.99", x: 200, y: 680, w: 30, h: 12 },
+  ];
+
+  const grid = clusterTextIntoGrid(sampleItems, 5);
+  assertEquals(grid.length, 2);
+  assertEquals(grid[0].includes("Product"), true);
+  assertEquals(grid[0].includes("Price"), true);
+
+  const sheetXml = generateWorksheetXml(grid);
+  assertEquals(sheetXml.includes("<worksheet"), true);
+  assertEquals(sheetXml.includes("<row r=\"1\">"), true);
+
+  // Package into binary OOXML XLSX
+  const xlsxBytes = await packageXlsx(grid);
+  assertEquals(xlsxBytes[0], 0x50);
+  assertEquals(xlsxBytes[1], 0x4b);
+  assertEquals(xlsxBytes[2], 0x03);
+  assertEquals(xlsxBytes[3], 0x04);
+});
+
+Deno.test("conversions: pdfToPpt slide generation and .pptx packaging", async () => {
+  const slideBlocks = [
+    [
+      { type: "heading" as const, text: "Slide 1 Title", readingOrder: 0, pageNumber: 1, source: "native" as const },
+      { type: "paragraph" as const, text: "Slide 1 body paragraph", readingOrder: 1, pageNumber: 1, source: "native" as const },
+    ],
+  ];
+
+  const slideXml = generateSlideXml(slideBlocks[0], 1);
+  assertEquals(slideXml.includes("<p:sld"), true);
+  assertEquals(slideXml.includes("Slide 1 Title"), true);
+
+  const pptxBytes = await packagePptx(slideBlocks);
+  assertEquals(pptxBytes[0], 0x50);
+  assertEquals(pptxBytes[1], 0x4b);
+  assertEquals(pptxBytes[2], 0x03);
+  assertEquals(pptxBytes[3], 0x04);
+
+  // Validate PresentationML layout & master infrastructure
+  const entries = await readZip(pptxBytes.buffer as ArrayBuffer);
+  assertEquals(entries.has("ppt/slideMasters/slideMaster1.xml"), true);
+  assertEquals(entries.has("ppt/slideMasters/_rels/slideMaster1.xml.rels"), true);
+  assertEquals(entries.has("ppt/slideLayouts/slideLayout1.xml"), true);
+  assertEquals(entries.has("ppt/slideLayouts/_rels/slideLayout1.xml.rels"), true);
+  assertEquals(entries.has("ppt/slides/_rels/slide1.xml.rels"), true);
+  assertEquals(entries.has("ppt/presentation.xml"), true);
+  assertEquals(entries.has("ppt/_rels/presentation.xml.rels"), true);
+
+  const presRelText = new TextDecoder().decode(entries.get("ppt/_rels/presentation.xml.rels")!);
+  assertEquals(presRelText.includes("slideMasters/slideMaster1.xml"), true);
+  assertEquals(presRelText.includes("slides/slide1.xml"), true);
+});
+
+Deno.test("conversions: excelToPdf shared strings, sheet parser, and XSS sanitization", () => {
+  const sstXml = `<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+    <si><t>Header 1</t></si>
+    <si><t>Header 2</t></si>
+    <si><t>&lt;script&gt;alert('xss')&lt;/script&gt;</t></si>
+  </sst>`;
+  const strings = parseSharedStringsXml(sstXml);
+  assertEquals(strings, ["Header 1", "Header 2", "<script>alert('xss')</script>"]);
+
+  const wsXml = `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+    <sheetData>
+      <row r="1">
+        <c r="A1" t="s"><v>0</v></c>
+        <c r="B1" t="s"><v>1</v></c>
+      </row>
+      <row r="2">
+        <c r="A2"><v>100</v></c>
+        <c r="B2" t="s"><v>2</v></c>
+      </row>
+      <row r="3">
+        <c r="A3" t="inlineStr"><t>&lt;img src=x onerror=evil()&gt;</t></c>
+        <c r="B3"><v>300</v></c>
+      </row>
+    </sheetData>
+  </worksheet>`;
+
+  const grid = parseWorksheetXml(wsXml, strings);
+  assertEquals(grid.length, 3);
+  assertEquals(grid[0], ["Header 1", "Header 2"]);
+  assertEquals(grid[1], ["100", "<script>alert('xss')</script>"]);
+  assertEquals(grid[2], ["<img src=x onerror=evil()>", "300"]);
+
+  // Test with crafted malicious workbook title and cell values
+  const tableHtml = gridToHtmlTable(grid, '<script>alert("title")</script>');
+  assertEquals(tableHtml.includes("<table"), true);
+  assertEquals(tableHtml.includes("Header 1"), true);
+  assertEquals(tableHtml.includes("300"), true);
+
+  // Assert NO executable script tags or unescaped onerror handlers exist in output HTML
+  assertEquals(tableHtml.includes('<script>alert("title")</script>'), false);
+  assertEquals(tableHtml.includes("&lt;script&gt;alert(&quot;title&quot;)&lt;/script&gt;"), true);
+  assertEquals(tableHtml.includes("<script>alert('xss')</script>"), false);
+  assertEquals(tableHtml.includes("&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;"), true);
+  assertEquals(tableHtml.includes("<img src=x onerror=evil()>"), false);
+  assertEquals(tableHtml.includes("&lt;img src=x onerror=evil()&gt;"), true);
+});
+
+Deno.test("conversions: libreOfficeWasm maintains lazy loading status", () => {
+  assertEquals(isLibreOfficeLoaded(), false);
+  const status = getLibreOfficeStatus();
+  assertEquals(status.loaded, false);
+  assertEquals(status.loading, false);
+});
+
+Deno.test("conversions: gridToCsv formats 2D grid into properly escaped CSV and neutralizes formulas", () => {
+  const grid = [
+    ["Name", "Notes", "Count", "FormulaText"],
+    ["Widget A", 'Includes "quotes" and, commas', "42", "=1+1"],
+    ["Widget B", "Multi\nline", "10", "+CMD|' /C calc'!A0"],
+    ["Widget C", "Regular", "5", "@HYPERLINK('http://evil.com')"],
+    ["Widget D", "Tabs", "1", "\t=SUM(A1:A10)"],
+    ["Widget E", "Minus", "-15", "-10+5"],
+  ];
+  const csv = gridToCsv(grid);
+  
+  // Formula triggers must be prefixed with single quote to prevent spreadsheet execution
+  assertEquals(csv.includes("'=1+1"), true);
+  assertEquals(csv.includes("'+CMD"), true);
+  assertEquals(csv.includes("'@HYPERLINK"), true);
+  assertEquals(csv.includes("'\t=SUM"), true);
+  assertEquals(csv.includes("'-10+5"), true);
+  assertEquals(csv.includes('"Includes ""quotes"" and, commas"'), true);
+});
+
+Deno.test("conversions: F11 excelToPdf collects multi-run <t> in inlineStr", () => {
+  const wsXml = `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+    <sheetData>
+      <row r="1">
+        <c r="A1" t="inlineStr">
+          <is>
+            <r><t>Hello </t></r>
+            <r><rPr><b/></rPr><t>Beautiful </t></r>
+            <r><t>World</t></r>
+          </is>
+        </c>
+      </row>
+    </sheetData>
+  </worksheet>`;
+
+  const grid = parseWorksheetXml(wsXml, []);
+  assertEquals(grid.length, 1);
+  assertEquals(grid[0][0], "Hello Beautiful World");
+});
+
+Deno.test("conversions: F12 stripInvalidXml strips disallowed control chars from OOXML", async () => {
+  // Disallowed: 0x00 through 0x08, 0x0B, 0x0C, 0x0E through 0x1F, 0xFFFE, 0xFFFF
+  // Allowed: \t (\u0009), \n (\u000A), \r (\u000D)
+  const input = "Valid text\twith tab\nand newline\r\u0000\u0001\u0008\u000B\u000C\u001F\uFFFE\uFFFFend";
+  const stripped = stripInvalidXml(input);
+  assertEquals(stripped, "Valid text\twith tab\nand newline\rend");
+
+  const escaped = escapeXml("<test>\u0000&foo</test>");
+  assertEquals(escaped, "&lt;test&gt;&amp;foo&lt;/test&gt;");
+
+  // Validate that packageDocx, packageXlsx, packagePptx handle disallowed control characters safely
+  const textWithControls = "Hello\u0000\u0008\u000B\u001F World";
+  const docx = await packageDocx([[{ type: "paragraph", text: textWithControls, readingOrder: 0, pageNumber: 1, source: "native" }]]);
+  const docxZip = await readZip(docx.buffer as ArrayBuffer);
+  const docXml = new TextDecoder().decode(docxZip.get("word/document.xml")!);
+  assertEquals(docXml.includes("Hello World"), true);
+  // eslint-disable-next-line no-control-regex
+  assertEquals(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(docXml), false);
+
+  const pptx = await packagePptx([[{ type: "paragraph", text: textWithControls, readingOrder: 0, pageNumber: 1, source: "native" }]]);
+  const pptxZip = await readZip(pptx.buffer as ArrayBuffer);
+  const sldXml = new TextDecoder().decode(pptxZip.get("ppt/slides/slide1.xml")!);
+  assertEquals(sldXml.includes("Hello World"), true);
+  // eslint-disable-next-line no-control-regex
+  assertEquals(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(sldXml), false);
+
+  const xlsx = await packageXlsx([[textWithControls]]);
+  const xlsxZip = await readZip(xlsx.buffer as ArrayBuffer);
+  const sheetXml = new TextDecoder().decode(xlsxZip.get("xl/worksheets/sheet1.xml")!);
+  assertEquals(sheetXml.includes("Hello World"), true);
+  // eslint-disable-next-line no-control-regex
+  assertEquals(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(sheetXml), false);
+});
+
+Deno.test("conversions: parseWorksheetXml handles self-closing rows and cells", () => {
+  const wsXml = `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+    <sheetData>
+      <row r="1">
+        <c r="A1" s="1"/>
+        <c r="B1" t="s"><v>0</v></c>
+      </row>
+      <row r="2"/>
+      <row r="3">
+        <c r="A3"><v>42</v></c>
+      </row>
+    </sheetData>
+  </worksheet>`;
+
+  const grid = parseWorksheetXml(wsXml, ["Shared String Value"]);
+  assertEquals(grid.length, 3);
+  assertEquals(grid[0][0], "");
+  assertEquals(grid[0][1], "Shared String Value");
+  assertEquals(grid[2][0], "42");
+});
+
+Deno.test("conversions: parseWorksheetXml enforces bounds on untrusted row and col indices", () => {
+  const badRow = `<worksheet><sheetData><row r="9999999"><c r="A1"><v>1</v></c></row></sheetData></worksheet>`;
+  let msg = "";
+  try {
+    parseWorksheetXml(badRow, []);
+  } catch (e) {
+    msg = (e as Error).message;
+  }
+  assertEquals(/exceeds safety maximum/.test(msg), true);
+
+  const badCol = `<worksheet><sheetData><row r="1"><c r="ZZZZZ1"><v>1</v></c></row></sheetData></worksheet>`;
+  msg = "";
+  try {
+    parseWorksheetXml(badCol, []);
+  } catch (e) {
+    msg = (e as Error).message;
+  }
+  assertEquals(/exceeds safety maximum/.test(msg), true);
+});
+
+Deno.test("conversions: convertExcelToCsv respects workbook tab order and excludes hidden sheets", async () => {
+  const enc = new TextEncoder();
+  const relsXml = `<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/>
+</Relationships>`;
+
+  // Tab order in workbook.xml: Sheet2 (rId2) first, Sheet1 (rId1) hidden, Sheet3 (rId3) second
+  const wbXml = `<?xml version="1.0" encoding="UTF-8"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    <sheet name="TabTwo" sheetId="2" r:id="rId2"/>
+    <sheet name="SecretHidden" sheetId="1" r:id="rId1" state="hidden"/>
+    <sheet name="TabThree" sheetId="3" r:id="rId3"/>
+  </sheets>
+</workbook>`;
+
+  const sheet1Xml = `<worksheet><sheetData><row r="1"><c r="A1"><v>HiddenData</v></c></row></sheetData></worksheet>`;
+  const sheet2Xml = `<worksheet><sheetData><row r="1"><c r="A1"><v>SecondTabFirst</v></c></row></sheetData></worksheet>`;
+  const sheet3Xml = `<worksheet><sheetData><row r="1"><c r="A1"><v>ThirdTabSecond</v></c></row></sheetData></worksheet>`;
+
+  const zipData = await writeZip([
+    { name: "xl/_rels/workbook.xml.rels", data: enc.encode(relsXml) },
+    { name: "xl/workbook.xml", data: enc.encode(wbXml) },
+    { name: "xl/worksheets/sheet1.xml", data: enc.encode(sheet1Xml) },
+    { name: "xl/worksheets/sheet2.xml", data: enc.encode(sheet2Xml) },
+    { name: "xl/worksheets/sheet3.xml", data: enc.encode(sheet3Xml) },
+  ]);
+
+  const file = new File([zipData as unknown as BlobPart], "test.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const csvBlob = await convertExcelToCsv(file);
+  const csvText = await csvBlob.text();
+
+  // Hidden sheet must NOT be present
+  assertEquals(csvText.includes("HiddenData"), false);
+  assertEquals(csvText.includes("SecretHidden"), false);
+
+  // TabTwo must come before TabThree
+  assertEquals(csvText.includes("SecondTabFirst"), true);
+  assertEquals(csvText.includes("ThirdTabSecond"), true);
+  const idx2 = csvText.indexOf("SecondTabFirst");
+  const idx3 = csvText.indexOf("ThirdTabSecond");
+  assertEquals(idx2 < idx3, true);
+});
+
+Deno.test("conversions: XML escaping strips invalid XML 1.0 control characters from OOXML output", () => {
+  // Disallowed control chars: \u0000-\u0008, \u000B, \u000C, \u000E-\u001F, \uFFFE, \uFFFF
+  // Allowed whitespace: \u0009 (tab), \u000A (LF), \u000D (CR)
+  const hostileString = "Safe\u0000Text\u0007With\u0008Chars\u000BAnd\u000CMore\u001FEnd\uFFFE\uFFFF\t\n\r<>&'\"";
+  const stripped = stripInvalidXml(hostileString);
+  // eslint-disable-next-line no-control-regex -- testing XML 1.0 disallowed control character stripping
+  assertEquals(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/.test(stripped), false);
+  assertEquals(stripped.includes("\t\n\r"), true);
+
+  const escaped = escapeXml(hostileString);
+  // eslint-disable-next-line no-control-regex -- testing XML 1.0 disallowed control character stripping
+  assertEquals(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/.test(escaped), false);
+  assertEquals(escaped.includes("&lt;&gt;&amp;&apos;&quot;"), true);
+
+  // Check Word XML builders
+  const headingXml = buildHeadingXml("Heading\u0003Title", 1);
+  assertEquals(headingXml.includes("\u0003"), false);
+  const paraXml = buildParagraphXml("Para\u000CBody");
+  assertEquals(paraXml.includes("\u000C"), false);
+  const itemXml = buildListItemXml("- Bullet\u001BItem");
+  assertEquals(itemXml.includes("\u001B"), false);
+
+  // Check Excel XML builder with control chars in numbers and strings
+  const sheetXml = generateWorksheetXml([["Cell\u0001Data", "Valid", "12\u000834", "\u000042"]]);
+  assertEquals(sheetXml.includes("\u0001"), false);
+  assertEquals(sheetXml.includes("\u0008"), false);
+  assertEquals(sheetXml.includes("\u0000"), false);
+
+  // Check null/undefined/empty handling
+  assertEquals(stripInvalidXml(null), "");
+  assertEquals(stripInvalidXml(undefined), "");
+  assertEquals(escapeXml(null), "");
+  assertEquals(escapeXml(undefined), "");
+
+  // Check PPT XML builder
+  const slideXml = generateSlideXml([
+    { type: "heading", text: "Slide\u0005Title", readingOrder: 0, pageNumber: 1, source: "native" },
+    { type: "paragraph", text: "Slide\u0007Body", readingOrder: 1, pageNumber: 1, source: "native" },
+  ], 1);
+  assertEquals(slideXml.includes("\u0005"), false);
+  assertEquals(slideXml.includes("\u0007"), false);
+});

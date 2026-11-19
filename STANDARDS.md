@@ -47,6 +47,8 @@ This document specifies the technical standards, toolchain invariants, and deplo
 ## 4. Pre-Upload Manual Re-Review Checklist
 
 - [ ] Run test suite with multiple workers: `deno test --parallel --allow-read tests/` (100% pass rate).
+- [ ] Run Node.js test runner: `node scripts/test.mjs` (100% pass rate).
+- [ ] Run Playwright E2E via Deno (max 3 workers): `deno run -A npm:@playwright/test test --workers=3`.
 - [ ] Typecheck all engine modules: `deno check tests/*.ts src/lib/*.ts`.
 - [ ] Verify Hallmark test: `deno test --allow-read tests/hallmark.test.ts`.
 - [ ] Verify build asset sizes are under 24 MiB.

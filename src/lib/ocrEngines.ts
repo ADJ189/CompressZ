@@ -13,6 +13,8 @@
  *   - Clean release of workers, canvases, and buffers on cancellation/completion.
  */
 
+import { EngineError, toErrorMessage } from "./engineError";
+
 export type OcrProfile = "auto" | "printed" | "handwriting" | "mixed";
 export type OcrEngineId = "auto" | "tesseract" | "paddle" | "trocr";
 export type OcrEngine = OcrEngineId;
@@ -200,7 +202,7 @@ export function loadTesseract(): Promise<any> {
     s.onload = () => resolve((window as any).Tesseract);
     s.onerror = () => {
       tessLoadPromise = null;
-      reject(new Error("Failed to load Tesseract.js runtime from CDN"));
+      reject(new EngineError("Failed to load Tesseract.js runtime from CDN", "tesseract"));
     };
     document.head.appendChild(s);
   });
@@ -223,8 +225,17 @@ export async function runPrintedOcr(
     ? "eng+equ"
     : options.language ?? "eng";
 
-  const worker = await getTesseractWorker(lang, options.onProgress);
-  const result = await worker.recognize(imageSource);
+  let result: any;
+  try {
+    const worker = await getTesseractWorker(lang, options.onProgress);
+    result = await worker.recognize(imageSource);
+  } catch (err) {
+    if (err instanceof EngineError) throw err;
+    throw new EngineError(
+      `Tesseract failed to recognise text: ${toErrorMessage(err, "engine error")}`,
+      "tesseract",
+    );
+  }
 
   const lines: OcrLineResult[] = [];
   const warnings: string[] = [];

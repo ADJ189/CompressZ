@@ -2,6 +2,8 @@
   import { onMount } from "svelte";
   import { navigate } from "../router";
   import { mountWorkbench } from "../lib/workbench";
+  import MacIcon from "../components/MacIcon.svelte";
+  import UniversalUpload from "../components/UniversalUpload.svelte";
 
   let rootEl: HTMLElement;
 
@@ -29,7 +31,8 @@
       id: "images",
       route: "compress/images",
       icon: "🖼️",
-      name: "Images",
+      iconName: "image",
+      name: "Compress Images",
       desc: "GPU-accelerated encoding via OffscreenCanvas. Binary search to hit exact target sizes. SSIM quality guard.",
       tags: ["JPEG", "PNG", "WebP", "AVIF", "HEIC", "✨ AI"],
       keywords: "image photo jpg jpeg png webp avif jxl svg gif compress quality reduce shrink ssim",
@@ -38,7 +41,8 @@
       id: "pdf",
       route: "compress/pdf",
       icon: "📄",
-      name: "PDF",
+      iconName: "pdf",
+      name: "Compress PDF",
       desc: "Structural image resampling — text and vectors untouched. Compress to exact MB/KB target.",
       tags: ["Structural", "pdf-lib", "Target size"],
       keywords: "pdf document shrink compress clean fonts downscale dpi",
@@ -47,16 +51,38 @@
       id: "merge",
       route: "compress/merge-pdf",
       icon: "🧷",
+      iconName: "merge",
       name: "Merge PDF",
       desc: "Combine multiple PDFs into one, in any order — pages copied directly, nothing rasterised.",
       tags: ["pdf-lib", "Reorderable", "Preview"],
       keywords: "merge pdf combine join concatenate append reorder pages",
     },
     {
+      id: "pdf-markdown",
+      route: "convert/pdf-markdown",
+      icon: "📝",
+      iconName: "markdown",
+      name: "PDF to Markdown",
+      desc: "High-fidelity structural extraction with column-aware reading order, table preservation, and figure crops.",
+      tags: ["Markdown", "TrOCR", "ZIP Bundle", "✨ New"],
+      keywords: "pdf markdown convert export extract tables text layout doc handwriting math",
+    },
+    {
+      id: "pdf-suite",
+      route: "pdf",
+      icon: "🛠️",
+      iconName: "studio",
+      name: "PDF Suite & Studio",
+      desc: "Split, organize, watermark, crop margins, fill forms, redact, sign, and repair PDF files in browser.",
+      tags: ["Split", "Watermark", "Redact", "Sign", "✨ Studio"],
+      keywords: "pdf suite studio edit split organize watermark crop forms redact sign repair",
+    },
+    {
       id: "images-to-pdf",
       route: "compress/images-to-pdf",
       icon: "🧩",
-      name: "Images → PDF",
+      iconName: "image",
+      name: "Images to PDF",
       desc: "Combine photos or screenshots into one PDF, one page each, reorderable with visual previews.",
       tags: ["pdf-lib", "Reorderable", "GPU", "✨ AI"],
       keywords: "images to pdf photo jpg png sequence pages sheet album",
@@ -65,7 +91,8 @@
       id: "video",
       route: "compress/video",
       icon: "🎬",
-      name: "Video",
+      iconName: "video",
+      name: "Compress Video",
       desc: "WebCodecs hardware acceleration with FFmpeg.wasm multi-threaded fallback for edit proxies.",
       tags: ["H.264", "H.265", "VP9", "AV1"],
       keywords: "video mp4 webm h264 h265 av1 webcodecs mediabunny ffmpeg",
@@ -74,7 +101,8 @@
       id: "audio",
       route: "compress/audio",
       icon: "🎵",
-      name: "Audio",
+      iconName: "audio",
+      name: "Compress Audio",
       desc: "FFmpeg.wasm encodes to 6 formats with custom bitrate, sample rate, and volume normalization.",
       tags: ["MP3", "AAC", "Opus", "FLAC", "WAV"],
       keywords: "audio mp3 aac opus flac wav normalize bitrate transcode",
@@ -83,7 +111,8 @@
       id: "gif",
       route: "compress/gif",
       icon: "🎞️",
-      name: "GIF",
+      iconName: "gif",
+      name: "Compress GIF",
       desc: "Gold-standard two-pass palettegen + paletteuse Bayer dithering or WebM VP9 conversion.",
       tags: ["GIF", "WebM VP9", "FFmpeg"],
       keywords: "gif webm vp9 palettegen animation motion",
@@ -92,8 +121,9 @@
       id: "ocr",
       route: "compress/ocr",
       icon: "🔍",
-      name: "PDF OCR",
-      desc: "Make scanned PDFs searchable. Tesseract.js LSTM neural OCR running in WebAssembly (100+ langs).",
+      iconName: "ocr",
+      name: "Searchable PDF OCR",
+      desc: "Turn scanned PDFs and images into searchable PDFs. Tesseract.js LSTM neural OCR in WebAssembly (100+ langs).",
       tags: ["Tesseract", "WASM", "Searchable PDF"],
       keywords: "ocr pdf searchable tesseract scanned text document extract",
     },
@@ -101,19 +131,11 @@
       id: "convert",
       route: "convert",
       icon: "🔁",
-      name: "Convert",
+      iconName: "convert",
+      name: "Convert Formats",
       desc: "Format conversion for video, audio, images, PDF ⇄ images, Word DOCX, and PowerPoint PPTX.",
       tags: ["Video", "DOCX", "PPTX", "PDF"],
       keywords: "convert video audio images docx pptx pdf transcode",
-    },
-    {
-      id: "pdf-markdown",
-      route: "convert/pdf-markdown",
-      icon: "📝",
-      name: "PDF to Markdown",
-      desc: "High-fidelity structural extraction with column-aware reading order, table preservation, and figure crops.",
-      tags: ["Markdown", "TrOCR", "ZIP Bundle", "✨ New"],
-      keywords: "pdf markdown convert export extract tables text layout doc handwriting math",
     },
   ];
 </script>
@@ -151,6 +173,7 @@
           <path d="M5 12h14M12 5l7 7-7 7"/>
         </svg>
       </a>
+      <UniversalUpload label="Drop or Pick Any File" />
       <button
         type="button"
         class="btn-ghost"
@@ -217,7 +240,9 @@
         onclick={(e) => handleNav(tool.route, e)}
       >
         <div class="htc-head">
-          <div class="htc-icon">{tool.icon}</div>
+          <div class="htc-icon">
+            <MacIcon name={tool.iconName} variant="squircle" squircleSize={40} />
+          </div>
           <button
             type="button"
             class="cz-wb-all__fav"

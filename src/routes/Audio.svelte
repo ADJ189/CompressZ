@@ -1,19 +1,21 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import FileDropzone from "../components/FileDropzone.svelte";
   import FileQueue from "../components/FileQueue.svelte";
-  import { audioStore, type AudioState } from "../store";
+  import { audioStore, type AudioState, consumeStagedUniversalFile, currentRoute } from "../store";
   import { compressAudio } from "../lib/compressAudio";
   import { audioOptions } from "../lib/options";
   import { runScheduled } from "../lib/resourceManager";
+import { entryError } from "../lib/engineError";
   import { uid, type FileEntry, type AudioFormat, outputFilename } from "../lib/types";
   import { toast } from "../toast";
 
-  let state = $state<AudioState>(audioStore.get());
+  let audioState = $state<AudioState>(audioStore.get());
   let isBusy = $state(false);
 
   $effect(() => {
     const unsub = audioStore.subscribe((val) => {
-      state = val;
+      audioState = val;
     });
     return unsub;
   });
@@ -31,27 +33,47 @@
       status: "idle",
       type: "audio",
     }));
-    updateStore({ files: [...state.files, ...newEntries] });
+    updateStore({ files: [...audioState.files, ...newEntries] });
   }
+
+  function applyStagedFile() {
+    const staged = consumeStagedUniversalFile("compress/audio");
+    if (staged?.file) {
+      handleFilesAdded([staged.file]);
+    }
+  }
+
+  onMount(() => {
+    applyStagedFile();
+  });
+
+  $effect(() => {
+    const unsub = currentRoute.subscribe((r) => {
+      if (r === "compress/audio") {
+        applyStagedFile();
+      }
+    });
+    return unsub;
+  });
 
   async function compressSingle(entry: FileEntry) {
     if (entry.status === "compressing") return;
 
     updateStore({
-      files: state.files.map((f) =>
+      files: audioState.files.map((f) =>
         f.id === entry.id ? { ...f, status: "compressing", error: undefined } : f,
       ),
     });
 
     try {
-      const options = audioOptions(state);
+      const options = audioOptions(audioState);
       const res = await runScheduled(
         { kind: "audio", label: entry.name, bytes: entry.file.size },
         () => compressAudio(entry.file, options),
       );
 
       updateStore({
-        files: state.files.map((f) =>
+        files: audioState.files.map((f) =>
           f.id === entry.id
             ? {
                 ...f,
@@ -65,24 +87,28 @@
       toast(`Compressed ${entry.name}`, "success");
     } catch (err) {
       console.error("[audioCompress] error:", err);
+      const failure = entryError(err, "Audio compression failed");
       updateStore({
-        files: state.files.map((f) =>
+        files: audioState.files.map((f) =>
           f.id === entry.id
             ? {
                 ...f,
                 status: "error",
-                error: (err as Error).message || "Audio compression failed",
+                error: failure.error,
+                errorLog: failure.errorLog,
               }
             : f,
         ),
       });
-      toast(`Failed to compress ${entry.name}`, "error");
+      toast(`${entry.name}: ${failure.error}`, "error", undefined, {
+        log: failure.errorLog,
+      });
     }
   }
 
   async function handleCompressAll() {
     isBusy = true;
-    const idleEntries = state.files.filter((f) => f.status === "idle" || f.status === "error");
+    const idleEntries = audioState.files.filter((f) => f.status === "idle" || f.status === "error");
     for (const entry of idleEntries) {
       await compressSingle(entry);
     }
@@ -96,21 +122,21 @@
     a.href = url;
     a.download = outputFilename(entry.name, entry.compressedBlob, {
       suffix: "-compressed",
-      fallbackExt: state.fmt,
+      fallbackExt: audioState.fmt,
     });
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   }
 
   function handleDownloadAll() {
-    const doneEntries = state.files.filter((f) => f.status === "done");
+    const doneEntries = audioState.files.filter((f) => f.status === "done");
     for (const entry of doneEntries) {
       handleDownloadSingle(entry);
     }
   }
 
   function handleRemove(id: string) {
-    updateStore({ files: state.files.filter((f) => f.id !== id) });
+    updateStore({ files: audioState.files.filter((f) => f.id !== id) });
   }
 
   function handleClear() {
@@ -132,7 +158,7 @@
       <select
         id="aud-fmt"
         class="cz-select"
-        value={state.fmt}
+        value={audioState.fmt}
         onchange={(e) => updateStore({ fmt: (e.target as HTMLSelectElement).value as AudioFormat })}
       >
         <option value="mp3">MP3 (Universal)</option>
@@ -149,7 +175,7 @@
       <select
         id="aud-bitrate"
         class="cz-select"
-        value={state.bitrate}
+        value={audioState.bitrate}
         onchange={(e) => updateStore({ bitrate: Number((e.target as HTMLSelectElement).value) })}
       >
         <option value="64">64 kbps (Voice / Low)</option>
@@ -164,7 +190,7 @@
     <label class="cz-checkbox-label">
       <input
         type="checkbox"
-        checked={state.stripMeta}
+        checked={audioState.stripMeta}
         onchange={(e) => updateStore({ stripMeta: (e.target as HTMLInputElement).checked })}
       />
       <span>Strip ID3 tags</span>
@@ -176,13 +202,13 @@
     icon="🎵"
     title="Drop audio files here"
     subtitle="MP3, AAC, OGG, Opus, FLAC, WAV, M4A"
-    hasFiles={state.files.length > 0}
+    hasFiles={audioState.files.length > 0}
     onFiles={handleFilesAdded}
   />
 
-  {#if state.files.length > 0}
+  {#if audioState.files.length > 0}
     <FileQueue
-      files={state.files}
+      files={audioState.files}
       {isBusy}
       onCompressAll={handleCompressAll}
       onDownloadAll={handleDownloadAll}

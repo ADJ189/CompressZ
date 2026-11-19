@@ -1,19 +1,21 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import FileDropzone from "../components/FileDropzone.svelte";
   import FileQueue from "../components/FileQueue.svelte";
-  import { gifStore, type GifState } from "../store";
+  import { gifStore, type GifState, consumeStagedUniversalFile, currentRoute } from "../store";
   import { compressGif } from "../lib/compressGif";
   import { gifOptions } from "../lib/options";
   import { runScheduled } from "../lib/resourceManager";
+import { entryError } from "../lib/engineError";
   import { uid, type FileEntry, outputFilename } from "../lib/types";
   import { toast } from "../toast";
 
-  let state = $state<GifState>(gifStore.get());
+  let gifState = $state<GifState>(gifStore.get());
   let isBusy = $state(false);
 
   $effect(() => {
     const unsub = gifStore.subscribe((val) => {
-      state = val;
+      gifState = val;
     });
     return unsub;
   });
@@ -31,27 +33,47 @@
       status: "idle",
       type: "gif",
     }));
-    updateStore({ files: [...state.files, ...newEntries] });
+    updateStore({ files: [...gifState.files, ...newEntries] });
   }
+
+  function applyStagedFile() {
+    const staged = consumeStagedUniversalFile("compress/gif");
+    if (staged?.file) {
+      handleFilesAdded([staged.file]);
+    }
+  }
+
+  onMount(() => {
+    applyStagedFile();
+  });
+
+  $effect(() => {
+    const unsub = currentRoute.subscribe((r) => {
+      if (r === "compress/gif") {
+        applyStagedFile();
+      }
+    });
+    return unsub;
+  });
 
   async function compressSingle(entry: FileEntry) {
     if (entry.status === "compressing") return;
 
     updateStore({
-      files: state.files.map((f) =>
+      files: gifState.files.map((f) =>
         f.id === entry.id ? { ...f, status: "compressing", error: undefined } : f,
       ),
     });
 
     try {
-      const options = gifOptions(state);
+      const options = gifOptions(gifState);
       const res = await runScheduled(
         { kind: "gif", label: entry.name, bytes: entry.file.size },
         () => compressGif(entry.file, options),
       );
 
       updateStore({
-        files: state.files.map((f) =>
+        files: gifState.files.map((f) =>
           f.id === entry.id
             ? {
                 ...f,
@@ -65,24 +87,28 @@
       toast(`Compressed ${entry.name}`, "success");
     } catch (err) {
       console.error("[gifCompress] error:", err);
+      const failure = entryError(err, "GIF compression failed");
       updateStore({
-        files: state.files.map((f) =>
+        files: gifState.files.map((f) =>
           f.id === entry.id
             ? {
                 ...f,
                 status: "error",
-                error: (err as Error).message || "GIF compression failed",
+                error: failure.error,
+                errorLog: failure.errorLog,
               }
             : f,
         ),
       });
-      toast(`Failed to compress ${entry.name}`, "error");
+      toast(`${entry.name}: ${failure.error}`, "error", undefined, {
+        log: failure.errorLog,
+      });
     }
   }
 
   async function handleCompressAll() {
     isBusy = true;
-    const idleEntries = state.files.filter((f) => f.status === "idle" || f.status === "error");
+    const idleEntries = gifState.files.filter((f) => f.status === "idle" || f.status === "error");
     for (const entry of idleEntries) {
       await compressSingle(entry);
     }
@@ -103,14 +129,14 @@
   }
 
   function handleDownloadAll() {
-    const doneEntries = state.files.filter((f) => f.status === "done");
+    const doneEntries = gifState.files.filter((f) => f.status === "done");
     for (const entry of doneEntries) {
       handleDownloadSingle(entry);
     }
   }
 
   function handleRemove(id: string) {
-    updateStore({ files: state.files.filter((f) => f.id !== id) });
+    updateStore({ files: gifState.files.filter((f) => f.id !== id) });
   }
 
   function handleClear() {
@@ -128,13 +154,13 @@
 
   <div class="cz-tool-settings-bar">
     <div class="cz-setting-item">
-      <label class="cz-setting-label" for="gif-q">Quality ({state.quality}%)</label>
+      <label class="cz-setting-label" for="gif-q">Quality ({gifState.quality}%)</label>
       <input
         id="gif-q"
         type="range"
         min="10"
         max="100"
-        value={state.quality}
+        value={gifState.quality}
         class="cz-range"
         oninput={(e) => updateStore({ quality: Number((e.target as HTMLInputElement).value) })}
       />
@@ -145,8 +171,8 @@
       <div class="seg" role="group" aria-label="Output format">
         <button
           type="button"
-          class={!state.gifToVideo ? "on" : ""}
-          aria-pressed={!state.gifToVideo}
+          class={!gifState.gifToVideo ? "on" : ""}
+          aria-pressed={!gifState.gifToVideo}
           id="out-gif"
           onclick={() => updateStore({ gifToVideo: false })}
         >
@@ -154,8 +180,8 @@
         </button>
         <button
           type="button"
-          class={state.gifToVideo ? "on" : ""}
-          aria-pressed={state.gifToVideo}
+          class={gifState.gifToVideo ? "on" : ""}
+          aria-pressed={gifState.gifToVideo}
           id="out-webm"
           onclick={() => updateStore({ gifToVideo: true })}
         >
@@ -169,7 +195,7 @@
       <select
         id="gif-w"
         class="cz-select"
-        value={state.maxWidth}
+        value={gifState.maxWidth}
         onchange={(e) => updateStore({ maxWidth: Number((e.target as HTMLSelectElement).value) })}
       >
         <option value="0">Original</option>
@@ -184,13 +210,13 @@
     icon="🎞️"
     title="Drop animated GIF files here"
     subtitle="Standard animated GIF files"
-    hasFiles={state.files.length > 0}
+    hasFiles={gifState.files.length > 0}
     onFiles={handleFilesAdded}
   />
 
-  {#if state.files.length > 0}
+  {#if gifState.files.length > 0}
     <FileQueue
-      files={state.files}
+      files={gifState.files}
       {isBusy}
       onCompressAll={handleCompressAll}
       onDownloadAll={handleDownloadAll}

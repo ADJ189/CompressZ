@@ -70,8 +70,13 @@ export interface FileEntry {
   result?: CompressResult;
   compressedBlob?: Blob;
   compressedSize?: number;
+  /** Secondary artefact from a run that produces two files (e.g. OCR pdf + txt). */
+  extraBlob?: Blob;
+  extraName?: string;
   thumbUrl?: string;
   error?: string;
+  /** Bounded engine log for an error, shown behind a "Details" disclosure. */
+  errorLog?: string[];
   options?: CompressOptions;
   aiLabel?: string; // set by the local AI engine's "Smart Analyze" (see lib/aiEngine.ts) — undefined until run
 }
