@@ -149,6 +149,13 @@ export function calculateImageDrawnSizes(
       continue;
     }
 
+    // Array delimiters: [ and ]
+    if (ch === "[" || ch === "]") {
+      i++;
+      operands.length = 0;
+      continue;
+    }
+
     // Comment: % ... \n
     if (ch === "%") {
       while (i < len && streamText[i] !== "\r" && streamText[i] !== "\n") {
@@ -223,15 +230,23 @@ export function calculateImageDrawnSizes(
       streamText[i] !== "/" &&
       streamText[i] !== "(" &&
       streamText[i] !== "[" &&
+      streamText[i] !== "]" &&
       streamText[i] !== "<" &&
+      streamText[i] !== ">" &&
       streamText[i] !== "%"
     ) {
       i++;
     }
+
+    if (start === i) {
+      i++;
+      continue;
+    }
+
     const token = streamText.slice(start, i);
     const num = Number(token);
 
-    if (!isNaN(num)) {
+    if (!Number.isNaN(num)) {
       operands.push(num);
     } else if (token === "cm") {
       if (operands.length >= 6) {
@@ -319,8 +334,8 @@ async function decompressFlate(bytes: Uint8Array): Promise<Uint8Array> {
     try {
       const ds = new DecompressionStream("deflate");
       const writer = ds.writable.getWriter();
-      writer.write(bytes as any);
-      writer.close();
+      void writer.write(bytes as any).catch(() => {});
+      void writer.close().catch(() => {});
       const res = new Response(ds.readable);
       return new Uint8Array(await res.arrayBuffer());
     } catch {

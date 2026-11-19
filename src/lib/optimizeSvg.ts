@@ -9,8 +9,8 @@ import type { CompressResult } from './types';
 export function parseSvgLength(value: string): number | null {
   const match = value.trim().match(/^([\d.]+)\s*(px|pt|in|cm|mm|pc)?$/i);
   if (!match) return null;
-  const num = parseFloat(match[1]);
-  if (isNaN(num) || num <= 0) return null;
+  const num = Number.parseFloat(match[1]);
+  if (Number.isNaN(num) || num <= 0) return null;
   const unit = (match[2] ?? "px").toLowerCase();
   switch (unit) {
     case "px":
@@ -60,7 +60,7 @@ export async function optimizeSvg(
 
   // Round long decimals (≥3 decimal places → 2)
   svg = svg.replace(/(\d+\.\d{3,})/g, m =>
-    parseFloat(m).toFixed(2).replace(/\.?0+$/, ''));
+    Number.parseFloat(m).toFixed(2).replace(/\.?0+$/, ''));
   onProgress?.(55);
 
   // Compact path data

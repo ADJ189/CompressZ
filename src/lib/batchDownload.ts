@@ -16,6 +16,18 @@ export interface BatchFileItem {
   blob: Blob;
 }
 
+/** 32-bit ZIP limit (4 GiB). Batches at or above this cannot be packaged safely without Zip64. */
+export const MAX_ZIP_BATCH_BYTES = 0xffffffff;
+
+function triggerDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
 export async function downloadBatch(
   items: BatchFileItem[],
   archiveName: string,
@@ -24,33 +36,44 @@ export async function downloadBatch(
   if (validItems.length === 0) return;
 
   if (validItems.length === 1) {
-    const single = validItems[0];
-    const url = URL.createObjectURL(single.blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = single.name;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    triggerDownload(validItems[0].blob, validItems[0].name);
     return;
   }
 
-  // Multi-file batch: create a single ZIP archive
-  const zipEntries: ZipEntryIn[] = await Promise.all(
-    validItems.map(async (item) => ({
-      name: item.name,
-      data: new Uint8Array(await item.blob.arrayBuffer()),
-    })),
+  // Pre-check total size before allocating arrays and packaging
+  const totalSizeBytes = validItems.reduce(
+    (acc, item) => acc + (item.blob?.size ?? 0),
+    0,
   );
 
-  const zipBytes = await writeZip(zipEntries);
-  const zipBlob = new Blob([new Uint8Array(zipBytes)], { type: "application/zip" });
-  const url = URL.createObjectURL(zipBlob);
-  const a = document.createElement("a");
-  a.href = url;
-  const safeArchiveName = archiveName.endsWith(".zip")
-    ? archiveName
-    : `${archiveName}.zip`;
-  a.download = safeArchiveName;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  // If combined size exceeds the 32-bit (4 GiB) ZIP threshold, fall back to
+  // individually accessible output downloads within the user gesture so the batch succeeds.
+  if (totalSizeBytes >= MAX_ZIP_BATCH_BYTES) {
+    for (const item of validItems) {
+      triggerDownload(item.blob, item.name);
+    }
+    return;
+  }
+
+  try {
+    // Multi-file batch: create a single ZIP archive
+    const zipEntries: ZipEntryIn[] = await Promise.all(
+      validItems.map(async (item) => ({
+        name: item.name,
+        data: new Uint8Array(await item.blob.arrayBuffer()),
+      })),
+    );
+
+    const zipBytes = await writeZip(zipEntries);
+    const zipBlob = new Blob([new Uint8Array(zipBytes)], { type: "application/zip" });
+    const safeArchiveName = archiveName.endsWith(".zip")
+      ? archiveName
+      : `${archiveName}.zip`;
+    triggerDownload(zipBlob, safeArchiveName);
+  } catch {
+    // Fallback: if in-memory ZIP packaging fails (e.g. limit reached), provide individual downloads
+    for (const item of validItems) {
+      triggerDownload(item.blob, item.name);
+    }
+  }
 }
