@@ -3,7 +3,7 @@
   "specifiers": {
     "npm:@eslint/js@^10.0.1": "10.0.1_eslint@10.14.0",
     "npm:@huggingface/transformers@^4.3.2": "4.3.2",
-    "npm:@lhci/cli@^0.16.1": "0.16.1",
+    "npm:@lhci/cli@~0.16.1": "0.16.1",
     "npm:@playwright/test@^1.65.0": "1.65.0",
     "npm:@sveltejs/vite-plugin-svelte@^7.3.1": "7.3.1_svelte@5.57.3_vite@8.3.6",
     "npm:eslint@^10.14.0": "10.14.0",
@@ -3047,8 +3047,9 @@
       "dependencies": [
         "npm:@eslint/js@^10.0.1",
         "npm:@huggingface/transformers@^4.3.2",
-        "npm:@lhci/cli@^0.16.1",
+        "npm:@lhci/cli@~0.16.1",
         "npm:@playwright/test@^1.65.0",
+        "npm:@sentry/svelte@^11.14.0",
         "npm:@sveltejs/vite-plugin-svelte@^7.3.1",
         "npm:eslint@^10.14.0",
         "npm:svelte-check@^4.7.8",

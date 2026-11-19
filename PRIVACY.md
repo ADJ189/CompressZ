@@ -24,7 +24,7 @@ GitHub.
 - We do **not** collect names, email addresses, or any personal identifiers.
 - We do **not** use cookies for tracking or advertising.
 - We do **not** run analytics scripts (no Google Analytics, Mixpanel, or similar).
-- We do **not** sell, share, or transfer any data to third parties.
+- We do **not** sell, share, or transfer user files to third parties (anonymous crash diagnostics may be transmitted to Sentry when enabled; see §7).
 - We do **not** have a backend server that touches your files.
 
 ## 3. How file processing works
