@@ -13,19 +13,21 @@
   <div class="cz-privacy-callout-box">
     <p>
       <strong>Summary:</strong> CompressZ operates as an offline-capable, client-side web application.
-      We have no backend servers that receive your documents. We collect no personal data, run no
-      telemetry, and store no cookies. Your files remain strictly on your device.
+      All file processing occurs 100% locally in your browser. We have no backend servers that touch
+      your documents. We run no advertising, no tracking scripts, and store no cookies. Anonymous error
+      diagnostics are enabled by default solely to catch software bugs and crashes, which you can opt out of
+      anytime in Settings.
     </p>
   </div>
 
   <section class="cz-content-section">
-    <h2 class="cz-content-heading">1. No Data Collection</h2>
+    <h2 class="cz-content-heading">1. No Document or Personal Data Collection</h2>
     <ul>
-      <li>We do not collect, view, or retain your files, text, images, or metadata.</li>
-      <li>We do not collect names, email addresses, or device identifiers.</li>
-      <li>We do not run tracking scripts, third-party analytics, or ad pixels.</li>
-      <li>All processing executes in temporary browser memory.</li>
-      <li>Anonymous error diagnostics are enabled by default to detect software bugs; this strictly scrubs all filenames, file paths, and URLs, and can be disabled anytime in Settings.</li>
+      <li>We do not collect, view, or retain your files, text, images, or document metadata.</li>
+      <li>We do not collect names, email addresses, user accounts, or persistent identifiers.</li>
+      <li>We do not run tracking scripts, third-party analytics, user profiling, or ad pixels.</li>
+      <li>All compression, conversion, and OCR execute in temporary browser memory on your device.</li>
+      <li>Anonymous error diagnostics are enabled by default to detect software crashes and engine bugs; event payloads strictly scrub all filenames, file paths, and URLs, exclude user IDs and IPs, and can be disabled anytime in Settings.</li>
     </ul>
   </section>
 

@@ -8,7 +8,7 @@
   import { runScheduled } from "../lib/resourceManager";
 import { entryError } from "../lib/engineError";
   import { uid, type FileEntry, type VideoCodec, outputFilename } from "../lib/types";
-  import { downloadBatch } from "../lib/batchDownload";
+  import { downloadBatch, exceedsZipLimit } from "../lib/batchDownload";
   import { toast } from "../toast";
 
   let videoState = $state<VideoState>(videoStore.get());
@@ -138,8 +138,7 @@ import { entryError } from "../lib/engineError";
       }),
       blob: entry.compressedBlob!,
     }));
-    const totalBytes = items.reduce((acc, it) => acc + (it.blob?.size ?? 0), 0);
-    if (totalBytes >= 0xffffffff) {
+    if (exceedsZipLimit(items.map((it) => ({ name: it.name, size: it.blob.size })))) {
       toast("Batch exceeds 4 GiB ZIP limit; downloading files individually", "info");
     }
     await downloadBatch(items, "video-compressed.zip");
