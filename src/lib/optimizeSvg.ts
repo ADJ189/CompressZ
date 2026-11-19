@@ -1,5 +1,35 @@
 import type { CompressResult } from './types';
 
+/**
+ * Parse an SVG dimension value with units into user-unit numbers (CSS pixels).
+ * Converts absolute units (pt, in, cm, mm, pc, px, unitless).
+ * Rejects percentages (%) and relative font-relative units (em, rem, etc.) whose
+ * user-unit equivalent cannot be established without an external context.
+ */
+export function parseSvgLength(value: string): number | null {
+  const match = value.trim().match(/^([\d.]+)\s*(px|pt|in|cm|mm|pc)?$/i);
+  if (!match) return null;
+  const num = parseFloat(match[1]);
+  if (isNaN(num) || num <= 0) return null;
+  const unit = (match[2] ?? "px").toLowerCase();
+  switch (unit) {
+    case "px":
+      return num;
+    case "pt":
+      return (num * 4) / 3;
+    case "in":
+      return num * 96;
+    case "cm":
+      return (num * 96) / 2.54;
+    case "mm":
+      return (num * 96) / 25.4;
+    case "pc":
+      return num * 16;
+    default:
+      return null;
+  }
+}
+
 export async function optimizeSvg(
   file: File,
   onProgress?: (pct: number) => void,
@@ -71,15 +101,17 @@ export async function optimizeSvg(
   svg = svg.replace(/\s{2,}/g, ' ').trim();
   onProgress?.(80);
 
-  // Add viewBox if missing (SVG viewBox coordinates must be unitless numbers)
+  // Add viewBox if missing (SVG viewBox coordinates must be unitless numbers in CSS pixels)
   if (!svg.includes('viewBox') && svg.includes('width=') && svg.includes('height=')) {
-    const w = svg.match(/width="([^"]+)"/)?.[1];
-    const h = svg.match(/height="([^"]+)"/)?.[1];
+    const w = svg.match(/\bwidth=["']([^"']+)["']/i)?.[1];
+    const h = svg.match(/\bheight=["']([^"']+)["']/i)?.[1];
     if (w && h) {
-      const numW = parseFloat(w);
-      const numH = parseFloat(h);
-      if (!isNaN(numW) && !isNaN(numH) && numW > 0 && numH > 0) {
-        svg = svg.replace('<svg', `<svg viewBox="0 0 ${numW} ${numH}"`);
+      const numW = parseSvgLength(w);
+      const numH = parseSvgLength(h);
+      if (numW !== null && numH !== null) {
+        const fmtW = Number(numW.toFixed(2));
+        const fmtH = Number(numH.toFixed(2));
+        svg = svg.replace('<svg', `<svg viewBox="0 0 ${fmtW} ${fmtH}"`);
       }
     }
   }

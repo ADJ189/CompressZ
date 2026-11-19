@@ -63,7 +63,7 @@ export function planVideoSize(
 }
 
 /** Resolve display dimensions + duration from a video element with timeout guards. */
-export function getVideoMeta(file: File): Promise<VideoMeta> {
+export function getVideoMeta(file: File, timeoutMs: number = 10_000): Promise<VideoMeta> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const v = document.createElement("video");
@@ -81,9 +81,8 @@ export function getVideoMeta(file: File): Promise<VideoMeta> {
     const timer = setTimeout(() => {
       if (settled) return;
       cleanup();
-      // On timeout, resolve safe fallback dimensions rather than freezing the workflow
-      resolve({ width: 1280, height: 720, duration: 30 });
-    }, 10_000);
+      reject(new Error("Timed out reading video metadata"));
+    }, timeoutMs);
 
     v.onloadedmetadata = () => {
       if (settled) return;
