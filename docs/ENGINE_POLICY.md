@@ -8,7 +8,7 @@ This document specifies the technical architecture, operational boundaries, and 
 
 | Engine | Primary Duties | Technologies / Libraries | Isolation Mode | Maximum Memory Cap |
 | :--- | :--- | :--- | :--- | :--- |
-| **Image Engine** | Compression, format conversion (WebP, AVIF, JPEG, PNG, SVG) | Canvas 2D, OffscreenCanvas, WebAssembly codecs | Dedicated Web Worker / Main thread | 512 MiB per task |
+| **Image Engine** | Compression, format conversion (WebP, AVIF, JPEG, PNG, SVG) | Canvas 2D, OffscreenCanvas, WebAssembly codecs | Dedicated Web Worker / Main thread | Resource Guard concurrency & admission |
 | **Video Engine** | Transcoding, bitrate budgeting, downscaling | WebCodecs API (hardware), Mediabunny, FFmpeg WASM | Dedicated Web Worker | 1.5 GiB per task |
 | **Audio Engine** | Transcoding (MP3, WAV, OGG, AAC), sample rate conversion | Web Audio API (`AudioContext`), LAME WASM | Dedicated Web Worker | 256 MiB per task |
 | **PDF Suite & Studio** | Splitting, merging, watermarking, redaction, AcroForms, repair | QPDF WASM, pdf-lib, PDF.js | Web Worker / Virtual FS | 1.0 GiB per task |

@@ -32,7 +32,7 @@ CompressZ uses open-source, standards-based browser machine learning runtimes:
 
 1. **On-Demand Fetching**: Model weights are not bundled with the static initial application download to preserve fast startup. They are fetched on first tool invocation only when the user selects a feature that requires an AI model.
 2. **Public CDN Sources**: Weights are fetched via HTTPS from verified public CDNs (e.g., Hugging Face Model Hub, jsDelivr, Cloudflare CDN) as immutable, read-only ONNX / SafeTensor binaries.
-3. **Local CacheStorage**: Once downloaded, model weights are stored in the browser's persistent `CacheStorage` or `IndexedDB`. Subsequent runs execute completely offline without network access.
+3. **Local CacheStorage**: Once downloaded, model weights are stored in the browser's persistent `CacheStorage` or `IndexedDB`. While model weights are cached locally, the app shell and ONNX WASM runtime still require network access to load, and no full offline pack exists yet (matching PRIVACY.md).
 4. **Cloudflare Pages Asset Stripping**: Models or WASM assets exceeding Cloudflare Pages' 25 MiB static file hosting limit are isolated and fetched on demand from configured CDN endpoints (`scripts/strip-oversized-assets.mjs`).
 
 ---
