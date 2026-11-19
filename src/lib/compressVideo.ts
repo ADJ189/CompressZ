@@ -356,8 +356,20 @@ async function videoViaMediaRecorder(
     muted: true,
     playsInline: true,
   });
-  await new Promise<void>((r) => {
-    vid.onloadedmetadata = () => r();
+  await new Promise<void>((r, rej) => {
+    const timer = setTimeout(() => {
+      vid.onloadedmetadata = null;
+      vid.onerror = null;
+      r();
+    }, 8000);
+    vid.onloadedmetadata = () => {
+      clearTimeout(timer);
+      r();
+    };
+    vid.onerror = () => {
+      clearTimeout(timer);
+      rej(new Error("Failed to load video in MediaRecorder fallback"));
+    };
   });
 
   const canvas = document.createElement("canvas");

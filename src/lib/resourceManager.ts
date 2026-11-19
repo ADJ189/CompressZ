@@ -402,8 +402,13 @@ export interface RunOptions {
 }
 
 async function waitUntilVisible(signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) throw abortError();
   if (typeof document === 'undefined' || !document.hidden) return;
   await new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortError());
+      return;
+    }
     const onVisibility = () => {
       if (document.hidden) return;
       cleanup();

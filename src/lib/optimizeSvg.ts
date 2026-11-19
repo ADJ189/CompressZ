@@ -71,12 +71,17 @@ export async function optimizeSvg(
   svg = svg.replace(/\s{2,}/g, ' ').trim();
   onProgress?.(80);
 
-  // Add viewBox if missing
+  // Add viewBox if missing (SVG viewBox coordinates must be unitless numbers)
   if (!svg.includes('viewBox') && svg.includes('width=') && svg.includes('height=')) {
     const w = svg.match(/width="([^"]+)"/)?.[1];
     const h = svg.match(/height="([^"]+)"/)?.[1];
-    if (w && h && !isNaN(parseFloat(w)) && !isNaN(parseFloat(h)))
-      svg = svg.replace('<svg', `<svg viewBox="0 0 ${w} ${h}"`);
+    if (w && h) {
+      const numW = parseFloat(w);
+      const numH = parseFloat(h);
+      if (!isNaN(numW) && !isNaN(numH) && numW > 0 && numH > 0) {
+        svg = svg.replace('<svg', `<svg viewBox="0 0 ${numW} ${numH}"`);
+      }
+    }
   }
 
   onProgress?.(100);

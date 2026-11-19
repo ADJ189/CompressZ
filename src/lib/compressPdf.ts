@@ -145,6 +145,12 @@ async function structuralCompress(
       const origH = xObj.dict.lookup(PDFName.of("Height"))?.numberValue ?? 0;
       if (origW < 64 || origH < 64) continue; // skip tiny decorations
 
+      // Skip images with transparency masks: JPEG cannot represent alpha channels,
+      // and deleting SMask flattens transparent illustrations/logos into opaque blocks.
+      const hasSMask =
+        xObj.dict.has(PDFName.of("SMask")) || xObj.dict.has(PDFName.of("Mask"));
+      if (hasSMask) continue;
+
       let imgBlob: Blob;
       try {
         imgBlob = await decodeXObjectToBlob(xObj, origW, origH);
@@ -152,9 +158,20 @@ async function structuralCompress(
         continue;
       }
 
-      // PDFs use 72pt = 1 inch. targetDpi / 72 gives the scale factor that
-      // maps PDF points to target-DPI pixels. We never upscale (min 1).
-      const dpiScale = Math.min(1, targetDpi / 72);
+      // PDFs use 72pt = 1 inch. Calculate max allowed pixels at target DPI for the page,
+      // and compare against standard high-res (300 DPI) baseline so embedded images
+      // are downsampled appropriately without upscaling (dpiScale <= 1).
+      const pageWidthPt = page.getWidth?.() ?? 612;
+      const pageHeightPt = page.getHeight?.() ?? 792;
+      const maxPagePixels = Math.round(
+        (Math.max(pageWidthPt, pageHeightPt) / 72) * targetDpi,
+      );
+      const baseScale = Math.min(1, targetDpi / 300);
+      const pageScale =
+        maxPagePixels > 0
+          ? Math.min(1, maxPagePixels / Math.max(origW, origH))
+          : 1;
+      const dpiScale = Math.min(baseScale, pageScale);
       const newW = Math.max(1, Math.round(origW * dpiScale));
       const newH = Math.max(1, Math.round(origH * dpiScale));
 
