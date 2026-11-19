@@ -624,6 +624,19 @@ img, svg { display: block; }
   margin-left: auto;
   line-height: 1;
   transition: color var(--t);
+  position: relative;
+  z-index: 2;
+}
+.htc-link {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+.htc-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
 }
 .cz-wb-all__fav:hover,
 .cz-wb-all__fav.is-on {
