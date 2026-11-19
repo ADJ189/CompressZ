@@ -25,6 +25,7 @@
       <li>We do not collect names, email addresses, or device identifiers.</li>
       <li>We do not run tracking scripts, third-party analytics, or ad pixels.</li>
       <li>All processing executes in temporary browser memory.</li>
+      <li>Anonymous error diagnostics are enabled by default to detect software bugs; this strictly scrubs all filenames, file paths, and URLs, and can be disabled anytime in Settings.</li>
     </ul>
   </section>
 
