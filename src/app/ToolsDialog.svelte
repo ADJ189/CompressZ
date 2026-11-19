@@ -88,7 +88,7 @@
       icon: "docs",
       items: [
         { route: "docs", name: "Documentation", desc: "Engine specifications, limits, and technical guides", icon: "docs" },
-        { route: "privacy", name: "Privacy Guarantee", desc: "Local-only invariants and zero-telemetry guarantee", icon: "security" },
+        { route: "privacy", name: "Privacy Guarantee", desc: "Local-only document processing & privacy guarantee", icon: "security" },
         { route: "about", name: "About CompressZ", desc: "Architecture, mission, and offline privacy model", icon: "home" },
       ],
     },
