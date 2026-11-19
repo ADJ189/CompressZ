@@ -99,3 +99,52 @@ Deno.test("batchDownload: multiple files package into single zip archive", async
     (globalThis as any).document = origDoc;
   }
 });
+
+Deno.test("batchDownload: oversized batch exceeding 4 GiB limit falls back to individual downloads", async () => {
+  const downloadedNames: string[] = [];
+  let clickCount = 0;
+
+  const origCreate = URL.createObjectURL;
+  const origRevoke = URL.revokeObjectURL;
+  const origDoc = (globalThis as any).document;
+
+  try {
+    URL.createObjectURL = (_b: Blob) => "blob:mock-oversized";
+    URL.revokeObjectURL = () => {};
+
+    (globalThis as any).document = {
+      createElement: (tag: string) => {
+        if (tag === "a") {
+          return {
+            set href(_val: string) {},
+            set download(val: string) { downloadedNames.push(val); },
+            click: () => { clickCount++; },
+          };
+        }
+        return {};
+      },
+    };
+
+    // Create 2 mock blobs whose sizes sum to > 4 GiB (0xffffffff = 4,294,967,295 bytes)
+    const blob1 = new Blob(["part1"]);
+    Object.defineProperty(blob1, "size", { value: 2.5 * 1024 * 1024 * 1024 });
+
+    const blob2 = new Blob(["part2"]);
+    Object.defineProperty(blob2, "size", { value: 2.5 * 1024 * 1024 * 1024 });
+
+    const items: BatchFileItem[] = [
+      { name: "video1-compressed.mp4", blob: blob1 },
+      { name: "video2-compressed.mp4", blob: blob2 },
+    ];
+
+    await downloadBatch(items, "video-compressed.zip");
+
+    // Both files should have been clicked individually instead of creating an oversized zip
+    assertEquals(clickCount, 2);
+    assertEquals(downloadedNames, ["video1-compressed.mp4", "video2-compressed.mp4"]);
+  } finally {
+    URL.createObjectURL = origCreate;
+    URL.revokeObjectURL = origRevoke;
+    (globalThis as any).document = origDoc;
+  }
+});

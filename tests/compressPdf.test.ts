@@ -48,6 +48,26 @@ Deno.test("compressPdf: calculateImageDrawnSizes ignores strings and comments", 
   assertEquals(Math.round(imReal[0].heightPt), 240);
 });
 
+Deno.test("compressPdf: calculateImageDrawnSizes handles TJ text arrays with [ and ] without infinite loop", () => {
+  const stream = `
+    BT
+    /F1 12 Tf
+    [(Hello) -250 (World) 100 (PDF)] TJ
+    [3 2] 0 d
+    ET
+    q
+    150 0 0 250 10 20 cm
+    /ImWithTJ Do
+    Q
+  `;
+  const drawn = calculateImageDrawnSizes(stream);
+  assertEquals(drawn.has("ImWithTJ"), true);
+  const im = drawn.get("ImWithTJ")!;
+  assertEquals(im.length, 1);
+  assertEquals(Math.round(im[0].widthPt), 150);
+  assertEquals(Math.round(im[0].heightPt), 250);
+});
+
 Deno.test("compressPdf: effective DPI and dpiScale avoids blanket 300 DPI assumption", () => {
   // An image of 300x300 displayed at 300x300 points (4.17 x 4.17 inches):
   // effDpi = 300 / (300 / 72) = 72 DPI.
