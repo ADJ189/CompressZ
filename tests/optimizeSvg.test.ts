@@ -35,6 +35,20 @@ Deno.test("optimizeSvg: rounds long decimals and preserves clean structure", asy
   assert(result.format.includes("SVG"), "Format note should describe SVG output");
 });
 
+Deno.test("optimizeSvg: trims trailing zeros from rounded decimals without regex backtracking", async () => {
+  const rawSvg = `<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+    <path d="M 10.0001 20.3004 L 30.2501 40.0000" stroke="black"/>
+  </svg>`;
+
+  const file = new File([rawSvg], "zeros.svg", { type: "image/svg+xml" });
+  const result = await optimizeSvg(file);
+  const text = await result.blob.text();
+
+  // 10.0001 -> 10, 20.3004 -> 20.3, 30.2501 -> 30.25, 40.0000 -> 40
+  // Path data compactor strips whitespace around commands (M10 20.3L30.25 40)
+  assert(text.includes('d="M10 20.3L30.25 40"'), "Should cleanly strip trailing zeros without leaving .00 or trailing dot");
+});
+
 Deno.test("optimizeSvg: creates valid unitless viewBox from dimensions with units", async () => {
   const rawSvg = `<svg width="150px" height="250pt" xmlns="http://www.w3.org/2000/svg">
     <rect width="100%" height="100%" fill="blue"/>

@@ -1,6 +1,6 @@
 import { assertEquals, assert } from "./assert.ts";
 import { downloadBatch, type BatchFileItem } from "../src/lib/batchDownload.ts";
-import { readZip } from "../src/lib/zip.ts";
+import { readZip, estimateZipArchiveSize, exceedsZipLimit } from "../src/lib/zip.ts";
 
 Deno.test("batchDownload: single file downloads directly without zip", async () => {
   let createdUrl: string | null = null;
@@ -147,4 +147,23 @@ Deno.test("batchDownload: oversized batch exceeding 4 GiB limit falls back to in
     URL.revokeObjectURL = origRevoke;
     (globalThis as any).document = origDoc;
   }
+});
+
+Deno.test("batchDownload: entry overhead accounts for archives near 4 GiB threshold", () => {
+  // A batch of 100 files where raw bytes = 0xffffffff - 5000 (just under 4 GiB)
+  const fileCount = 100;
+  const rawBytes = 0xffffffff - 5000;
+  const perFileSize = Math.floor(rawBytes / fileCount);
+
+  const items = Array.from({ length: fileCount }, (_, i) => ({
+    name: `video_segment_${i}.mp4`,
+    size: perFileSize,
+  }));
+
+  // Overhead per entry is at least 76 bytes + 2*nameLen.
+  // 100 entries * ~120 bytes overhead = ~12,000 bytes overhead.
+  // 5000 bytes below limit + 12000 overhead pushes projected size over 4 GiB!
+  const estimated = estimateZipArchiveSize(items);
+  assertEquals(estimated >= 0xffffffff, true);
+  assertEquals(exceedsZipLimit(items), true);
 });
