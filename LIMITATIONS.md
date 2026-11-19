@@ -14,6 +14,9 @@ Because computation takes place entirely on client hardware within the browser s
 | **Audio Processing** | Buffer limits for uncompressed audio frames | 500 MB per batch (unlimited duration) | ffmpeg.wasm software pipeline |
 | **Image Compression** | Canvas texture limits (16384x16384 px) | 100 MB per image, 150 images per batch | OffscreenCanvas + WASM SSIM Guard |
 | **PDF Merging & Shrink** | In-memory document buffers & vector trees | 200 MB per document, 500 pages per merge | pdf-lib + PDF.js parser |
+| **PDF Suite & Studio**  | True redaction (300 DPI raster purge), AES-256 | 150 MB per document, interactive forms | pdf-lib + QPDF WASM + Canvas Studio |
+| **Two-Way Office (Fast)**| Structural OOXML text/table reconstruction | Instant (<50ms), 50 MB RAM, offline | Native OOXML Generator + zip.ts |
+| **Two-Way Office (WASM)**| Desktop-grade LibreOffice WASM layout | ~85–110 MB WASM, 2 GiB memory ceiling | @bentopdf/libreoffice-wasm |
 | **PDF to Markdown & OCR**| Working RAM during figure crop extraction | 100 pages per document (multilingual) | Tesseract.js WASM + layout analyzer |
 | **Multi-threading** | Requires COOP/COEP headers for SharedArrayBuffer | 4 to 8 Web Worker threads | Web Workers + SharedArrayBuffer |
 | **Mobile & Battery** | OS suspends or throttles background tabs | Keep tab in foreground during processing | Efficient Mode concurrency governor |

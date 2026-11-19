@@ -1,5 +1,5 @@
 import type { CompressOptions, CompressResult } from "./types";
-import { getFFmpeg, ffFetch, ffJob, setProgressHandler } from "./ffmpeg";
+import { getFFmpeg, ffFetch, ffJob, setProgressHandler, ffExec } from "./ffmpeg";
 
 export function compressGif(
   file: File,
@@ -29,23 +29,27 @@ async function runCompressGif(
 
   if (options.gifToVideo) {
     // ── Convert to WebM VP9 ──
-    await ff.exec([
-      "-i",
-      "input.gif",
-      "-c:v",
-      "libvpx-vp9",
-      "-b:v",
-      "0",
-      "-crf",
-      "33",
-      "-vf",
-      "scale=trunc(iw/2)*2:trunc(ih/2)*2",
-      "-an",
-      "-loop",
-      "0",
-      "-y",
-      "output.webm",
-    ]);
+    await ffExec(
+      ff,
+      [
+        "-i",
+        "input.gif",
+        "-c:v",
+        "libvpx-vp9",
+        "-b:v",
+        "0",
+        "-crf",
+        "33",
+        "-vf",
+        "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+        "-an",
+        "-loop",
+        "0",
+        "-y",
+        "output.webm",
+      ],
+      "convert the GIF to WebM",
+    );
     const d = await ff.readFile("output.webm");
     blob = new Blob([d], { type: "video/webm" });
     fmt = "WebM VP9 (from GIF)";
@@ -62,26 +66,34 @@ async function runCompressGif(
     const pre = `${fpsPart}${scalePart}`;
 
     // Pass 1 — generate palette
-    await ff.exec([
-      "-i",
-      "input.gif",
-      "-vf",
-      `${pre}palettegen=max_colors=${colors}:stats_mode=diff`,
-      "-y",
-      "palette.png",
-    ]);
+    await ffExec(
+      ff,
+      [
+        "-i",
+        "input.gif",
+        "-vf",
+        `${pre}palettegen=max_colors=${colors}:stats_mode=diff`,
+        "-y",
+        "palette.png",
+      ],
+      "build the GIF colour palette",
+    );
 
     // Pass 2 — apply palette with Bayer dithering
-    await ff.exec([
-      "-i",
-      "input.gif",
-      "-i",
-      "palette.png",
-      "-lavfi",
-      `${pre}paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle`,
-      "-y",
-      "output.gif",
-    ]);
+    await ffExec(
+      ff,
+      [
+        "-i",
+        "input.gif",
+        "-i",
+        "palette.png",
+        "-lavfi",
+        `${pre}paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle`,
+        "-y",
+        "output.gif",
+      ],
+      "optimise the GIF",
+    );
 
     const d = await ff.readFile("output.gif");
     blob = new Blob([d], { type: "image/gif" });

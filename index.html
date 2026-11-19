@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -11,9 +11,19 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=DM+Mono:wght@400;500&display=swap" />
+  <script type="module" src="/src/init.ts"></script>
   <script type="module" src="/src/main.ts"></script>
 </head>
 <body>
+  <noscript>
+    <div style="padding: 2.5rem 1.5rem; text-align: center; font-family: system-ui, -apple-system, sans-serif; color: #18181b; background: #fafafa; min-height: 100vh;">
+      <h2 style="font-size: 1.5rem; margin-bottom: 0.75rem;">JavaScript Required</h2>
+      <p style="font-size: 1rem; color: #52525b; max-width: 480px; margin: 0 auto;">
+        CompressZ processes all media, documents, and OCR 100% locally in your browser using WebAssembly. Please enable JavaScript to continue.
+      </p>
+    </div>
+  </noscript>
+
   <!-- Splash Screen -->
   <div id="splash">
     <div class="sp-inner">

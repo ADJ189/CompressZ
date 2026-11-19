@@ -1,7 +1,14 @@
 {
+  "tasks": {
+    "test": "deno test --allow-read tests/",
+    "test:parallel": "deno test --parallel --allow-read tests/",
+    "check": "deno check tests/*.ts src/lib/*.ts",
+    "e2e": "deno run -A npm:@playwright/test test --workers=3"
+  },
   "compilerOptions": {
     "lib": ["deno.ns", "dom", "esnext"]
   },
+  "nodeModulesDir": "none",
   "lint": {
     "include": ["src/", "tests/"],
     "rules": {
@@ -11,7 +18,8 @@
         "no-window-prefix",
         "require-await",
         "no-sloppy-imports",
-        "prefer-const"
+        "prefer-const",
+        "no-control-regex"
       ]
     }
   },

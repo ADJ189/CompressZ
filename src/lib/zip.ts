@@ -36,26 +36,51 @@ function crc32(data: Uint8Array): number {
 async function deflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
   const cs = new CompressionStream("deflate-raw");
   const writer = cs.writable.getWriter();
-  writer.write(bytes as BufferSource);
-  writer.close();
+  void (async () => {
+    try {
+      await writer.write(bytes as BufferSource);
+      await writer.close();
+    } catch {
+      // Ignored: errors caught via readAll
+    }
+  })();
   return readAll(cs.readable);
 }
-async function inflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
+async function inflateRaw(bytes: Uint8Array, maxBytes?: number): Promise<Uint8Array> {
   const ds = new DecompressionStream("deflate-raw");
   const writer = ds.writable.getWriter();
-  writer.write(bytes as BufferSource);
-  writer.close();
-  return readAll(ds.readable);
+  void (async () => {
+    try {
+      await writer.write(bytes as BufferSource);
+      await writer.close();
+    } catch {
+      // Ignored: errors caught via readAll
+    }
+  })();
+  return readAll(ds.readable, maxBytes);
 }
 async function readAll(
   stream: ReadableStream<Uint8Array>,
+  maxBytes?: number,
 ): Promise<Uint8Array> {
   const out: Uint8Array[] = [];
   const reader = stream.getReader();
+  let total = 0;
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
     out.push(value);
+    total += value.length;
+    if (maxBytes !== undefined && total > maxBytes) {
+      try {
+        await reader.cancel();
+      } catch {
+        // Ignored: cancellation error
+      }
+      throw new Error(
+        `Decompressed entry exceeds safety limit of ${Math.round(maxBytes / (1024 * 1024))} MB.`,
+      );
+    }
   }
   return concat(out);
 }
@@ -104,6 +129,7 @@ export async function writeZip(entries: ZipEntryIn[]): Promise<Uint8Array> {
   const { time, date } = dosDateTime();
   const chunks: Uint8Array[] = [];
   const central: Uint8Array[] = [];
+  const usedNames = new Set<string>();
   let offset = 0;
 
   // Preflight check: prevent exceeding 32-bit / 4GiB ZIP limit
@@ -118,7 +144,21 @@ export async function writeZip(entries: ZipEntryIn[]): Promise<Uint8Array> {
   }
 
   for (const { name, data } of entries) {
-    const safeName = sanitizeZipPath(name);
+    // Two source names can sanitise to the same path (`a/../b` and `b`), so
+    // de-duplicate before writing or the central directory would contain two
+    // entries with identical names.
+    let safeName = sanitizeZipPath(name);
+    if (usedNames.has(safeName)) {
+      const slash = safeName.lastIndexOf("/");
+      const dot = safeName.lastIndexOf(".");
+      const hasExt = dot > slash;
+      const base = hasExt ? safeName.slice(0, dot) : safeName;
+      const ext = hasExt ? safeName.slice(dot) : "";
+      let n = 2;
+      while (usedNames.has(`${base} (${n})${ext}`)) n++;
+      safeName = `${base} (${n})${ext}`;
+    }
+    usedNames.add(safeName);
     const nameBytes = new TextEncoder().encode(safeName);
     const crc = crc32(data);
     const compressed = await deflateRaw(data);
@@ -186,9 +226,26 @@ export async function zipToBlob(entries: ZipEntryIn[]): Promise<Blob> {
 }
 
 // ── Reader ────────────────────────────────────────────────────
+export interface ReadZipOptions {
+  maxEntries?: number;
+  maxEntryBytes?: number;
+  maxAggregateBytes?: number;
+}
+
+/**
+ * Reads a ZIP archive from an ArrayBuffer, returning a Map of filenames to Uint8Array contents.
+ * Enforces resource bounds against decompression bombs and excessive entries.
+ */
 export async function readZip(
   buf: ArrayBuffer,
+  options: ReadZipOptions = {},
 ): Promise<Map<string, Uint8Array>> {
+  const {
+    maxEntries = 1000,
+    maxEntryBytes = 64 * 1024 * 1024,
+    maxAggregateBytes = 256 * 1024 * 1024,
+  } = options;
+
   const bytes = new Uint8Array(buf);
   const dv = new DataView(buf);
 
@@ -223,7 +280,14 @@ export async function readZip(
     );
   }
 
+  if (entryCount > maxEntries) {
+    throw new Error(
+      `ZIP contains ${entryCount} entries, exceeding the maximum allowed limit of ${maxEntries}.`,
+    );
+  }
+
   const out = new Map<string, Uint8Array>();
+  let aggregateBytes = 0;
   let p = centralStart;
   for (let i = 0; i < entryCount; i++) {
     if (dv.getUint32(p, true) !== 0x02014b50)
@@ -256,14 +320,34 @@ export async function readZip(
     const raw = bytes.subarray(dataStart, dataStart + compSize);
 
     if (!name.endsWith("/")) {
-      const data = method === 8 ? await inflateRaw(raw) : new Uint8Array(raw);
+      if (method === 0 && raw.length > maxEntryBytes) {
+        throw new Error(
+          `Decompressed entry exceeds safety limit of ${Math.round(maxEntryBytes / (1024 * 1024))} MB.`,
+        );
+      }
+      const data = method === 8 ? await inflateRaw(raw, maxEntryBytes) : new Uint8Array(raw);
+      if (data.length > maxEntryBytes) {
+        throw new Error(
+          `Decompressed entry exceeds safety limit of ${Math.round(maxEntryBytes / (1024 * 1024))} MB.`,
+        );
+      }
+      aggregateBytes += data.length;
+      if (aggregateBytes > maxAggregateBytes) {
+        throw new Error(
+          `Total decompressed size exceeds safety limit of ${Math.round(maxAggregateBytes / (1024 * 1024))} MB.`,
+        );
+      }
       const actualCrc = crc32(data);
       if (actualCrc !== expectedCrc) {
         throw new Error(
           `"${name}" failed CRC check (expected ${expectedCrc.toString(16)}, got ${actualCrc.toString(16)}) — archive may be corrupt`,
         );
       }
-      out.set(name, data);
+      // Entry names are attacker-controlled. Sanitise before exposing them as
+      // map keys so a caller writing these paths back to disk (ZIP bundle
+      // export, OOXML extraction) can never be tricked into `../` traversal.
+      const safeName = sanitizeZipPath(name);
+      if (!out.has(safeName)) out.set(safeName, data);
     }
     p += 46 + nameLen + extraLen + commentLen;
   }

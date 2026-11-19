@@ -2,6 +2,9 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { crc32 as zlibCrc32 } from "node:zlib";
 import { test, expect, type Browser, type Download, type Page } from "@playwright/test";
+import { packageXlsx } from "../src/lib/conversions/pdfToExcel";
+import { packagePptx } from "../src/lib/conversions/pdfToPpt";
+import { makePdf } from "./helpers";
 
 /**
  * End-to-end conversion matrix.
@@ -22,33 +25,6 @@ import { test, expect, type Browser, type Download, type Page } from "@playwrigh
 const CDN_TIMEOUT = 240_000;
 
 // ── Fixture generation ─────────────────────────────────────────
-
-/** Smallest valid PDF (one A4 page, one line of Helvetica text). */
-function makePdf(text = "CompressZ sample page"): Buffer {
-  const content = `BT /F1 24 Tf 72 720 Td (${text}) Tj ET`;
-  const objects = [
-    "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] " +
-      "/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
-    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-  ];
-
-  let out = "%PDF-1.4\n";
-  const offsets: number[] = [];
-  objects.forEach((body, i) => {
-    offsets.push(out.length);
-    out += `${i + 1} 0 obj\n${body}\nendobj\n`;
-  });
-  const startxref = out.length;
-  out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  for (const offset of offsets) {
-    out += `${String(offset).padStart(10, "0")} 00000 n \n`;
-  }
-  out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${startxref}\n%%EOF\n`;
-  return Buffer.from(out, "latin1");
-}
 
 /** Store-only ZIP writer (method 0) — enough for a minimal DOCX. */
 function makeZip(files: Record<string, string>): Buffer {
@@ -198,7 +174,15 @@ async function makeImage(
         ctx.fillStyle = "#101010";
         ctx.font = "bold 48px sans-serif";
         ctx.fillText("CompressZ", 32, 88);
-        return canvas.toDataURL(type, 0.92).split(",")[1];
+        const blob = await new Promise<Blob>((resolve) =>
+          canvas.toBlob((b) => resolve(b!), type, 0.92),
+        );
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        let binary = "";
+        for (let i = 0; i < bytes.length; i += 0x8000) {
+          binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        }
+        return btoa(binary);
       },
       { type, width, height },
     );
@@ -248,6 +232,12 @@ async function makeVideo(browser: Browser): Promise<Buffer | null> {
       stream.getTracks().forEach((t) => t.stop());
 
       const blob = new Blob(chunks, { type: mime });
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      let binary = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      }
+      return btoa(binary);
       return new Promise<string>((res, rej) => {
         const r = new FileReader();
         r.onload = () => res(String(r.result).split(",")[1]);
@@ -319,6 +309,28 @@ async function clickDownload(page: Page, index = 0): Promise<{ name: string; byt
   return { name: download.suggestedFilename(), bytes: await readDownload(download) };
 }
 
+async function runConvertPipeline(
+  page: Page,
+  cat: string,
+  targetFormat: string | RegExp,
+  fixtureFile: string,
+  exactBtn = false,
+): Promise<{ download: Download; bytes: Buffer }> {
+  test.setTimeout(CDN_TIMEOUT);
+  await page.goto("/convert");
+  await category(page, cat).click();
+  await page.getByRole("button", { name: targetFormat, exact: exactBtn }).click();
+  await upload(page, fixtureFile);
+  await page.getByRole("button", { name: "Convert All" }).click();
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    convertDownload(page).click({ timeout: CDN_TIMEOUT }),
+  ]);
+  const bytes = await readDownload(download);
+  return { download, bytes };
+}
+
 async function clickConvertDownload(
   page: Page,
   timeout = CDN_TIMEOUT,
@@ -350,6 +362,9 @@ let fixtures: {
   docx: string;
   wav: string;
   webm: string | null;
+  xlsx: string;
+  pptx: string;
+  unsupported: string;
 };
 
 test.beforeAll(async ({ browser }, testInfo) => {
@@ -361,6 +376,18 @@ test.beforeAll(async ({ browser }, testInfo) => {
     return path;
   };
 
+  const xlsxBytes = await packageXlsx([
+    ["Item", "Quantity", "Price"],
+    ["Widget A", "10", "5.99"],
+    ["Widget B", "5", "12.50"],
+  ]);
+  const pptxBytes = await packagePptx([
+    [
+      { type: "heading", text: "Slide One Header", readingOrder: 0, pageNumber: 1, source: "native" },
+      { type: "paragraph", text: "This is slide body content.", readingOrder: 1, pageNumber: 1, source: "native" },
+    ],
+  ]);
+
   fixtures = {
     png: write("photo.png", await makeImage(browser, "image/png")),
     jpg: write("photo.jpg", await makeImage(browser, "image/jpeg")),
@@ -370,6 +397,9 @@ test.beforeAll(async ({ browser }, testInfo) => {
     docx: write("sample.docx", makeDocx()),
     wav: write("tone.wav", makeWav()),
     webm: null,
+    xlsx: write("sample.xlsx", Buffer.from(xlsxBytes)),
+    pptx: write("sample.pptx", Buffer.from(pptxBytes)),
+    unsupported: write("dummy.unsupportedext", Buffer.from("arbitrary raw text")),
   };
 
   const video = await makeVideo(browser);
@@ -392,7 +422,10 @@ test.describe("conversion matrix", () => {
   test("Images: two photos compress to WebP with blob-derived names", async ({ page }) => {
     await page.goto("/compress/images");
     await upload(page, fixtures.png, fixtures.jpg);
-    const { name, bytes } = await runCompression(page, 2);
+    await page.getByRole("button", { name: "Compress all" }).click();
+    await waitForCards(page, 2);
+
+    const { name, bytes } = await clickDownload(page);
     expect(name).toMatch(/-compressed\.webp$/);
     expect(bytes.subarray(0, 4).toString("latin1")).toBe("RIFF");
     expect(bytes.subarray(8, 12).toString("latin1")).toBe("WEBP");
@@ -419,7 +452,10 @@ test.describe("conversion matrix", () => {
     test.setTimeout(CDN_TIMEOUT);
     await page.goto("/compress/pdf");
     await upload(page, fixtures.pdf);
-    const { name, bytes } = await runCompression(page);
+    await page.getByRole("button", { name: "Compress all" }).click();
+    await waitForCards(page, 1);
+
+    const { name, bytes } = await clickDownload(page);
     expect(name).toMatch(/-compressed\.pdf$/);
     expect(bytes.subarray(0, 4).toString("latin1")).toBe("%PDF");
   });
@@ -474,34 +510,35 @@ test.describe("conversion matrix", () => {
     await upload(page, fixtures.pdf);
     await page.getByRole("button", { name: "Convert All" }).click();
 
-    const { name, bytes } = await clickConvertDownload(page);
-    expect(name).toMatch(/-images\.png$/);
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      convertDownload(page).click({ timeout: CDN_TIMEOUT }),
+    ]);
+    const bytes = await readDownload(download);
+    expect(download.suggestedFilename()).toMatch(/-images\.png$/);
     expect(bytes.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
   });
 
-  for (const [format, ext] of [
-    ["Plain Text", /\.txt$/],
-    ["HTML", /\.html$/],
-  ] as const) {
-    test(`Convert: DOCX → ${format}`, async ({ page }) => {
-      test.setTimeout(CDN_TIMEOUT);
-      await page.goto("/convert");
-      await category(page, "DOCX").click();
-      await page.getByRole("button", { name: format }).click();
-      await upload(page, fixtures.docx);
-      await page.getByRole("button", { name: "Convert All" }).click();
+  test("Convert: DOCX → TXT", async ({ page }) => {
+    const { download, bytes } = await runConvertPipeline(page, "DOCX", "Plain Text", fixtures.docx);
+    expect(download.suggestedFilename()).toMatch(/\.txt$/);
+    expect(bytes.toString("utf8")).toContain("CompressZ document text");
+  });
 
-      const { name, bytes } = await clickConvertDownload(page);
-      expect(name).toMatch(ext);
-      expect(bytes.toString("utf8")).toContain("CompressZ document text");
-    });
-  }
+  test("Convert: DOCX → HTML", async ({ page }) => {
+    const { download, bytes } = await runConvertPipeline(page, "DOCX", "HTML", fixtures.docx, true);
+    expect(download.suggestedFilename()).toMatch(/\.html$/);
+    expect(bytes.toString("utf8")).toContain("CompressZ document text");
+  });
 
   test("GIF: re-optimise keeps a GIF", async ({ page }) => {
     test.setTimeout(CDN_TIMEOUT);
     await page.goto("/compress/gif");
     await upload(page, fixtures.gif);
-    const { name, bytes } = await runCompression(page);
+    await page.getByRole("button", { name: "Compress all" }).click();
+    await waitForCards(page, 1);
+
+    const { name, bytes } = await clickDownload(page);
     expect(name).toMatch(/-compressed\.gif$/);
     expect(bytes.subarray(0, 6).toString("latin1")).toMatch(/^GIF8[79]a$/);
   });
@@ -523,7 +560,10 @@ test.describe("conversion matrix", () => {
     test.setTimeout(CDN_TIMEOUT);
     await page.goto("/compress/audio");
     await upload(page, fixtures.wav);
-    const { name, bytes } = await runCompression(page);
+    await page.getByRole("button", { name: "Compress all" }).click();
+    await waitForCards(page, 1);
+
+    const { name, bytes } = await clickDownload(page);
     expect(name).toMatch(/-compressed\.mp3$/);
     // ID3 tag or a raw MPEG frame sync.
     const id3 = bytes.subarray(0, 3).toString("latin1") === "ID3";
@@ -536,8 +576,99 @@ test.describe("conversion matrix", () => {
     test.skip(!fixtures.webm, "MediaRecorder produced no WebM clip in this browser");
     await page.goto("/compress/video");
     await upload(page, fixtures.webm!);
-    const { name, bytes } = await runCompression(page);
+    await page.getByRole("button", { name: "Compress all" }).click();
+    await waitForCards(page, 1);
+
+    const { name, bytes } = await clickDownload(page);
     expect(name).toMatch(/-compressed\.mp4$/);
     expect(bytes.subarray(4, 8).toString("latin1")).toBe("ftyp");
+  });
+
+  test("Convert: profile restore round-trip", async ({ page }) => {
+    await page.goto("/convert");
+    await category(page, "Audio").click();
+    await page.getByRole("button", { name: "FLAC" }).click();
+    await page.locator(".cz-advanced-drawer-toggle").click();
+    await page.locator("#conv-quality").fill("90");
+    await page.locator("#conv-quality").dispatchEvent("change");
+
+    await page.reload();
+    await expect(page.locator(".cz-cat-segmented .is-active")).toContainText("Audio");
+    await expect(page.locator(".cz-options-pill-bar .is-active")).toContainText("FLAC");
+    await expect(page.locator(".cz-drawer-summary")).toContainText("90%");
+  });
+
+  test("Convert: unsupported file dropped leaves queue empty", async ({ page }) => {
+    await page.goto("/convert");
+    await upload(page, fixtures.unsupported);
+    await expect(page.locator(".toast-item")).toContainText("Unsupported conversion file format");
+    await expect(page.locator("#file-list .cz-inset-row")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Convert All" })).not.toBeVisible();
+  });
+
+  test("Convert: Audio WAV → MP3", async ({ page }) => {
+    const { download, bytes } = await runConvertPipeline(page, "Audio", "MP3", fixtures.wav);
+    expect(download.suggestedFilename()).toMatch(/\.mp3$/);
+    const id3 = bytes.subarray(0, 3).toString("latin1") === "ID3";
+    const frameSync = bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0;
+    expect(id3 || frameSync).toBe(true);
+  });
+
+  test("Convert: XLSX → CSV", async ({ page }) => {
+    const { download, bytes } = await runConvertPipeline(page, "Excel", "CSV (.csv)", fixtures.xlsx);
+    expect(download.suggestedFilename()).toMatch(/\.csv$/);
+    const csvContent = bytes.toString("utf8");
+    expect(csvContent).toContain("Widget A");
+    expect(csvContent).toContain("5.99");
+  });
+
+  test("Convert: PPTX → TXT", async ({ page }) => {
+    const { download, bytes } = await runConvertPipeline(page, "PPTX", "Plain Text", fixtures.pptx);
+    expect(download.suggestedFilename()).toMatch(/\.txt$/);
+    expect(bytes.toString("utf8")).toContain("Slide One Header");
+  });
+
+  test("Convert: forced engine error leaves UI usable", async ({ page }) => {
+    await page.goto("/convert");
+    await category(page, "Image").click();
+    const workerFixtures = resolve("test-results", "conversion-fixtures", "error-test");
+    mkdirSync(workerFixtures, { recursive: true });
+    const corruptPng = join(workerFixtures, "fake.png");
+    writeFileSync(corruptPng, Buffer.from("not a real png content at all"));
+
+    await upload(page, corruptPng);
+    await page.getByRole("button", { name: "Convert All" }).click();
+
+    await expect(page.locator(".toast-item")).toBeVisible({ timeout: 15_000 });
+    const convertBtn = page.getByRole("button", { name: "Convert All" });
+    await expect(convertBtn).toBeEnabled();
+
+    await page.getByRole("button", { name: "Clear" }).click();
+    await expect(page.locator("#file-list .cz-inset-row")).toHaveCount(0);
+  });
+
+  test("Convert: staging an upload while earlier conversion is pending cancels previous run and isolates staged queue", async ({ page }) => {
+    await page.goto("/convert");
+    await category(page, "Audio").click();
+    await upload(page, fixtures.wav);
+
+    // Click Convert All
+    await page.getByRole("button", { name: "Convert All" }).click();
+
+    // Immediately stage a new universal upload while previous run is in-flight/pending
+    await page.evaluate(() => {
+      const file = new File(["minimal docx text content"], "staged-new.docx", {
+        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      });
+      window.dispatchEvent(
+        new CustomEvent("compressz:stage-universal-file", {
+          detail: { file, actionId: "docx-to-txt", targetRoute: "convert" },
+        }),
+      );
+    });
+
+    // Staging the new file must reset the queue to only contain the new staged file
+    await expect(page.locator("#file-list .cz-inset-row")).toHaveCount(1);
+    await expect(page.locator("#file-list .cz-inset-row")).toContainText("staged-new.docx");
   });
 });
