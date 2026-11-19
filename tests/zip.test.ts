@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "./assert.ts";
-import { writeZip, readZip, sanitizeZipPath } from "../src/lib/zip.ts";
+import { writeZip, readZip, sanitizeZipPath, estimateZipArchiveSize } from "../src/lib/zip.ts";
 
 Deno.test("zip: sanitizeZipPath strips directory traversal and leading slashes", () => {
   assertEquals(sanitizeZipPath("../secret.txt"), "secret.txt");
@@ -78,4 +78,23 @@ Deno.test("zip: stored entry exceeding maxEntryBytes is rejected before allocati
     message = String((err as Error).message);
   }
   assertEquals(/safety limit/.test(message), true);
+});
+
+Deno.test("zip: estimateZipArchiveSize accurately accounts for deduplicated filename lengths", () => {
+  const items = [
+    { name: "report.pdf", size: 100 },
+    { name: "report.pdf", size: 200 },
+    { name: "./report.pdf", size: 300 },
+  ];
+  // Deduplicated names will be: "report.pdf", "report (2).pdf", "report (3).pdf"
+  const estimated = estimateZipArchiveSize(items);
+  const baseLen = new TextEncoder().encode("report.pdf").length; // 10
+  const dup1Len = new TextEncoder().encode("report (2).pdf").length; // 14
+  const dup2Len = new TextEncoder().encode("report (3).pdf").length; // 14
+  const expectedTotal =
+    22 /* EOCD */ +
+    (100 + 76 + 2 * baseLen) +
+    (200 + 76 + 2 * dup1Len) +
+    (300 + 76 + 2 * dup2Len);
+  assertEquals(estimated, expectedTotal);
 });

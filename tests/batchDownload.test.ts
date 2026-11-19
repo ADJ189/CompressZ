@@ -22,7 +22,7 @@ Deno.test("batchDownload: single file downloads directly without zip", async () 
       createElement: (tag: string) => {
         if (tag === "a") {
           return {
-            set href(val: string) {},
+            set href(_val: string) { /* mock */ },
             set download(val: string) { downloadedName = val; },
             click: () => { clicked = true; },
           };
@@ -50,7 +50,7 @@ Deno.test("batchDownload: single file downloads directly without zip", async () 
 Deno.test("batchDownload: multiple files package into single zip archive", async () => {
   let clicked = false;
   let downloadedName = "";
-  let zipBlobCaptured: any = null;
+  let zipBlobCaptured: Blob | null = null;
 
   const origCreate = URL.createObjectURL;
   const origRevoke = URL.revokeObjectURL;
@@ -67,7 +67,7 @@ Deno.test("batchDownload: multiple files package into single zip archive", async
       createElement: (tag: string) => {
         if (tag === "a") {
           return {
-            set href(val: string) {},
+            set href(_val: string) { /* mock */ },
             set download(val: string) { downloadedName = val; },
             click: () => { clicked = true; },
           };
@@ -85,10 +85,11 @@ Deno.test("batchDownload: multiple files package into single zip archive", async
 
     assertEquals(clicked, true);
     assertEquals(downloadedName, "audio-compressed.zip");
-    assert(zipBlobCaptured !== null, "Zip blob must be created");
+    const capturedBlob = zipBlobCaptured as Blob | null;
+    assert(capturedBlob !== null, "Zip blob must be created");
 
     // Verify zip contains both files
-    const zipBuf = await zipBlobCaptured!.arrayBuffer();
+    const zipBuf = await capturedBlob.arrayBuffer();
     const extracted = await readZip(zipBuf);
     assertEquals(extracted.size, 2);
     assertEquals(extracted.has("track1.mp3"), true);
@@ -116,7 +117,7 @@ Deno.test("batchDownload: oversized batch exceeding 4 GiB limit falls back to in
       createElement: (tag: string) => {
         if (tag === "a") {
           return {
-            set href(_val: string) {},
+            set href(_val: string) { /* mock */ },
             set download(val: string) { downloadedNames.push(val); },
             click: () => { clickCount++; },
           };
@@ -166,4 +167,42 @@ Deno.test("batchDownload: entry overhead accounts for archives near 4 GiB thresh
   const estimated = estimateZipArchiveSize(items);
   assertEquals(estimated >= 0xffffffff, true);
   assertEquals(exceedsZipLimit(items), true);
+});
+
+Deno.test("batchDownload: 0xffff or more items fall back to individual downloads to prevent 16-bit entry overflow", async () => {
+  let clickCount = 0;
+  const origCreate = URL.createObjectURL;
+  const origRevoke = URL.revokeObjectURL;
+  const origDoc = (globalThis as any).document;
+
+  try {
+    URL.createObjectURL = () => "blob:mock";
+    URL.revokeObjectURL = () => {};
+
+    (globalThis as any).document = {
+      createElement: (tag: string) => {
+        if (tag === "a") {
+          return {
+            set href(_val: string) { /* mock */ },
+            set download(_val: string) { /* mock */ },
+            click: () => { clickCount++; },
+          };
+        }
+        return {};
+      },
+    };
+
+    const dummyBlob = new Blob(["test"]);
+    const items: BatchFileItem[] = Array.from({ length: 0xffff }, (_, i) => ({
+      name: `item_${i}.txt`,
+      blob: dummyBlob,
+    }));
+
+    await downloadBatch(items, "huge-batch.zip");
+    assertEquals(clickCount, 0xffff);
+  } finally {
+    URL.createObjectURL = origCreate;
+    URL.revokeObjectURL = origRevoke;
+    (globalThis as any).document = origDoc;
+  }
 });

@@ -84,3 +84,23 @@ Deno.test("optimizeSvg: does not invent viewBox for percentage or em dimensions"
 
   assert(!emText.includes("viewBox="), "Must not invent a viewBox for em dimensions");
 });
+
+Deno.test("optimizeSvg: extracts dimensions strictly from root svg element attributes", async () => {
+  // 1. Root svg with data-width/data-height only (and child rect with width/height) must NOT generate a viewBox
+  const dataSvg = `<svg data-width="200" data-height="200" xmlns="http://www.w3.org/2000/svg">
+    <rect width="100" height="100" fill="red"/>
+  </svg>`;
+  const dataFile = new File([dataSvg], "data.svg", { type: "image/svg+xml" });
+  const dataResult = await optimizeSvg(dataFile);
+  const dataText = await dataResult.blob.text();
+  assert(!dataText.includes("viewBox="), "Must not extract dimensions from data-width/data-height or descendant elements");
+
+  // 2. Root svg with single quotes width/height should generate viewBox
+  const singleQuoteSvg = `<svg width='120' height='80' xmlns="http://www.w3.org/2000/svg">
+    <circle cx="60" cy="40" r="20" fill="blue"/>
+  </svg>`;
+  const singleFile = new File([singleQuoteSvg], "single.svg", { type: "image/svg+xml" });
+  const singleResult = await optimizeSvg(singleFile);
+  const singleText = await singleResult.blob.text();
+  assert(singleText.includes('viewBox="0 0 120 80"'), "Must extract dimensions from single-quoted root svg attributes");
+});
