@@ -47,8 +47,8 @@ export async function optimizeSvg(
 
   // Remove metadata, editor namespaces
   svg = svg.replace(/<metadata[\s\S]*?<\/metadata>/gi, '');
-  svg = svg.replace(/<sodipodi:[^/]*(\/>|[\s\S]*?<\/sodipodi:[^>]*>)/gi, '');
-  svg = svg.replace(/<inkscape:[^/]*(\/>|[\s\S]*?<\/inkscape:[^>]*>)/gi, '');
+  svg = svg.replace(/<sodipodi:[^>]*\/>|<sodipodi:[^>]*>[\s\S]*?<\/sodipodi:[^>]*>/gi, '');
+  svg = svg.replace(/<inkscape:[^>]*\/>|<inkscape:[^>]*>[\s\S]*?<\/inkscape:[^>]*>/gi, '');
   svg = svg.replace(/\s+xmlns:(inkscape|sodipodi|sketch|dc|cc|rdf|xlink)="[^"]*"/gi, '');
   svg = svg.replace(/\s+(inkscape|sodipodi):[a-z-]+="[^"]*"/gi, '');
   onProgress?.(35);
@@ -59,19 +59,23 @@ export async function optimizeSvg(
   svg = svg.replace(/<defs>\s*<\/defs>/gi, '');
 
   // Round long decimals (≥3 decimal places → 2)
-  svg = svg.replace(/(\d+\.\d{3,})/g, (m) =>
+  svg = svg.replace(/\d+\.\d{3,}/g, (m) =>
     Number(Number.parseFloat(m).toFixed(2)).toString());
   onProgress?.(55);
 
-  // Compact path data
-  svg = svg.replace(/\s+([MmZzLlHhVvCcSsQqTtAa])/g, '$1');
-  svg = svg.replace(/([MmZzLlHhVvCcSsQqTtAa])\s+/g, '$1');
-  svg = svg.replace(/,\s+/g, ',');
+  // Compact path data inside d attributes
+  svg = svg.replace(/\bd=(["'])([\s\S]*?)\1/gi, (_m, quote, d) => {
+    const compacted = d
+      .replace(/\s+([MmZzLlHhVvCcSsQqTtAa])/g, '$1')
+      .replace(/([MmZzLlHhVvCcSsQqTtAa])\s+/g, '$1')
+      .replace(/,\s+/g, ',');
+    return `d=${quote}${compacted}${quote}`;
+  });
 
   // Strip embedded scripts (security)
   do {
     prev = svg;
-    svg  = svg.replace(/<script\b[^>]*(?:\/>|>[\s\S]*?<\/script(?:\s[^>]*)?>)/gi, '');
+    svg  = svg.replace(/<script\b[^>]*\/>|<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '');
   } while (svg !== prev);
 
   // Strip inline event-handler attributes (onload, onclick, onmouseover, …)
@@ -87,13 +91,13 @@ export async function optimizeSvg(
   // Remove hidden elements
   do {
     prev = svg;
-    svg = svg.replace(/<[^>]+(?:display\s*:\s*none|visibility\s*:\s*hidden)[^>]*(\/>|[\s\S]*?<\/[a-z]+>)/gi, '');
+    svg = svg.replace(/<[^>]+(?:display\s*:\s*none|visibility\s*:\s*hidden)[^>]*\/>|<([a-z0-9:-]+)[^>]+(?:display\s*:\s*none|visibility\s*:\s*hidden)[^>]*>[\s\S]*?<\/\1>/gi, '');
   } while (svg !== prev);
 
   // Re-strip embedded scripts in case hidden-element removal exposes new tags
   do {
     prev = svg;
-    svg  = svg.replace(/<script\b[^>]*(?:\/>|>[\s\S]*?<\/script(?:\s[^>]*)?>)/gi, '');
+    svg  = svg.replace(/<script\b[^>]*\/>|<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '');
   } while (svg !== prev);
 
   // Collapse whitespace
@@ -101,17 +105,23 @@ export async function optimizeSvg(
   svg = svg.replace(/\s{2,}/g, ' ').trim();
   onProgress?.(80);
 
-  // Add viewBox if missing (SVG viewBox coordinates must be unitless numbers in CSS pixels)
-  if (!svg.includes('viewBox') && svg.includes('width=') && svg.includes('height=')) {
-    const w = svg.match(/\bwidth=["']([^"']+)["']/i)?.[1];
-    const h = svg.match(/\bheight=["']([^"']+)["']/i)?.[1];
-    if (w && h) {
-      const numW = parseSvgLength(w);
-      const numH = parseSvgLength(h);
-      if (numW !== null && numH !== null) {
-        const fmtW = Number(numW.toFixed(2));
-        const fmtH = Number(numH.toFixed(2));
-        svg = svg.replace('<svg', `<svg viewBox="0 0 ${fmtW} ${fmtH}"`);
+  // Add viewBox if missing from the root <svg> element (SVG viewBox coordinates must be unitless numbers in CSS pixels).
+  // Read width and height only from exact attributes on the root svg element, avoiding data-width or descendant attributes.
+  const rootSvgMatch = svg.match(/<svg\b([^>]*)>/i);
+  if (rootSvgMatch) {
+    const rootAttrs = rootSvgMatch[1];
+    const hasViewBox = /(?<![a-zA-Z0-9_-])viewBox\s*=/i.test(rootAttrs);
+    if (!hasViewBox) {
+      const wMatch = rootAttrs.match(/(?<![a-zA-Z0-9_-])width\s*=\s*["']([^"']+)["']/i);
+      const hMatch = rootAttrs.match(/(?<![a-zA-Z0-9_-])height\s*=\s*["']([^"']+)["']/i);
+      if (wMatch && hMatch) {
+        const numW = parseSvgLength(wMatch[1]);
+        const numH = parseSvgLength(hMatch[1]);
+        if (numW !== null && numH !== null) {
+          const fmtW = Number(numW.toFixed(2));
+          const fmtH = Number(numH.toFixed(2));
+          svg = svg.replace(/<svg\b/i, `<svg viewBox="0 0 ${fmtW} ${fmtH}"`);
+        }
       }
     }
   }

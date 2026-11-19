@@ -134,10 +134,24 @@ export function estimateZipArchiveSize(items: { name: string; size: number }[]):
   const EOCD_BYTES = 22;
   const PER_ENTRY_OVERHEAD = 76; // 30 bytes local header + 46 bytes central directory header
   let total = EOCD_BYTES;
+  const usedNames = new Set<string>();
+  const encoder = new TextEncoder();
+
   for (const item of items) {
-    const nameBytes = new TextEncoder().encode(sanitizeZipPath(item.name)).length;
-    // Account for potential deduplication suffix e.g. " (99)" (~5 bytes)
-    const nameLen = nameBytes + 5;
+    let safeName = sanitizeZipPath(item.name);
+    if (usedNames.has(safeName)) {
+      const slash = safeName.lastIndexOf("/");
+      const dot = safeName.lastIndexOf(".");
+      const hasExt = dot > slash;
+      const base = hasExt ? safeName.slice(0, dot) : safeName;
+      const ext = hasExt ? safeName.slice(dot) : "";
+      let n = 2;
+      while (usedNames.has(`${base} (${n})${ext}`)) n++;
+      safeName = `${base} (${n})${ext}`;
+    }
+    usedNames.add(safeName);
+
+    const nameLen = encoder.encode(safeName).length;
     total += item.size + PER_ENTRY_OVERHEAD + (2 * nameLen);
   }
   return total;

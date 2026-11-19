@@ -19,6 +19,9 @@ export const DEFAULT_SENTRY_DSN =
 
 function getStorage(): Storage | null {
   try {
+    if (typeof globalThis !== "undefined" && (globalThis as any).localStorage) {
+      return (globalThis as any).localStorage;
+    }
     if (typeof window !== "undefined" && window.localStorage) {
       return window.localStorage;
     }
@@ -31,25 +34,34 @@ function getStorage(): Storage | null {
   }
 }
 
+let runtimeOptOut = false;
+
 /**
  * Safely check if the user has opted out of error diagnostics.
  * Returns false by default (error diagnostics enabled), or true if opted out.
  * Never throws, even if storage access is restricted.
  */
 export function isTelemetryOptedOut(): boolean {
+  if (runtimeOptOut) return true;
   try {
     const storage = getStorage();
-    return storage?.getItem(TELEMETRY_STORAGE_KEY) === "true";
+    if (storage?.getItem(TELEMETRY_STORAGE_KEY) === "true") {
+      runtimeOptOut = true;
+      return true;
+    }
+    return runtimeOptOut;
   } catch {
-    return false;
+    return runtimeOptOut;
   }
 }
 
 /**
  * Safely persist the user's error diagnostics opt-out preference.
- * Returns true if written successfully, false if storage was blocked.
+ * Records the runtime choice immediately, then persists to storage if available.
+ * Returns true if written successfully to storage, false if storage was blocked.
  */
 export function setTelemetryOptOut(optOut: boolean): boolean {
+  runtimeOptOut = optOut;
   try {
     const storage = getStorage();
     if (!storage) return false;
@@ -61,6 +73,25 @@ export function setTelemetryOptOut(optOut: boolean): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Safely clear local storage while preserving the user's telemetry opt-out preference.
+ * If the user has opted out, the opt-out preference key is preserved so error diagnostics
+ * do not unexpectedly resume reporting after clearing cache or reloading.
+ */
+export function clearStoragePreservingTelemetry(storage?: Storage | null): void {
+  const target = storage ?? getStorage();
+  if (!target) return;
+  try {
+    const wasOptedOut = isTelemetryOptedOut();
+    target.clear();
+    if (wasOptedOut) {
+      target.setItem(TELEMETRY_STORAGE_KEY, "true");
+    }
+  } catch {
+    // Gracefully ignore storage restrictions
   }
 }
 
@@ -79,9 +110,9 @@ export function scrubDiagnosticText(text: string): string {
     // Strip double and single quoted strings (frequent container of raw user filenames)
     .replace(/"[^"\r\n]{1,250}"/g, '"[redacted]"')
     .replace(/'[^'\r\n]{1,250}'/g, "'[redacted]'")
-    // Strip filenames with extensions, including spaces and non-ASCII / Unicode characters
+    // Strip filenames with extensions, including spaces, emoji, and non-ASCII / Unicode characters
     .replace(
-      /(?:[\p{L}\p{N}_.\s-]{1,80})\.(?:heic|heif|mov|m4v|mp4|webm|mkv|avi|wav|mp3|flac|aac|ogg|pdf|docx|xlsx|pptx|odt|ods|odp|png|jpe?g|webp|gif|svg|tiff?|bmp|zip|tar|gz|7z|[a-zA-Z0-9]{2,6})\b/giu,
+      /(?:[^\s/\\:?*"<>|]{1,80})\.(?:heic|heif|mov|m4v|mp4|webm|mkv|avi|wav|mp3|flac|aac|ogg|pdf|docx|xlsx|pptx|odt|ods|odp|png|jpe?g|webp|gif|svg|tiff?|bmp|zip|tar|gz|7z|[a-zA-Z0-9]{2,6})\b/giu,
       "[filename]",
     )
     // Collapse any redundant placeholders
@@ -120,7 +151,7 @@ export function sanitizeSentryEvent(event: Sentry.Event): Sentry.Event | null {
   event.extra = {};
   event.tags = {};
   if (event.contexts) {
-    delete (event.contexts as any).state;
+    delete (event.contexts as Record<string, unknown>).state;
   }
 
   // 5. Scrub error message
@@ -154,27 +185,29 @@ export function initTelemetry(dsnOverride?: string): boolean {
 
   const dsn =
     dsnOverride ||
-    (typeof import.meta !== "undefined" && import.meta.env?.VITE_SENTRY_DSN) ||
+    (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_SENTRY_DSN) ||
     DEFAULT_SENTRY_DSN;
 
   if (!dsn) {
     return false;
   }
 
-  // If already active, return true
-  if (isInitialized && Sentry.getClient()) {
+  // If already active with usable transport, return true
+  const existingClient = Sentry.getClient();
+  if (isInitialized && existingClient && typeof (existingClient as any).getTransport === "function" && (existingClient as any).getTransport()) {
     return true;
   }
 
   const appVersion = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.15.0";
   const envMode =
-    typeof import.meta !== "undefined" && import.meta.env
-      ? import.meta.env.MODE || (import.meta.env.DEV ? "development" : "production")
+    typeof import.meta !== "undefined" && (import.meta as any).env
+      ? (import.meta as any).env.MODE || ((import.meta as any).env.DEV ? "development" : "production")
       : "production";
 
   Sentry.init({
     dsn,
     sendDefaultPii: false,
+    sendClientReports: false,
     release: `compressz@${appVersion}`,
     environment: envMode,
     // Drop session tracking, breadcrumb scraping, and console interceptors so zero telemetry is sent during normal usage
@@ -186,8 +219,13 @@ export function initTelemetry(dsnOverride?: string): boolean {
     beforeSend: sanitizeSentryEvent,
   } as any);
 
-  isInitialized = true;
-  return true;
+  const client = Sentry.getClient();
+  if (client && typeof (client as any).getTransport === "function" && (client as any).getTransport()) {
+    isInitialized = true;
+    return true;
+  }
+  isInitialized = false;
+  return false;
 }
 
 /**
@@ -195,9 +233,20 @@ export function initTelemetry(dsnOverride?: string): boolean {
  */
 export async function disableTelemetry(): Promise<void> {
   isInitialized = false;
+  setTelemetryOptOut(true);
   try {
+    const client = Sentry.getClient();
+    if (client && typeof (client as any).getTransport === "function") {
+      const transport = (client as any).getTransport();
+      if (typeof transport?.abort === "function") {
+        transport.abort();
+      }
+    }
     if (typeof Sentry.close === "function") {
-      await Sentry.close();
+      await Promise.race([
+        Sentry.close(500),
+        new Promise((resolve) => setTimeout(resolve, 500)),
+      ]);
     }
   } catch {
     // Ignore close errors

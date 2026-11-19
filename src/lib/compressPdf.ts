@@ -53,7 +53,7 @@ export async function compressPdf(
   // the preset default in either direction.
   const stripMeta = options.stripMetadata ?? preset.stripMeta;
 
-  const { PDFDocument, PDFName, PDFRawStream } = (await import(
+  const { PDFDocument, PDFName, PDFRawStream, decodePDFRawStream } = (await import(
     /* @vite-ignore */ PDFLIB_ESM
   )) as any;
   onProgress?.(6);
@@ -75,6 +75,7 @@ export async function compressPdf(
         stripMeta,
         targetSizeKB,
         onProgress,
+        decodePDFRawStream,
       );
       if (result.compressedSize < file.size * 0.98) return result;
     } catch (e) {
@@ -296,7 +297,7 @@ export function calculateEffectiveDpi(
       displayedHeightPt && displayedHeightPt > 0
         ? (origH * 72) / displayedHeightPt
         : effDpiX;
-    return Math.max(effDpiX, effDpiY);
+    return Math.min(effDpiX, effDpiY);
   }
 
   // Page-size bound fallback: max(origW, origH) / (max(pageW, pageH) / 72)
@@ -345,7 +346,11 @@ async function decompressFlate(bytes: Uint8Array): Promise<Uint8Array> {
   return bytes;
 }
 
-async function getPageContentText(page: any, pdfDoc: any): Promise<string> {
+async function getPageContentText(
+  page: any,
+  pdfDoc: any,
+  decodePDFRawStream?: any,
+): Promise<string> {
   try {
     const contents =
       page.node.Contents?.() ??
@@ -368,21 +373,46 @@ async function getPageContentText(page: any, pdfDoc: any): Promise<string> {
       }
       if (!item) continue;
 
-      let rawBytes: Uint8Array | null = null;
-      if (item.contents instanceof Uint8Array) {
-        rawBytes = item.contents;
-      } else if (typeof item.getContents === "function") {
-        rawBytes = item.getContents();
+      let decodedBytes: Uint8Array | null = null;
+      if (typeof decodePDFRawStream === "function") {
+        try {
+          const decodedStream = decodePDFRawStream(item);
+          if (decodedStream?.contents instanceof Uint8Array) {
+            decodedBytes = decodedStream.contents;
+          } else if (typeof decodedStream?.getContents === "function") {
+            decodedBytes = decodedStream.getContents();
+          } else if (typeof decodedStream?.asUint8Array === "function") {
+            decodedBytes = decodedStream.asUint8Array();
+          }
+        } catch {
+          // Fall back to manual filter check
+        }
       }
-      if (!rawBytes || rawBytes.length === 0) continue;
 
-      const filter =
-        item.dict?.lookup?.(pdfDoc.context.obj("Filter"))?.encodedName ?? "";
-      let decoded = rawBytes;
-      if (filter === "/FlateDecode") {
-        decoded = await decompressFlate(rawBytes);
+      if (!decodedBytes) {
+        let rawBytes: Uint8Array | null = null;
+        if (item.contents instanceof Uint8Array) {
+          rawBytes = item.contents;
+        } else if (typeof item.getContents === "function") {
+          rawBytes = item.getContents();
+        }
+        if (!rawBytes || rawBytes.length === 0) continue;
+
+        const filterObj = item.dict?.lookup?.(pdfDoc.context.obj("Filter"));
+        const filterName = filterObj?.encodedName ?? filterObj?.toString?.() ?? "";
+        if (
+          filterName === "/FlateDecode" ||
+          (Array.isArray(filterObj) && filterObj.some((f: any) => f?.encodedName === "/FlateDecode"))
+        ) {
+          decodedBytes = await decompressFlate(rawBytes);
+        } else {
+          decodedBytes = rawBytes;
+        }
       }
-      text += "\n" + new TextDecoder("latin1").decode(decoded);
+
+      if (decodedBytes) {
+        text += "\n" + new TextDecoder("latin1").decode(decodedBytes);
+      }
     }
     return text;
   } catch {
@@ -402,6 +432,7 @@ async function structuralCompress(
   stripMeta: boolean,
   targetSizeKB: number,
   onProgress?: (pct: number) => void,
+  decodePDFRawStream?: any,
 ): Promise<CompressResult> {
   const pdfDoc = await PDFDocument.load(new Uint8Array(arrayBuffer), {
     ignoreEncryption: true,
@@ -417,7 +448,7 @@ async function structuralCompress(
 
   for (let p = 0; p < total; p++) {
     const page = pages[p];
-    const streamText = await getPageContentText(page, pdfDoc);
+    const streamText = await getPageContentText(page, pdfDoc, decodePDFRawStream);
     if (!streamText) continue;
 
     const pageDrawn = calculateImageDrawnSizes(streamText);
@@ -434,9 +465,10 @@ async function structuralCompress(
       existingByName.push(...drawnList);
       drawnSizesByName.set(name, existingByName);
 
-      const xObj = xObjects.lookup(key);
-      if (xObj?.ref) {
-        const refStr = `${xObj.ref.objectNumber}_${xObj.ref.generationNumber}`;
+      const rawRef = xObjects.dict ? xObjects.dict.get(key) : (xObjects.get?.(key) ?? null);
+      const refObj = rawRef?.objectNumber !== undefined ? rawRef : xObjects.lookup(key)?.ref;
+      if (refObj?.objectNumber !== undefined) {
+        const refStr = `${refObj.objectNumber}_${refObj.generationNumber ?? 0}`;
         const existingByRef = drawnSizesByRef.get(refStr) ?? [];
         existingByRef.push(...drawnList);
         drawnSizesByRef.set(refStr, existingByRef);
@@ -446,6 +478,7 @@ async function structuralCompress(
 
   const processedObjects = new Set<any>();
   const processedRefKeys = new Set<string>();
+  const replacementsByRef = new Map<string, any>();
 
   for (let p = 0; p < total; p++) {
     const page = pages[p];
@@ -461,8 +494,10 @@ async function structuralCompress(
       const xObj = xObjects.lookup(key);
       if (!xObj?.dict) continue;
 
-      const refKey = xObj.ref
-        ? `${xObj.ref.objectNumber}_${xObj.ref.generationNumber}`
+      const rawRef = xObjects.dict ? xObjects.dict.get(key) : (xObjects.get?.(key) ?? null);
+      const targetRef = rawRef?.objectNumber !== undefined ? rawRef : xObj.ref;
+      const refKey = targetRef?.objectNumber !== undefined
+        ? `${targetRef.objectNumber}_${targetRef.generationNumber ?? 0}`
         : null;
 
       // Skip already processed images (shared across pages or multiple keys)
@@ -471,6 +506,9 @@ async function structuralCompress(
         processedObjects.has(xObj.dict) ||
         (refKey && processedRefKeys.has(refKey))
       ) {
+        if (refKey && replacementsByRef.has(refKey)) {
+          xObjects.set(key, replacementsByRef.get(refKey));
+        }
         continue;
       }
 
@@ -567,16 +605,24 @@ async function structuralCompress(
       xObj.dict.delete(PDFName.of("Mask"));
       xObj.dict.delete(PDFName.of("SMask"));
 
-      // If the XObject already has a stable ref, update it in-place.
-      // Otherwise register a new object and point the XObject dict entry at it.
-      if (xObj.ref) {
-        pdfDoc.context.assign(xObj.ref, new PDFRawStream(xObj.dict, reencoded));
+      // If the XObject has a stable resource reference, update it in-place.
+      // Otherwise register a new object, point the XObject dict entry at it,
+      // and track the replacement so other aliases redirect to it.
+      if (targetRef) {
+        pdfDoc.context.assign(targetRef, new PDFRawStream(xObj.dict, reencoded));
+        if (refKey) {
+          replacementsByRef.set(refKey, targetRef);
+        }
       } else {
         const newRef = pdfDoc.context.register(
           new PDFRawStream(xObj.dict, reencoded),
         );
         xObjects.set(key, newRef);
         processedObjects.add(newRef);
+        if (refKey) {
+          replacementsByRef.set(refKey, newRef);
+          processedRefKeys.add(refKey);
+        }
         processedRefKeys.add(
           `${newRef.objectNumber}_${newRef.generationNumber}`,
         );

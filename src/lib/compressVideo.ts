@@ -311,6 +311,7 @@ async function videoViaMediaRecorder(
   file: File,
   opts: CompressOptions,
   onProgress?: (pct: number) => void,
+  metadataTimeoutMs: number = 8000,
 ): Promise<CompressResult> {
   const meta = await getVideoMeta(file);
   const { width: ow, height: oh, duration } = meta;
@@ -368,8 +369,9 @@ async function videoViaMediaRecorder(
     const timer = setTimeout(() => {
       vid.onloadedmetadata = null;
       vid.onerror = null;
-      r();
-    }, 8000);
+      revokeUrl();
+      rej(new Error("Timeout loading video metadata in MediaRecorder fallback"));
+    }, metadataTimeoutMs);
     vid.onloadedmetadata = () => {
       clearTimeout(timer);
       r();

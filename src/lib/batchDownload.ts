@@ -42,9 +42,13 @@ export async function downloadBatch(
   }
 
   // Pre-check total projected archive size including headers before allocating arrays and packaging.
-  // If projected size exceeds the 32-bit (4 GiB) ZIP threshold, fall back immediately to
+  // Standard ZIP supports up to 0xfffe (65534) entries; 0xffff or more overflows the 16-bit entry count.
+  // If entry count reaches 0xffff or projected size exceeds the 32-bit (4 GiB) ZIP threshold, fall back immediately to
   // individually accessible output downloads within the user gesture so the batch succeeds.
-  if (exceedsZipLimit(validItems.map((item) => ({ name: item.name, size: item.blob.size })))) {
+  if (
+    validItems.length >= 0xffff ||
+    exceedsZipLimit(validItems.map((item) => ({ name: item.name, size: item.blob.size })))
+  ) {
     for (const item of validItems) {
       triggerDownload(item.blob, item.name);
     }

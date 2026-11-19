@@ -81,9 +81,11 @@ export async function decryptFileAesGcm(
     throw new Error("Invalid file header: not a CompressZ AES-256 encrypted payload.");
   }
 
-  const salt = encryptedBytes.slice(4, 20);
-  const iv = encryptedBytes.slice(20, 32);
-  const ciphertext = encryptedBytes.slice(32);
+  // Create independent copies of salt, iv, and ciphertext before any async boundaries
+  // to guard against caller-mutable buffer modifications during crypto operations.
+  const salt = new Uint8Array(encryptedBytes.subarray(4, 20));
+  const iv = new Uint8Array(encryptedBytes.subarray(20, 32));
+  const ciphertext = new Uint8Array(encryptedBytes.subarray(32));
 
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
