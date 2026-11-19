@@ -98,6 +98,13 @@ Google Fonts is used for typography and is loaded from
 engines are downloaded on first use and cached; there is no full
 offline pack yet.
 
+- **Anonymous Error Diagnostics (Sentry)** — to detect crashes, unhandled
+  exceptions, and WASM engine failures, anonymous diagnostics are sent to
+  `sentry.io`. This is enabled by default. No personal data, IP addresses,
+  filenames, file paths, or document contents are ever transmitted. Users
+  can opt out anytime in Settings under Privacy & data (persisted locally
+  via `cz-telemetry-opt-out`).
+
 ## 5. Local storage
 
 CompressZ stores these keys in your browser's `localStorage`:
@@ -118,6 +125,7 @@ CompressZ stores these keys in your browser's `localStorage`:
   used on the Multi-Format Converter (format names only, never file names).
 - `cz-pdfsuite-profile` — the encryption standard, render DPI and permission
   toggles you last picked in PDF Suite.
+- `cz-telemetry-opt-out` — indicates whether anonymous error diagnostics have been disabled (enabled by default).
 
 These values never leave your device. Contextual suggestions are evaluated
 locally from metadata that is already in the page (file names, byte sizes,
