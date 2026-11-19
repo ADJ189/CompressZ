@@ -59,8 +59,8 @@ export async function optimizeSvg(
   svg = svg.replace(/<defs>\s*<\/defs>/gi, '');
 
   // Round long decimals (≥3 decimal places → 2)
-  svg = svg.replace(/(\d+\.\d{3,})/g, m =>
-    Number.parseFloat(m).toFixed(2).replace(/\.?0+$/, ''));
+  svg = svg.replace(/(\d+\.\d{3,})/g, (m) =>
+    Number(Number.parseFloat(m).toFixed(2)).toString());
   onProgress?.(55);
 
   // Compact path data

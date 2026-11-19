@@ -9,7 +9,7 @@
  *  - 2+ items: packaged into a single ZIP archive downloaded immediately
  */
 
-import { writeZip, type ZipEntryIn } from "./zip";
+import { writeZip, exceedsZipLimit, MAX_ZIP_32_BYTES, type ZipEntryIn } from "./zip";
 
 export interface BatchFileItem {
   name: string;
@@ -17,7 +17,8 @@ export interface BatchFileItem {
 }
 
 /** 32-bit ZIP limit (4 GiB). Batches at or above this cannot be packaged safely without Zip64. */
-export const MAX_ZIP_BATCH_BYTES = 0xffffffff;
+export const MAX_ZIP_BATCH_BYTES = MAX_ZIP_32_BYTES;
+export { exceedsZipLimit };
 
 function triggerDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
@@ -40,15 +41,10 @@ export async function downloadBatch(
     return;
   }
 
-  // Pre-check total size before allocating arrays and packaging
-  const totalSizeBytes = validItems.reduce(
-    (acc, item) => acc + (item.blob?.size ?? 0),
-    0,
-  );
-
-  // If combined size exceeds the 32-bit (4 GiB) ZIP threshold, fall back to
+  // Pre-check total projected archive size including headers before allocating arrays and packaging.
+  // If projected size exceeds the 32-bit (4 GiB) ZIP threshold, fall back immediately to
   // individually accessible output downloads within the user gesture so the batch succeeds.
-  if (totalSizeBytes >= MAX_ZIP_BATCH_BYTES) {
+  if (exceedsZipLimit(validItems.map((item) => ({ name: item.name, size: item.blob.size })))) {
     for (const item of validItems) {
       triggerDownload(item.blob, item.name);
     }
