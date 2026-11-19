@@ -8,6 +8,7 @@
   import { runScheduled } from "../lib/resourceManager";
 import { entryError } from "../lib/engineError";
   import { uid, type FileEntry, outputFilename } from "../lib/types";
+  import { downloadBatch } from "../lib/batchDownload";
   import { toast } from "../toast";
 
   let gifState = $state<GifState>(gifStore.get());
@@ -128,11 +129,16 @@ import { entryError } from "../lib/engineError";
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   }
 
-  function handleDownloadAll() {
-    const doneEntries = gifState.files.filter((f) => f.status === "done");
-    doneEntries.forEach((entry, idx) => {
-      setTimeout(() => handleDownloadSingle(entry), idx * 200);
-    });
+  async function handleDownloadAll() {
+    const doneEntries = gifState.files.filter((f) => f.status === "done" && f.compressedBlob);
+    const items = doneEntries.map((entry) => ({
+      name: outputFilename(entry.name, entry.compressedBlob!, {
+        suffix: "-compressed",
+        fallbackExt: "gif",
+      }),
+      blob: entry.compressedBlob!,
+    }));
+    await downloadBatch(items, "gif-compressed.zip");
   }
 
   function handleRemove(id: string) {

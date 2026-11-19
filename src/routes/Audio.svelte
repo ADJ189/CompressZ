@@ -8,6 +8,7 @@
   import { runScheduled } from "../lib/resourceManager";
 import { entryError } from "../lib/engineError";
   import { uid, type FileEntry, type AudioFormat, outputFilename } from "../lib/types";
+  import { downloadBatch } from "../lib/batchDownload";
   import { toast } from "../toast";
 
   let audioState = $state<AudioState>(audioStore.get());
@@ -128,11 +129,16 @@ import { entryError } from "../lib/engineError";
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   }
 
-  function handleDownloadAll() {
-    const doneEntries = audioState.files.filter((f) => f.status === "done");
-    doneEntries.forEach((entry, idx) => {
-      setTimeout(() => handleDownloadSingle(entry), idx * 200);
-    });
+  async function handleDownloadAll() {
+    const doneEntries = audioState.files.filter((f) => f.status === "done" && f.compressedBlob);
+    const items = doneEntries.map((entry) => ({
+      name: outputFilename(entry.name, entry.compressedBlob!, {
+        suffix: "-compressed",
+        fallbackExt: audioState.fmt,
+      }),
+      blob: entry.compressedBlob!,
+    }));
+    await downloadBatch(items, "audio-compressed.zip");
   }
 
   function handleRemove(id: string) {
