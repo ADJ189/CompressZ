@@ -226,3 +226,16 @@ Deno.test("optimizeSvg: linear single-pass parser processes large sequence of hi
   assert(text.includes("<path"), "Visible path must be preserved");
 });
 
+Deno.test("optimizeSvg: retains complete CDATA section containing script text without corruption", async () => {
+  const cdataSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+    <text><![CDATA[<script ]]></text>
+  </svg>`;
+
+  const file = new File([cdataSvg], "cdata.svg", { type: "image/svg+xml" });
+  const result = await optimizeSvg(file);
+  const text = await result.blob.text();
+
+  assert(text.includes("<text><![CDATA[<script ]]></text>"), "Must retain complete CDATA section without removing terminator or contents");
+});
+
+
