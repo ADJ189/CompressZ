@@ -25,6 +25,28 @@ Deno.test("optimizeSvg: strips scripts and XSS inline handlers", async () => {
   assert(text.includes("<circle"), "Must preserve valid SVG circle geometry");
 });
 
+Deno.test("optimizeSvg: strips unquoted javascript: href, entity-encoded javascript:, and foreignObject tags", async () => {
+  const hostileSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+    <a href=javascript:alert('unquoted')><text x="10" y="20">Unquoted</text></a>
+    <a xlink:href=javascript:alert('unquoted-xlink')><text x="10" y="40">Unquoted Xlink</text></a>
+    <a href="&#106;avascript:alert('entity')"><text x="10" y="60">Entity</text></a>
+    <a href="&#x6a;avascript:alert('hex-entity')"><text x="10" y="80">Hex Entity</text></a>
+    <foreignObject width="100" height="100">
+      <iframe src="https://evil.com"></iframe>
+    </foreignObject>
+  </svg>`;
+
+  const file = new File([hostileSvg], "hostile.svg", { type: "image/svg+xml" });
+  const result = await optimizeSvg(file);
+  const text = await result.blob.text();
+
+  assert(!/href\s*=\s*javascript:/i.test(text), "Must strip unquoted javascript: href");
+  assert(!/href\s*=\s*['"]?&#(?:106|x6a);/i.test(text), "Must strip entity-encoded javascript: href");
+  assert(!text.includes("foreignObject"), "Must strip <foreignObject> tags");
+  assert(!text.includes("<iframe"), "Must strip child HTML tags in foreignObject");
+});
+
+
 Deno.test("optimizeSvg: rounds long decimals and preserves clean structure", async () => {
   const rawSvg = `<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
     <path d="M 12.345678 45.678912 L 89.123456 99.888888" stroke="black"/>

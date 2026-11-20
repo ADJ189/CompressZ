@@ -98,3 +98,21 @@ Deno.test("zip: estimateZipArchiveSize accurately accounts for deduplicated file
     (300 + 76 + 2 * dup2Len);
   assertEquals(estimated, expectedTotal);
 });
+
+Deno.test("zip: writeZip rejects archive with 65535 or more entries to prevent 16-bit truncation", async () => {
+  // Array of 65535 entries (0xffff)
+  const dummyData = new Uint8Array(0);
+  const entries = new Array(0xffff).fill(null).map((_, i) => ({
+    name: `f${i}.txt`,
+    data: dummyData,
+  }));
+
+  let message = "";
+  try {
+    await writeZip(entries);
+  } catch (err) {
+    message = String((err as Error)?.message || err);
+  }
+  assert(/65534 entries/i.test(message) || /65535 entries/i.test(message), `Expected 16-bit limit error, got: "${message}"`);
+});
+
