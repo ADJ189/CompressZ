@@ -76,7 +76,13 @@ function compactPathData(d: string): string {
  */
 function cleanElementAttributes(tagAttrs: string): string {
   // Strip inline event-handler attributes (onload, onclick, onmouseover, …)
-  let cleaned = tagAttrs.replace(/\s+\bon[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+  // Repeat until stable to avoid incomplete multi-character sanitization.
+  let cleaned = tagAttrs;
+  let previous: string;
+  do {
+    previous = cleaned;
+    cleaned = cleaned.replace(/\s+\bon[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+  } while (cleaned !== previous);
 
   // Strip editor namespace declarations
   cleaned = cleaned.replace(
