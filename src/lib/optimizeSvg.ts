@@ -97,7 +97,7 @@ export async function optimizeSvg(
   // Re-strip embedded scripts in case hidden-element removal exposes new tags
   do {
     prev = svg;
-    svg  = svg.replace(/<script\b[^>]*\/>|<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '');
+    svg  = svg.replace(/<script\b[^>]*\/>|<script\b[^>]*>[\s\S]*?<\/script(?:\s+[^>]*)?>/gi, '');
   } while (svg !== prev);
 
   // Collapse whitespace
