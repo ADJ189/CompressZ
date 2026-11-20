@@ -183,3 +183,46 @@ Deno.test("optimizeSvg: removes hidden elements without regex backtracking", asy
   assert(text.includes("<path"), "Should preserve visible path");
   assert(text.includes("<text>display:none</text>"), "Should preserve text node containing literal 'display:none'");
 });
+
+Deno.test("optimizeSvg: preserves text nodes beginning with onload= and editor namespace strings", async () => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100">
+    <circle cx="50" cy="50" r="40" fill="blue" onload="evilHandler()"/>
+    <text x="10" y="30">onload=executeUserFormula();</text>
+    <text x="10" y="60">xmlns:inkscape="http://inkscape.org" and inkscape:label="User Diagram"</text>
+  </svg>`;
+
+  const file = new File([svg], "text-nodes.svg", { type: "image/svg+xml" });
+  const result = await optimizeSvg(file);
+  const text = await result.blob.text();
+
+  // Attribute onload handler on circle must be stripped
+  assert(!text.includes('onload="evilHandler()"'), "Must strip onload attribute from element tag");
+  // Visible text node content starting with onload= must be untouched
+  assert(text.includes("<text x=\"10\" y=\"30\">onload=executeUserFormula();</text>"), "Must preserve visible text starting with onload=");
+  // Visible text node content containing namespace and editor attribute names must be untouched
+  assert(text.includes('xmlns:inkscape="http://inkscape.org" and inkscape:label="User Diagram"'), "Must preserve editor namespace strings inside text nodes");
+});
+
+Deno.test("optimizeSvg: linear single-pass parser processes large sequence of hidden siblings in linear time", async () => {
+  const hiddenSiblings: string[] = [];
+  for (let i = 0; i < 500; i++) {
+    hiddenSiblings.push(`<rect id="hidden_${i}" x="${i}" y="${i}" width="10" height="10" style="display:none" />`);
+  }
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000">
+    <circle cx="100" cy="100" r="50" fill="green" />
+    ${hiddenSiblings.join("\n")}
+    <path d="M 10 10 L 90 90" stroke="black" />
+  </svg>`;
+
+  const file = new File([svg], "large-hidden.svg", { type: "image/svg+xml" });
+  const start = performance.now();
+  const result = await optimizeSvg(file);
+  const elapsed = performance.now() - start;
+  const text = await result.blob.text();
+
+  assert(elapsed < 1000, `Large sequence of hidden siblings must be parsed in linear time (<1000ms), took ${elapsed.toFixed(1)}ms`);
+  assert(!text.includes("<rect"), "All 500 hidden sibling rects must be removed");
+  assert(text.includes("<circle"), "Visible circle must be preserved");
+  assert(text.includes("<path"), "Visible path must be preserved");
+});
+
