@@ -73,54 +73,172 @@ function compactPathData(d: string): string {
 /**
  * Clean element attributes strictly on tag headers, preserving text nodes.
  * Strips event handlers, unwanted editor namespaces, and neutralizes javascript: URIs.
+ * Uses a linear scan (O(N) with zero regex backtracking).
  */
 function cleanElementAttributes(tagAttrs: string): string {
-  // Strip inline event-handler attributes (onload, onclick, onmouseover, …)
-  let cleaned = tagAttrs.replace(/\s+\bon[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+  let cleaned = "";
+  let i = 0;
+  const len = tagAttrs.length;
 
-  // Strip editor namespace declarations
-  cleaned = cleaned.replace(
-    /\s+\bxmlns:(?:inkscape|sodipodi|sketch|dc|cc|rdf|xlink)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi,
-    "",
-  );
+  while (i < len) {
+    // Collect leading whitespace
+    const wsStart = i;
+    while (
+      i < len &&
+      (tagAttrs[i] === " " ||
+        tagAttrs[i] === "\t" ||
+        tagAttrs[i] === "\n" ||
+        tagAttrs[i] === "\r")
+    ) {
+      i++;
+    }
+    const ws = tagAttrs.slice(wsStart, i);
+    if (i >= len) {
+      cleaned += ws;
+      break;
+    }
 
-  // Strip editor attributes (inkscape:*, sodipodi:*)
-  cleaned = cleaned.replace(
-    /\s+\b(?:inkscape|sodipodi):[a-z-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi,
-    "",
-  );
+    // Read attribute name
+    const nameStart = i;
+    while (
+      i < len &&
+      tagAttrs[i] !== "=" &&
+      tagAttrs[i] !== ">" &&
+      tagAttrs[i] !== "/" &&
+      tagAttrs[i] !== " " &&
+      tagAttrs[i] !== "\t" &&
+      tagAttrs[i] !== "\n" &&
+      tagAttrs[i] !== "\r"
+    ) {
+      i++;
+    }
+    const attrName = tagAttrs.slice(nameStart, i);
+    if (!attrName) {
+      cleaned += ws + tagAttrs[i++];
+      continue;
+    }
 
-  // Neutralize javascript: and executable data URIs in href and xlink:href
-  cleaned = cleaned.replace(
-    /\b(href|xlink:href)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi,
-    (full: string, attr: string, dQuote?: string, sQuote?: string, uQuote?: string) => {
-      const rawVal = dQuote ?? sQuote ?? uQuote ?? "";
-      const decoded = rawVal
+    // Check for optional '=' and attribute value
+    let hasEquals = false;
+    let quote = "";
+    let attrVal = "";
+
+    const beforeEqWsStart = i;
+    while (
+      i < len &&
+      (tagAttrs[i] === " " ||
+        tagAttrs[i] === "\t" ||
+        tagAttrs[i] === "\n" ||
+        tagAttrs[i] === "\r")
+    ) {
+      i++;
+    }
+
+    if (i < len && tagAttrs[i] === "=") {
+      hasEquals = true;
+      i++; // consume '='
+      // skip whitespace after '='
+      while (
+        i < len &&
+        (tagAttrs[i] === " " ||
+          tagAttrs[i] === "\t" ||
+          tagAttrs[i] === "\n" ||
+          tagAttrs[i] === "\r")
+      ) {
+        i++;
+      }
+
+      if (i < len) {
+        if (tagAttrs[i] === '"' || tagAttrs[i] === "'") {
+          quote = tagAttrs[i];
+          i++; // consume opening quote
+          const valStart = i;
+          while (i < len && tagAttrs[i] !== quote) {
+            i++;
+          }
+          attrVal = tagAttrs.slice(valStart, i);
+          if (i < len && tagAttrs[i] === quote) {
+            i++; // consume closing quote
+          }
+        } else {
+          // Unquoted value: terminates at whitespace, '>', or '/'
+          const valStart = i;
+          while (
+            i < len &&
+            tagAttrs[i] !== " " &&
+            tagAttrs[i] !== "\t" &&
+            tagAttrs[i] !== "\n" &&
+            tagAttrs[i] !== "\r" &&
+            tagAttrs[i] !== ">" &&
+            tagAttrs[i] !== "/"
+          ) {
+            i++;
+          }
+          attrVal = tagAttrs.slice(valStart, i);
+        }
+      }
+    } else {
+      // Attribute without value (e.g. boolean attribute)
+      i = beforeEqWsStart;
+    }
+
+    const lowerName = attrName.toLowerCase();
+
+    // 1. Drop inline event handlers (onload, onclick, onmouseover, ...)
+    if (lowerName.startsWith("on")) {
+      continue;
+    }
+
+    // 2. Drop editor namespace declarations (xmlns:inkscape, xmlns:sodipodi, etc.)
+    if (
+      lowerName === "xmlns:inkscape" ||
+      lowerName === "xmlns:sodipodi" ||
+      lowerName === "xmlns:sketch" ||
+      lowerName === "xmlns:dc" ||
+      lowerName === "xmlns:cc" ||
+      lowerName === "xmlns:rdf" ||
+      lowerName === "xmlns:xlink"
+    ) {
+      continue;
+    }
+
+    // 3. Drop editor attributes (inkscape:*, sodipodi:*)
+    if (lowerName.startsWith("inkscape:") || lowerName.startsWith("sodipodi:")) {
+      continue;
+    }
+
+    // 4. Neutralize javascript: and executable data URIs in href and xlink:href
+    if (lowerName === "href" || lowerName === "xlink:href") {
+      const decoded = attrVal
         .replace(/&#(\d+);?/g, (_: string, n: string) => String.fromCharCode(Number(n)))
         .replace(/&#x([0-9a-f]+);?/gi, (_: string, h: string) => String.fromCharCode(Number.parseInt(h, 16)));
       let stripped = "";
-      for (let i = 0; i < decoded.length; i++) {
-        if (decoded.charCodeAt(i) > 32) {
-          stripped += decoded[i];
+      for (let c = 0; c < decoded.length; c++) {
+        if (decoded.charCodeAt(c) > 32) {
+          stripped += decoded[c];
         }
       }
       if (/^javascript:/i.test(stripped) || /^data:text\/(?:html|javascript)/i.test(stripped)) {
-        return `${attr}="#"`;
+        attrVal = "#";
+        quote = quote || '"';
       }
-      return full;
-    },
-  );
+    }
 
-  // Compact path data inside d attributes deterministically without backtracking
-  cleaned = cleaned.replace(
-    /\bd=(?:"([^"]*)"|'([^']*)')/gi,
-    (_match: string, dDouble?: string, dSingle?: string) => {
-      const isDouble = dDouble !== undefined;
-      const quote = isDouble ? '"' : "'";
-      const d = isDouble ? dDouble! : dSingle!;
-      return `d=${quote}${compactPathData(d)}${quote}`;
-    },
-  );
+    // 5. Compact path data inside d attributes
+    if (lowerName === "d") {
+      attrVal = compactPathData(attrVal);
+      quote = quote || '"';
+    }
+
+    // Append preserved/sanitized attribute
+    const sep = ws || " ";
+    if (hasEquals) {
+      const q = quote || '"';
+      cleaned += `${sep}${attrName}=${q}${attrVal}${q}`;
+    } else {
+      cleaned += `${sep}${attrName}`;
+    }
+  }
 
   return cleaned;
 }
@@ -244,8 +362,8 @@ function processSvgLinear(svg: string): string {
     }
 
     // Check if element should be discarded (script, foreignObject, metadata, editor namespaces)
-    if (!isClose && shouldDiscardElement(tagName)) {
-      if (!isSelfClosing) {
+    if (shouldDiscardElement(tagName)) {
+      if (!isClose && !isSelfClosing) {
         discardDepth = 1;
         discardTag = lowerName;
       }
@@ -283,10 +401,39 @@ function processSvgLinear(svg: string): string {
   result = result.replace(/<g\s*\/>/gi, "");
   result = result.replace(/<defs>\s*<\/defs>/gi, "");
 
-  // CodeQL guard: ensure no unparsed or trailing <script tag token survives in markup (without matching namespace elements like script:rect)
-  result = result.replace(/<\/?script(?=[\s/>]|$)[^>]*>/gi, "");
-
   return result;
+}
+
+/**
+ * Linear-time removal of inter-tag whitespace between '>' and '<'.
+ * Replaces sequences of 2 or more whitespace characters between tags with zero spaces (O(N) with zero backtracking).
+ */
+function collapseInterTagWhitespace(svg: string): string {
+  let out = "";
+  let i = 0;
+  const len = svg.length;
+  while (i < len) {
+    if (svg[i] === ">") {
+      out += ">";
+      i++;
+      const wsStart = i;
+      while (
+        i < len &&
+        (svg[i] === " " || svg[i] === "\t" || svg[i] === "\n" || svg[i] === "\r")
+      ) {
+        i++;
+      }
+      if (i - wsStart >= 2 && i < len && svg[i] === "<") {
+        // Collapsed whitespace between '>' and '<'
+      } else {
+        out += svg.slice(wsStart, i);
+      }
+    } else {
+      out += svg[i];
+      i++;
+    }
+  }
+  return out;
 }
 
 export async function optimizeSvg(
@@ -309,7 +456,7 @@ export async function optimizeSvg(
   onProgress?.(70);
 
   // Collapse whitespace
-  svg = svg.replace(/>\s{2,}</g, "><");
+  svg = collapseInterTagWhitespace(svg);
   svg = svg.replace(/\s{2,}/g, " ").trim();
   onProgress?.(80);
 
@@ -318,17 +465,21 @@ export async function optimizeSvg(
   const rootSvgMatch = svg.match(/<svg\b([^>]*)>/i);
   if (rootSvgMatch) {
     const rootAttrs = rootSvgMatch[1];
-    const hasViewBox = /(?<![a-zA-Z0-9_-])viewBox\s*=/i.test(rootAttrs);
+    const hasViewBox = /(?:^|\s)viewBox\s*=/i.test(rootAttrs);
     if (!hasViewBox) {
-      const wMatch = rootAttrs.match(/(?<![a-zA-Z0-9_-])width\s*=\s*["']([^"']+)["']/i);
-      const hMatch = rootAttrs.match(/(?<![a-zA-Z0-9_-])height\s*=\s*["']([^"']+)["']/i);
+      const wMatch = rootAttrs.match(/(?:^|\s)width\s*=\s*(?:"([^"]+)"|'([^']+)')/i);
+      const hMatch = rootAttrs.match(/(?:^|\s)height\s*=\s*(?:"([^"]+)"|'([^']+)')/i);
       if (wMatch && hMatch) {
-        const numW = parseSvgLength(wMatch[1]);
-        const numH = parseSvgLength(hMatch[1]);
-        if (numW !== null && numH !== null) {
-          const fmtW = Number(numW.toFixed(2));
-          const fmtH = Number(numH.toFixed(2));
-          svg = svg.replace(/<svg\b/i, `<svg viewBox="0 0 ${fmtW} ${fmtH}"`);
+        const rawW = wMatch[1] ?? wMatch[2];
+        const rawH = hMatch[1] ?? hMatch[2];
+        if (rawW && rawH) {
+          const numW = parseSvgLength(rawW);
+          const numH = parseSvgLength(rawH);
+          if (numW !== null && numH !== null) {
+            const fmtW = Number(numW.toFixed(2));
+            const fmtH = Number(numH.toFixed(2));
+            svg = svg.replace(/<svg\b/i, `<svg viewBox="0 0 ${fmtW} ${fmtH}"`);
+          }
         }
       }
     }
