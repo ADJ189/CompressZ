@@ -8,7 +8,7 @@ import {
   TELEMETRY_STORAGE_KEY,
 } from "../src/lib/telemetry.ts";
 
-function setStorageMock(mock: any) {
+function setStorageMock(mock: unknown) {
   Object.defineProperty(globalThis, "localStorage", {
     value: mock,
     configurable: true,
@@ -16,22 +16,42 @@ function setStorageMock(mock: any) {
   });
 }
 
-Deno.test("telemetry: isTelemetryOptedOut and setTelemetryOptOut safely handle localStorage", () => {
-  const origDesc = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+interface StorageMock {
+  getItem: (k: string) => string | null;
+  setItem: (k: string, v: string) => void;
+  removeItem: (k: string) => void;
+  clear: () => void;
+}
 
+function withMockStorage(
+  fn: (store: Record<string, string>, mockStorage: StorageMock) => void,
+) {
+  const origDesc = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
   try {
     setTelemetryOptOut(false);
-    // 1. Storage available
     const store: Record<string, string> = {};
-    setStorageMock({
+    const mockStorage: StorageMock = {
       getItem: (k: string) => store[k] ?? null,
       setItem: (k: string, v: string) => { store[k] = v; },
       removeItem: (k: string) => { delete store[k]; },
       clear: () => {
         for (const k of Object.keys(store)) delete store[k];
       },
-    });
+    };
+    setStorageMock(mockStorage);
+    fn(store, mockStorage);
+  } finally {
+    setTelemetryOptOut(false);
+    if (origDesc) {
+      Object.defineProperty(globalThis, "localStorage", origDesc);
+    } else {
+      Reflect.deleteProperty(globalThis, "localStorage");
+    }
+  }
+}
 
+Deno.test("telemetry: isTelemetryOptedOut and setTelemetryOptOut safely handle localStorage", () => {
+  withMockStorage((_store) => {
     // Defaults to false (telemetry enabled)
     assertEquals(isTelemetryOptedOut(), false);
 
@@ -57,14 +77,7 @@ Deno.test("telemetry: isTelemetryOptedOut and setTelemetryOptOut safely handle l
     // Setting opt out updates runtime preference, but storage persistence returns false
     assertEquals(setTelemetryOptOut(true), false);
     assertEquals(isTelemetryOptedOut(), true);
-  } finally {
-    setTelemetryOptOut(false);
-    if (origDesc) {
-      Object.defineProperty(globalThis, "localStorage", origDesc);
-    } else {
-      delete (globalThis as any).localStorage;
-    }
-  }
+  });
 });
 
 Deno.test("telemetry: scrubDiagnosticText redacts paths, unfamiliar extensions, spaces, and Unicode", () => {
@@ -103,20 +116,7 @@ Deno.test("telemetry: scrubDiagnosticText redacts paths, unfamiliar extensions, 
 });
 
 Deno.test("telemetry: sanitizeSentryEvent strips user, headers, URLs, and drops when opted out", () => {
-  const origDesc = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
-
-  try {
-    setTelemetryOptOut(false);
-    const store: Record<string, string> = {};
-    setStorageMock({
-      getItem: (k: string) => store[k] ?? null,
-      setItem: (k: string, v: string) => { store[k] = v; },
-      removeItem: (k: string) => { delete store[k]; },
-      clear: () => {
-        for (const k of Object.keys(store)) delete store[k];
-      },
-    });
-
+  withMockStorage((_store) => {
     const mockEvent: NonNullable<Parameters<typeof sanitizeSentryEvent>[0]> = {
       user: { id: "user-123", ip_address: "192.168.1.1" },
       request: {
@@ -148,31 +148,11 @@ Deno.test("telemetry: sanitizeSentryEvent strips user, headers, URLs, and drops 
     setTelemetryOptOut(true);
     const dropped = sanitizeSentryEvent(mockEvent);
     assertEquals(dropped, null);
-  } finally {
-    setTelemetryOptOut(false);
-    if (origDesc) {
-      Object.defineProperty(globalThis, "localStorage", origDesc);
-    } else {
-      delete (globalThis as any).localStorage;
-    }
-  }
+  });
 });
 
 Deno.test("telemetry: clearStoragePreservingTelemetry preserves opt-out across clear operations", () => {
-  const origDesc = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
-
-  try {
-    const store: Record<string, string> = {};
-    const mockStorage = {
-      getItem: (k: string) => store[k] ?? null,
-      setItem: (k: string, v: string) => { store[k] = v; },
-      removeItem: (k: string) => { delete store[k]; },
-      clear: () => {
-        for (const k of Object.keys(store)) delete store[k];
-      },
-    };
-    setStorageMock(mockStorage);
-
+  withMockStorage((store, mockStorage) => {
     // 1. User opted out -> Clear data -> opt-out preserved
     setTelemetryOptOut(true);
     store["cz-recent-tools"] = JSON.stringify(["image", "pdf"]);
@@ -180,7 +160,7 @@ Deno.test("telemetry: clearStoragePreservingTelemetry preserves opt-out across c
     store["other-cached-key"] = "123";
 
     assertEquals(isTelemetryOptedOut(), true);
-    clearStoragePreservingTelemetry(mockStorage as any);
+    clearStoragePreservingTelemetry(mockStorage as unknown as Storage);
 
     // Other keys deleted, telemetry opt-out preserved
     assertEquals(store["cz-recent-tools"], undefined);
@@ -194,16 +174,9 @@ Deno.test("telemetry: clearStoragePreservingTelemetry preserves opt-out across c
     store["cz-recent-tools"] = JSON.stringify(["video"]);
     assertEquals(isTelemetryOptedOut(), false);
 
-    clearStoragePreservingTelemetry(mockStorage as any);
+    clearStoragePreservingTelemetry(mockStorage as unknown as Storage);
     assertEquals(store["cz-recent-tools"], undefined);
     assertEquals(store[TELEMETRY_STORAGE_KEY], undefined);
     assertEquals(isTelemetryOptedOut(), false);
-  } finally {
-    setTelemetryOptOut(false);
-    if (origDesc) {
-      Object.defineProperty(globalThis, "localStorage", origDesc);
-    } else {
-      delete (globalThis as any).localStorage;
-    }
-  }
+  });
 });

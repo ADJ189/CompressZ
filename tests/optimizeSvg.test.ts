@@ -2,9 +2,10 @@ import { assert } from "./assert.ts";
 import { optimizeSvg } from "../src/lib/optimizeSvg.ts";
 
 Deno.test("optimizeSvg: strips scripts and XSS inline handlers", async () => {
-  const dirtySvg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+  const dirtySvg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:script="http://www.w3.org/2000/svg" width="100" height="100">
     <!-- comment to strip -->
     <script>alert(1);</script>
+    <script:rect x="10" y="10" width="80" height="80">valid content</script:rect>
     <circle cx="50" cy="50" r="40" onclick="alert('xss')" onload="evil()" fill="red"/>
     <a href="javascript:alert(2)"><text x="10" y="20">Click</text></a>
   </svg>`;
@@ -13,7 +14,10 @@ Deno.test("optimizeSvg: strips scripts and XSS inline handlers", async () => {
   const result = await optimizeSvg(file);
   const text = await result.blob.text();
 
-  assert(!text.includes("<script"), "Must strip <script> tags");
+  assert(!text.match(/<script(?=[\s/>])/i), "Must strip <script> tags");
+  assert(!text.includes("alert(1);"), "Must strip script body");
+  assert(text.includes("<script:rect"), "Must preserve valid namespace-qualified script:rect element");
+  assert(text.includes("</script:rect>"), "Must preserve closing tag of namespace-qualified script:rect element");
   assert(!text.includes("onclick"), "Must strip onclick attribute");
   assert(!text.includes("onload"), "Must strip onload attribute");
   assert(!text.includes("javascript:"), "Must strip javascript: pseudo-protocol");
@@ -103,4 +107,57 @@ Deno.test("optimizeSvg: extracts dimensions strictly from root svg element attri
   const singleResult = await optimizeSvg(singleFile);
   const singleText = await singleResult.blob.text();
   assert(singleText.includes('viewBox="0 0 120 80"'), "Must extract dimensions from single-quoted root svg attributes");
+});
+
+Deno.test("optimizeSvg: handles long unterminated script closing tag without quadratic backtracking", async () => {
+  const longWhitespaceClosingTag = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+    <rect width="50" height="50" fill="blue"/>
+    </script${" ".repeat(50000)}
+  </svg>`;
+
+  const file = new File([longWhitespaceClosingTag], "unterminated.svg", { type: "image/svg+xml" });
+  const start = performance.now();
+  const result = await optimizeSvg(file);
+  const duration = performance.now() - start;
+  const text = await result.blob.text();
+
+  assert(duration < 1000, `Processing must be linear (<1000ms), took ${duration.toFixed(1)}ms`);
+  assert(text.includes("<rect"), "Must preserve valid SVG rect geometry");
+});
+
+Deno.test("optimizeSvg: preserves paired script:rect namespace-qualified element while stripping script", async () => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:script="http://www.w3.org/2000/svg">
+    <script>alert("evil");</script>
+    <script:rect id="target" x="5" y="5" width="50" height="50">Drawing</script:rect>
+    <script:rect id="self-closing" x="60" y="60" width="20" height="20"/>
+  </svg>`;
+
+  const file = new File([svg], "ns.svg", { type: "image/svg+xml" });
+  const result = await optimizeSvg(file);
+  const text = await result.blob.text();
+
+  assert(!text.match(/<script(?=[\s/>])/i), "Must strip genuine <script> tag");
+  assert(!text.includes('alert("evil")'), "Must strip script content");
+  assert(text.includes('<script:rect id="target"'), "Must preserve paired <script:rect>");
+  assert(text.includes('Drawing</script:rect>'), "Must preserve paired <script:rect> body and close tag");
+  assert(text.includes('<script:rect id="self-closing"'), "Must preserve self-closing <script:rect/>");
+});
+
+Deno.test("optimizeSvg: removes hidden elements without regex backtracking", async () => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+    <rect width="10" height="10" style="display:none"/>
+    <g style="visibility:hidden"><circle cx="20" cy="20" r="10"/></g>
+    <path d="M0 0 L10 10" fill="none"/>
+    <text>display:none</text>
+  </svg>`;
+
+  const file = new File([svg], "hidden.svg", { type: "image/svg+xml" });
+  const result = await optimizeSvg(file);
+  const text = await result.blob.text();
+
+  assert(!text.includes("<rect"), "Should remove self-closing element with display:none");
+  assert(!text.includes("<circle"), "Should remove element inside group with visibility:hidden");
+  assert(!text.includes("<g"), "Should remove group with visibility:hidden");
+  assert(text.includes("<path"), "Should preserve visible path");
+  assert(text.includes("<text>display:none</text>"), "Should preserve text node containing literal 'display:none'");
 });
