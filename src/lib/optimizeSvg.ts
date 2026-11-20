@@ -75,7 +75,7 @@ export async function optimizeSvg(
   // Strip embedded scripts (security)
   do {
     prev = svg;
-    svg  = svg.replace(/<script\b[^>]*\/>|<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '');
+    svg  = svg.replace(/<script\b[^>]*\/>|<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, '');
   } while (svg !== prev);
 
   // Strip inline event-handler attributes (onload, onclick, onmouseover, …)
