@@ -73,62 +73,140 @@ function compactPathData(d: string): string {
 /**
  * Clean element attributes strictly on tag headers, preserving text nodes.
  * Strips event handlers, unwanted editor namespaces, and neutralizes javascript: URIs.
+ * Uses a single-pass deterministic scanner with zero regular expression backtracking.
  */
 function cleanElementAttributes(tagAttrs: string): string {
-  // Strip inline event-handler attributes (onload, onclick, onmouseover, …)
-  // Repeat until stable to avoid incomplete multi-character sanitization.
-  let cleaned = tagAttrs;
-  let previous: string;
-  do {
-    previous = cleaned;
-    cleaned = cleaned.replace(/\s+\bon[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");
-  } while (cleaned !== previous);
+  let out = "";
+  let i = 0;
+  const len = tagAttrs.length;
 
-  // Strip editor namespace declarations
-  cleaned = cleaned.replace(
-    /\s+\bxmlns:(?:inkscape|sodipodi|sketch|dc|cc|rdf|xlink)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi,
-    "",
-  );
+  while (i < len) {
+    if (tagAttrs[i] === " " || tagAttrs[i] === "\t" || tagAttrs[i] === "\n" || tagAttrs[i] === "\r") {
+      out += tagAttrs[i];
+      i++;
+      continue;
+    }
 
-  // Strip editor attributes (inkscape:*, sodipodi:*)
-  cleaned = cleaned.replace(
-    /\s+\b(?:inkscape|sodipodi):[a-z-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi,
-    "",
-  );
+    const nameStart = i;
+    while (
+      i < len &&
+      tagAttrs[i] !== "=" &&
+      tagAttrs[i] !== " " &&
+      tagAttrs[i] !== "\t" &&
+      tagAttrs[i] !== "\n" &&
+      tagAttrs[i] !== "\r" &&
+      tagAttrs[i] !== "/" &&
+      tagAttrs[i] !== ">"
+    ) {
+      i++;
+    }
+    const rawAttrName = tagAttrs.slice(nameStart, i);
+    const lowerAttrName = rawAttrName.toLowerCase();
 
-  // Neutralize javascript: and executable data URIs in href and xlink:href
-  cleaned = cleaned.replace(
-    /\b(href|xlink:href)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi,
-    (full: string, attr: string, dQuote?: string, sQuote?: string, uQuote?: string) => {
-      const rawVal = dQuote ?? sQuote ?? uQuote ?? "";
+    let spacingAfterName = "";
+    while (i < len && (tagAttrs[i] === " " || tagAttrs[i] === "\t" || tagAttrs[i] === "\n" || tagAttrs[i] === "\r")) {
+      spacingAfterName += tagAttrs[i];
+      i++;
+    }
+
+    let hasEquals = false;
+    let spacingAfterEquals = "";
+    let rawVal = "";
+    let quoteChar: '"' | "'" | "" = "";
+
+    if (i < len && tagAttrs[i] === "=") {
+      hasEquals = true;
+      i++;
+      while (i < len && (tagAttrs[i] === " " || tagAttrs[i] === "\t" || tagAttrs[i] === "\n" || tagAttrs[i] === "\r")) {
+        spacingAfterEquals += tagAttrs[i];
+        i++;
+      }
+      if (i < len && (tagAttrs[i] === '"' || tagAttrs[i] === "'")) {
+        quoteChar = tagAttrs[i] as '"' | "'";
+        i++;
+        const valStart = i;
+        while (i < len && tagAttrs[i] !== quoteChar) {
+          i++;
+        }
+        rawVal = tagAttrs.slice(valStart, i);
+        if (i < len && tagAttrs[i] === quoteChar) {
+          i++;
+        }
+      } else {
+        const valStart = i;
+        while (
+          i < len &&
+          tagAttrs[i] !== " " &&
+          tagAttrs[i] !== "\t" &&
+          tagAttrs[i] !== "\n" &&
+          tagAttrs[i] !== "\r" &&
+          tagAttrs[i] !== "/" &&
+          tagAttrs[i] !== ">"
+        ) {
+          i++;
+        }
+        rawVal = tagAttrs.slice(valStart, i);
+      }
+    }
+
+    // Strip inline event-handler attributes (onload, onclick, onmouseover, …)
+    if (lowerAttrName.startsWith("on") && lowerAttrName.length > 2) {
+      continue;
+    }
+
+    // Strip editor namespace declarations
+    if (
+      lowerAttrName === "xmlns:inkscape" ||
+      lowerAttrName === "xmlns:sodipodi" ||
+      lowerAttrName === "xmlns:sketch" ||
+      lowerAttrName === "xmlns:dc" ||
+      lowerAttrName === "xmlns:cc" ||
+      lowerAttrName === "xmlns:rdf" ||
+      lowerAttrName === "xmlns:xlink"
+    ) {
+      continue;
+    }
+
+    // Strip editor attributes (inkscape:*, sodipodi:*)
+    if (lowerAttrName.startsWith("inkscape:") || lowerAttrName.startsWith("sodipodi:")) {
+      continue;
+    }
+
+    // Neutralize javascript: and executable data URIs in href and xlink:href
+    if (lowerAttrName === "href" || lowerAttrName === "xlink:href") {
       const decoded = rawVal
         .replace(/&#(\d+);?/g, (_: string, n: string) => String.fromCharCode(Number(n)))
         .replace(/&#x([0-9a-f]+);?/gi, (_: string, h: string) => String.fromCharCode(Number.parseInt(h, 16)));
       let stripped = "";
-      for (let i = 0; i < decoded.length; i++) {
-        if (decoded.charCodeAt(i) > 32) {
-          stripped += decoded[i];
+      for (let c = 0; c < decoded.length; c++) {
+        if (decoded.charCodeAt(c) > 32) {
+          stripped += decoded[c];
         }
       }
       if (/^javascript:/i.test(stripped) || /^data:text\/(?:html|javascript)/i.test(stripped)) {
-        return `${attr}="#"`;
+        out += `${rawAttrName}="#"`;
+        continue;
       }
-      return full;
-    },
-  );
+    }
 
-  // Compact path data inside d attributes deterministically without backtracking
-  cleaned = cleaned.replace(
-    /\bd=(?:"([^"]*)"|'([^']*)')/gi,
-    (_match: string, dDouble?: string, dSingle?: string) => {
-      const isDouble = dDouble !== undefined;
-      const quote = isDouble ? '"' : "'";
-      const d = isDouble ? dDouble! : dSingle!;
-      return `d=${quote}${compactPathData(d)}${quote}`;
-    },
-  );
+    // Compact path data inside d attributes deterministically without backtracking
+    if (lowerAttrName === "d" && quoteChar) {
+      out += `${rawAttrName}=${quoteChar}${compactPathData(rawVal)}${quoteChar}`;
+      continue;
+    }
 
-  return cleaned;
+    if (hasEquals) {
+      if (quoteChar) {
+        out += `${rawAttrName}${spacingAfterName}=${spacingAfterEquals}${quoteChar}${rawVal}${quoteChar}`;
+      } else {
+        out += `${rawAttrName}${spacingAfterName}=${spacingAfterEquals}${rawVal}`;
+      }
+    } else {
+      out += rawAttrName;
+    }
+  }
+
+  return out;
 }
 
 /**
@@ -250,8 +328,8 @@ function processSvgLinear(svg: string): string {
     }
 
     // Check if element should be discarded (script, foreignObject, metadata, editor namespaces)
-    if (!isClose && shouldDiscardElement(tagName)) {
-      if (!isSelfClosing) {
+    if (shouldDiscardElement(tagName)) {
+      if (!isClose && !isSelfClosing) {
         discardDepth = 1;
         discardTag = lowerName;
       }
@@ -289,10 +367,50 @@ function processSvgLinear(svg: string): string {
   result = result.replace(/<g\s*\/>/gi, "");
   result = result.replace(/<defs>\s*<\/defs>/gi, "");
 
-  // CodeQL guard: ensure no unparsed or trailing <script tag token survives in markup (without matching namespace elements like script:rect)
-  result = result.replace(/<\/?script(?=[\s/>]|$)[^>]*>/gi, "");
-
   return result;
+}
+
+/**
+ * Round long decimals (≥3 decimal places → 2), e.g. 12.345678 -> 12.35, 10.0001 -> 10.
+ * Single-pass linear scan with zero regex backtracking.
+ */
+function roundLongDecimals(str: string): string {
+  let out = "";
+  let i = 0;
+  const len = str.length;
+
+  while (i < len) {
+    const ch = str[i];
+    if (ch >= "0" && ch <= "9") {
+      const numStart = i;
+      while (i < len && str[i] >= "0" && str[i] <= "9") {
+        i++;
+      }
+      if (i < len && str[i] === ".") {
+        i++;
+        const fracStart = i;
+        while (i < len && str[i] >= "0" && str[i] <= "9") {
+          i++;
+        }
+        const fracLen = i - fracStart;
+        if (fracLen >= 3) {
+          const numStr = str.slice(numStart, i);
+          const rounded = Number(Number.parseFloat(numStr).toFixed(2)).toString();
+          out += rounded;
+          continue;
+        } else {
+          out += str.slice(numStart, i);
+          continue;
+        }
+      } else {
+        out += str.slice(numStart, i);
+        continue;
+      }
+    }
+    out += ch;
+    i++;
+  }
+  return out;
 }
 
 export async function optimizeSvg(
@@ -309,9 +427,7 @@ export async function optimizeSvg(
   onProgress?.(55);
 
   // Round long decimals (≥3 decimal places → 2), e.g. 12.345678 -> 12.35, 10.0001 -> 10
-  svg = svg.replace(/\d+\.\d{3,}/g, (m: string) =>
-    Number(Number.parseFloat(m).toFixed(2)).toString()
-  );
+  svg = roundLongDecimals(svg);
   onProgress?.(70);
 
   // Collapse whitespace
