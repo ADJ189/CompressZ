@@ -278,6 +278,9 @@ export function readTar(tarBytes: Uint8Array, options: ReadTarOptions = {}): Tar
           data: new Uint8Array(tarBytes.subarray(dataOffset, dataOffset + size)),
         });
       }
+    } else {
+      // Any other non-regular entry (symlink, hardlink, fifo, etc.) skips without leaking pending name
+      pendingName = null;
     }
 
     offset = nextHeaderOffset;

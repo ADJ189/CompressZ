@@ -486,6 +486,12 @@ async function videoViaMediaRecorder(
     } catch {
       /**/
     }
+    try {
+      combinedStream?.getTracks()?.forEach((track) => track.stop());
+      videoStream?.getTracks()?.forEach((track) => track.stop());
+    } catch {
+      /**/
+    }
     revokeUrl();
   }
 

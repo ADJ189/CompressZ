@@ -137,10 +137,11 @@ export async function optimizeSvg(
     return `d=${quote}${compacted}${quote}`;
   });
 
-  // Strip embedded scripts (security)
+  // Strip embedded scripts and dangerous foreignObject HTML embeddings (security)
   do {
     prev = svg;
-    svg  = svg.replace(/<script(?=[\s/>])[^>]*\/>|<script(?=[\s/>])[^>]*>[\s\S]*?<\/script(?:\s[^>]*)?>/gi, '');
+    svg = svg.replace(/<script(?=[\s/>])[^>]*\/>|<script(?=[\s/>])[^>]*>[\s\S]*?<\/script(?:\s[^>]*)?>/gi, '');
+    svg = svg.replace(/<foreignObject(?=[\s/>])[^>]*\/>|<foreignObject(?=[\s/>])[\s\S]*?<\/foreignObject(?:\s[^>]*)?>/gi, '');
   } while (svg !== prev);
 
   // Strip inline event-handler attributes (onload, onclick, onmouseover, …)
@@ -150,8 +151,19 @@ export async function optimizeSvg(
     prev = svg;
     svg = svg.replace(/\s?\bon[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
   } while (svg !== prev);
-  svg = svg.replace(/(href|xlink:href)\s*=\s*"(\s*javascript:[^"]*)"/gi, '$1="#"');
-  svg = svg.replace(/(href|xlink:href)\s*=\s*'(\s*javascript:[^']*)'/gi, "$1='#'");
+
+  // Neutralize javascript: and executable data URIs in href and xlink:href (quoted and unquoted, including entity encodings)
+  svg = svg.replace(/\b(href|xlink:href)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi, (full: string, attr: string, dQuote?: string, sQuote?: string, uQuote?: string) => {
+    const rawVal = dQuote ?? sQuote ?? uQuote ?? "";
+    const decoded = rawVal
+      .replace(/&#(\d+);?/g, (_: string, n: string) => String.fromCharCode(Number(n)))
+      .replace(/&#x([0-9a-f]+);?/gi, (_: string, h: string) => String.fromCharCode(Number.parseInt(h, 16)))
+      .replace(/[\s\x00-\x1f]+/g, "");
+    if (/^javascript:/i.test(decoded) || /^data:text\/(?:html|javascript)/i.test(decoded)) {
+      return `${attr}="#"`;
+    }
+    return full;
+  });
 
   // Remove hidden elements
   svg = removeHiddenElements(svg);

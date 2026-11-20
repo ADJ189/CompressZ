@@ -168,6 +168,12 @@ export function exceedsZipLimit(items: { name: string; size: number }[]): boolea
 
 // ── Writer ────────────────────────────────────────────────────
 export async function writeZip(entries: ZipEntryIn[]): Promise<Uint8Array> {
+  if (entries.length >= 0xffff) {
+    throw new Error(
+      `Archive contains ${entries.length} entries, exceeding the maximum allowed limit of 65534 entries without Zip64.`,
+    );
+  }
+
   const { time, date } = dosDateTime();
   const chunks: Uint8Array[] = [];
   const central: Uint8Array[] = [];
