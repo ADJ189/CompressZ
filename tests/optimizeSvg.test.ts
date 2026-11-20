@@ -1,6 +1,22 @@
 import { assert } from "./assert.ts";
 import { optimizeSvg } from "../src/lib/optimizeSvg.ts";
 
+async function optimize(svg: string, fileName = "test.svg") {
+  const file = new File([svg], fileName, { type: "image/svg+xml" });
+  const result = await optimizeSvg(file);
+  const text = await result.blob.text();
+  return { result, text };
+}
+
+async function optimizeWithTiming(svg: string, fileName = "perf.svg") {
+  const file = new File([svg], fileName, { type: "image/svg+xml" });
+  const start = performance.now();
+  const result = await optimizeSvg(file);
+  const duration = performance.now() - start;
+  const text = await result.blob.text();
+  return { duration, text };
+}
+
 Deno.test("optimizeSvg: strips scripts and XSS inline handlers", async () => {
   const dirtySvg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:script="http://www.w3.org/2000/svg" width="100" height="100">
     <!-- comment to strip -->
@@ -10,9 +26,7 @@ Deno.test("optimizeSvg: strips scripts and XSS inline handlers", async () => {
     <a href="javascript:alert(2)"><text x="10" y="20">Click</text></a>
   </svg>`;
 
-  const file = new File([dirtySvg], "test.svg", { type: "image/svg+xml" });
-  const result = await optimizeSvg(file);
-  const text = await result.blob.text();
+  const { text } = await optimize(dirtySvg);
 
   assert(!text.match(/<script(?=[\s/>])/i), "Must strip <script> tags");
   assert(!text.includes("alert(1);"), "Must strip script body");
@@ -36,9 +50,7 @@ Deno.test("optimizeSvg: strips unquoted javascript: href, entity-encoded javascr
     </foreignObject>
   </svg>`;
 
-  const file = new File([hostileSvg], "hostile.svg", { type: "image/svg+xml" });
-  const result = await optimizeSvg(file);
-  const text = await result.blob.text();
+  const { text } = await optimize(hostileSvg, "hostile.svg");
 
   assert(!/href\s*=\s*javascript:/i.test(text), "Must strip unquoted javascript: href");
   assert(!/href\s*=\s*['"]?&#(?:106|x6a);/i.test(text), "Must strip entity-encoded javascript: href");
@@ -46,15 +58,12 @@ Deno.test("optimizeSvg: strips unquoted javascript: href, entity-encoded javascr
   assert(!text.includes("<iframe"), "Must strip child HTML tags in foreignObject");
 });
 
-
 Deno.test("optimizeSvg: rounds long decimals and preserves clean structure", async () => {
   const rawSvg = `<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
     <path d="M 12.345678 45.678912 L 89.123456 99.888888" stroke="black"/>
   </svg>`;
 
-  const file = new File([rawSvg], "path.svg", { type: "image/svg+xml" });
-  const result = await optimizeSvg(file);
-  const text = await result.blob.text();
+  const { result, text } = await optimize(rawSvg, "path.svg");
 
   assert(!text.includes("12.345678"), "Should round long floating point values");
   assert(text.includes("12.35"), "Should format rounded numbers cleanly");
@@ -66,9 +75,7 @@ Deno.test("optimizeSvg: trims trailing zeros from rounded decimals without regex
     <path d="M 10.0001 20.3004 L 30.2501 40.0000" stroke="black"/>
   </svg>`;
 
-  const file = new File([rawSvg], "zeros.svg", { type: "image/svg+xml" });
-  const result = await optimizeSvg(file);
-  const text = await result.blob.text();
+  const { text } = await optimize(rawSvg, "zeros.svg");
 
   // 10.0001 -> 10, 20.3004 -> 20.3, 30.2501 -> 30.25, 40.0000 -> 40
   // Path data compactor strips whitespace around commands (M10 20.3L30.25 40)
@@ -80,9 +87,7 @@ Deno.test("optimizeSvg: creates valid unitless viewBox from dimensions with unit
     <rect width="100%" height="100%" fill="blue"/>
   </svg>`;
 
-  const file = new File([rawSvg], "units.svg", { type: "image/svg+xml" });
-  const result = await optimizeSvg(file);
-  const text = await result.blob.text();
+  const { text } = await optimize(rawSvg, "units.svg");
 
   // 150px -> 150, 250pt -> 250 * 4/3 = 333.33
   assert(text.includes('viewBox="0 0 150 333.33"'), "viewBox must convert pt to CSS pixels (approx 333.33)");
@@ -95,19 +100,13 @@ Deno.test("optimizeSvg: does not invent viewBox for percentage or em dimensions"
     <circle cx="50" cy="50" r="40" fill="green"/>
   </svg>`;
 
-  const file = new File([percentSvg], "percent.svg", { type: "image/svg+xml" });
-  const result = await optimizeSvg(file);
-  const text = await result.blob.text();
-
-  assert(!text.includes("viewBox="), "Must not invent a viewBox for percentage dimensions");
+  const { text: percentText } = await optimize(percentSvg, "percent.svg");
+  assert(!percentText.includes("viewBox="), "Must not invent a viewBox for percentage dimensions");
 
   const emSvg = `<svg width="10em" height="5em" xmlns="http://www.w3.org/2000/svg">
     <circle cx="50" cy="50" r="40" fill="green"/>
   </svg>`;
-  const emFile = new File([emSvg], "em.svg", { type: "image/svg+xml" });
-  const emResult = await optimizeSvg(emFile);
-  const emText = await emResult.blob.text();
-
+  const { text: emText } = await optimize(emSvg, "em.svg");
   assert(!emText.includes("viewBox="), "Must not invent a viewBox for em dimensions");
 });
 
@@ -116,18 +115,14 @@ Deno.test("optimizeSvg: extracts dimensions strictly from root svg element attri
   const dataSvg = `<svg data-width="200" data-height="200" xmlns="http://www.w3.org/2000/svg">
     <rect width="100" height="100" fill="red"/>
   </svg>`;
-  const dataFile = new File([dataSvg], "data.svg", { type: "image/svg+xml" });
-  const dataResult = await optimizeSvg(dataFile);
-  const dataText = await dataResult.blob.text();
+  const { text: dataText } = await optimize(dataSvg, "data.svg");
   assert(!dataText.includes("viewBox="), "Must not extract dimensions from data-width/data-height or descendant elements");
 
   // 2. Root svg with single quotes width/height should generate viewBox
   const singleQuoteSvg = `<svg width='120' height='80' xmlns="http://www.w3.org/2000/svg">
     <circle cx="60" cy="40" r="20" fill="blue"/>
   </svg>`;
-  const singleFile = new File([singleQuoteSvg], "single.svg", { type: "image/svg+xml" });
-  const singleResult = await optimizeSvg(singleFile);
-  const singleText = await singleResult.blob.text();
+  const { text: singleText } = await optimize(singleQuoteSvg, "single.svg");
   assert(singleText.includes('viewBox="0 0 120 80"'), "Must extract dimensions from single-quoted root svg attributes");
 });
 
@@ -137,11 +132,7 @@ Deno.test("optimizeSvg: handles long unterminated script closing tag without qua
     </script${" ".repeat(50000)}
   </svg>`;
 
-  const file = new File([longWhitespaceClosingTag], "unterminated.svg", { type: "image/svg+xml" });
-  const start = performance.now();
-  const result = await optimizeSvg(file);
-  const duration = performance.now() - start;
-  const text = await result.blob.text();
+  const { duration, text } = await optimizeWithTiming(longWhitespaceClosingTag, "unterminated.svg");
 
   assert(duration < 1000, `Processing must be linear (<1000ms), took ${duration.toFixed(1)}ms`);
   assert(text.includes("<rect"), "Must preserve valid SVG rect geometry");
@@ -154,9 +145,7 @@ Deno.test("optimizeSvg: preserves paired script:rect namespace-qualified element
     <script:rect id="self-closing" x="60" y="60" width="20" height="20"/>
   </svg>`;
 
-  const file = new File([svg], "ns.svg", { type: "image/svg+xml" });
-  const result = await optimizeSvg(file);
-  const text = await result.blob.text();
+  const { text } = await optimize(svg, "ns.svg");
 
   assert(!text.match(/<script(?=[\s/>])/i), "Must strip genuine <script> tag");
   assert(!text.includes('alert("evil")'), "Must strip script content");
@@ -173,9 +162,7 @@ Deno.test("optimizeSvg: removes hidden elements without regex backtracking", asy
     <text>display:none</text>
   </svg>`;
 
-  const file = new File([svg], "hidden.svg", { type: "image/svg+xml" });
-  const result = await optimizeSvg(file);
-  const text = await result.blob.text();
+  const { text } = await optimize(svg, "hidden.svg");
 
   assert(!text.includes("<rect"), "Should remove self-closing element with display:none");
   assert(!text.includes("<circle"), "Should remove element inside group with visibility:hidden");
@@ -191,9 +178,7 @@ Deno.test("optimizeSvg: preserves text nodes beginning with onload= and editor n
     <text x="10" y="60">xmlns:inkscape="http://inkscape.org" and inkscape:label="User Diagram"</text>
   </svg>`;
 
-  const file = new File([svg], "text-nodes.svg", { type: "image/svg+xml" });
-  const result = await optimizeSvg(file);
-  const text = await result.blob.text();
+  const { text } = await optimize(svg, "text-nodes.svg");
 
   // Attribute onload handler on circle must be stripped
   assert(!text.includes('onload="evilHandler()"'), "Must strip onload attribute from element tag");
@@ -214,11 +199,7 @@ Deno.test("optimizeSvg: linear single-pass parser processes large sequence of hi
     <path d="M 10 10 L 90 90" stroke="black" />
   </svg>`;
 
-  const file = new File([svg], "large-hidden.svg", { type: "image/svg+xml" });
-  const start = performance.now();
-  const result = await optimizeSvg(file);
-  const elapsed = performance.now() - start;
-  const text = await result.blob.text();
+  const { duration: elapsed, text } = await optimizeWithTiming(svg, "large-hidden.svg");
 
   assert(elapsed < 1000, `Large sequence of hidden siblings must be parsed in linear time (<1000ms), took ${elapsed.toFixed(1)}ms`);
   assert(!text.includes("<rect"), "All 500 hidden sibling rects must be removed");
@@ -226,16 +207,15 @@ Deno.test("optimizeSvg: linear single-pass parser processes large sequence of hi
   assert(text.includes("<path"), "Visible path must be preserved");
 });
 
-Deno.test("optimizeSvg: retains complete CDATA section containing script text without corruption", async () => {
+Deno.test("optimizeSvg: retains complete CDATA section containing script token without removing CDATA terminator", async () => {
   const cdataSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
     <text><![CDATA[<script ]]></text>
   </svg>`;
 
-  const file = new File([cdataSvg], "cdata.svg", { type: "image/svg+xml" });
-  const result = await optimizeSvg(file);
-  const text = await result.blob.text();
+  const { text } = await optimize(cdataSvg, "cdata.svg");
 
-  assert(text.includes("<text><![CDATA[<script ]]></text>"), "Must retain complete CDATA section without removing terminator or contents");
+  assert(text.includes("<text><![CDATA[<script ]]></text>"), "Output must retain the complete CDATA section including CDATA terminator");
 });
+
 
 
