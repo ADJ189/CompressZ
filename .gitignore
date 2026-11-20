@@ -7,7 +7,6 @@ dist/
 *.log
 .vite/
 test-results/
-temp/
 playwright-report/
 blob-report/
 .lighthouseci/
