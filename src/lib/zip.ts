@@ -33,31 +33,33 @@ function crc32(data: Uint8Array): number {
   return computeCrc32(data);
 }
 
-async function deflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
-  const cs = new CompressionStream("deflate-raw");
-  const writer = cs.writable.getWriter();
+interface ByteTransformStream {
+  writable: WritableStream<BufferSource>;
+  readable: ReadableStream<Uint8Array>;
+}
+
+async function transformRaw(
+  transform: ByteTransformStream,
+  bytes: Uint8Array,
+  maxBytes?: number,
+): Promise<Uint8Array> {
+  const writer = transform.writable.getWriter();
   void (async () => {
     try {
-      await writer.write(bytes as BufferSource);
+      await writer.write(bytes as unknown as BufferSource);
       await writer.close();
     } catch {
       // Ignored: errors caught via readAll
     }
   })();
-  return readAll(cs.readable);
+  return readAll(transform.readable, maxBytes);
+}
+
+async function deflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
+  return transformRaw(new CompressionStream("deflate-raw"), bytes);
 }
 async function inflateRaw(bytes: Uint8Array, maxBytes?: number): Promise<Uint8Array> {
-  const ds = new DecompressionStream("deflate-raw");
-  const writer = ds.writable.getWriter();
-  void (async () => {
-    try {
-      await writer.write(bytes as BufferSource);
-      await writer.close();
-    } catch {
-      // Ignored: errors caught via readAll
-    }
-  })();
-  return readAll(ds.readable, maxBytes);
+  return transformRaw(new DecompressionStream("deflate-raw"), bytes, maxBytes);
 }
 async function readAll(
   stream: ReadableStream<Uint8Array>,

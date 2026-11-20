@@ -30,6 +30,68 @@ export function parseSvgLength(value: string): number | null {
   }
 }
 
+function removeHiddenElements(svg: string): string {
+  const hiddenDecl = /\b(?:display\s*:\s*none|visibility\s*:\s*hidden)\b/i;
+  if (!hiddenDecl.test(svg)) return svg;
+
+  let prev: string;
+  do {
+    prev = svg;
+    let searchIdx = 0;
+    while (searchIdx < svg.length) {
+      const match = svg.slice(searchIdx).match(hiddenDecl);
+      if (!match || match.index === undefined) break;
+
+      const declIdx = searchIdx + match.index;
+      const tagOpen = svg.lastIndexOf("<", declIdx);
+      if (tagOpen === -1) {
+        searchIdx = declIdx + match[0].length;
+        continue;
+      }
+
+      // If there is a '>' between tagOpen and declIdx, decl is not inside tag attributes
+      const closeBeforeDecl = svg.indexOf(">", tagOpen);
+      if (closeBeforeDecl !== -1 && closeBeforeDecl < declIdx) {
+        searchIdx = declIdx + match[0].length;
+        continue;
+      }
+
+      const tagClose = svg.indexOf(">", declIdx);
+      if (tagClose === -1) break;
+
+      const tagHeader = svg.slice(tagOpen + 1, tagClose);
+      const nameMatch = tagHeader.match(/^([a-z0-9:-]+)/i);
+      if (!nameMatch) {
+        searchIdx = tagClose + 1;
+        continue;
+      }
+      const tagName = nameMatch[1];
+      if (tagName.toLowerCase() === "svg") {
+        searchIdx = tagClose + 1;
+        continue;
+      }
+
+      if (tagHeader.trimEnd().endsWith("/")) {
+        svg = svg.slice(0, tagOpen) + svg.slice(tagClose + 1);
+        searchIdx = tagOpen;
+        continue;
+      }
+
+      const closePattern = new RegExp(`</${tagName}(?:\\s[^>]*)?>`, "i");
+      const rest = svg.slice(tagClose + 1);
+      const closeMatch = rest.match(closePattern);
+      if (closeMatch && closeMatch.index !== undefined) {
+        const endPos = tagClose + 1 + closeMatch.index + closeMatch[0].length;
+        svg = svg.slice(0, tagOpen) + svg.slice(endPos);
+        searchIdx = tagOpen;
+      } else {
+        searchIdx = tagClose + 1;
+      }
+    }
+  } while (svg !== prev);
+  return svg;
+}
+
 export async function optimizeSvg(
   file: File,
   onProgress?: (pct: number) => void,
@@ -49,8 +111,8 @@ export async function optimizeSvg(
   svg = svg.replace(/<metadata[\s\S]*?<\/metadata>/gi, '');
   svg = svg.replace(/<sodipodi:[^>]*\/>|<sodipodi:[^>]*>[\s\S]*?<\/sodipodi:[^>]*>/gi, '');
   svg = svg.replace(/<inkscape:[^>]*\/>|<inkscape:[^>]*>[\s\S]*?<\/inkscape:[^>]*>/gi, '');
-  svg = svg.replace(/\s+xmlns:(inkscape|sodipodi|sketch|dc|cc|rdf|xlink)="[^"]*"/gi, '');
-  svg = svg.replace(/\s+(inkscape|sodipodi):[a-z-]+="[^"]*"/gi, '');
+  svg = svg.replace(/\s?\bxmlns:(inkscape|sodipodi|sketch|dc|cc|rdf|xlink)="[^"]*"/gi, '');
+  svg = svg.replace(/\s?\b(inkscape|sodipodi):[a-z-]+="[^"]*"/gi, '');
   onProgress?.(35);
 
   // Remove empty groups and defs
@@ -64,7 +126,10 @@ export async function optimizeSvg(
   onProgress?.(55);
 
   // Compact path data inside d attributes
-  svg = svg.replace(/\bd=(["'])([\s\S]*?)\1/gi, (_m, quote, d) => {
+  svg = svg.replace(/\bd="([^"]*)"|\bd='([^']*)'/gi, (_m, dDouble, dSingle) => {
+    const isDouble = dDouble !== undefined;
+    const quote = isDouble ? '"' : "'";
+    const d = isDouble ? dDouble : dSingle;
     const compacted = d
       .replace(/\s+([MmZzLlHhVvCcSsQqTtAa])/g, '$1')
       .replace(/([MmZzLlHhVvCcSsQqTtAa])\s+/g, '$1')
@@ -75,7 +140,7 @@ export async function optimizeSvg(
   // Strip embedded scripts (security)
   do {
     prev = svg;
-    svg  = svg.replace(/<script\b[^>]*\/>|<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '');
+    svg  = svg.replace(/<script(?=[\s/>])[^>]*\/>|<script(?=[\s/>])[^>]*>[\s\S]*?<\/script(?:\s[^>]*)?>/gi, '');
   } while (svg !== prev);
 
   // Strip inline event-handler attributes (onload, onclick, onmouseover, …)
@@ -83,21 +148,18 @@ export async function optimizeSvg(
   // intact if the SVG is ever rendered inline (e.g. via innerHTML or <object>).
   do {
     prev = svg;
-    svg = svg.replace(/\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+    svg = svg.replace(/\s?\bon[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
   } while (svg !== prev);
   svg = svg.replace(/(href|xlink:href)\s*=\s*"(\s*javascript:[^"]*)"/gi, '$1="#"');
   svg = svg.replace(/(href|xlink:href)\s*=\s*'(\s*javascript:[^']*)'/gi, "$1='#'");
 
   // Remove hidden elements
-  do {
-    prev = svg;
-    svg = svg.replace(/<[^>]+(?:display\s*:\s*none|visibility\s*:\s*hidden)[^>]*\/>|<([a-z0-9:-]+)[^>]+(?:display\s*:\s*none|visibility\s*:\s*hidden)[^>]*>[\s\S]*?<\/\1>/gi, '');
-  } while (svg !== prev);
+  svg = removeHiddenElements(svg);
 
   // Re-strip embedded scripts in case hidden-element removal exposes new tags
   do {
     prev = svg;
-    svg  = svg.replace(/<script\b[^>]*\/>|<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '');
+    svg  = svg.replace(/<script(?=[\s/>])[^>]*\/>|<script(?=[\s/>])[^>]*>[\s\S]*?<\/script(?:\s[^>]*)?>/gi, '');
   } while (svg !== prev);
 
   // Collapse whitespace
