@@ -73,143 +73,108 @@ function compactPathData(d: string): string {
 /**
  * Clean element attributes strictly on tag headers, preserving text nodes.
  * Strips event handlers, unwanted editor namespaces, and neutralizes javascript: URIs.
- * Uses a linear scan (O(N) with zero regex backtracking).
+ * Uses a single-pass deterministic scanner with zero regular expression backtracking.
  */
 function cleanElementAttributes(tagAttrs: string): string {
-  let cleaned = "";
+  let out = "";
   let i = 0;
   const len = tagAttrs.length;
 
   while (i < len) {
-    // Collect leading whitespace
-    const wsStart = i;
-    while (
-      i < len &&
-      (tagAttrs[i] === " " ||
-        tagAttrs[i] === "\t" ||
-        tagAttrs[i] === "\n" ||
-        tagAttrs[i] === "\r")
-    ) {
+    if (tagAttrs[i] === " " || tagAttrs[i] === "\t" || tagAttrs[i] === "\n" || tagAttrs[i] === "\r") {
+      out += tagAttrs[i];
       i++;
-    }
-    const ws = tagAttrs.slice(wsStart, i);
-    if (i >= len) {
-      cleaned += ws;
-      break;
+      continue;
     }
 
-    // Read attribute name
     const nameStart = i;
     while (
       i < len &&
       tagAttrs[i] !== "=" &&
-      tagAttrs[i] !== ">" &&
-      tagAttrs[i] !== "/" &&
       tagAttrs[i] !== " " &&
       tagAttrs[i] !== "\t" &&
       tagAttrs[i] !== "\n" &&
-      tagAttrs[i] !== "\r"
+      tagAttrs[i] !== "\r" &&
+      tagAttrs[i] !== "/" &&
+      tagAttrs[i] !== ">"
     ) {
       i++;
     }
-    const attrName = tagAttrs.slice(nameStart, i);
-    if (!attrName) {
-      cleaned += ws + tagAttrs[i++];
-      continue;
+    const rawAttrName = tagAttrs.slice(nameStart, i);
+    const lowerAttrName = rawAttrName.toLowerCase();
+
+    let spacingAfterName = "";
+    while (i < len && (tagAttrs[i] === " " || tagAttrs[i] === "\t" || tagAttrs[i] === "\n" || tagAttrs[i] === "\r")) {
+      spacingAfterName += tagAttrs[i];
+      i++;
     }
 
-    // Check for optional '=' and attribute value
     let hasEquals = false;
-    let quote = "";
-    let attrVal = "";
-
-    const beforeEqWsStart = i;
-    while (
-      i < len &&
-      (tagAttrs[i] === " " ||
-        tagAttrs[i] === "\t" ||
-        tagAttrs[i] === "\n" ||
-        tagAttrs[i] === "\r")
-    ) {
-      i++;
-    }
+    let spacingAfterEquals = "";
+    let rawVal = "";
+    let quoteChar: '"' | "'" | "" = "";
 
     if (i < len && tagAttrs[i] === "=") {
       hasEquals = true;
-      i++; // consume '='
-      // skip whitespace after '='
-      while (
-        i < len &&
-        (tagAttrs[i] === " " ||
-          tagAttrs[i] === "\t" ||
-          tagAttrs[i] === "\n" ||
-          tagAttrs[i] === "\r")
-      ) {
+      i++;
+      while (i < len && (tagAttrs[i] === " " || tagAttrs[i] === "\t" || tagAttrs[i] === "\n" || tagAttrs[i] === "\r")) {
+        spacingAfterEquals += tagAttrs[i];
         i++;
       }
-
-      if (i < len) {
-        if (tagAttrs[i] === '"' || tagAttrs[i] === "'") {
-          quote = tagAttrs[i];
-          i++; // consume opening quote
-          const valStart = i;
-          while (i < len && tagAttrs[i] !== quote) {
-            i++;
-          }
-          attrVal = tagAttrs.slice(valStart, i);
-          if (i < len && tagAttrs[i] === quote) {
-            i++; // consume closing quote
-          }
-        } else {
-          // Unquoted value: terminates at whitespace, '>', or '/'
-          const valStart = i;
-          while (
-            i < len &&
-            tagAttrs[i] !== " " &&
-            tagAttrs[i] !== "\t" &&
-            tagAttrs[i] !== "\n" &&
-            tagAttrs[i] !== "\r" &&
-            tagAttrs[i] !== ">" &&
-            tagAttrs[i] !== "/"
-          ) {
-            i++;
-          }
-          attrVal = tagAttrs.slice(valStart, i);
+      if (i < len && (tagAttrs[i] === '"' || tagAttrs[i] === "'")) {
+        quoteChar = tagAttrs[i] as '"' | "'";
+        i++;
+        const valStart = i;
+        while (i < len && tagAttrs[i] !== quoteChar) {
+          i++;
         }
+        rawVal = tagAttrs.slice(valStart, i);
+        if (i < len && tagAttrs[i] === quoteChar) {
+          i++;
+        }
+      } else {
+        const valStart = i;
+        while (
+          i < len &&
+          tagAttrs[i] !== " " &&
+          tagAttrs[i] !== "\t" &&
+          tagAttrs[i] !== "\n" &&
+          tagAttrs[i] !== "\r" &&
+          tagAttrs[i] !== "/" &&
+          tagAttrs[i] !== ">"
+        ) {
+          i++;
+        }
+        rawVal = tagAttrs.slice(valStart, i);
       }
-    } else {
-      // Attribute without value (e.g. boolean attribute)
-      i = beforeEqWsStart;
     }
 
-    const lowerName = attrName.toLowerCase();
-
-    // 1. Drop inline event handlers (onload, onclick, onmouseover, ...)
-    if (lowerName.startsWith("on")) {
+    // Strip inline event-handler attributes (onload, onclick, onmouseover, …)
+    if (lowerAttrName.startsWith("on") && lowerAttrName.length > 2) {
       continue;
     }
 
-    // 2. Drop editor namespace declarations (xmlns:inkscape, xmlns:sodipodi, etc.)
+    // Strip editor namespace declarations
     if (
-      lowerName === "xmlns:inkscape" ||
-      lowerName === "xmlns:sodipodi" ||
-      lowerName === "xmlns:sketch" ||
-      lowerName === "xmlns:dc" ||
-      lowerName === "xmlns:cc" ||
-      lowerName === "xmlns:rdf" ||
-      lowerName === "xmlns:xlink"
+      lowerAttrName === "xmlns:inkscape" ||
+      lowerAttrName === "xmlns:sodipodi" ||
+      lowerAttrName === "xmlns:sketch" ||
+      lowerAttrName === "xmlns:dc" ||
+      lowerAttrName === "xmlns:cc" ||
+      lowerAttrName === "xmlns:rdf" ||
+      lowerAttrName === "xmlns:xlink"
     ) {
       continue;
     }
 
-    // 3. Drop editor attributes (inkscape:*, sodipodi:*)
-    if (lowerName.startsWith("inkscape:") || lowerName.startsWith("sodipodi:")) {
+    // Strip editor attributes (inkscape:*, sodipodi:*)
+    if (lowerAttrName.startsWith("inkscape:") || lowerAttrName.startsWith("sodipodi:")) {
       continue;
     }
 
-    // 4. Neutralize javascript: and executable data URIs in href and xlink:href
-    if (lowerName === "href" || lowerName === "xlink:href") {
-      const decoded = attrVal
+    // Neutralize javascript: and executable data URIs in href and xlink:href
+    if (lowerAttrName === "href" || lowerAttrName === "xlink:href") {
+      const decoded = rawVal
         .replace(/&#(\d+);?/g, (_: string, n: string) => String.fromCharCode(Number(n)))
         .replace(/&#x([0-9a-f]+);?/gi, (_: string, h: string) => String.fromCharCode(Number.parseInt(h, 16)));
       let stripped = "";
@@ -219,28 +184,29 @@ function cleanElementAttributes(tagAttrs: string): string {
         }
       }
       if (/^javascript:/i.test(stripped) || /^data:text\/(?:html|javascript)/i.test(stripped)) {
-        attrVal = "#";
-        quote = quote || '"';
+        out += `${rawAttrName}="#"`;
+        continue;
       }
     }
 
-    // 5. Compact path data inside d attributes
-    if (lowerName === "d") {
-      attrVal = compactPathData(attrVal);
-      quote = quote || '"';
+    // Compact path data inside d attributes deterministically without backtracking
+    if (lowerAttrName === "d" && quoteChar) {
+      out += `${rawAttrName}=${quoteChar}${compactPathData(rawVal)}${quoteChar}`;
+      continue;
     }
 
-    // Append preserved/sanitized attribute
-    const sep = ws || " ";
     if (hasEquals) {
-      const q = quote || '"';
-      cleaned += `${sep}${attrName}=${q}${attrVal}${q}`;
+      if (quoteChar) {
+        out += `${rawAttrName}${spacingAfterName}=${spacingAfterEquals}${quoteChar}${rawVal}${quoteChar}`;
+      } else {
+        out += `${rawAttrName}${spacingAfterName}=${spacingAfterEquals}${rawVal}`;
+      }
     } else {
-      cleaned += `${sep}${attrName}`;
+      out += rawAttrName;
     }
   }
 
-  return cleaned;
+  return out;
 }
 
 /**
@@ -405,33 +371,44 @@ function processSvgLinear(svg: string): string {
 }
 
 /**
- * Linear-time removal of inter-tag whitespace between '>' and '<'.
- * Replaces sequences of 2 or more whitespace characters between tags with zero spaces (O(N) with zero backtracking).
+ * Round long decimals (≥3 decimal places → 2), e.g. 12.345678 -> 12.35, 10.0001 -> 10.
+ * Single-pass linear scan with zero regex backtracking.
  */
-function collapseInterTagWhitespace(svg: string): string {
+function roundLongDecimals(str: string): string {
   let out = "";
   let i = 0;
-  const len = svg.length;
+  const len = str.length;
+
   while (i < len) {
-    if (svg[i] === ">") {
-      out += ">";
-      i++;
-      const wsStart = i;
-      while (
-        i < len &&
-        (svg[i] === " " || svg[i] === "\t" || svg[i] === "\n" || svg[i] === "\r")
-      ) {
+    const ch = str[i];
+    if (ch >= "0" && ch <= "9") {
+      const numStart = i;
+      while (i < len && str[i] >= "0" && str[i] <= "9") {
         i++;
       }
-      if (i - wsStart >= 2 && i < len && svg[i] === "<") {
-        // Collapsed whitespace between '>' and '<'
+      if (i < len && str[i] === ".") {
+        i++;
+        const fracStart = i;
+        while (i < len && str[i] >= "0" && str[i] <= "9") {
+          i++;
+        }
+        const fracLen = i - fracStart;
+        if (fracLen >= 3) {
+          const numStr = str.slice(numStart, i);
+          const rounded = Number(Number.parseFloat(numStr).toFixed(2)).toString();
+          out += rounded;
+          continue;
+        } else {
+          out += str.slice(numStart, i);
+          continue;
+        }
       } else {
-        out += svg.slice(wsStart, i);
+        out += str.slice(numStart, i);
+        continue;
       }
-    } else {
-      out += svg[i];
-      i++;
     }
+    out += ch;
+    i++;
   }
   return out;
 }
@@ -450,13 +427,11 @@ export async function optimizeSvg(
   onProgress?.(55);
 
   // Round long decimals (≥3 decimal places → 2), e.g. 12.345678 -> 12.35, 10.0001 -> 10
-  svg = svg.replace(/\d+\.\d{3,}/g, (m: string) =>
-    Number(Number.parseFloat(m).toFixed(2)).toString()
-  );
+  svg = roundLongDecimals(svg);
   onProgress?.(70);
 
   // Collapse whitespace
-  svg = collapseInterTagWhitespace(svg);
+  svg = svg.replace(/>\s{2,}</g, "><");
   svg = svg.replace(/\s{2,}/g, " ").trim();
   onProgress?.(80);
 
@@ -465,21 +440,17 @@ export async function optimizeSvg(
   const rootSvgMatch = svg.match(/<svg\b([^>]*)>/i);
   if (rootSvgMatch) {
     const rootAttrs = rootSvgMatch[1];
-    const hasViewBox = /(?:^|\s)viewBox\s*=/i.test(rootAttrs);
+    const hasViewBox = /(?<![a-zA-Z0-9_-])viewBox\s*=/i.test(rootAttrs);
     if (!hasViewBox) {
-      const wMatch = rootAttrs.match(/(?:^|\s)width\s*=\s*(?:"([^"]+)"|'([^']+)')/i);
-      const hMatch = rootAttrs.match(/(?:^|\s)height\s*=\s*(?:"([^"]+)"|'([^']+)')/i);
+      const wMatch = rootAttrs.match(/(?<![a-zA-Z0-9_-])width\s*=\s*["']([^"']+)["']/i);
+      const hMatch = rootAttrs.match(/(?<![a-zA-Z0-9_-])height\s*=\s*["']([^"']+)["']/i);
       if (wMatch && hMatch) {
-        const rawW = wMatch[1] ?? wMatch[2];
-        const rawH = hMatch[1] ?? hMatch[2];
-        if (rawW && rawH) {
-          const numW = parseSvgLength(rawW);
-          const numH = parseSvgLength(rawH);
-          if (numW !== null && numH !== null) {
-            const fmtW = Number(numW.toFixed(2));
-            const fmtH = Number(numH.toFixed(2));
-            svg = svg.replace(/<svg\b/i, `<svg viewBox="0 0 ${fmtW} ${fmtH}"`);
-          }
+        const numW = parseSvgLength(wMatch[1]);
+        const numH = parseSvgLength(hMatch[1]);
+        if (numW !== null && numH !== null) {
+          const fmtW = Number(numW.toFixed(2));
+          const fmtH = Number(numH.toFixed(2));
+          svg = svg.replace(/<svg\b/i, `<svg viewBox="0 0 ${fmtW} ${fmtH}"`);
         }
       }
     }

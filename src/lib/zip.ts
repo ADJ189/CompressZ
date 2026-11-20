@@ -126,13 +126,11 @@ export function sanitizeZipPath(raw: string): string {
   return safe || "file";
 }
 
-export const MAX_ZIP_32_BYTES = 0xffffffff;
-
 /**
- * De-duplicate an entry path against already recorded paths by appending ' (2)', ' (3)', etc.
+ * Resolves a collision-free zip entry path given a set of already used entry names.
  */
-export function deduplicateZipEntryName(rawName: string, usedNames: Set<string>): string {
-  let safeName = sanitizeZipPath(rawName);
+function resolveUniqueZipPath(name: string, usedNames: Set<string>): string {
+  let safeName = sanitizeZipPath(name);
   if (usedNames.has(safeName)) {
     const slash = safeName.lastIndexOf("/");
     const dot = safeName.lastIndexOf(".");
@@ -147,6 +145,8 @@ export function deduplicateZipEntryName(rawName: string, usedNames: Set<string>)
   return safeName;
 }
 
+export const MAX_ZIP_32_BYTES = 0xffffffff;
+
 /**
  * Conservatively estimates the uncompressed ZIP archive size including local file headers,
  * central directory headers, UTF-8 filenames, and end-of-central-directory records.
@@ -159,7 +159,7 @@ export function estimateZipArchiveSize(items: { name: string; size: number }[]):
   const encoder = new TextEncoder();
 
   for (const item of items) {
-    const safeName = deduplicateZipEntryName(item.name, usedNames);
+    const safeName = resolveUniqueZipPath(item.name, usedNames);
     const nameLen = encoder.encode(safeName).length;
     total += item.size + PER_ENTRY_OVERHEAD + (2 * nameLen);
   }
@@ -201,7 +201,7 @@ export async function writeZip(entries: ZipEntryIn[]): Promise<Uint8Array> {
     // Two source names can sanitise to the same path (`a/../b` and `b`), so
     // de-duplicate before writing or the central directory would contain two
     // entries with identical names.
-    const safeName = deduplicateZipEntryName(name, usedNames);
+    const safeName = resolveUniqueZipPath(name, usedNames);
     const nameBytes = new TextEncoder().encode(safeName);
     const crc = crc32(data);
     const compressed = await deflateRaw(data);
