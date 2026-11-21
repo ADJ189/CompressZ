@@ -22,7 +22,7 @@ import { makePdf } from "./helpers";
  * mammoth, FFmpeg.wasm) are marked and get a longer timeout.
  */
 
-const CDN_TIMEOUT = 240_000;
+const CDN_TIMEOUT = 60_000;
 
 // ── Fixture generation ─────────────────────────────────────────
 
