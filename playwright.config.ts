@@ -81,6 +81,12 @@ export default defineConfig({
             // Firefox defaults to viewing webp/avif internally (opening a temp tab)
             // instead of triggering a download event. Clearing this forces downloads.
             "browser.download.viewableInternally.enabledTypes": "",
+            "browser.tabs.remote.autostart": true,
+            "toolkit.telemetry.enabled": false,
+            "toolkit.telemetry.unified": false,
+            "app.normandy.enabled": false,
+            "app.shield.optoutstudies.enabled": false,
+            "datareporting.healthreport.uploadEnabled": false,
           },
         },
       },
