@@ -81,7 +81,15 @@ function cleanElementAttributes(tagAttrs: string): string {
   const len = tagAttrs.length;
 
   while (i < len) {
+    const loopStart = i;
+
     if (tagAttrs[i] === " " || tagAttrs[i] === "\t" || tagAttrs[i] === "\n" || tagAttrs[i] === "\r") {
+      out += tagAttrs[i];
+      i++;
+      continue;
+    }
+
+    if (tagAttrs[i] === "/" || tagAttrs[i] === ">") {
       out += tagAttrs[i];
       i++;
       continue;
@@ -102,6 +110,14 @@ function cleanElementAttributes(tagAttrs: string): string {
     }
     const rawAttrName = tagAttrs.slice(nameStart, i);
     const lowerAttrName = rawAttrName.toLowerCase();
+
+    if (rawAttrName.length === 0 && (i >= len || tagAttrs[i] !== "=")) {
+      if (i < len) {
+        out += tagAttrs[i];
+        i++;
+      }
+      continue;
+    }
 
     let spacingAfterName = "";
     while (i < len && (tagAttrs[i] === " " || tagAttrs[i] === "\t" || tagAttrs[i] === "\n" || tagAttrs[i] === "\r")) {
@@ -140,7 +156,7 @@ function cleanElementAttributes(tagAttrs: string): string {
           tagAttrs[i] !== "\t" &&
           tagAttrs[i] !== "\n" &&
           tagAttrs[i] !== "\r" &&
-          tagAttrs[i] !== "/" &&
+          !(tagAttrs[i] === "/" && (i + 1 === len || tagAttrs[i + 1] === ">")) &&
           tagAttrs[i] !== ">"
         ) {
           i++;
@@ -204,9 +220,41 @@ function cleanElementAttributes(tagAttrs: string): string {
     } else {
       out += rawAttrName;
     }
+
+    if (i <= loopStart) {
+      if (i < len) {
+        out += tagAttrs[i];
+        i++;
+      } else {
+        break;
+      }
+    }
   }
 
   return out;
+}
+
+/**
+ * Finds the matching '>' closing a DOCTYPE declaration, respecting quotes and internal subsets [...].
+ */
+function findDocTypeEnd(str: string, startIndex: number): number {
+  let inQuote: '"' | "'" | null = null;
+  let inBracket = false;
+  for (let i = startIndex; i < str.length; i++) {
+    const ch = str[i];
+    if (inQuote) {
+      if (ch === inQuote) inQuote = null;
+    } else if (ch === '"' || ch === "'") {
+      inQuote = ch;
+    } else if (ch === "[" && !inBracket) {
+      inBracket = true;
+    } else if (ch === "]" && inBracket) {
+      inBracket = false;
+    } else if (ch === ">" && !inBracket) {
+      return i;
+    }
+  }
+  return -1;
 }
 
 /**
@@ -292,6 +340,17 @@ function processSvgLinear(svg: string): string {
     if (svg.startsWith("<![CDATA[", tagStart)) {
       const cdataEnd = svg.indexOf("]]>", tagStart + 9);
       const endPos = cdataEnd === -1 ? len : cdataEnd + 3;
+      if (discardDepth === 0) {
+        chunks.push(svg.slice(tagStart, endPos));
+      }
+      pos = endPos;
+      continue;
+    }
+
+    // Handle DOCTYPE <!DOCTYPE ... >
+    if (/^<!doctype\b/i.test(svg.slice(tagStart, tagStart + 10))) {
+      const docTypeEnd = findDocTypeEnd(svg, tagStart);
+      const endPos = docTypeEnd === -1 ? len : docTypeEnd + 1;
       if (discardDepth === 0) {
         chunks.push(svg.slice(tagStart, endPos));
       }
