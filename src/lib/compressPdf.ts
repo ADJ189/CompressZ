@@ -53,7 +53,7 @@ export async function compressPdf(
   // the preset default in either direction.
   const stripMeta = options.stripMetadata ?? preset.stripMeta;
 
-  const { PDFDocument, PDFName, PDFRawStream } = (await import(
+  const { PDFDocument, PDFName, PDFRawStream, decodePDFRawStream } = (await import(
     /* @vite-ignore */ PDFLIB_ESM
   )) as any;
   onProgress?.(6);
@@ -75,6 +75,7 @@ export async function compressPdf(
         stripMeta,
         targetSizeKB,
         onProgress,
+        decodePDFRawStream,
       );
       if (result.compressedSize < file.size * 0.98) return result;
     } catch (e) {
@@ -98,6 +99,327 @@ export async function compressPdf(
 }
 
 // ── Strategy A: structural image resampling ───────────────────
+export interface DrawnDimension {
+  widthPt: number;
+  heightPt: number;
+}
+
+interface Matrix2D {
+  a: number;
+  b: number;
+  c: number;
+  d: number;
+  e: number;
+  f: number;
+}
+
+function multiplyMatrix(m: Matrix2D, c: Matrix2D): Matrix2D {
+  return {
+    a: m.a * c.a + m.b * c.c,
+    b: m.a * c.b + m.b * c.d,
+    c: m.c * c.a + m.d * c.c,
+    d: m.c * c.b + m.d * c.d,
+    e: m.e * c.a + m.f * c.c + c.e,
+    f: m.e * c.b + m.f * c.d + c.f,
+  };
+}
+
+/**
+ * Parses CTM concat (cm) and XObject paint (Do) operators from a PDF content stream,
+ * tracking graphics state pushes (q) and pops (Q) to compute displayed dimensions in points.
+ */
+export function calculateImageDrawnSizes(
+  streamText: string,
+): Map<string, DrawnDimension[]> {
+  const result = new Map<string, DrawnDimension[]>();
+  if (!streamText) return result;
+
+  let currentMatrix: Matrix2D = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+  const stack: Matrix2D[] = [];
+  const operands: (number | string)[] = [];
+
+  let i = 0;
+  const len = streamText.length;
+
+  while (i < len) {
+    const ch = streamText[i];
+
+    // Whitespace
+    if (ch <= " " || ch === "\0") {
+      i++;
+      continue;
+    }
+
+    // Array delimiters: [ and ]
+    if (ch === "[" || ch === "]") {
+      i++;
+      operands.length = 0;
+      continue;
+    }
+
+    // Comment: % ... \n
+    if (ch === "%") {
+      while (i < len && streamText[i] !== "\r" && streamText[i] !== "\n") {
+        i++;
+      }
+      continue;
+    }
+
+    // String literal: ( ... ) with balanced parentheses and escapes
+    if (ch === "(") {
+      let depth = 1;
+      i++;
+      while (i < len && depth > 0) {
+        if (streamText[i] === "\\" && i + 1 < len) {
+          i += 2;
+        } else if (streamText[i] === "(") {
+          depth++;
+          i++;
+        } else if (streamText[i] === ")") {
+          depth--;
+          i++;
+        } else {
+          i++;
+        }
+      }
+      operands.length = 0;
+      continue;
+    }
+
+    // Hex string: < ... > (ignoring dictionary << >>)
+    if (ch === "<") {
+      if (streamText[i + 1] === "<") {
+        i += 2;
+      } else {
+        i++;
+        while (i < len && streamText[i] !== ">") i++;
+        if (i < len) i++;
+      }
+      operands.length = 0;
+      continue;
+    }
+
+    if (ch === ">" && streamText[i + 1] === ">") {
+      i += 2;
+      operands.length = 0;
+      continue;
+    }
+
+    // Name token: /Name
+    if (ch === "/") {
+      const start = i + 1;
+      i++;
+      while (
+        i < len &&
+        streamText[i] > " " &&
+        streamText[i] !== "/" &&
+        streamText[i] !== "(" &&
+        streamText[i] !== "[" &&
+        streamText[i] !== "<"
+      ) {
+        i++;
+      }
+      operands.push(streamText.slice(start, i));
+      continue;
+    }
+
+    // Numbers, operators, keywords
+    const start = i;
+    while (
+      i < len &&
+      streamText[i] > " " &&
+      streamText[i] !== "/" &&
+      streamText[i] !== "(" &&
+      streamText[i] !== "[" &&
+      streamText[i] !== "]" &&
+      streamText[i] !== "<" &&
+      streamText[i] !== ">" &&
+      streamText[i] !== "%"
+    ) {
+      i++;
+    }
+
+    if (start === i) {
+      i++;
+      continue;
+    }
+
+    const token = streamText.slice(start, i);
+    const num = Number(token);
+
+    if (!Number.isNaN(num)) {
+      operands.push(num);
+    } else if (token === "cm") {
+      if (operands.length >= 6) {
+        const [a, b, c, d, e, f] = operands.slice(-6) as number[];
+        currentMatrix = multiplyMatrix({ a, b, c, d, e, f }, currentMatrix);
+      }
+      operands.length = 0;
+    } else if (token === "q") {
+      stack.push({ ...currentMatrix });
+      operands.length = 0;
+    } else if (token === "Q") {
+      if (stack.length > 0) {
+        currentMatrix = stack.pop()!;
+      }
+      operands.length = 0;
+    } else if (token === "Do") {
+      if (operands.length >= 1) {
+        const name = String(operands[operands.length - 1]).replace(/^\//, "");
+        const widthPt = Math.hypot(currentMatrix.a, currentMatrix.b);
+        const heightPt = Math.hypot(currentMatrix.c, currentMatrix.d);
+        if (widthPt > 0 && heightPt > 0) {
+          const list = result.get(name) ?? [];
+          list.push({ widthPt, heightPt });
+          result.set(name, list);
+        }
+      }
+      operands.length = 0;
+    } else {
+      operands.length = 0;
+    }
+  }
+
+  return result;
+}
+
+export function calculateEffectiveDpi(
+  origW: number,
+  origH: number,
+  displayedWidthPt?: number,
+  displayedHeightPt?: number,
+  pageW: number = 612,
+  pageH: number = 792,
+): number {
+  if (displayedWidthPt && displayedWidthPt > 0) {
+    const effDpiX = (origW * 72) / displayedWidthPt;
+    const effDpiY =
+      displayedHeightPt && displayedHeightPt > 0
+        ? (origH * 72) / displayedHeightPt
+        : effDpiX;
+    return Math.min(effDpiX, effDpiY);
+  }
+
+  // Page-size bound fallback: max(origW, origH) / (max(pageW, pageH) / 72)
+  const maxPixels = Math.max(origW, origH);
+  const maxPageInches = Math.max(pageW, pageH) / 72;
+  return maxPageInches > 0 ? maxPixels / maxPageInches : 72;
+}
+
+export function calculateDpiScale(effDpi: number, targetDpi: number): number {
+  if (effDpi <= 0) return 1;
+  return Math.min(1, targetDpi / effDpi);
+}
+
+export function calculateTargetQuality(
+  jpegQuality: number,
+  targetSizeKB: number,
+  originalSize: number,
+): number {
+  if (targetSizeKB <= 0) return jpegQuality;
+  const targetRatio = (targetSizeKB * 1024) / Math.max(originalSize, 1);
+  return Math.max(0.2, Math.min(0.92, jpegQuality * Math.min(1, targetRatio)));
+}
+
+async function decompressFlate(bytes: Uint8Array): Promise<Uint8Array> {
+  if (typeof process !== "undefined" && (process as any).versions?.node) {
+    try {
+      const zlibMod = "node:zlib";
+      const zlib = await import(/* @vite-ignore */ zlibMod);
+      return new Uint8Array(zlib.inflateSync(bytes));
+    } catch {
+      /**/
+    }
+  }
+  if (typeof DecompressionStream !== "undefined") {
+    try {
+      const ds = new DecompressionStream("deflate");
+      const writer = ds.writable.getWriter();
+      void writer.write(bytes as any).catch(() => {});
+      void writer.close().catch(() => {});
+      const res = new Response(ds.readable);
+      return new Uint8Array(await res.arrayBuffer());
+    } catch {
+      /**/
+    }
+  }
+  return bytes;
+}
+
+async function getPageContentText(
+  page: any,
+  pdfDoc: any,
+  decodePDFRawStream?: any,
+): Promise<string> {
+  try {
+    const contents =
+      page.node.Contents?.() ??
+      page.node.dict?.lookup?.(pdfDoc.context.obj("Contents"));
+    if (!contents) return "";
+
+    const streamItems: any[] = [];
+    if (typeof contents.asArray === "function" && Array.isArray(contents.asArray())) {
+      streamItems.push(...contents.asArray());
+    } else if (Array.isArray(contents.array)) {
+      streamItems.push(...contents.array);
+    } else {
+      streamItems.push(contents);
+    }
+
+    let text = "";
+    for (let item of streamItems) {
+      if (item?.constructor?.name === "PDFRef" || item?.objectNumber !== undefined) {
+        item = pdfDoc.context.lookup(item);
+      }
+      if (!item) continue;
+
+      let decodedBytes: Uint8Array | null = null;
+      if (typeof decodePDFRawStream === "function") {
+        try {
+          const decodedStream = decodePDFRawStream(item);
+          if (decodedStream?.contents instanceof Uint8Array) {
+            decodedBytes = decodedStream.contents;
+          } else if (typeof decodedStream?.getContents === "function") {
+            decodedBytes = decodedStream.getContents();
+          } else if (typeof decodedStream?.asUint8Array === "function") {
+            decodedBytes = decodedStream.asUint8Array();
+          }
+        } catch {
+          // Fall back to manual filter check
+        }
+      }
+
+      if (!decodedBytes) {
+        let rawBytes: Uint8Array | null = null;
+        if (item.contents instanceof Uint8Array) {
+          rawBytes = item.contents;
+        } else if (typeof item.getContents === "function") {
+          rawBytes = item.getContents();
+        }
+        if (!rawBytes || rawBytes.length === 0) continue;
+
+        const filterObj = item.dict?.lookup?.(pdfDoc.context.obj("Filter"));
+        const filterName = filterObj?.encodedName ?? filterObj?.toString?.() ?? "";
+        if (
+          filterName === "/FlateDecode" ||
+          (Array.isArray(filterObj) && filterObj.some((f: any) => f?.encodedName === "/FlateDecode"))
+        ) {
+          decodedBytes = await decompressFlate(rawBytes);
+        } else {
+          decodedBytes = rawBytes;
+        }
+      }
+
+      if (decodedBytes) {
+        text += "\n" + new TextDecoder("latin1").decode(decodedBytes);
+      }
+    }
+    return text;
+  } catch {
+    return "";
+  }
+}
+
 async function structuralCompress(
   arrayBuffer: ArrayBuffer,
   originalSize: number,
@@ -110,6 +432,7 @@ async function structuralCompress(
   stripMeta: boolean,
   targetSizeKB: number,
   onProgress?: (pct: number) => void,
+  decodePDFRawStream?: any,
 ): Promise<CompressResult> {
   const pdfDoc = await PDFDocument.load(new Uint8Array(arrayBuffer), {
     ignoreEncryption: true,
@@ -118,6 +441,44 @@ async function structuralCompress(
 
   const pages = pdfDoc.getPages();
   const total = pages.length;
+
+  // Pre-scan content streams to find drawn dimensions across all pages
+  const drawnSizesByRef = new Map<string, DrawnDimension[]>();
+  const drawnSizesByName = new Map<string, DrawnDimension[]>();
+
+  for (let p = 0; p < total; p++) {
+    const page = pages[p];
+    const streamText = await getPageContentText(page, pdfDoc, decodePDFRawStream);
+    if (!streamText) continue;
+
+    const pageDrawn = calculateImageDrawnSizes(streamText);
+    const resources = page.node.Resources();
+    const xObjects = resources?.lookup(PDFName.of("XObject"));
+    const keys: any[] = xObjects?.keys?.() ?? [];
+
+    for (const key of keys) {
+      const name = key.name ?? key.encodedName?.replace(/^\//, "");
+      const drawnList = pageDrawn.get(name);
+      if (!drawnList || drawnList.length === 0) continue;
+
+      const existingByName = drawnSizesByName.get(name) ?? [];
+      existingByName.push(...drawnList);
+      drawnSizesByName.set(name, existingByName);
+
+      const rawRef = xObjects.dict ? xObjects.dict.get(key) : (xObjects.get?.(key) ?? null);
+      const refObj = rawRef?.objectNumber !== undefined ? rawRef : xObjects.lookup(key)?.ref;
+      if (refObj?.objectNumber !== undefined) {
+        const refStr = `${refObj.objectNumber}_${refObj.generationNumber ?? 0}`;
+        const existingByRef = drawnSizesByRef.get(refStr) ?? [];
+        existingByRef.push(...drawnList);
+        drawnSizesByRef.set(refStr, existingByRef);
+      }
+    }
+  }
+
+  const processedObjects = new Set<any>();
+  const processedRefKeys = new Set<string>();
+  const replacementsByRef = new Map<string, any>();
 
   for (let p = 0; p < total; p++) {
     const page = pages[p];
@@ -133,8 +494,31 @@ async function structuralCompress(
       const xObj = xObjects.lookup(key);
       if (!xObj?.dict) continue;
 
+      const rawRef = xObjects.dict ? xObjects.dict.get(key) : (xObjects.get?.(key) ?? null);
+      const targetRef = rawRef?.objectNumber !== undefined ? rawRef : xObj.ref;
+      const refKey = targetRef?.objectNumber !== undefined
+        ? `${targetRef.objectNumber}_${targetRef.generationNumber ?? 0}`
+        : null;
+
+      // Skip already processed images (shared across pages or multiple keys)
+      if (
+        processedObjects.has(xObj) ||
+        processedObjects.has(xObj.dict) ||
+        (refKey && processedRefKeys.has(refKey))
+      ) {
+        if (refKey && replacementsByRef.has(refKey)) {
+          xObjects.set(key, replacementsByRef.get(refKey));
+        }
+        continue;
+      }
+
       const subtype = xObj.dict.lookup(PDFName.of("Subtype"));
       if (subtype?.encodedName !== "/Image") continue;
+
+      // Mark as inspected so unsupported/skipped formats are not repeatedly analyzed
+      processedObjects.add(xObj);
+      processedObjects.add(xObj.dict);
+      if (refKey) processedRefKeys.add(refKey);
 
       // Skip color spaces the canvas cannot represent correctly
       const cs = xObj.dict.lookup(PDFName.of("ColorSpace"));
@@ -145,6 +529,50 @@ async function structuralCompress(
       const origH = xObj.dict.lookup(PDFName.of("Height"))?.numberValue ?? 0;
       if (origW < 64 || origH < 64) continue; // skip tiny decorations
 
+      // Skip images with transparency masks: JPEG cannot represent alpha channels,
+      // and deleting SMask flattens transparent illustrations/logos into opaque blocks.
+      const hasSMask =
+        xObj.dict.has(PDFName.of("SMask")) || xObj.dict.has(PDFName.of("Mask"));
+      if (hasSMask) continue;
+
+      // Resolve drawn dimensions across all occurrences
+      const name = key.name ?? key.encodedName?.replace(/^\//, "");
+      const drawnPlacements =
+        (refKey ? drawnSizesByRef.get(refKey) : null) ??
+        drawnSizesByName.get(name) ??
+        [];
+
+      let displayedWidthPt: number | undefined;
+      let displayedHeightPt: number | undefined;
+      if (drawnPlacements.length > 0) {
+        // Use maximum displayed dimensions across all placements to preserve quality
+        displayedWidthPt = Math.max(...drawnPlacements.map((d) => d.widthPt));
+        displayedHeightPt = Math.max(...drawnPlacements.map((d) => d.heightPt));
+      }
+
+      const pageWidthPt = page.getWidth?.() ?? 612;
+      const pageHeightPt = page.getHeight?.() ?? 792;
+
+      const effDpi = calculateEffectiveDpi(
+        origW,
+        origH,
+        displayedWidthPt,
+        displayedHeightPt,
+        pageWidthPt,
+        pageHeightPt,
+      );
+
+      const dpiScale = calculateDpiScale(effDpi, targetDpi);
+
+      // Downsample only when effective DPI exceeds target DPI (dpiScale < 1)
+      // or if target size constraint requires re-encoding
+      if (dpiScale >= 1 && targetSizeKB <= 0) {
+        continue;
+      }
+
+      const newW = Math.max(1, Math.round(origW * dpiScale));
+      const newH = Math.max(1, Math.round(origH * dpiScale));
+
       let imgBlob: Blob;
       try {
         imgBlob = await decodeXObjectToBlob(xObj, origW, origH);
@@ -152,22 +580,11 @@ async function structuralCompress(
         continue;
       }
 
-      // PDFs use 72pt = 1 inch. targetDpi / 72 gives the scale factor that
-      // maps PDF points to target-DPI pixels. We never upscale (min 1).
-      const dpiScale = Math.min(1, targetDpi / 72);
-      const newW = Math.max(1, Math.round(origW * dpiScale));
-      const newH = Math.max(1, Math.round(origH * dpiScale));
-
-      const quality =
-        targetSizeKB > 0
-          ? Math.max(
-              0.2,
-              Math.min(
-                0.92,
-                jpegQuality * ((newW * newH) / Math.max(origW * origH, 1)),
-              ),
-            )
-          : jpegQuality;
+      const quality = calculateTargetQuality(
+        jpegQuality,
+        targetSizeKB,
+        originalSize,
+      );
 
       let reencoded: Uint8Array;
       try {
@@ -188,15 +605,27 @@ async function structuralCompress(
       xObj.dict.delete(PDFName.of("Mask"));
       xObj.dict.delete(PDFName.of("SMask"));
 
-      // If the XObject already has a stable ref, update it in-place.
-      // Otherwise register a new object and point the XObject dict entry at it.
-      if (xObj.ref) {
-        pdfDoc.context.assign(xObj.ref, new PDFRawStream(xObj.dict, reencoded));
+      // If the XObject has a stable resource reference, update it in-place.
+      // Otherwise register a new object, point the XObject dict entry at it,
+      // and track the replacement so other aliases redirect to it.
+      if (targetRef) {
+        pdfDoc.context.assign(targetRef, new PDFRawStream(xObj.dict, reencoded));
+        if (refKey) {
+          replacementsByRef.set(refKey, targetRef);
+        }
       } else {
         const newRef = pdfDoc.context.register(
           new PDFRawStream(xObj.dict, reencoded),
         );
         xObjects.set(key, newRef);
+        processedObjects.add(newRef);
+        if (refKey) {
+          replacementsByRef.set(refKey, newRef);
+          processedRefKeys.add(refKey);
+        }
+        processedRefKeys.add(
+          `${newRef.objectNumber}_${newRef.generationNumber}`,
+        );
       }
     }
 

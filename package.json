@@ -21,7 +21,8 @@
     "lighthouse": "lhci autorun"
   },
   "dependencies": {
-    "@huggingface/transformers": "^4.3.2"
+    "@huggingface/transformers": "^4.3.2",
+    "@sentry/svelte": "^11.14.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -19,6 +19,7 @@
   import { runScheduled } from "../lib/resourceManager";
 import { entryError } from "../lib/engineError";
   import { uid, type FileEntry } from "../lib/types";
+  import { downloadBatch } from "../lib/batchDownload";
   import { toast } from "../toast";
 
   let ocrState = $state<OcrState>(ocrStore.get());
@@ -383,12 +384,26 @@ import { entryError } from "../lib/engineError";
     startDownload(entry.extraBlob, entry.extraName ?? `${base}-ocr.txt`);
   }
 
-  function handleDownloadAll() {
+  async function handleDownloadAll() {
     const doneEntries = ocrState.files.filter((f) => f.status === "done");
+    const items: { name: string; blob: Blob }[] = [];
     for (const entry of doneEntries) {
-      handleDownloadSingle(entry);
-      if (entry.extraBlob) handleDownloadExtra(entry);
+      const base = entry.name.replace(/\.[^/.]+$/, "");
+      if (entry.compressedBlob) {
+        const isPdf = entry.compressedBlob.type === "application/pdf";
+        items.push({
+          name: isPdf ? `${base}-searchable.pdf` : `${base}-ocr.txt`,
+          blob: entry.compressedBlob,
+        });
+      }
+      if (entry.extraBlob) {
+        items.push({
+          name: entry.extraName ?? `${base}-ocr.txt`,
+          blob: entry.extraBlob,
+        });
+      }
     }
+    await downloadBatch(items, "ocr-results.zip");
   }
 
   function handleRemove(id: string) {

@@ -33,31 +33,33 @@ function crc32(data: Uint8Array): number {
   return computeCrc32(data);
 }
 
-async function deflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
-  const cs = new CompressionStream("deflate-raw");
-  const writer = cs.writable.getWriter();
+interface ByteTransformStream {
+  writable: WritableStream<BufferSource>;
+  readable: ReadableStream<Uint8Array>;
+}
+
+async function transformRaw(
+  transform: ByteTransformStream,
+  bytes: Uint8Array,
+  maxBytes?: number,
+): Promise<Uint8Array> {
+  const writer = transform.writable.getWriter();
   void (async () => {
     try {
-      await writer.write(bytes as BufferSource);
+      await writer.write(bytes as unknown as BufferSource);
       await writer.close();
     } catch {
       // Ignored: errors caught via readAll
     }
   })();
-  return readAll(cs.readable);
+  return readAll(transform.readable, maxBytes);
+}
+
+async function deflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
+  return transformRaw(new CompressionStream("deflate-raw"), bytes);
 }
 async function inflateRaw(bytes: Uint8Array, maxBytes?: number): Promise<Uint8Array> {
-  const ds = new DecompressionStream("deflate-raw");
-  const writer = ds.writable.getWriter();
-  void (async () => {
-    try {
-      await writer.write(bytes as BufferSource);
-      await writer.close();
-    } catch {
-      // Ignored: errors caught via readAll
-    }
-  })();
-  return readAll(ds.readable, maxBytes);
+  return transformRaw(new DecompressionStream("deflate-raw"), bytes, maxBytes);
 }
 async function readAll(
   stream: ReadableStream<Uint8Array>,
@@ -124,20 +126,72 @@ export function sanitizeZipPath(raw: string): string {
   return safe || "file";
 }
 
+/**
+ * Resolves a collision-free zip entry path given a set of already used entry names.
+ */
+function resolveUniqueZipPath(name: string, usedNames: Set<string>): string {
+  let safeName = sanitizeZipPath(name);
+  if (usedNames.has(safeName)) {
+    const slash = safeName.lastIndexOf("/");
+    const dot = safeName.lastIndexOf(".");
+    const hasExt = dot > slash;
+    const base = hasExt ? safeName.slice(0, dot) : safeName;
+    const ext = hasExt ? safeName.slice(dot) : "";
+    let n = 2;
+    while (usedNames.has(`${base} (${n})${ext}`)) n++;
+    safeName = `${base} (${n})${ext}`;
+  }
+  usedNames.add(safeName);
+  return safeName;
+}
+
+export const MAX_ZIP_32_BYTES = 0xffffffff;
+
+/**
+ * Conservatively estimates the uncompressed ZIP archive size including local file headers,
+ * central directory headers, UTF-8 filenames, and end-of-central-directory records.
+ */
+export function estimateZipArchiveSize(items: { name: string; size: number }[]): number {
+  const EOCD_BYTES = 22;
+  const PER_ENTRY_OVERHEAD = 76; // 30 bytes local header + 46 bytes central directory header
+  let total = EOCD_BYTES;
+  const usedNames = new Set<string>();
+  const encoder = new TextEncoder();
+
+  for (const item of items) {
+    const safeName = resolveUniqueZipPath(item.name, usedNames);
+    const nameLen = encoder.encode(safeName).length;
+    total += item.size + PER_ENTRY_OVERHEAD + (2 * nameLen);
+  }
+  return total;
+}
+
+/**
+ * Checks whether the items list is projected to exceed the 32-bit (4 GiB) classic ZIP threshold.
+ */
+export function exceedsZipLimit(items: { name: string; size: number }[]): boolean {
+  return estimateZipArchiveSize(items) >= MAX_ZIP_32_BYTES;
+}
+
 // ── Writer ────────────────────────────────────────────────────
 export async function writeZip(entries: ZipEntryIn[]): Promise<Uint8Array> {
+  if (entries.length >= 0xffff) {
+    throw new Error(
+      `Archive contains ${entries.length} entries, exceeding the maximum allowed limit of 65534 entries without Zip64.`,
+    );
+  }
+
   const { time, date } = dosDateTime();
   const chunks: Uint8Array[] = [];
   const central: Uint8Array[] = [];
   const usedNames = new Set<string>();
   let offset = 0;
 
-  // Preflight check: prevent exceeding 32-bit / 4GiB ZIP limit
-  let estimatedTotal = 0;
-  for (const e of entries) {
-    estimatedTotal += e.data.length + 100;
-  }
-  if (estimatedTotal >= 0xffffffff) {
+  // Preflight check: prevent exceeding 32-bit / 4GiB ZIP limit including headers
+  const estimatedTotal = estimateZipArchiveSize(
+    entries.map((e) => ({ name: e.name, size: e.data.length })),
+  );
+  if (estimatedTotal >= MAX_ZIP_32_BYTES) {
     throw new Error(
       "Archive size exceeds the 32-bit (4 GiB) ZIP limit. Cannot package safely without Zip64.",
     );
@@ -147,24 +201,17 @@ export async function writeZip(entries: ZipEntryIn[]): Promise<Uint8Array> {
     // Two source names can sanitise to the same path (`a/../b` and `b`), so
     // de-duplicate before writing or the central directory would contain two
     // entries with identical names.
-    let safeName = sanitizeZipPath(name);
-    if (usedNames.has(safeName)) {
-      const slash = safeName.lastIndexOf("/");
-      const dot = safeName.lastIndexOf(".");
-      const hasExt = dot > slash;
-      const base = hasExt ? safeName.slice(0, dot) : safeName;
-      const ext = hasExt ? safeName.slice(dot) : "";
-      let n = 2;
-      while (usedNames.has(`${base} (${n})${ext}`)) n++;
-      safeName = `${base} (${n})${ext}`;
-    }
-    usedNames.add(safeName);
+    const safeName = resolveUniqueZipPath(name, usedNames);
     const nameBytes = new TextEncoder().encode(safeName);
     const crc = crc32(data);
     const compressed = await deflateRaw(data);
     const useStore = compressed.length >= data.length;
     const payload = useStore ? data : compressed;
     const method = useStore ? 0 : 8;
+
+    if (offset + 30 + nameBytes.length + payload.length >= MAX_ZIP_32_BYTES) {
+      throw new Error("Archive offset exceeds the 32-bit (4 GiB) ZIP limit.");
+    }
 
     const local = new DataView(new ArrayBuffer(30));
     local.setUint32(0, 0x04034b50, true);
@@ -209,6 +256,16 @@ export async function writeZip(entries: ZipEntryIn[]): Promise<Uint8Array> {
 
   const centralStart = offset;
   const centralSize = central.reduce((s, c) => s + c.length, 0);
+
+  if (
+    centralStart >= MAX_ZIP_32_BYTES ||
+    centralSize >= MAX_ZIP_32_BYTES ||
+    centralStart + centralSize + 22 >= MAX_ZIP_32_BYTES
+  ) {
+    throw new Error(
+      "Central directory exceeds the 32-bit (4 GiB) ZIP limit. Cannot package safely without Zip64.",
+    );
+  }
 
   const eocd = new DataView(new ArrayBuffer(22));
   eocd.setUint32(0, 0x06054b50, true);

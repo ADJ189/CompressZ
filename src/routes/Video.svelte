@@ -8,6 +8,7 @@
   import { runScheduled } from "../lib/resourceManager";
 import { entryError } from "../lib/engineError";
   import { uid, type FileEntry, type VideoCodec, outputFilename } from "../lib/types";
+  import { downloadBatch, exceedsZipLimit } from "../lib/batchDownload";
   import { toast } from "../toast";
 
   let videoState = $state<VideoState>(videoStore.get());
@@ -128,11 +129,19 @@ import { entryError } from "../lib/engineError";
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   }
 
-  function handleDownloadAll() {
-    const doneEntries = videoState.files.filter((f) => f.status === "done");
-    for (const entry of doneEntries) {
-      handleDownloadSingle(entry);
+  async function handleDownloadAll() {
+    const doneEntries = videoState.files.filter((f) => f.status === "done" && f.compressedBlob);
+    const items = doneEntries.map((entry) => ({
+      name: outputFilename(entry.name, entry.compressedBlob!, {
+        suffix: "-compressed",
+        fallbackExt: videoState.codec.includes("vp") ? "webm" : "mp4",
+      }),
+      blob: entry.compressedBlob!,
+    }));
+    if (exceedsZipLimit(items.map((it) => ({ name: it.name, size: it.blob.size })))) {
+      toast("Batch exceeds 4 GiB ZIP limit; downloading files individually", "info");
     }
+    await downloadBatch(items, "video-compressed.zip");
   }
 
   function handleRemove(id: string) {

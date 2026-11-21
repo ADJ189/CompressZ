@@ -1,14 +1,14 @@
 {
   "tasks": {
-    "test": "deno test --allow-read tests/",
-    "test:parallel": "deno test --parallel --allow-read tests/",
-    "check": "deno check tests/*.ts src/lib/*.ts",
+    "test": "deno test --node-modules-dir=manual --allow-read --allow-env tests/",
+    "test:parallel": "deno test --parallel --node-modules-dir=manual --allow-read --allow-env tests/",
+    "check": "deno check --node-modules-dir=manual tests/*.ts src/lib/*.ts",
     "e2e": "deno run -A npm:@playwright/test test --workers=3"
   },
   "compilerOptions": {
     "lib": ["deno.ns", "dom", "esnext"]
   },
-  "nodeModulesDir": "none",
+  "nodeModulesDir": "manual",
   "lint": {
     "include": ["src/", "tests/"],
     "rules": {

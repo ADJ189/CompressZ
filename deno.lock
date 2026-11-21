@@ -3,8 +3,9 @@
   "specifiers": {
     "npm:@eslint/js@^10.0.1": "10.0.1_eslint@10.14.0",
     "npm:@huggingface/transformers@^4.3.2": "4.3.2",
-    "npm:@lhci/cli@^0.16.1": "0.16.1",
+    "npm:@lhci/cli@~0.16.1": "0.16.1",
     "npm:@playwright/test@^1.65.0": "1.65.0",
+    "npm:@sentry/svelte@^11.14.0": "11.15.0_svelte@5.57.3",
     "npm:@sveltejs/vite-plugin-svelte@^7.3.1": "7.3.1_svelte@5.57.3_vite@8.3.6",
     "npm:eslint@^10.14.0": "10.14.0",
     "npm:svelte-check@^4.7.8": "4.7.8_svelte@5.57.3_typescript@5.9.3",
@@ -643,10 +644,29 @@
     "@rolldown/pluginutils@1.0.1": {
       "integrity": "sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw=="
     },
+    "@sentry/browser-utils@11.15.0": {
+      "integrity": "sha512-P4DVs11PqLpll5GDfRdqh6s2RRi3/LP7v7CCGjTfebjyKL/lud/QebZ4UsZzgHF1vhwjy/QCM2w4FaCoqr20pw==",
+      "dependencies": [
+        "@sentry/conventions",
+        "@sentry/core@11.15.0",
+        "web-vitals"
+      ]
+    },
+    "@sentry/browser@11.15.0": {
+      "integrity": "sha512-oo2X3opEAgJ5I3doQjMagQLxvK3mtKw+mR0t2R0mVBHBFxxEVsVitj+mIH03Z1aZLqOyfhe0cO8DKbLTfTN8JQ==",
+      "dependencies": [
+        "@sentry/browser-utils",
+        "@sentry/conventions",
+        "@sentry/core@11.15.0",
+        "@sentry/feedback",
+        "@sentry/replay",
+        "@sentry/replay-canvas"
+      ]
+    },
     "@sentry/bundler-plugins@11.13.0": {
       "integrity": "sha512-MYH2ygxSQDf6Iuh+EmQUX4+ygWKQOWDk4j3N8O2qA9hV/8FDlUa6NSSZh30prWsSas2KJh3+63mZHwltbYYF+g==",
       "dependencies": [
-        "@sentry/core",
+        "@sentry/core@11.13.0",
         "dotenv",
         "glob@14.0.6",
         "magic-string@1.4.5",
@@ -663,13 +683,25 @@
         "@sentry/conventions"
       ]
     },
+    "@sentry/core@11.15.0": {
+      "integrity": "sha512-zsprEOu/voisojJFnDIhPd+GhycAli/aqjV752eQHiNOrAwAvigCadsSh2ND5e1AEycvSmZTxOOhCNjWzSZ4Ng==",
+      "dependencies": [
+        "@sentry/conventions"
+      ]
+    },
+    "@sentry/feedback@11.15.0": {
+      "integrity": "sha512-4WYfm1poYb2A8IbMXGjkOo+LFPTj27FUJYeCVNSRKEKuuySqdMcjfk8U9Si2cKEcJjFpvhITREiyNm77q91kyg==",
+      "dependencies": [
+        "@sentry/core@11.15.0"
+      ]
+    },
     "@sentry/node@11.13.0": {
       "integrity": "sha512-Yj9fsfiTKmitluyH7jbGHJox58tSpoRY0318v8EvICDpp4VcCc8Kn36PZFO9chj6ezKQHNGIxxL53O4OF7u1Kg==",
       "dependencies": [
         "@opentelemetry/api",
         "@sentry/bundler-plugins",
         "@sentry/conventions",
-        "@sentry/core",
+        "@sentry/core@11.13.0",
         "@sentry/opentelemetry",
         "@sentry/server-runtime-injection",
         "@sentry/server-utils"
@@ -680,13 +712,27 @@
       "dependencies": [
         "@opentelemetry/api",
         "@sentry/conventions",
-        "@sentry/core"
+        "@sentry/core@11.13.0"
+      ]
+    },
+    "@sentry/replay-canvas@11.15.0": {
+      "integrity": "sha512-vZXVJrHtnzTo21zHC/uNUJH5L2yP4L3/M2m+ctZgQykma5vgN9ljof3zp0Yo8JGO3hAZZ9fV8EdFKtHrfPtJSQ==",
+      "dependencies": [
+        "@sentry/core@11.15.0",
+        "@sentry/replay"
+      ]
+    },
+    "@sentry/replay@11.15.0": {
+      "integrity": "sha512-HgfH4B0y88OzdYADL45/jy/CCxB9+XtWOWxZG/luaXiScAO7q5q4B3FogqnP9k/81r/0uf6cGXODWitFB9o9dw==",
+      "dependencies": [
+        "@sentry/browser-utils",
+        "@sentry/core@11.15.0"
       ]
     },
     "@sentry/server-runtime-injection@11.13.0": {
       "integrity": "sha512-fX+wXIbIAmu8TNhF5NMtZ21BKw8rPgXKQi7ka2eqx/JOTcdtPr22YaCiKZrljgdP9qzcD8y0oxDPrTz+PzgOmQ==",
       "dependencies": [
-        "@sentry/core",
+        "@sentry/core@11.13.0",
         "@sentry/server-utils"
       ]
     },
@@ -695,7 +741,17 @@
       "dependencies": [
         "@opentelemetry/api",
         "@sentry/conventions",
-        "@sentry/core"
+        "@sentry/core@11.13.0"
+      ]
+    },
+    "@sentry/svelte@11.15.0_svelte@5.57.3": {
+      "integrity": "sha512-rdkKu3tsQexjnBarsCvxPLKqy1kt6rkh6TEbypltikNP1A7xFo3DrYBO4O5b8f5SQPCNjx4uKa9N/eRJ9/P+0w==",
+      "dependencies": [
+        "@sentry/browser",
+        "@sentry/conventions",
+        "@sentry/core@11.15.0",
+        "magic-string@0.30.21",
+        "svelte"
       ]
     },
     "@sveltejs/acorn-typescript@1.0.13_acorn@8.19.0": {
@@ -2911,6 +2967,9 @@
         "defaults"
       ]
     },
+    "web-vitals@6.2.3": {
+      "integrity": "sha512-Dmy+vdO1UPMqXiAtZSNayhl4f794Bxfd94W4HIj2HlYtczEQfEOon969memlcpcHrTuOKLa5baFjX7WbgmOq+A=="
+    },
     "webdriver-bidi-protocol@1.0.2": {
       "integrity": "sha512-nghazPI+J5RrLZ+qb6vMjC6l1/tnwqr2muVEax4Ufd6eIdcjeqNnhLsAxTG9s+7Zf4umgf0DrEwDC8CoU91nAA=="
     },
@@ -3047,8 +3106,9 @@
       "dependencies": [
         "npm:@eslint/js@^10.0.1",
         "npm:@huggingface/transformers@^4.3.2",
-        "npm:@lhci/cli@^0.16.1",
+        "npm:@lhci/cli@~0.16.1",
         "npm:@playwright/test@^1.65.0",
+        "npm:@sentry/svelte@^11.14.0",
         "npm:@sveltejs/vite-plugin-svelte@^7.3.1",
         "npm:eslint@^10.14.0",
         "npm:svelte-check@^4.7.8",

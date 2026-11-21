@@ -52,6 +52,73 @@ Deno.test("archives: createArchive and extractArchive round-trip ZIP", async () 
   assertEquals(extracted.some((f) => f.name === "b.txt" && new TextDecoder().decode(f.data) === "Beta content"), true);
 });
 
+Deno.test("tar: readTar resets pendingName when followed by non-regular or symlink entries", () => {
+  const enc = new TextEncoder();
+
+  // 1. Create a GNU long name header ('L') for a symlink
+  const longName = "skipped-symlink-long-target.txt";
+  const longNameData = enc.encode(`${longName}\0`);
+  const lHeader = new Uint8Array(512);
+  lHeader.set(enc.encode("././@LongLink"), 0);
+  // size octal at 124..135
+  const lSizeOct = longNameData.length.toString(8).padStart(11, "0");
+  lHeader.set(enc.encode(lSizeOct), 124);
+  lHeader[156] = 0x4c; // 'L'
+  lHeader.set(enc.encode("ustar\0"), 257);
+  // Checksum
+  lHeader.fill(0x20, 148, 156);
+  let lSum = 0;
+  for (let i = 0; i < 512; i++) lSum += lHeader[i];
+  lHeader.set(enc.encode(lSum.toString(8).padStart(6, "0") + "\0 "), 148);
+
+  const lPadding = new Uint8Array((512 - (longNameData.length % 512)) % 512);
+
+  // 2. Create symlink entry (typeflag '2')
+  const sHeader = new Uint8Array(512);
+  sHeader.set(enc.encode("symlink-entry"), 0);
+  sHeader.set(enc.encode("00000000000"), 124); // size 0
+  sHeader[156] = 0x32; // '2' = symlink
+  sHeader.set(enc.encode("ustar\0"), 257);
+  sHeader.fill(0x20, 148, 156);
+  let sSum = 0;
+  for (let i = 0; i < 512; i++) sSum += sHeader[i];
+  sHeader.set(enc.encode(sSum.toString(8).padStart(6, "0") + "\0 "), 148);
+
+  // 3. Create regular file entry (typeflag '0')
+  const rData = enc.encode("Real regular file content");
+  const rHeader = new Uint8Array(512);
+  rHeader.set(enc.encode("actual-regular-file.txt"), 0);
+  const rSizeOct = rData.length.toString(8).padStart(11, "0");
+  rHeader.set(enc.encode(rSizeOct), 124);
+  rHeader[156] = 0x30; // '0' = regular file
+  rHeader.set(enc.encode("ustar\0"), 257);
+  rHeader.fill(0x20, 148, 156);
+  let rSum = 0;
+  for (let i = 0; i < 512; i++) rSum += rHeader[i];
+  rHeader.set(enc.encode(rSum.toString(8).padStart(6, "0") + "\0 "), 148);
+
+  const rPadding = new Uint8Array((512 - (rData.length % 512)) % 512);
+  const terminator = new Uint8Array(1024);
+
+  // Concatenate all chunks
+  const totalLen =
+    lHeader.length + longNameData.length + lPadding.length +
+    sHeader.length +
+    rHeader.length + rData.length + rPadding.length +
+    terminator.length;
+  const tarBytes = new Uint8Array(totalLen);
+  let pos = 0;
+  for (const chunk of [lHeader, longNameData, lPadding, sHeader, rHeader, rData, rPadding, terminator]) {
+    tarBytes.set(chunk, pos);
+    pos += chunk.length;
+  }
+
+  const entries = readTar(tarBytes);
+  assertEquals(entries.length, 1);
+  assertEquals(entries[0].name, "actual-regular-file.txt", "Regular file must NOT inherit the long name of a skipped entry");
+});
+
+
 Deno.test("archives: createArchive and extractArchive round-trip TAR", async () => {
   const enc = new TextEncoder();
   const files = [

@@ -192,38 +192,46 @@ export async function applyTrueRedaction(
   }
 
   const pdfJsDoc = await openPdfDocument(pdfBytes);
-  const outDoc = await PDFDocument.create();
+  try {
+    const outDoc = await PDFDocument.create();
 
-  for (let i = 0; i < totalPages; i++) {
-    const pageRedactions = redactionsMap.get(i);
+    for (let i = 0; i < totalPages; i++) {
+      const pageRedactions = redactionsMap.get(i);
 
-    if (pageRedactions && pageRedactions.length > 0) {
-      // Redacted page: burn in permanently into sanitized raster layer
-      const { pngBytes, widthPt, heightPt } = await renderSanitizedRasterPage(
-        pdfJsDoc,
-        i,
-        pageRedactions,
-        options.renderDpi || 300,
-      );
-      const embeddedPng = await outDoc.embedPng(pngBytes);
-      const newPage = outDoc.addPage([widthPt, heightPt]);
-      newPage.drawImage(embeddedPng, {
-        x: 0,
-        y: 0,
-        width: widthPt,
-        height: heightPt,
-      });
-    } else {
-      // Untouched page: copy structural vectors and text verbatim
-      const [copiedPage] = await outDoc.copyPages(srcDoc, [i]);
-      outDoc.addPage(copiedPage);
+      if (pageRedactions && pageRedactions.length > 0) {
+        // Redacted page: burn in permanently into sanitized raster layer
+        const { pngBytes, widthPt, heightPt } = await renderSanitizedRasterPage(
+          pdfJsDoc,
+          i,
+          pageRedactions,
+          options.renderDpi || 300,
+        );
+        const embeddedPng = await outDoc.embedPng(pngBytes);
+        const newPage = outDoc.addPage([widthPt, heightPt]);
+        newPage.drawImage(embeddedPng, {
+          x: 0,
+          y: 0,
+          width: widthPt,
+          height: heightPt,
+        });
+      } else {
+        // Untouched page: copy structural vectors and text verbatim
+        const [copiedPage] = await outDoc.copyPages(srcDoc, [i]);
+        outDoc.addPage(copiedPage);
+      }
+
+      const pct = Math.round(10 + ((i + 1) / totalPages) * 80);
+      options.onProgress?.(pct);
     }
 
-    const pct = Math.round(10 + ((i + 1) / totalPages) * 80);
-    options.onProgress?.(pct);
+    const resultBytes = await outDoc.save();
+    options.onProgress?.(100);
+    return resultBytes;
+  } finally {
+    try {
+      await pdfJsDoc.destroy();
+    } catch {
+      // Ignore worker destruction errors
+    }
   }
-
-  const resultBytes = await outDoc.save();
-  options.onProgress?.(100);
-  return resultBytes;
 }

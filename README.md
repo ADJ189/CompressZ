@@ -399,6 +399,13 @@ CompressZ runs 100% client-side. See [LIMITATIONS.md](LIMITATIONS.md) for detail
 
 CompressZ has no backend. Files never leave your browser. See [PRIVACY.md](PRIVACY.md) (also live at [/privacy](https://compressz.pages.dev/privacy)) for full details.
 
+### Architecture & Policy Documentation
+- [docs/ENGINE_POLICY.md](docs/ENGINE_POLICY.md) — Comprehensive media, PDF, office, and archive engine specifications.
+- [docs/AI_ENGINE_POLICY.md](docs/AI_ENGINE_POLICY.md) — On-device AI/ML runtime, zero-cloud inference, and weight caching policy.
+- [docs/TELEMETRY_POLICY.md](docs/TELEMETRY_POLICY.md) — Error reporting, payload scrubbing pipeline, and opt-out controls.
+- [LIMITATIONS.md](LIMITATIONS.md) — Operational thresholds, WebAssembly memory ceilings, and 4 GiB ZIP boundaries.
+- [SECURITY.md](SECURITY.md) — Security model, local-first isolation, and vulnerability disclosure policy.
+
 ---
 
 ## Contributing & Standards

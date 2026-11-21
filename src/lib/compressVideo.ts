@@ -311,6 +311,7 @@ async function videoViaMediaRecorder(
   file: File,
   opts: CompressOptions,
   onProgress?: (pct: number) => void,
+  metadataTimeoutMs: number = 8000,
 ): Promise<CompressResult> {
   const meta = await getVideoMeta(file);
   const { width: ow, height: oh, duration } = meta;
@@ -347,6 +348,14 @@ async function videoViaMediaRecorder(
     types.find((t) => MediaRecorder.isTypeSupported(t)) ?? "video/webm";
 
   const url = URL.createObjectURL(file);
+  let urlRevoked = false;
+  const revokeUrl = () => {
+    if (!urlRevoked) {
+      urlRevoked = true;
+      URL.revokeObjectURL(url);
+    }
+  };
+
   // `muted` only silences local audio output — it does NOT affect the
   // track(s) returned by captureStream(), so we can keep the element muted
   // (required by autoplay policy in most browsers) while still capturing
@@ -356,8 +365,22 @@ async function videoViaMediaRecorder(
     muted: true,
     playsInline: true,
   });
-  await new Promise<void>((r) => {
-    vid.onloadedmetadata = () => r();
+  await new Promise<void>((r, rej) => {
+    const timer = setTimeout(() => {
+      vid.onloadedmetadata = null;
+      vid.onerror = null;
+      revokeUrl();
+      rej(new Error("Timeout loading video metadata in MediaRecorder fallback"));
+    }, metadataTimeoutMs);
+    vid.onloadedmetadata = () => {
+      clearTimeout(timer);
+      r();
+    };
+    vid.onerror = () => {
+      clearTimeout(timer);
+      revokeUrl();
+      rej(new Error("Failed to load video in MediaRecorder fallback"));
+    };
   });
 
   const canvas = document.createElement("canvas");
@@ -402,7 +425,7 @@ async function videoViaMediaRecorder(
   try {
     await vid.play();
   } catch (err) {
-    URL.revokeObjectURL(url);
+    revokeUrl();
     throw new Error(
       `MediaRecorder fallback could not start playback (autoplay blocked?): ${err}`,
       { cause: err },
@@ -415,47 +438,62 @@ async function videoViaMediaRecorder(
   // requestVideoFrameCallback fires once per actually-decoded frame and
   // hands back the frame's presentation time, so drawing there is frame-
   // accurate. Fall back to requestAnimationFrame on browsers without it.
-  await new Promise<void>((resolve) => {
-    let done = false;
-    const finish = () => {
-      if (!done) {
-        done = true;
-        resolve();
-      }
-    };
+  try {
+    await new Promise<void>((resolve) => {
+      let done = false;
+      const finish = () => {
+        if (!done) {
+          done = true;
+          resolve();
+        }
+      };
 
-    const drawAndReport = (currentTime: number) => {
-      ctx.drawImage(vid, 0, 0, w, h);
-      onProgress?.(5 + Math.round((currentTime / Math.max(duration, 1)) * 90));
-    };
+      const drawAndReport = (currentTime: number) => {
+        ctx.drawImage(vid, 0, 0, w, h);
+        onProgress?.(5 + Math.round((currentTime / Math.max(duration, 1)) * 90));
+      };
 
-    const rvfc = (vid as any).requestVideoFrameCallback?.bind(vid);
-    if (rvfc) {
-      const onFrame = (_now: number, metadata: { mediaTime: number }) => {
-        if (done) return;
-        drawAndReport(metadata.mediaTime);
+      const rvfc = (vid as any).requestVideoFrameCallback?.bind(vid);
+      if (rvfc) {
+        const onFrame = (_now: number, metadata: { mediaTime: number }) => {
+          if (done) return;
+          drawAndReport(metadata.mediaTime);
+          rvfc(onFrame);
+        };
         rvfc(onFrame);
-      };
-      rvfc(onFrame);
-    } else {
-      const onFrame = () => {
-        if (done) return;
-        drawAndReport(vid.currentTime);
+      } else {
+        const onFrame = () => {
+          if (done) return;
+          drawAndReport(vid.currentTime);
+          requestAnimationFrame(onFrame);
+        };
         requestAnimationFrame(onFrame);
-      };
-      requestAnimationFrame(onFrame);
+      }
+
+      vid.onended = finish;
+      setTimeout(finish, (duration + 5) * 1000);
+    });
+
+    rec.stop();
+    vid.pause();
+    revokeUrl();
+    await new Promise<void>((r) => {
+      rec.onstop = () => r();
+    });
+  } finally {
+    try {
+      vid.pause();
+    } catch {
+      /**/
     }
-
-    vid.onended = finish;
-    setTimeout(finish, (duration + 5) * 1000);
-  });
-
-  rec.stop();
-  vid.pause();
-  URL.revokeObjectURL(url);
-  await new Promise<void>((r) => {
-    rec.onstop = () => r();
-  });
+    try {
+      combinedStream?.getTracks()?.forEach((track) => track.stop());
+      videoStream?.getTracks()?.forEach((track) => track.stop());
+    } catch {
+      /**/
+    }
+    revokeUrl();
+  }
 
   const blob = new Blob(chunks, { type: mimeType });
   onProgress?.(100);
@@ -470,5 +508,7 @@ async function videoViaMediaRecorder(
     duration,
   };
 }
+
+export { videoViaMediaRecorder };
 
 

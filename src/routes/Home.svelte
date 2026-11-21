@@ -227,8 +227,7 @@
 
   <div id="wb-all" class="home-tools-grid cz-wb-quick">
     {#each TOOLS as tool}
-      <a
-        href="/{tool.route}"
+      <div
         class="htc cz-wb-quick__card cz-wb-all__card"
         data-t={tool.id}
         data-nav={tool.route}
@@ -237,7 +236,6 @@
         data-keywords={tool.keywords}
         data-wb-tool
         data-wb-quick
-        onclick={(e) => handleNav(tool.route, e)}
       >
         <div class="htc-head">
           <div class="htc-icon">
@@ -254,14 +252,19 @@
             <path d="M7 17L17 7M7 7h10v10"/>
           </svg>
         </div>
-        <div class="htc-name cz-wb-quick__name">{tool.name}</div>
+        <a
+          href="/{tool.route}"
+          class="htc-name cz-wb-quick__name htc-link"
+          data-nav={tool.route}
+          onclick={(e) => handleNav(tool.route, e)}
+        >{tool.name}</a>
         <div class="htc-desc cz-wb-quick__desc">{tool.desc}</div>
         <div class="htc-tags">
           {#each tool.tags as tag}
             <span class="htc-tag">{tag}</span>
           {/each}
         </div>
-      </a>
+      </div>
     {/each}
   </div>
 
@@ -291,7 +294,7 @@
   <div class="priv-highlight">
     <div class="ph-title">🔒 Your files never leave your device</div>
     <p class="ph-sub">
-      CompressZ has no backend servers. All compression, transcoding, and OCR processing takes place 100% locally using WebAssembly, WebCodecs, and HTML5 Web APIs. We don't collect personal data, run zero telemetry, and never touch your files.
+      CompressZ has no backend servers. All compression, transcoding, and OCR processing takes place 100% locally using WebAssembly, WebCodecs, and HTML5 Web APIs. Files never leave your device, with zero ad tracking. When anonymous error diagnostics are enabled, crash reports are sent to Sentry (which receives the user's public IP address with HTTP requests) without any file contents.
     </p>
     <div class="ph-actions">
       <a
