@@ -217,5 +217,34 @@ Deno.test("optimizeSvg: retains complete CDATA section containing script token w
   assert(text.includes("<text><![CDATA[<script ]]></text>"), "Output must retain the complete CDATA section including CDATA terminator");
 });
 
+Deno.test("optimizeSvg: handles SVG with URL-bearing DOCTYPE without infinite loop", async () => {
+  const svgWithDoctype = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+  <circle cx="50" cy="50" r="40" fill="red"/>
+</svg>`;
+
+  const { duration, text } = await optimizeWithTiming(svgWithDoctype, "doctype.svg");
+
+  assert(duration < 1000, `Processing SVG with DOCTYPE must be fast (<1000ms), took ${duration.toFixed(1)}ms`);
+  assert(text.includes("<!DOCTYPE svg PUBLIC"), "Must preserve DOCTYPE declaration");
+  assert(text.includes("http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"), "Must preserve DOCTYPE URL");
+  assert(text.includes("<circle"), "Must preserve circle element");
+});
+
+Deno.test("optimizeSvg: attribute scanner handles slashes in unquoted and standalone attributes without looping", async () => {
+  const svgWithSlashes = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+    <a href=http://example.com/test/pic.svg><text x="10" y="20">Link</text></a>
+    <rect width="50" height="50" / >
+  </svg>`;
+
+  const { duration, text } = await optimizeWithTiming(svgWithSlashes, "slashes.svg");
+
+  assert(duration < 1000, `Processing SVG with attribute slashes must be fast (<1000ms), took ${duration.toFixed(1)}ms`);
+  assert(text.includes("http://example.com/test/pic.svg"), "Must preserve unquoted URL containing slashes");
+  assert(text.includes("<rect"), "Must preserve rect element");
+});
+
+
 
 
