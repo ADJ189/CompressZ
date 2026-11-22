@@ -27,9 +27,43 @@ The suffix is dropped on the release that ships it (`1.12.0`).
   uses an embedded Noto Sans subset, so Latin, Cyrillic, Greek and Vietnamese
   are searchable; characters outside that coverage are reported instead of
   being drawn as tofu.
+- **Chaos, fuzz and stress test suite (`tests/chaos.test.ts`)**: 28 offline
+  tests that feed random, truncated and bit-flipped bytes to the ZIP, TAR,
+  gzip, SVG, Markdown and settings parsers, plus concurrency, batch, abort and
+  decompression-bomb stress cases. They assert only documented outcomes
+  (clean parse or descriptive `Error`) so a raw `RangeError`, hang or unhandled
+  rejection fails the suite.
 
 ### Fixed
 
+- **Archive readers no longer trust offsets or checksums**: `readZip` bounds-
+  checks the EOCD, central directory, local headers and entry data before
+  reading, and reports a truncated archive instead of throwing `RangeError`.
+  `readTar` now rejects a header whose checksum is present but wrong (while
+  still tolerating historic writers that leave it blank), counts GNU long-name
+  and PAX metadata payloads toward the byte budget, truncates UTF-8 names on a
+  character boundary, and rejects octal fields that overflow or are negative.
+- **Settings survive corrupted storage**: `mergeSettings()` type-checks and
+  range-clamps every persisted field, so a hand-edited or stale
+  `cz-settings-v2` can no longer inject numeric strings, unknown enum values or
+  out-of-range quality/concurrency into engine options. The PDF Suite profile
+  loader likewise accepts only a known encryption standard and one of the
+  offered render DPIs.
+- **SVG optimiser hardening**: named entities such as `&colon;` and
+  `&NewLine;` are decoded before the `javascript:`/`data:text/html` checks, so
+  they can no longer smuggle a script URL past the filter; hidden-element
+  detection only reads real `style`/`display`/`visibility` attributes (an
+  `aria-label="display:none"` no longer deletes visible content); and text
+  nodes are preserved verbatim instead of having decimals rounded and
+  whitespace collapsed.
+- **Markdown preview escaping**: image `alt` text is escaped exactly once, and
+  a rejected image cannot inject `-->` to close its fallback HTML comment early.
+- **Resource guard applies capacity changes immediately**: raising Batch
+  Concurrency while jobs are queued now drains them via `setCapacity()` instead
+  of leaving waiters orphaned until the next unrelated admission, and shrinking
+  a pool clamps queued weights to the live capacity.
+- **Gzip streaming no longer risks an unhandled rejection**: the writer promise
+  in `streamCompressBytes()` is settled even when the source stream errors.
 - **UI polish, responsive layout & accessibility (`Navigation.svelte`, `HubHeader.svelte`, `Convert.svelte`, `PdfSuite.svelte`, `index.html`, `init.ts`)**: Resolved top navigation label clipping on viewports <= 820px with smooth horizontal scrolling, scroll-snap, and CSS edge fade mask; converted HubHeader tool chips into a non-wrapping horizontal scroll strip; replaced emoji tofu and stray symbols with crisp vector `<MacIcon>` glyphs; removed all-caps "MACOS PRO", "POWERFUL", and "Inspector" badge framing; removed glued arrows from action links; enhanced accessibility with `role="tab"`, `role="group"`, `aria-selected`, `aria-pressed`, and `tabindex` attributes; added early theme initialization module in `init.ts` before DOM paint to prevent dark-mode white flashes; and added `<noscript>` fallback and a 10s splash screen watchdog recovery.
 - **Output fidelity & extraction improvements (`pdfToMarkdown.ts`, `markdownPreview.ts`, `cropPdf.ts`, `watermarkPdf.ts`, `excelToPdf.ts`, `common.ts`)**: Deduplicated page-break markers to strictly `pageCount - 1` delimiters; implemented cross-page repeated running header and footer detection; implemented HTML table and MathML equation generation; upgraded markdown preview to render multi-line math blocks, padded tables with escaped pipes, safe images, and protected code spans; preserved MediaBox during page cropping by targeting CropBox and TrimBox; corrected watermark placement by accounting for CropBox origin offsets; collected multi-run rich text strings in inline Excel cells; stripped invalid XML control characters across Office document generators; and guarded bundle zip downloads in standalone markdown mode.
 - **Convert page correctness (`Convert.svelte`)**: Persisted target formats in user profiles and restored them only when valid for the active category; clamped quality and scale DPI inputs; prevented route change listeners from clobbering active user formats; sanitized file drops by validating extensions across conversion categories and rejecting unsupported formats with an explanatory error toast; keyed conversion results by file instance to prevent prefix collisions; and wrapped batch execution in `try/finally` blocks so controls are never locked on failure.
