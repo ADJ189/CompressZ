@@ -387,6 +387,8 @@ function stripDocTypeInternalSubset(docType: string): string {
 
 const STANDARD_XML_ENTITIES = new Set(["amp", "lt", "gt", "quot", "apos"]);
 
+export const MAX_EXPANDED_SVG_BYTES = 4 * 1024 * 1024; // 4 MiB safety ceiling
+
 /**
  * Safely resolves supported entity definitions from DOCTYPE internal subsets
  * into document body and attributes before discarding the subset declarations,
@@ -475,13 +477,39 @@ export function resolveAndStripDocTypeEntities(svg: string): string {
   let before = svg.slice(0, tagStart);
   let after = svg.slice(docTypeEnd + 1);
 
-  // Resolve supported entity references in document body
-  for (const [name, val] of entities.entries()) {
-    if (STANDARD_XML_ENTITIES.has(name)) continue;
-    const refRegex = new RegExp(`&${name};`, "g");
-    after = after.replace(refRegex, val);
-    before = before.replace(refRegex, val);
+  // Calculate projected total size of all entity reference replacements before allocating strings.
+  // Rejects billion laughs and repeated reference expansion attacks before large memory allocations.
+  let projectedSize = before.length + cleanDocType.length + after.length;
+
+  for (const text of [before, after]) {
+    for (const m of text.matchAll(/&([a-zA-Z0-9_.-]+);/g)) {
+      const refName = m[1];
+      if (entities.has(refName) && !STANDARD_XML_ENTITIES.has(refName)) {
+        const val = entities.get(refName)!;
+        projectedSize += val.length - m[0].length;
+      }
+    }
   }
+
+  if (projectedSize > MAX_EXPANDED_SVG_BYTES) {
+    throw new Error(
+      `Projected entity expansion (${projectedSize} bytes) exceeded safety limit (${MAX_EXPANDED_SVG_BYTES} bytes)`,
+    );
+  }
+
+  // Resolve supported entity references in a single pass across document body
+  const replaceRefs = (text: string): string => {
+    return text.replace(/&([a-zA-Z0-9_.-]+);/g, (ref, refName) => {
+      if (STANDARD_XML_ENTITIES.has(refName)) return ref;
+      if (entities.has(refName)) {
+        return entities.get(refName)!;
+      }
+      return ref;
+    });
+  };
+
+  before = replaceRefs(before);
+  after = replaceRefs(after);
 
   return `${before}${cleanDocType}${after}`;
 }

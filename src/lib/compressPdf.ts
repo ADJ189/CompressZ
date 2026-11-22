@@ -475,6 +475,45 @@ export interface PageContentTextResult {
   text: string;
   bytesRead: number;
   truncated: boolean;
+  incomplete: boolean;
+}
+
+export function extractPdfFilterNames(filterObj: any, context?: any): string[] {
+  if (!filterObj) return [];
+  let resolved = filterObj;
+  if (context && (resolved?.constructor?.name === "PDFRef" || resolved?.objectNumber !== undefined)) {
+    try {
+      resolved = context.lookup(resolved);
+    } catch {
+      return [];
+    }
+  }
+  let items: any[];
+  if (typeof resolved?.asArray === "function") {
+    items = resolved.asArray();
+  } else if (Array.isArray(resolved?.array)) {
+    items = resolved.array;
+  } else if (Array.isArray(resolved)) {
+    items = resolved;
+  } else {
+    items = [resolved];
+  }
+
+  const names: string[] = [];
+  for (let entry of items) {
+    if (context && (entry?.constructor?.name === "PDFRef" || entry?.objectNumber !== undefined)) {
+      try {
+        entry = context.lookup(entry);
+      } catch {
+        /**/
+      }
+    }
+    const name = entry?.encodedName ?? entry?.name ?? entry?.toString?.() ?? "";
+    if (name) {
+      names.push(name);
+    }
+  }
+  return names;
 }
 
 export async function getPageContentText(
@@ -487,7 +526,7 @@ export async function getPageContentText(
     const contents =
       page.node.Contents?.() ??
       page.node.dict?.lookup?.(pdfDoc.context.obj("Contents"));
-    if (!contents) return { text: "", bytesRead: 0, truncated: false };
+    if (!contents) return { text: "", bytesRead: 0, truncated: false, incomplete: false };
 
     const streamItems: any[] = [];
     if (Array.isArray(contents)) {
@@ -503,16 +542,21 @@ export async function getPageContentText(
     let text = "";
     let totalBytes = 0;
     let truncated = false;
+    let incomplete = false;
 
     for (let item of streamItems) {
       if (totalBytes >= maxStreamBytes) {
         truncated = true;
+        incomplete = true;
         break;
       }
       if (item?.constructor?.name === "PDFRef" || item?.objectNumber !== undefined) {
         item = pdfDoc.context.lookup(item);
       }
-      if (!item) continue;
+      if (!item) {
+        incomplete = true;
+        continue;
+      }
 
       const remainingBytes = maxStreamBytes - totalBytes;
       let rawBytes: Uint8Array | null = null;
@@ -525,47 +569,70 @@ export async function getPageContentText(
 
       // DO NOT call decodePDFRawStream because it is unbounded and materializes
       // full decompression bombs in memory before capping. Instead, decode
-      // supported content filters incrementally up to remainingBytes.
+      // supported content filters incrementally up to remainingBytes in order.
       let decodedBytes: Uint8Array | null = null;
       const filterObj = item.dict?.lookup?.(pdfDoc.context.obj("Filter"));
-      const filterName =
-        filterObj?.encodedName ?? filterObj?.name ?? filterObj?.toString?.() ?? "";
-      const isFlate =
-        filterName === "/FlateDecode" ||
-        filterName === "FlateDecode" ||
-        (Array.isArray(filterObj) &&
-          filterObj.some(
-            (f: any) =>
-              f?.encodedName === "/FlateDecode" || f?.name === "FlateDecode",
-          ));
+      const filterNames = extractPdfFilterNames(filterObj, pdfDoc.context);
 
-      if (isFlate) {
-        decodedBytes = await decompressFlate(rawBytes, remainingBytes);
-      } else if (!filterObj || filterName === "" || filterName === "/None") {
-        decodedBytes = rawBytes.subarray(0, remainingBytes);
-      } else if (filterName === "/ASCIIHexDecode" || filterName === "ASCIIHexDecode") {
-        decodedBytes = decodeAsciiHex(rawBytes, remainingBytes);
+      let currentBytes: Uint8Array = rawBytes;
+      let failedOrUnsupported = false;
+
+      if (filterNames.length === 0) {
+        decodedBytes = currentBytes.subarray(0, remainingBytes);
       } else {
-        // Unsupported filter: skip rather than using an unbounded decoder
+        for (const rawName of filterNames) {
+          const norm = rawName.replace(/^\//, "");
+          if (norm === "" || norm === "None") {
+            continue;
+          } else if (norm === "ASCIIHexDecode") {
+            const next = decodeAsciiHex(currentBytes, remainingBytes);
+            if (!next) {
+              failedOrUnsupported = true;
+              break;
+            }
+            currentBytes = next;
+          } else if (norm === "FlateDecode") {
+            const next = await decompressFlate(currentBytes, remainingBytes);
+            if (!next) {
+              failedOrUnsupported = true;
+              break;
+            }
+            currentBytes = next;
+          } else {
+            // Unsupported filter (e.g. ASCII85Decode, LZWDecode):
+            // mark skipped stream as incomplete to avoid downsampling unknown placements
+            failedOrUnsupported = true;
+            break;
+          }
+        }
+        if (!failedOrUnsupported) {
+          decodedBytes = currentBytes;
+        }
+      }
+
+      if (failedOrUnsupported || !decodedBytes) {
+        incomplete = true;
         continue;
       }
 
-      if (decodedBytes && decodedBytes.length > 0) {
+      if (decodedBytes.length > 0) {
         if (decodedBytes.length >= remainingBytes) {
           truncated = true;
+          incomplete = true;
           decodedBytes = decodedBytes.subarray(0, remainingBytes);
         }
         totalBytes += decodedBytes.length;
         text += "\n" + new TextDecoder("latin1").decode(decodedBytes);
         if (totalBytes >= maxStreamBytes) {
           truncated = true;
+          incomplete = true;
           break;
         }
       }
     }
-    return { text, bytesRead: totalBytes, truncated };
+    return { text, bytesRead: totalBytes, truncated, incomplete };
   } catch {
-    return { text: "", bytesRead: 0, truncated: false };
+    return { text: "", bytesRead: 0, truncated: false, incomplete: true };
   }
 }
 
@@ -633,14 +700,14 @@ async function structuralCompress(
       MAX_PAGE_SCAN_STREAM_BYTES,
       MAX_PAGE_SCAN_TOTAL_BYTES - totalScannedBytes,
     );
-    const { text: streamText, bytesRead, truncated } = await getPageContentText(
+    const { text: streamText, bytesRead, truncated, incomplete } = await getPageContentText(
       page,
       pdfDoc,
       undefined,
       streamLimit,
     );
     totalScannedBytes += bytesRead;
-    if (truncated || bytesRead >= streamLimit) {
+    if (truncated || incomplete || bytesRead >= streamLimit) {
       scanComplete = false;
     } else {
       fullyScannedPages.add(p);
@@ -735,18 +802,17 @@ async function structuralCompress(
       const name = key.name ?? key.encodedName?.replace(/^\//, "");
 
       // If the scan was incomplete, verify whether this image's placements are fully known.
-      // Shared images (appearing on multiple pages) or images referenced on an un-scanned page
-      // must skip resizing to prevent blurriness.
-      if (!scanComplete) {
-        const pageSet = (refKey ? imagePageReferences.get(refKey) : null) ??
-          (name ? imagePageReferences.get(name) : null);
-        const isShared = pageSet ? pageSet.size > 1 : false;
-        const hasUnscannedPage = pageSet
-          ? Array.from(pageSet).some((idx) => !fullyScannedPages.has(idx))
-          : true;
-        if (isShared || hasUnscannedPage) {
-          continue;
-        }
+      // Any image referenced on a page that was not fully scanned must skip resizing
+      // to prevent shrinking and blurring due to unknown placement dimensions.
+      // Shared images (appearing on multiple pages) must also skip resizing if scan was incomplete.
+      const pageSet = (refKey ? imagePageReferences.get(refKey) : null) ??
+        (name ? imagePageReferences.get(name) : null);
+      const isShared = pageSet ? pageSet.size > 1 : false;
+      const hasUnscannedPage = pageSet
+        ? pageSet.size === 0 || Array.from(pageSet).some((idx) => !fullyScannedPages.has(idx))
+        : true;
+      if (hasUnscannedPage || (!scanComplete && isShared)) {
+        continue;
       }
 
       const drawnPlacements =

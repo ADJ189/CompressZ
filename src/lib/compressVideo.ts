@@ -398,6 +398,13 @@ async function videoViaMediaRecorder(
   let videoStream: MediaStream | null = null;
   let combinedStream: MediaStream | null = null;
   let rec: MediaRecorder | null = null;
+  let playbackTimer: any = null;
+  const clearPlaybackTimer = () => {
+    if (playbackTimer !== null) {
+      clearTimeout(playbackTimer);
+      playbackTimer = null;
+    }
+  };
   const chunks: Blob[] = [];
 
   try {
@@ -452,6 +459,7 @@ async function videoViaMediaRecorder(
     await new Promise<void>((resolve, reject) => {
       let done = false;
       const finish = () => {
+        clearPlaybackTimer();
         if (!done) {
           done = true;
           if (recorderError) {
@@ -468,11 +476,13 @@ async function videoViaMediaRecorder(
 
       const checkRecorder = () => {
         if (recorderError) {
+          clearPlaybackTimer();
           done = true;
           reject(recorderError);
           return false;
         }
         if (rec?.state === "inactive") {
+          clearPlaybackTimer();
           done = true;
           reject(
             new Error("MediaRecorder stopped unexpectedly before video playback completed"),
@@ -510,7 +520,7 @@ async function videoViaMediaRecorder(
       }
 
       vid.onended = finish;
-      setTimeout(finish, (duration + 5) * 1000);
+      playbackTimer = setTimeout(finish, (duration + 5) * 1000);
     });
 
     if (recorderError) {
@@ -536,6 +546,7 @@ async function videoViaMediaRecorder(
       };
     });
   } finally {
+    clearPlaybackTimer();
     try {
       if (rec && rec.state !== "inactive") {
         rec.stop();
