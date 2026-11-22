@@ -395,50 +395,53 @@ async function videoViaMediaRecorder(
   const ctx = get2D(canvas, "video");
 
   // FIX 2: merge canvas video stream with audio track from the video element
-  const videoStream = canvas.captureStream(opts.fps ?? 30);
-
-  // Try to get audio tracks from the hidden video element
-  let combinedStream = videoStream;
-  try {
-    const vidStream = (vid as any).captureStream?.() ?? null;
-    const audioTracks = vidStream?.getAudioTracks() ?? [];
-    if (audioTracks.length > 0) {
-      combinedStream = new MediaStream([
-        ...videoStream.getVideoTracks(),
-        ...audioTracks,
-      ]);
-    }
-  } catch {
-    /**/
-  }
-
-  const rec = new MediaRecorder(combinedStream, {
-    mimeType,
-    videoBitsPerSecond: bitrate,
-  });
+  let videoStream: MediaStream | null = null;
+  let combinedStream: MediaStream | null = null;
+  let rec: MediaRecorder | null = null;
   const chunks: Blob[] = [];
-  rec.ondataavailable = (e) => {
-    if (e.data.size > 0) chunks.push(e.data);
-  };
-  rec.start(250);
 
   try {
-    await vid.play();
-  } catch (err) {
-    revokeUrl();
-    throw new Error(
-      `MediaRecorder fallback could not start playback (autoplay blocked?): ${err}`,
-      { cause: err },
-    );
-  }
+    videoStream = canvas.captureStream(opts.fps ?? 30);
 
-  // `timeupdate` fires on a coarse, non-frame-aligned schedule (browsers
-  // throttle it to a few times per second), which produces duplicated /
-  // dropped frames and stutter when used to drive per-frame canvas capture.
-  // requestVideoFrameCallback fires once per actually-decoded frame and
-  // hands back the frame's presentation time, so drawing there is frame-
-  // accurate. Fall back to requestAnimationFrame on browsers without it.
-  try {
+    // Try to get audio tracks from the hidden video element
+    combinedStream = videoStream;
+    try {
+      const vidStream = (vid as any).captureStream?.() ?? null;
+      const audioTracks = vidStream?.getAudioTracks() ?? [];
+      if (audioTracks.length > 0) {
+        combinedStream = new MediaStream([
+          ...videoStream.getVideoTracks(),
+          ...audioTracks,
+        ]);
+      }
+    } catch {
+      /**/
+    }
+
+    rec = new MediaRecorder(combinedStream, {
+      mimeType,
+      videoBitsPerSecond: bitrate,
+    });
+    rec.ondataavailable = (e) => {
+      if (e.data.size > 0) chunks.push(e.data);
+    };
+    rec.start(250);
+
+    try {
+      await vid.play();
+    } catch (err) {
+      throw new Error(
+        `MediaRecorder fallback could not start playback (autoplay blocked?): ${err}`,
+        { cause: err },
+      );
+    }
+
+    // `timeupdate` fires on a coarse, non-frame-aligned schedule (browsers
+    // throttle it to a few times per second), which produces duplicated /
+    // dropped frames and stutter when used to drive per-frame canvas capture.
+    // requestVideoFrameCallback fires once per actually-decoded frame and
+    // hands back the frame's presentation time, so drawing there is frame-
+    // accurate. Fall back to requestAnimationFrame on browsers without it.
     await new Promise<void>((resolve) => {
       let done = false;
       const finish = () => {
@@ -474,13 +477,21 @@ async function videoViaMediaRecorder(
       setTimeout(finish, (duration + 5) * 1000);
     });
 
-    rec.stop();
-    vid.pause();
-    revokeUrl();
-    await new Promise<void>((r) => {
-      rec.onstop = () => r();
-    });
+    if (rec.state !== "inactive") {
+      rec.stop();
+      await new Promise<void>((r) => {
+        if (rec) rec.onstop = () => r();
+        else r();
+      });
+    }
   } finally {
+    try {
+      if (rec && rec.state !== "inactive") {
+        rec.stop();
+      }
+    } catch {
+      /**/
+    }
     try {
       vid.pause();
     } catch {

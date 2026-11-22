@@ -321,44 +321,94 @@ export function calculateTargetQuality(
   return Math.max(0.2, Math.min(0.92, jpegQuality * Math.min(1, targetRatio)));
 }
 
-async function decompressFlate(bytes: Uint8Array): Promise<Uint8Array> {
-  if (typeof process !== "undefined" && (process as any).versions?.node) {
-    try {
-      const zlibMod = "node:zlib";
-      const zlib = await import(/* @vite-ignore */ zlibMod);
-      return new Uint8Array(zlib.inflateSync(bytes));
-    } catch {
-      /**/
-    }
-  }
+export const MAX_PAGE_SCAN_STREAM_BYTES = 4 * 1024 * 1024; // 4 MiB limit per content stream
+export const MAX_PAGE_SCAN_TOTAL_BYTES = 32 * 1024 * 1024; // 32 MiB limit across all pages
+
+export async function decompressFlate(
+  bytes: Uint8Array,
+  maxBytes = MAX_PAGE_SCAN_STREAM_BYTES,
+): Promise<Uint8Array> {
   if (typeof DecompressionStream !== "undefined") {
     try {
       const ds = new DecompressionStream("deflate");
       const writer = ds.writable.getWriter();
-      void writer.write(bytes as any).catch(() => {});
-      void writer.close().catch(() => {});
-      const res = new Response(ds.readable);
-      return new Uint8Array(await res.arrayBuffer());
+      void (async () => {
+        try {
+          await writer.write(bytes as any);
+          await writer.close();
+        } catch {
+          /**/
+        }
+      })();
+      const reader = ds.readable.getReader();
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          if (maxBytes !== undefined && total + value.length > maxBytes) {
+            const allowed = maxBytes - total;
+            if (allowed > 0) {
+              chunks.push(value.subarray(0, allowed));
+            }
+            try {
+              await reader.cancel();
+            } catch {
+              /**/
+            }
+            break;
+          }
+          chunks.push(value);
+          total += value.length;
+        }
+      }
+      const totalLen = chunks.reduce((acc, c) => acc + c.length, 0);
+      const result = new Uint8Array(totalLen);
+      let offset = 0;
+      for (const c of chunks) {
+        result.set(c, offset);
+        offset += c.length;
+      }
+      return result;
     } catch {
       /**/
     }
   }
-  return bytes;
+  if (typeof process !== "undefined" && (process as any).versions?.node) {
+    try {
+      const zlibMod = "node:zlib";
+      const zlib = await import(/* @vite-ignore */ zlibMod);
+      const inflated = zlib.inflateSync(bytes, maxBytes ? { maxOutputLength: maxBytes } : undefined);
+      return new Uint8Array(inflated);
+    } catch {
+      /**/
+    }
+  }
+  return bytes.subarray(0, maxBytes);
 }
 
-async function getPageContentText(
+export interface PageContentTextResult {
+  text: string;
+  bytesRead: number;
+}
+
+export async function getPageContentText(
   page: any,
   pdfDoc: any,
   decodePDFRawStream?: any,
-): Promise<string> {
+  maxStreamBytes = MAX_PAGE_SCAN_STREAM_BYTES,
+): Promise<PageContentTextResult> {
   try {
     const contents =
       page.node.Contents?.() ??
       page.node.dict?.lookup?.(pdfDoc.context.obj("Contents"));
-    if (!contents) return "";
+    if (!contents) return { text: "", bytesRead: 0 };
 
     const streamItems: any[] = [];
-    if (typeof contents.asArray === "function" && Array.isArray(contents.asArray())) {
+    if (Array.isArray(contents)) {
+      streamItems.push(...contents);
+    } else if (typeof contents.asArray === "function" && Array.isArray(contents.asArray())) {
       streamItems.push(...contents.asArray());
     } else if (Array.isArray(contents.array)) {
       streamItems.push(...contents.array);
@@ -367,12 +417,15 @@ async function getPageContentText(
     }
 
     let text = "";
+    let totalBytes = 0;
     for (let item of streamItems) {
+      if (totalBytes >= maxStreamBytes) break;
       if (item?.constructor?.name === "PDFRef" || item?.objectNumber !== undefined) {
         item = pdfDoc.context.lookup(item);
       }
       if (!item) continue;
 
+      const remainingBytes = maxStreamBytes - totalBytes;
       let decodedBytes: Uint8Array | null = null;
       if (typeof decodePDFRawStream === "function") {
         try {
@@ -404,19 +457,26 @@ async function getPageContentText(
           filterName === "/FlateDecode" ||
           (Array.isArray(filterObj) && filterObj.some((f: any) => f?.encodedName === "/FlateDecode"))
         ) {
-          decodedBytes = await decompressFlate(rawBytes);
+          decodedBytes = await decompressFlate(rawBytes, remainingBytes);
         } else {
           decodedBytes = rawBytes;
         }
       }
 
       if (decodedBytes) {
+        if (decodedBytes.length > remainingBytes) {
+          decodedBytes = decodedBytes.subarray(0, remainingBytes);
+        }
+        totalBytes += decodedBytes.length;
         text += "\n" + new TextDecoder("latin1").decode(decodedBytes);
+        if (totalBytes >= maxStreamBytes) {
+          break;
+        }
       }
     }
-    return text;
+    return { text, bytesRead: totalBytes };
   } catch {
-    return "";
+    return { text: "", bytesRead: 0 };
   }
 }
 
@@ -446,9 +506,21 @@ async function structuralCompress(
   const drawnSizesByRef = new Map<string, DrawnDimension[]>();
   const drawnSizesByName = new Map<string, DrawnDimension[]>();
 
+  let totalScannedBytes = 0;
   for (let p = 0; p < total; p++) {
+    if (totalScannedBytes >= MAX_PAGE_SCAN_TOTAL_BYTES) break;
     const page = pages[p];
-    const streamText = await getPageContentText(page, pdfDoc, decodePDFRawStream);
+    const streamLimit = Math.min(
+      MAX_PAGE_SCAN_STREAM_BYTES,
+      MAX_PAGE_SCAN_TOTAL_BYTES - totalScannedBytes,
+    );
+    const { text: streamText, bytesRead } = await getPageContentText(
+      page,
+      pdfDoc,
+      decodePDFRawStream,
+      streamLimit,
+    );
+    totalScannedBytes += bytesRead;
     if (!streamText) continue;
 
     const pageDrawn = calculateImageDrawnSizes(streamText);

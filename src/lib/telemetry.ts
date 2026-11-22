@@ -104,13 +104,22 @@ export function scrubDiagnosticText(text: string): string {
 
   return text
     // Strip Windows drive paths (e.g. C:\Users\... or D:\Documents\...)
-    .replace(/[a-zA-Z]:\\[^"'\n\r\t<>]+/g, "[path]")
+    .replace(/[a-zA-Z]:\\[^"'\n\r\t<>:]+/g, "[path]")
     // Strip Unix-style paths
     .replace(/(?:\/[a-zA-Z0-9_.-]+){2,}/g, "[path]")
     // Strip double and single quoted strings (frequent container of raw user filenames)
     .replace(/"[^"\r\n]{1,250}"/g, '"[redacted]"')
     .replace(/'[^'\r\n]{1,250}'/g, "'[redacted]'")
-    // Strip filenames with extensions, including spaces, emoji, and non-ASCII / Unicode characters
+    // Strip filenames with extensions containing spaces after action verbs, prepositions, or delimiters
+    .replace(
+      /(?<=\b(?:process(?:ing)?|read(?:ing)?|load(?:ing)?|pars(?:e|ing|er)|open(?:ing)?|convert(?:ing)?|compress(?:ing)?|decod(?:e|ing|er)|handl(?:e|ing)|fetch(?:ing)?|in|on|at|for|from|into|with|file|document|image|photo|picture|audio|video|clip|archive|target|source|name|error|exception|failed|failure)\b[:\s]+)[^\r\n/\\:?*"<>|]{1,120}\.(?:heic|heif|mov|m4v|mp4|webm|mkv|avi|wav|mp3|flac|aac|ogg|pdf|docx|xlsx|pptx|odt|ods|odp|png|jpe?g|webp|gif|svg|tiff?|bmp|zip|tar|gz|7z|[a-zA-Z0-9]{2,6})\b/giu,
+      "[filename]",
+    )
+    .replace(
+      /(?<=^|[\r\n]|[:\-–—=\t(]\s*)[^\r\n/\\:?*"<>|]{1,120}\.(?:heic|heif|mov|m4v|mp4|webm|mkv|avi|wav|mp3|flac|aac|ogg|pdf|docx|xlsx|pptx|odt|ods|odp|png|jpe?g|webp|gif|svg|tiff?|bmp|zip|tar|gz|7z|[a-zA-Z0-9]{2,6})\b/giu,
+      "[filename]",
+    )
+    // Strip standalone filenames with extensions
     .replace(
       /(?:[^\s/\\:?*"<>|]{1,80})\.(?:heic|heif|mov|m4v|mp4|webm|mkv|avi|wav|mp3|flac|aac|ogg|pdf|docx|xlsx|pptx|odt|ods|odp|png|jpe?g|webp|gif|svg|tiff?|bmp|zip|tar|gz|7z|[a-zA-Z0-9]{2,6})\b/giu,
       "[filename]",

@@ -59,9 +59,9 @@ export async function streamCompressBytes(
   const total = bytes.length;
   let written = 0;
 
-  // Stream write in background. A reader-side failure (or an early cancel)
-  // closes the writable side and rejects this promise; attach a handler now so
-  // that rejection is never reported as unhandled.
+  // Stream write in background. Attach a rejection observer immediately to prevent
+  // unhandled rejection warnings, but preserve the writer promise's error for the final await.
+  let writerError: unknown = null;
   const writePromise = (async () => {
     for (let offset = 0; offset < total; offset += chunkSize) {
       const slice = bytes.subarray(offset, Math.min(total, offset + chunkSize));
@@ -70,20 +70,41 @@ export async function streamCompressBytes(
       onProgress?.(total > 0 ? (written / total) * 0.7 : 0.5);
     }
     await writer.close();
-  })().catch(() => {});
+  })();
+
+  writePromise.catch((err) => {
+    writerError = err;
+  });
 
   // Collect compressed chunks
   const outChunks: Uint8Array[] = [];
   let compressedTotal = 0;
 
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    outChunks.push(value);
-    compressedTotal += value.length;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      outChunks.push(value);
+      compressedTotal += value.length;
+    }
+  } catch (readerErr) {
+    try {
+      await writer.abort(readerErr);
+    } catch {
+      // Ignored: writer abort error
+    }
+    throw readerErr;
   }
 
-  await writePromise;
+  try {
+    await writePromise;
+  } catch (err) {
+    throw writerError ?? err;
+  }
+  if (writerError) {
+    throw writerError;
+  }
+
   onProgress?.(1.0);
 
   const combined = new Uint8Array(compressedTotal);

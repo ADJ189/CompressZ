@@ -249,7 +249,8 @@ export function isAllocationFailure(err: unknown): boolean {
 // ── Weighted semaphore ────────────────────────────────────────
 
 interface Waiter {
-  weight: number;
+  requestedWeight: number;
+  grantedWeight?: number;
   grant: () => void;
   fail: (err: unknown) => void;
   signal?: AbortSignal;
@@ -264,12 +265,6 @@ class WeightedSemaphore {
 
   setCapacity(n: number): void {
     this.capacity = Math.max(1, n);
-    // A queued request may have been sized for the old (larger) capacity.
-    // Without clamping it, a shrink to capacity 1 would leave a weight-2
-    // waiter permanently un-grantable because used + 2 > 1 forever.
-    for (const waiter of this.queue) {
-      waiter.weight = Math.min(waiter.weight, this.capacity);
-    }
     this.drain();
   }
 
@@ -279,14 +274,20 @@ class WeightedSemaphore {
 
   acquire(weight: number, signal?: AbortSignal): Promise<() => void> {
     if (signal?.aborted) return Promise.reject(abortError());
-    const w = Math.min(Math.max(1, weight), this.capacity);
+    const req = Math.max(1, weight);
     return new Promise((resolve, reject) => {
+      let released = false;
       const waiter: Waiter = {
-        weight: w,
-        // Read `waiter.weight` at release time: a capacity change may clamp a
-        // queued request before it is granted, and the released weight must
-        // match the weight that was actually acquired.
-        grant: () => resolve(() => this.release(waiter.weight)),
+        requestedWeight: req,
+        grant: () => {
+          const granted = waiter.grantedWeight ?? Math.min(req, this.capacity);
+          resolve(() => {
+            if (!released) {
+              released = true;
+              this.release(granted);
+            }
+          });
+        },
         fail: reject,
         signal,
       };
@@ -311,16 +312,23 @@ class WeightedSemaphore {
   private drain(): void {
     while (this.queue.length) {
       const next = this.queue[0];
-      if (this.used + next.weight > this.capacity) break;
+      // Compute effective weight against the current capacity so a shrink to 1
+      // does not leave a weight-2 waiter permanently ungrantable.
+      // Do not permanently mutate the waiter's requested weight.
+      const effectiveWeight = Math.min(next.requestedWeight, this.capacity);
+      if (this.used + effectiveWeight > this.capacity) break;
       this.queue.shift();
       if (next.signal && next.onAbort) {
         next.signal.removeEventListener('abort', next.onAbort);
       }
-      this.used += next.weight;
+      next.grantedWeight = effectiveWeight;
+      this.used += effectiveWeight;
       next.grant();
     }
   }
 }
+
+export { WeightedSemaphore };
 
 function abortError(): Error {
   const err = new Error('Job cancelled');

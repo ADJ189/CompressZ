@@ -20,6 +20,12 @@ export interface BatchFileItem {
 export const MAX_ZIP_BATCH_BYTES = MAX_ZIP_32_BYTES;
 export { exceedsZipLimit };
 
+/**
+ * Maximum total uncompressed payload memory budget for creating an in-memory ZIP archive in the browser.
+ * Batches exceeding this threshold fall back to individual direct downloads to prevent tab OOM crashes.
+ */
+export const MAX_ZIP_MEMORY_BUDGET = 512 * 1024 * 1024; // 512 MiB
+
 function triggerDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -43,10 +49,12 @@ export async function downloadBatch(
 
   // Pre-check total projected archive size including headers before allocating arrays and packaging.
   // Standard ZIP supports up to 0xfffe (65534) entries; 0xffff or more overflows the 16-bit entry count.
-  // If entry count reaches 0xffff or projected size exceeds the 32-bit (4 GiB) ZIP threshold, fall back immediately to
-  // individually accessible output downloads within the user gesture so the batch succeeds.
+  // If entry count reaches 0xffff, total size exceeds memory budget (512 MiB), or projected size exceeds
+  // the 32-bit (4 GiB) ZIP threshold, fall back immediately to individual downloads within user gesture.
+  const totalRawBytes = validItems.reduce((sum, item) => sum + item.blob.size, 0);
   if (
     validItems.length >= 0xffff ||
+    totalRawBytes > MAX_ZIP_MEMORY_BUDGET ||
     exceedsZipLimit(validItems.map((item) => ({ name: item.name, size: item.blob.size })))
   ) {
     for (const item of validItems) {
@@ -65,7 +73,7 @@ export async function downloadBatch(
     );
 
     const zipBytes = await writeZip(zipEntries);
-    const zipBlob = new Blob([new Uint8Array(zipBytes)], { type: "application/zip" });
+    const zipBlob = new Blob([zipBytes as unknown as BlobPart], { type: "application/zip" });
     const safeArchiveName = archiveName.endsWith(".zip")
       ? archiveName
       : `${archiveName}.zip`;

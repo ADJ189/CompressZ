@@ -113,13 +113,19 @@ const NAMED_ENTITIES: Record<string, string> = {
   verbar: "|",
 };
 
+function safeCodePoint(n: number): string {
+  return Number.isInteger(n) && n >= 0 && n <= 0x10FFFF
+    ? String.fromCodePoint(n)
+    : "\uFFFD";
+}
+
 function decodeEntities(value: string): string {
   return value
     .replace(/&#x([0-9a-f]+);?/gi, (_m: string, hex: string) =>
-      String.fromCodePoint(Number.parseInt(hex, 16)),
+      safeCodePoint(Number.parseInt(hex, 16)),
     )
     .replace(/&#(\d+);?/g, (_m: string, dec: string) =>
-      String.fromCodePoint(Number(dec)),
+      safeCodePoint(Number(dec)),
     )
     .replace(/&([a-z][a-z0-9]+);?/gi, (match: string, name: string) => {
       const decoded = NAMED_ENTITIES[name.toLowerCase()];
@@ -245,7 +251,8 @@ function cleanElementAttributes(tagAttrs: string): string {
       continue;
     }
 
-    // Neutralize javascript: and executable data URIs in href and xlink:href
+    // Neutralize javascript: and executable data URIs in href and xlink:href,
+    // and neutralize URI attributes containing unresolved entity references
     if (lowerAttrName === "href" || lowerAttrName === "xlink:href") {
       const decoded = decodeEntities(rawVal);
       let stripped = "";
@@ -254,7 +261,11 @@ function cleanElementAttributes(tagAttrs: string): string {
           stripped += decoded[c];
         }
       }
-      if (/^javascript:/i.test(stripped) || /^data:text\/(?:html|javascript)/i.test(stripped)) {
+      if (
+        /^javascript:/i.test(stripped) ||
+        /^data:text\/(?:html|javascript)/i.test(stripped) ||
+        /&[a-z][a-z0-9_.-]*;/i.test(decoded)
+      ) {
         out += `${rawAttrName}="#"`;
         continue;
       }
@@ -341,30 +352,142 @@ function shouldDiscardElement(tagName: string): boolean {
   );
 }
 
-function isElementHidden(tagAttrs: string): boolean {
-  // Inspect the `style` attribute (or a real display/visibility attribute),
-  // never the whole tag text: an unrelated attribute such as
-  // aria-label="display:none" used to make a visible element disappear.
-  const styleMatch = /(?<![-\w:])style\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(
-    tagAttrs,
-  );
-  if (styleMatch) {
-    const style = styleMatch[1] ?? styleMatch[2] ?? styleMatch[3] ?? "";
-    if (
-      /(?:^|;)\s*display\s*:\s*none(?:\s*!important)?\s*(?:;|$)/i.test(style) ||
-      /(?:^|;)\s*visibility\s*:\s*hidden(?:\s*!important)?\s*(?:;|$)/i.test(style)
-    ) {
-      return true;
+/**
+ * Strips internal subsets [...] containing entity declarations from DOCTYPE.
+ */
+function stripDocTypeInternalSubset(docType: string): string {
+  let inQuote: '"' | "'" | null = null;
+  let bracketStart = -1;
+  let bracketEnd = -1;
+
+  for (let i = 0; i < docType.length; i++) {
+    const ch = docType[i];
+    if (inQuote) {
+      if (ch === inQuote) inQuote = null;
+    } else if (ch === '"' || ch === "'") {
+      inQuote = ch;
+    } else if (ch === "[" && bracketStart === -1) {
+      bracketStart = i;
+    } else if (ch === "]" && bracketStart !== -1) {
+      bracketEnd = i;
+      break;
     }
   }
 
-  const displayAttr =
-    /(?<![-\w:])display\s*=\s*(?:"none"|'none'|none)(?=[\s/>]|$)/i.test(tagAttrs);
-  const visibilityAttr =
-    /(?<![-\w:])visibility\s*=\s*(?:"hidden"|'hidden'|hidden)(?=[\s/>]|$)/i.test(
-      tagAttrs,
-    );
-  return displayAttr || visibilityAttr;
+  if (bracketStart !== -1 && bracketEnd !== -1) {
+    const before = docType.slice(0, bracketStart).trimEnd();
+    const after = docType.slice(bracketEnd + 1).trimStart();
+    const afterClean = after.startsWith(">") ? ">" : ` ${after}`;
+    const joined = `${before}${afterClean}`.trim();
+    return joined.endsWith(">") ? joined : `${joined}>`;
+  }
+
+  return docType;
+}
+
+function isElementHidden(tagAttrs: string): boolean {
+  // Parse actual attribute names and values with an attribute scanner,
+  // never the whole tag string: an unrelated attribute such as
+  // aria-label='display="none" ' must not match and delete the element.
+  let i = 0;
+  const len = tagAttrs.length;
+
+  while (i < len) {
+    while (
+      i < len &&
+      (tagAttrs[i] === " " ||
+        tagAttrs[i] === "\t" ||
+        tagAttrs[i] === "\n" ||
+        tagAttrs[i] === "\r" ||
+        tagAttrs[i] === "/")
+    ) {
+      i++;
+    }
+    if (i >= len || tagAttrs[i] === ">") break;
+
+    const start = i;
+    while (
+      i < len &&
+      tagAttrs[i] !== " " &&
+      tagAttrs[i] !== "\t" &&
+      tagAttrs[i] !== "\n" &&
+      tagAttrs[i] !== "\r" &&
+      tagAttrs[i] !== "=" &&
+      tagAttrs[i] !== "/" &&
+      tagAttrs[i] !== ">"
+    ) {
+      i++;
+    }
+    const rawAttrName = tagAttrs.slice(start, i);
+    const lowerAttrName = rawAttrName.toLowerCase();
+
+    while (
+      i < len &&
+      (tagAttrs[i] === " " ||
+        tagAttrs[i] === "\t" ||
+        tagAttrs[i] === "\n" ||
+        tagAttrs[i] === "\r")
+    ) {
+      i++;
+    }
+
+    let rawVal = "";
+    if (i < len && tagAttrs[i] === "=") {
+      i++;
+      while (
+        i < len &&
+        (tagAttrs[i] === " " ||
+          tagAttrs[i] === "\t" ||
+          tagAttrs[i] === "\n" ||
+          tagAttrs[i] === "\r")
+      ) {
+        i++;
+      }
+      if (i < len && (tagAttrs[i] === '"' || tagAttrs[i] === "'")) {
+        const q = tagAttrs[i];
+        i++;
+        const valStart = i;
+        while (i < len && tagAttrs[i] !== q) {
+          i++;
+        }
+        rawVal = tagAttrs.slice(valStart, i);
+        if (i < len && tagAttrs[i] === q) {
+          i++;
+        }
+      } else {
+        const valStart = i;
+        while (
+          i < len &&
+          tagAttrs[i] !== " " &&
+          tagAttrs[i] !== "\t" &&
+          tagAttrs[i] !== "\n" &&
+          tagAttrs[i] !== "\r" &&
+          !(tagAttrs[i] === "/" && (i + 1 === len || tagAttrs[i + 1] === ">")) &&
+          tagAttrs[i] !== ">"
+        ) {
+          i++;
+        }
+        rawVal = tagAttrs.slice(valStart, i);
+      }
+    }
+
+    if (lowerAttrName === "display" && rawVal.trim().toLowerCase() === "none") {
+      return true;
+    }
+    if (lowerAttrName === "visibility" && rawVal.trim().toLowerCase() === "hidden") {
+      return true;
+    }
+    if (lowerAttrName === "style") {
+      if (
+        /(?:^|;)\s*display\s*:\s*none(?:\s*!important)?\s*(?:;|$)/i.test(rawVal) ||
+        /(?:^|;)\s*visibility\s*:\s*hidden(?:\s*!important)?\s*(?:;|$)/i.test(rawVal)
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -426,9 +549,20 @@ function processSvgLinear(svg: string): string {
       const docTypeEnd = findDocTypeEnd(svg, tagStart);
       const endPos = docTypeEnd === -1 ? len : docTypeEnd + 1;
       if (discardDepth === 0) {
-        chunks.push(svg.slice(tagStart, endPos));
+        const rawDocType = svg.slice(tagStart, endPos);
+        const cleanDocType = stripDocTypeInternalSubset(rawDocType);
+        if (cleanDocType) {
+          chunks.push(cleanDocType);
+        }
       }
       pos = endPos;
+      continue;
+    }
+
+    // Discard standalone <!ENTITY ... > declarations
+    if (/^<!entity\b/i.test(svg.slice(tagStart, tagStart + 9))) {
+      const tagEnd = findTagEnd(svg, tagStart);
+      pos = tagEnd === -1 ? len : tagEnd + 1;
       continue;
     }
 
