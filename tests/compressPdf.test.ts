@@ -250,3 +250,99 @@ Deno.test("compressPdf: production decoder path limits highly compressible Flate
   assertEquals(text.includes("/HugeImage"), true);
 });
 
+Deno.test("compressPdf: getPageContentText handles PDFArray filter chains (ASCIIHexDecode + FlateDecode)", async () => {
+  const rawText = "q 250 0 0 350 10 20 cm /TargetImage Do Q\n";
+  const rawBytes = new TextEncoder().encode(rawText);
+
+  // Compress with Flate
+  let compressed: Uint8Array;
+  if (typeof CompressionStream !== "undefined") {
+    const cs = new CompressionStream("deflate");
+    const writer = cs.writable.getWriter();
+    void (async () => {
+      await writer.write(rawBytes);
+      await writer.close();
+    })();
+    const reader = cs.readable.getReader();
+    const chunks: Uint8Array[] = [];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) chunks.push(value);
+    }
+    const len = chunks.reduce((s, c) => s + c.length, 0);
+    compressed = new Uint8Array(len);
+    let o = 0;
+    for (const c of chunks) {
+      compressed.set(c, o);
+      o += c.length;
+    }
+  } else {
+    return;
+  }
+
+  // Convert to ASCIIHex
+  let hexString = "";
+  for (let i = 0; i < compressed.length; i++) {
+    hexString += compressed[i].toString(16).padStart(2, "0");
+  }
+  hexString += ">";
+  const hexBytes = new TextEncoder().encode(hexString);
+
+  // Real PDFArray mock matching pdf-lib structure (not a JS Array)
+  class MockPDFArray {
+    asArray() {
+      return [{ encodedName: "/ASCIIHexDecode" }, { encodedName: "/FlateDecode" }];
+    }
+    get array() {
+      return this.asArray();
+    }
+  }
+
+  const mockItem = {
+    contents: hexBytes,
+    dict: {
+      lookup: () => new MockPDFArray(),
+    },
+  };
+  const mockPage = {
+    node: {
+      Contents: () => [mockItem],
+    },
+  };
+  const mockPdfDoc = {
+    context: {
+      obj: (v: string) => v,
+      lookup: (v: any) => v,
+    },
+  };
+
+  const res = await getPageContentText(mockPage, mockPdfDoc);
+  assertEquals(res.incomplete, false);
+  assertEquals(res.truncated, false);
+  assertEquals(res.text.includes("/TargetImage"), true);
+});
+
+Deno.test("compressPdf: getPageContentText marks incomplete: true on unsupported filter (e.g. ASCII85Decode)", async () => {
+  const mockItem = {
+    contents: new TextEncoder().encode("<~s4IA0~>"),
+    dict: {
+      lookup: () => ({ encodedName: "/ASCII85Decode" }),
+    },
+  };
+  const mockPage = {
+    node: {
+      Contents: () => [mockItem],
+    },
+  };
+  const mockPdfDoc = {
+    context: {
+      obj: (v: string) => v,
+      lookup: (v: any) => v,
+    },
+  };
+
+  const res = await getPageContentText(mockPage, mockPdfDoc);
+  assertEquals(res.incomplete, true);
+});
+

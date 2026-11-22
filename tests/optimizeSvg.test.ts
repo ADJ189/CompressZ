@@ -309,6 +309,46 @@ Deno.test("optimizeSvg: rejects external SYSTEM/PUBLIC DTD entities to prevent X
   assertEquals(threw, true);
 });
 
+Deno.test("optimizeSvg: rejects short document with repeated entity references exceeding projected expansion budget", async () => {
+  // A small document (~1.5 MB with references), but repeated &blob; references
+  // project to >5 MiB expansion, exceeding the 4 MiB limit before allocation.
+  const payloadChunk = "A".repeat(1000); // 1,000 bytes per entity replacement
+  const repeatedRefs = "&chunk;".repeat(5000); // 5000 * 1000 = 5,000,000 bytes > 4 MiB
+  const boomSvg = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE svg [
+  <!ENTITY chunk "${payloadChunk}">
+]>
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+  <text>${repeatedRefs}</text>
+</svg>`;
+
+  let threw = false;
+  try {
+    await optimize(boomSvg, "boom.svg");
+  } catch (err: any) {
+    threw = true;
+    assert(err.message.includes("exceeded safety limit"), "Must reject aggregate entity expansion");
+  }
+  assertEquals(threw, true);
+});
+
+Deno.test("optimizeSvg: expands repeated references to permitted entity within budget", async () => {
+  const item = "CompressZ";
+  const repeatedRefs = "&item; ".repeat(10);
+  const safeSvg = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE svg [
+  <!ENTITY item "${item}">
+]>
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+  <text>${repeatedRefs}</text>
+</svg>`;
+
+  const { text } = await optimize(safeSvg, "safe-repeat.svg");
+  assert(!text.includes("<!ENTITY"), "Entities must be stripped from DTD");
+  assert(!text.includes("&item;"), "All occurrences of &item; must be replaced");
+  assert(text.includes("CompressZ CompressZ"), "Entity replacements must be present in output");
+});
+
 
 
 
