@@ -84,12 +84,27 @@ Deno.test("telemetry: scrubDiagnosticText redacts paths, unfamiliar extensions, 
   // 1. Windows path and file with spaces
   const win = scrubDiagnosticText("Error reading C:\\Users\\Administrator\\Documents\\My Tax 2024.pdf: corrupt");
   assertEquals(win.includes("C:\\Users"), false);
+  assertEquals(win.includes("Administrator"), false);
+  assertEquals(win.includes("Documents"), false);
   assertEquals(win.includes("My Tax 2024.pdf"), false);
+  assertEquals(win.includes("My Tax"), false);
   assertEquals(win.includes("[path]"), true);
+
+  // Spaced Unix path with directory and file names containing spaces
+  const unix = scrubDiagnosticText("Error in /Users/jane doe/personal finances/Confidential Tax 2024.pdf: corrupt stream");
+  assertEquals(unix.includes("jane"), false);
+  assertEquals(unix.includes("doe"), false);
+  assertEquals(unix.includes("personal"), false);
+  assertEquals(unix.includes("finances"), false);
+  assertEquals(unix.includes("Confidential"), false);
+  assertEquals(unix.includes("Tax"), false);
+  assertEquals(unix.includes("2024"), false);
+  assertEquals(unix.includes("[path]"), true);
 
   const fileSpaces = scrubDiagnosticText("Failed to process My Tax 2024.pdf");
   assertEquals(fileSpaces.includes("My Tax 2024.pdf"), false);
   assertEquals(fileSpaces.includes("My Tax"), false);
+  assertEquals(fileSpaces.includes("2024"), false);
   assertEquals(fileSpaces.includes("[filename]"), true);
 
   // 2. Unfamiliar extensions (HEIC, HEIF, MOV, FLAC)
@@ -127,7 +142,7 @@ Deno.test("telemetry: sanitizeSentryEvent strips user, headers, URLs, and drops 
       message: 'Crash while processing "financial_data.xlsx"',
       exception: {
         values: [
-          { value: "Error in /home/user/private/notes.txt: parsing failed" },
+          { value: "Error in /Users/jane doe/personal finances/Confidential Tax 2024.pdf: parsing failed" },
         ],
       },
       extra: { leakedData: "secret" },
@@ -143,6 +158,15 @@ Deno.test("telemetry: sanitizeSentryEvent strips user, headers, URLs, and drops 
     assertEquals(sanitized?.extra, {});
     assertEquals(sanitized?.tags, {});
     assertEquals(sanitized?.message?.includes("financial_data.xlsx"), false);
+    const excVal = sanitized?.exception?.values?.[0]?.value ?? "";
+    assertEquals(excVal.includes("jane"), false);
+    assertEquals(excVal.includes("doe"), false);
+    assertEquals(excVal.includes("personal"), false);
+    assertEquals(excVal.includes("finances"), false);
+    assertEquals(excVal.includes("Confidential"), false);
+    assertEquals(excVal.includes("Tax"), false);
+    assertEquals(excVal.includes("2024"), false);
+    assertEquals(excVal.includes("[path]"), true);
     assertEquals(sanitized?.exception?.values?.[0]?.value?.includes("notes.txt"), false);
 
     // When opted out, sanitizeSentryEvent immediately drops the event (returns null)

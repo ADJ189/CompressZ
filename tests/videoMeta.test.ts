@@ -294,3 +294,130 @@ Deno.test("compressVideo: videoViaMediaRecorder stops recorder and capture track
     (globalThis as any).MediaRecorder = origMediaRecorder;
   }
 });
+
+Deno.test("compressVideo: videoViaMediaRecorder rejects when MediaRecorder errors or becomes inactive after start() before playback ends", async () => {
+  const revokedUrls: string[] = [];
+  let trackStopped = false;
+
+  const origCreate = URL.createObjectURL;
+  const origRevoke = URL.revokeObjectURL;
+  const origDoc = (globalThis as any).document;
+  const origNavDescriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  const origMediaRecorder = (globalThis as any).MediaRecorder;
+
+  try {
+    let createdCount = 0;
+    URL.createObjectURL = (_b: Blob) => `blob:mock-rec-fail-${++createdCount}`;
+    URL.revokeObjectURL = (u: string) => { revokedUrls.push(u); };
+
+    let activeRecorderInstance: any = null;
+    (globalThis as any).MediaRecorder = class MockFailingRecorder {
+      state = "recording";
+      ondataavailable: ((e: any) => void) | null = null;
+      onerror: ((e: any) => void) | null = null;
+      onstop: (() => void) | null = null;
+
+      constructor(_stream: any, _opts: any) {
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
+        activeRecorderInstance = this;
+      }
+      start(_timeslice?: number) {
+        this.state = "recording";
+      }
+      stop() {
+        this.state = "inactive";
+        this.onstop?.();
+      }
+      static isTypeSupported() {
+        return true;
+      }
+    };
+
+    (globalThis as any).document = {
+      createElement: (tag: string) => {
+        if (tag === "video") {
+          let loadedMetaListener: (() => void) | null = null;
+          return {
+            src: "",
+            preload: "",
+            muted: true,
+            playsInline: true,
+            videoWidth: 640,
+            videoHeight: 480,
+            duration: 1.0,
+            currentTime: 0,
+            set onloadedmetadata(fn: () => void) {
+              loadedMetaListener = fn;
+              setTimeout(() => { if (loadedMetaListener) loadedMetaListener(); }, 5);
+            },
+            play: () => {
+              // Simulate asynchronous error on MediaRecorder after start()
+              setTimeout(() => {
+                if (activeRecorderInstance) {
+                  activeRecorderInstance.state = "inactive";
+                  activeRecorderInstance.onerror?.({
+                    type: "error",
+                    error: new Error("Hardware encoder reset"),
+                  });
+                }
+              }, 10);
+              return Promise.resolve();
+            },
+            pause: () => {},
+            captureStream: () => ({
+              getVideoTracks: () => [
+                { stop: () => { trackStopped = true; } },
+              ],
+              getAudioTracks: () => [],
+            }),
+          };
+        }
+        if (tag === "canvas") {
+          return {
+            width: 0,
+            height: 0,
+            getContext: () => ({
+              drawImage: () => {},
+            }),
+            captureStream: () => ({
+              getVideoTracks: () => [
+                { stop: () => { trackStopped = true; } },
+              ],
+              getTracks: () => [
+                { stop: () => { trackStopped = true; } },
+              ],
+            }),
+          };
+        }
+        return {};
+      },
+    };
+
+    try {
+      Object.defineProperty(globalThis, "navigator", {
+        value: { userAgent: "Chrome" },
+        configurable: true,
+        writable: true,
+      });
+    } catch {
+      /**/
+    }
+
+    const file = new File(["dummy"], "test.mp4", { type: "video/mp4" });
+    await assertRejects(
+      () => videoViaMediaRecorder(file, {}),
+      "Hardware encoder reset",
+    );
+
+    assertEquals(trackStopped, true);
+    assertEquals(revokedUrls.includes("blob:mock-rec-fail-2"), true);
+  } finally {
+    URL.createObjectURL = origCreate;
+    URL.revokeObjectURL = origRevoke;
+    (globalThis as any).document = origDoc;
+    if (origNavDescriptor) {
+      Object.defineProperty(globalThis, "navigator", origNavDescriptor);
+    }
+    (globalThis as any).MediaRecorder = origMediaRecorder;
+  }
+});

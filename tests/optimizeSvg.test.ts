@@ -1,4 +1,4 @@
-import { assert } from "./assert.ts";
+import { assert, assertEquals } from "./assert.ts";
 import { optimizeSvg } from "../src/lib/optimizeSvg.ts";
 
 async function optimize(svg: string, fileName = "test.svg") {
@@ -270,6 +270,43 @@ Deno.test("optimizeSvg: does not delete visible element whose aria-label contain
   const { text } = await optimize(svg, "aria-display.svg");
 
   assert(text.includes("<circle"), "Must not delete element whose aria-label mentions display none");
+});
+
+Deno.test("optimizeSvg: resolves DOCTYPE entities before stripping definitions so SVG remains valid XML", async () => {
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE svg [
+  <!ENTITY label "Hello">
+  <!ENTITY author "CompressZ">
+]>
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+  <text>&label;</text>
+  <circle cx="50" cy="50" r="40" fill="blue" aria-label="&author;"/>
+</svg>`;
+
+  const { text } = await optimize(svg, "entity-resolve.svg");
+
+  assert(!text.includes("<!ENTITY"), "Entity declarations must be stripped from DOCTYPE");
+  assert(text.includes("<text>Hello</text>"), "Supported entity &label; must resolve to Hello");
+  assert(text.includes('aria-label="CompressZ"'), "Entity in attribute &author; must resolve to CompressZ");
+  assert(!text.includes("&label;"), "No unresolved &label; entity should remain");
+  assert(!text.includes("&author;"), "No unresolved &author; entity should remain");
+});
+
+Deno.test("optimizeSvg: rejects external SYSTEM/PUBLIC DTD entities to prevent XXE", async () => {
+  const xxeSvg = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE svg [
+  <!ENTITY % dtd SYSTEM "http://example.com/evil.dtd">
+]>
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"></svg>`;
+
+  let threw = false;
+  try {
+    await optimize(xxeSvg, "xxe.svg");
+  } catch (err: any) {
+    threw = true;
+    assert(err.message.includes("SYSTEM/PUBLIC"), "Must reject external DTD entities");
+  }
+  assertEquals(threw, true);
 });
 
 

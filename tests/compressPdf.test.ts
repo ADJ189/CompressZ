@@ -187,9 +187,66 @@ Deno.test("compressPdf: getPageContentText stops reading when decoded-byte limit
   };
 
   // With a limit of 25 bytes, it reads item1 up to 25 bytes and stops before item2
-  const { text, bytesRead } = await getPageContentText(mockPage, mockPdfDoc, undefined, 25);
+  const { text, bytesRead, truncated } = await getPageContentText(mockPage, mockPdfDoc, undefined, 25);
   assertEquals(bytesRead, 25);
+  assertEquals(truncated, true);
   assertEquals(text.includes("/Im1"), true);
   assertEquals(text.includes("/Im2"), false);
+});
+
+Deno.test("compressPdf: production decoder path limits highly compressible Flate stream incrementally", async () => {
+  // Create a highly compressible stream (e.g. 200,000 bytes repeating)
+  const expanded = new TextEncoder().encode("q 100 0 0 100 0 0 cm /HugeImage Do Q\n".repeat(5000)); // ~185,000 bytes
+  let compressedStream: Uint8Array;
+  if (typeof CompressionStream !== "undefined") {
+    const cs = new CompressionStream("deflate");
+    const writer = cs.writable.getWriter();
+    void (async () => {
+      await writer.write(expanded);
+      await writer.close();
+    })();
+    const reader = cs.readable.getReader();
+    const chunks: Uint8Array[] = [];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) chunks.push(value);
+    }
+    const len = chunks.reduce((s, c) => s + c.length, 0);
+    compressedStream = new Uint8Array(len);
+    let o = 0;
+    for (const c of chunks) {
+      compressedStream.set(c, o);
+      o += c.length;
+    }
+  } else {
+    return;
+  }
+
+  const mockItem = {
+    contents: compressedStream,
+    dict: {
+      lookup: () => ({ encodedName: "/FlateDecode" }),
+    },
+  };
+  const mockPage = {
+    node: {
+      Contents: () => [mockItem],
+    },
+  };
+  const mockPdfDoc = {
+    context: {
+      obj: (v: string) => v,
+      lookup: (v: any) => v,
+    },
+  };
+
+  // Decode with remaining budget of 500 bytes: must stop decoding and not expand the full 185 KB
+  const cap = 500;
+  const { text, bytesRead, truncated } = await getPageContentText(mockPage, mockPdfDoc, undefined, cap);
+  assertEquals(bytesRead, cap);
+  assertEquals(truncated, true);
+  assertEquals(text.length <= cap + 10, true);
+  assertEquals(text.includes("/HugeImage"), true);
 });
 
