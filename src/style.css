@@ -155,6 +155,157 @@
   --shadow-lg:    0 8px 32px rgba(0,0,0,.65);
   --shadow-xl:    0 20px 60px rgba(0,0,0,.75);
   --shadow-acc:   0 6px 24px rgba(99,102,241,.3);
+  --toast-success-bg:     #064e3b;
+  --toast-success-text:   #ecfdf5;
+  --toast-success-border: #059669;
+  --toast-error-bg:       #881337;
+  --toast-error-text:     #fff1f2;
+  --toast-error-border:   #e11d48;
+}
+
+/* ── Color Schemes ────────────────────────────────────────── */
+/* 1. Origin — Classic CompressZ/CompressF royal indigo & deep electric blue */
+[data-color-scheme="origin"] {
+  --accent:       #2563eb;
+  --accent-2:     #3b82f6;
+  --accent-soft:  rgba(37, 99, 235, 0.09);
+  --accent-glow:  rgba(37, 99, 235, 0.18);
+  --brand:        #2563eb;
+  --shadow-acc:   0 6px 24px rgba(37, 99, 235, 0.22);
+  --toast-success-bg:     #1e3a8a;
+  --toast-success-text:   #eff6ff;
+  --toast-success-border: #3b82f6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"])[data-color-scheme="origin"] {
+    --bg:           #090b14;
+    --bg2:          #0e111e;
+    --bg3:          #141829;
+    --surface:      #101424;
+    --surface2:     #161c33;
+    --border:       #1f2746;
+    --border-mid:   #2a355d;
+    --border-strong:#38467b;
+    --accent:       #3b82f6;
+    --accent-2:     #60a5fa;
+    --accent-soft:  rgba(59, 130, 246, 0.14);
+    --accent-glow:  rgba(59, 130, 246, 0.24);
+    --brand:        #3b82f6;
+    --shadow-acc:   0 6px 24px rgba(59, 130, 246, 0.3);
+    --toast-success-bg:     #172554;
+    --toast-success-text:   #eff6ff;
+    --toast-success-border: #2563eb;
+  }
+}
+[data-theme="dark"][data-color-scheme="origin"],
+[data-theme="dark"] [data-color-scheme="origin"] {
+  --bg:           #090b14;
+  --bg2:          #0e111e;
+  --bg3:          #141829;
+  --surface:      #101424;
+  --surface2:     #161c33;
+  --border:       #1f2746;
+  --border-mid:   #2a355d;
+  --border-strong:#38467b;
+  --accent:       #3b82f6;
+  --accent-2:     #60a5fa;
+  --accent-soft:  rgba(59, 130, 246, 0.14);
+  --accent-glow:  rgba(59, 130, 246, 0.24);
+  --brand:        #3b82f6;
+  --shadow-acc:   0 6px 24px rgba(59, 130, 246, 0.3);
+  --toast-success-bg:     #172554;
+  --toast-success-text:   #eff6ff;
+  --toast-success-border: #2563eb;
+}
+
+/* 2. Blood Moon — High-drama crimson, ruby & scarlet */
+[data-color-scheme="blood-moon"] {
+  --accent:       #be123c;
+  --accent-2:     #e11d48;
+  --accent-soft:  rgba(225, 29, 72, 0.09);
+  --accent-glow:  rgba(190, 18, 60, 0.18);
+  --brand:        #be123c;
+  --shadow-acc:   0 6px 24px rgba(190, 18, 60, 0.22);
+  --toast-success-bg:     #4c0519;
+  --toast-success-text:   #fff1f2;
+  --toast-success-border: #e11d48;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"])[data-color-scheme="blood-moon"] {
+    --bg:           #0d0608;
+    --bg2:          #130a0d;
+    --bg3:          #1a0d13;
+    --surface:      #15090f;
+    --surface2:     #1f0d17;
+    --border:       #331525;
+    --border-mid:   #451b32;
+    --border-strong:#5a2341;
+    --accent:       #f43f5e;
+    --accent-2:     #fb7185;
+    --accent-soft:  rgba(244, 63, 94, 0.14);
+    --accent-glow:  rgba(244, 63, 94, 0.24);
+    --brand:        #f43f5e;
+    --shadow-acc:   0 6px 24px rgba(244, 63, 94, 0.3);
+    --toast-success-bg:     #4c0519;
+    --toast-success-text:   #fff1f2;
+    --toast-success-border: #f43f5e;
+  }
+}
+[data-theme="dark"][data-color-scheme="blood-moon"],
+[data-theme="dark"] [data-color-scheme="blood-moon"] {
+  --bg:           #0d0608;
+  --bg2:          #130a0d;
+  --bg3:          #1a0d13;
+  --surface:      #15090f;
+  --surface2:     #1f0d17;
+  --border:       #331525;
+  --border-mid:   #451b32;
+  --border-strong:#5a2341;
+  --accent:       #f43f5e;
+  --accent-2:     #fb7185;
+  --accent-soft:  rgba(244, 63, 94, 0.14);
+  --accent-glow:  rgba(244, 63, 94, 0.24);
+  --brand:        #f43f5e;
+  --shadow-acc:   0 6px 24px rgba(244, 63, 94, 0.3);
+  --toast-success-bg:     #4c0519;
+  --toast-success-text:   #fff1f2;
+  --toast-success-border: #f43f5e;
+}
+
+/* 3. Polished (Default Emerald) explicit overrides */
+[data-color-scheme="polished"] {
+  --accent:       #059669;
+  --accent-2:     #10b981;
+  --accent-soft:  rgba(16, 185, 129, 0.09);
+  --accent-glow:  rgba(5, 150, 105, 0.18);
+  --brand:        #059669;
+  --shadow-acc:   0 6px 24px rgba(5, 150, 105, 0.22);
+  --toast-success-bg:     #064e3b;
+  --toast-success-text:   #ecfdf5;
+  --toast-success-border: #059669;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"])[data-color-scheme="polished"] {
+    --accent:       #10b981;
+    --accent-2:     #34d399;
+    --accent-soft:  rgba(16, 185, 129, 0.14);
+    --accent-glow:  rgba(16, 185, 129, 0.24);
+    --brand:        #10b981;
+    --toast-success-bg:     #064e3b;
+    --toast-success-text:   #ecfdf5;
+    --toast-success-border: #10b981;
+  }
+}
+[data-theme="dark"][data-color-scheme="polished"],
+[data-theme="dark"] [data-color-scheme="polished"] {
+  --accent:       #10b981;
+  --accent-2:     #34d399;
+  --accent-soft:  rgba(16, 185, 129, 0.14);
+  --accent-glow:  rgba(16, 185, 129, 0.24);
+  --brand:        #10b981;
+  --toast-success-bg:     #064e3b;
+  --toast-success-text:   #ecfdf5;
+  --toast-success-border: #10b981;
 }
 
 /* ── Reset ────────────────────────────────────────────────── */
@@ -711,11 +862,13 @@ img, svg { display: block; }
 .htc-arrow { color: var(--text-4); opacity: 0; transition: var(--t2); }
 .htc-name  { font-size: .95rem; font-weight: 700; color: var(--text); margin-bottom: .3rem; }
 .htc-desc  { font-size: .8rem; color: var(--text-3); line-height: 1.6; margin-bottom: .7rem; }
-.htc-tags  { display: flex; flex-wrap: wrap; gap: .3rem; }
+.htc-tags  { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: auto; }
 .htc-tag   {
-  padding: .15rem .45rem; border-radius: 5px;
-  font-size: .66rem; font-weight: 700; letter-spacing: .02em;
-  background: var(--bg2); border: 1px solid var(--border); color: var(--text-4);
+  padding: .2rem .55rem; border-radius: var(--r-sm, 6px);
+  font-family: var(--mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: .68rem; font-weight: 600; letter-spacing: .01em;
+  background: var(--surface2, var(--bg2)); border: 1px solid var(--border); color: var(--text-2, var(--text-3));
+  white-space: nowrap;
 }
 /* per-tool accent on icon */
 .htc[data-t="images"] .htc-icon { background:rgba(14,165,233,.08); border-color:rgba(14,165,233,.2); }
@@ -1176,8 +1329,16 @@ input[type="range"].slider::-webkit-slider-thumb:hover {
   box-shadow: var(--shadow-xl);
   pointer-events: none;
 }
-.toast-item.success { background: var(--green); color: #fff; }
-.toast-item.error   { background: var(--rose);  color: #fff; }
+.toast-item.success {
+  background: var(--toast-success-bg, #064e3b);
+  color: var(--toast-success-text, #ecfdf5);
+  border: 1px solid var(--toast-success-border, #059669);
+}
+.toast-item.error {
+  background: var(--toast-error-bg, #881337);
+  color: var(--toast-error-text, #fff1f2);
+  border: 1px solid var(--toast-error-border, #e11d48);
+}
 /* Informational toasts: neutral surface rather than an alarm colour, but still
    opaque enough to read over any page background. */
 .toast-item.info {
