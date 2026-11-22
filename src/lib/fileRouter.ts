@@ -15,6 +15,21 @@ export interface FileAction {
   hub: "pdf" | "convert" | "compress" | "ai";
 }
 
+export interface ConversionTarget {
+  id: string;
+  name: string;
+  format: string;
+  desc?: string;
+  badge?: string;
+  route: string;
+  hub: FileAction["hub"];
+}
+
+export interface ConversionGroup {
+  category: string;
+  targets: ConversionTarget[];
+}
+
 export type DetectedCategory =
   | "pdf"
   | "docx"
@@ -33,6 +48,7 @@ export interface DetectionResult {
   label: string;
   mime: string;
   actions: FileAction[];
+  conversionGroups?: ConversionGroup[];
 }
 
 type ActionTuple = [
@@ -265,6 +281,154 @@ const GENERIC_ACTIONS: ActionTuple[] = [
   ["convert-general", "Convert Format", "🔁", "Convert media or document container", "convert", "convert"],
 ];
 
+const PDF_CONVERSION_GROUPS: ConversionGroup[] = [
+  {
+    category: "Convert to Document & Office",
+    targets: [
+      { id: "pdf-to-word", name: "Word Document", format: "DOCX", route: "convert?from=pdf&to=docx", hub: "convert", badge: "Editable" },
+      { id: "pdf-to-excel", name: "Excel Spreadsheet", format: "XLSX", route: "convert?from=pdf&to=xlsx", hub: "convert", badge: "Tables" },
+      { id: "pdf-to-ppt", name: "PowerPoint Slides", format: "PPTX", route: "convert?from=pdf&to=pptx", hub: "convert" },
+      { id: "pdf-markdown", name: "Structured Markdown", format: "MD", route: "convert/pdf-markdown", hub: "ai", badge: "Tables & Math" },
+    ],
+  },
+  {
+    category: "Convert to Images",
+    targets: [
+      { id: "pdf-to-images-png", name: "Lossless PNG Pages", format: "PNG", route: "convert?from=pdf&to=images", hub: "convert" },
+      { id: "pdf-to-images-jpeg", name: "Compact JPEG Pages", format: "JPEG", route: "convert?from=pdf&to=images", hub: "convert" },
+    ],
+  },
+  {
+    category: "Essential PDF Workstation",
+    targets: [
+      { id: "compress-pdf", name: "Compress PDF", format: "PDF", route: "compress/pdf", hub: "compress", badge: "Structural" },
+      { id: "edit-sign", name: "Edit & Sign", format: "PDF", route: "pdf/edit", hub: "pdf" },
+      { id: "ocr-pdf", name: "Searchable OCR", format: "PDF", route: "compress/ocr", hub: "ai", badge: "Tesseract 5" },
+      { id: "split-pdf", name: "Split Pages", format: "PDF", route: "pdf/split", hub: "pdf" },
+      { id: "organize-pdf", name: "Organize & Rotate", format: "PDF", route: "pdf/organize", hub: "pdf" },
+      { id: "fill-forms", name: "Fill Forms", format: "PDF", route: "pdf/forms", hub: "pdf" },
+      { id: "protect-pdf", name: "Protect (AES-256)", format: "PDF", route: "pdf/protect", hub: "pdf" },
+      { id: "repair-pdf", name: "Repair Corrupt PDF", format: "PDF", route: "pdf/repair", hub: "pdf" },
+    ],
+  },
+];
+
+const VIDEO_CONVERSION_GROUPS: ConversionGroup[] = [
+  {
+    category: "Convert Video Format",
+    targets: [
+      { id: "video-to-mp4", name: "MP4 Video", format: "MP4", route: "convert?cat=video&to=mp4", hub: "convert", badge: "WebCodecs" },
+      { id: "video-to-webm", name: "WebM Video", format: "WebM", route: "convert?cat=video&to=webm", hub: "convert" },
+      { id: "video-to-mkv", name: "Matroska Video", format: "MKV", route: "convert?cat=video&to=mkv", hub: "convert" },
+    ],
+  },
+  {
+    category: "Animation & Audio Extraction",
+    targets: [
+      { id: "video-to-gif", name: "Animated GIF", format: "GIF", route: "compress/gif", hub: "compress", badge: "Two-Pass" },
+      { id: "video-to-mp3", name: "Extract MP3", format: "MP3", route: "convert?cat=audio&to=mp3", hub: "convert" },
+      { id: "video-to-aac", name: "Extract AAC", format: "AAC", route: "convert?cat=audio&to=aac", hub: "convert" },
+      { id: "video-to-opus", name: "Extract Opus", format: "Opus", route: "convert?cat=audio&to=opus", hub: "convert" },
+      { id: "video-to-wav", name: "Extract WAV", format: "WAV", route: "convert?cat=audio&to=wav", hub: "convert" },
+    ],
+  },
+  {
+    category: "Video Utilities",
+    targets: [
+      { id: "compress-video", name: "Compress Video", format: "Video", route: "compress/video", hub: "compress", badge: "Hardware Accel" },
+    ],
+  },
+];
+
+const AUDIO_CONVERSION_GROUPS: ConversionGroup[] = [
+  {
+    category: "Convert Audio Format",
+    targets: [
+      { id: "audio-to-mp3", name: "MP3 Audio", format: "MP3", route: "convert?cat=audio&to=mp3", hub: "convert", badge: "Universal" },
+      { id: "audio-to-aac", name: "AAC Audio", format: "AAC", route: "convert?cat=audio&to=aac", hub: "convert" },
+      { id: "audio-to-opus", name: "Opus Voice/Music", format: "Opus", route: "convert?cat=audio&to=opus", hub: "convert", badge: "High Efficiency" },
+      { id: "audio-to-flac", name: "FLAC Audio", format: "FLAC", route: "convert?cat=audio&to=flac", hub: "convert", badge: "Lossless" },
+      { id: "audio-to-wav", name: "WAV Audio", format: "WAV", route: "convert?cat=audio&to=wav", hub: "convert" },
+      { id: "audio-to-ogg", name: "Ogg Vorbis", format: "OGG", route: "convert?cat=audio&to=ogg", hub: "convert" },
+    ],
+  },
+  {
+    category: "Audio Processing",
+    targets: [
+      { id: "compress-audio", name: "Compress Audio", format: "Audio", route: "compress/audio", hub: "compress", badge: "Bitrate & Normalization" },
+    ],
+  },
+];
+
+const IMAGE_CONVERSION_GROUPS: ConversionGroup[] = [
+  {
+    category: "Convert Image Format",
+    targets: [
+      { id: "image-to-webp", name: "WebP Image", format: "WebP", route: "convert?cat=image&to=webp", hub: "convert", badge: "Recommended" },
+      { id: "image-to-avif", name: "AVIF Image", format: "AVIF", route: "convert?cat=image&to=avif", hub: "convert", badge: "Next-Gen" },
+      { id: "image-to-png", name: "PNG Image", format: "PNG", route: "convert?cat=image&to=png", hub: "convert", badge: "Lossless" },
+      { id: "image-to-jpeg", name: "JPEG Image", format: "JPEG", route: "convert?cat=image&to=jpg", hub: "convert" },
+    ],
+  },
+  {
+    category: "Document & Text Utilities",
+    targets: [
+      { id: "images-to-pdf", name: "Compile to PDF", format: "PDF", route: "compress/images-to-pdf", hub: "compress", badge: "Multi-Page" },
+      { id: "ocr-image", name: "Extract Text (OCR)", format: "TXT", route: "compress/ocr", hub: "ai", badge: "Neural OCR" },
+      { id: "compress-image", name: "Compress Image", format: "Image", route: "compress/images", hub: "compress", badge: "SSIM Guard" },
+    ],
+  },
+];
+
+const DOCX_CONVERSION_GROUPS: ConversionGroup[] = [
+  {
+    category: "Convert Document",
+    targets: [
+      { id: "docx-to-pdf", name: "PDF Document", format: "PDF", route: "convert?from=docx&to=pdf", hub: "convert", badge: "Recommended" },
+      { id: "docx-to-txt", name: "Plain Text", format: "TXT", route: "convert?from=docx&to=txt", hub: "convert" },
+    ],
+  },
+];
+
+const XLSX_CONVERSION_GROUPS: ConversionGroup[] = [
+  {
+    category: "Convert Spreadsheet",
+    targets: [
+      { id: "xlsx-to-pdf", name: "PDF Document", format: "PDF", route: "convert?from=xlsx&to=pdf", hub: "convert" },
+      { id: "xlsx-to-csv", name: "Comma-Separated Values", format: "CSV", route: "convert?from=xlsx&to=csv", hub: "convert", badge: "Standard" },
+    ],
+  },
+];
+
+const PPTX_CONVERSION_GROUPS: ConversionGroup[] = [
+  {
+    category: "Convert Presentation",
+    targets: [
+      { id: "pptx-to-pdf", name: "PDF Slides", format: "PDF", route: "convert?from=pptx&to=pdf", hub: "convert", badge: "Recommended" },
+      { id: "pptx-to-txt", name: "Slide Text", format: "TXT", route: "convert?from=pptx&to=txt", hub: "convert" },
+    ],
+  },
+];
+
+const HTML_CONVERSION_GROUPS: ConversionGroup[] = [
+  {
+    category: "Convert Web Document",
+    targets: [
+      { id: "convert-html-pdf", name: "PDF Document", format: "PDF", route: "convert?cat=html&to=pdf", hub: "convert", badge: "Vector Print" },
+    ],
+  },
+];
+
+const GENERIC_CONVERSION_GROUPS: ConversionGroup[] = [
+  {
+    category: "General Utilities",
+    targets: [
+      { id: "convert-general", name: "Convert Format", format: "Convert", route: "convert", hub: "convert" },
+      { id: "repair-general", name: "Attempt File Repair", format: "Repair", route: "pdf/repair", hub: "pdf" },
+    ],
+  },
+];
+
 /**
  * Universal detector: takes a File and optional pre-read header bytes,
  * returns identified category and all context-specific actions.
@@ -288,6 +452,7 @@ export function detectFileTypeAndActions(
       label: "PDF Document",
       mime: "application/pdf",
       actions: buildActions(PDF_ACTION_DEFS),
+      conversionGroups: PDF_CONVERSION_GROUPS,
     };
   }
 
@@ -306,17 +471,25 @@ export function detectFileTypeAndActions(
       actions: buildActions([
         ["convert-html-pdf", "Convert HTML to PDF", "📄", "Render responsive HTML document to vector PDF", "convert?cat=html", "convert"],
       ]),
+      conversionGroups: HTML_CONVERSION_GROUPS,
     };
   }
 
   // Check Office formats
   if (ext === "docx" || ext === "pptx" || ext === "xlsx") {
     const cfg = OFFICE_CONFIGS[ext];
+    const conversionGroups =
+      ext === "docx"
+        ? DOCX_CONVERSION_GROUPS
+        : ext === "xlsx"
+          ? XLSX_CONVERSION_GROUPS
+          : PPTX_CONVERSION_GROUPS;
     return {
       category: ext,
       label: cfg.label,
       mime: cfg.mime,
       actions: buildActions(cfg.actions),
+      conversionGroups,
     };
   }
 
@@ -333,6 +506,7 @@ export function detectFileTypeAndActions(
       label: "Image File",
       mime: file.type || "image/jpeg",
       actions: buildActions(IMAGE_ACTIONS),
+      conversionGroups: IMAGE_CONVERSION_GROUPS,
     };
   }
 
@@ -347,6 +521,7 @@ export function detectFileTypeAndActions(
       label: "Video File",
       mime: file.type || "video/mp4",
       actions: buildActions(VIDEO_ACTIONS),
+      conversionGroups: VIDEO_CONVERSION_GROUPS,
     };
   }
 
@@ -361,6 +536,7 @@ export function detectFileTypeAndActions(
       label: "Audio File",
       mime: file.type || "audio/mpeg",
       actions: buildActions(AUDIO_ACTIONS),
+      conversionGroups: AUDIO_CONVERSION_GROUPS,
     };
   }
 
@@ -370,6 +546,7 @@ export function detectFileTypeAndActions(
     label: "Generic File",
     mime: file.type || "application/octet-stream",
     actions: buildActions(GENERIC_ACTIONS),
+    conversionGroups: GENERIC_CONVERSION_GROUPS,
   };
 }
 
