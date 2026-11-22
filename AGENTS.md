@@ -125,10 +125,11 @@ src/components/            reusable UI atoms (Svelte 5)
   FileCard.svelte         compact job item with status, size & action
   FileQueue.svelte        ordered list of jobs with batch actions
   ProgressStatus.svelte   real-time progress bar and status line
-  HubHeader.svelte        unified horizontal scrolling hub tool strip
+  HubHeader.svelte        unified wrapped hub tool strip with zero sideways scrolling
   MacIcon.svelte          macOS-style vector icon glyphs & squircles
   ToolCard.svelte         rectangular interactive tool card with squircle icon
   ToolGrid.svelte         responsive CSS grid container for tool discovery
+  ActionPalette.svelte    CloudConvert-style universal upload modal with device acceleration & format matrix
 src/router.ts              History API router, dispatches to store
 src/store.ts               pure TypeScript reactive store (Svelte 5 contract)
 src/toast.ts               toast notifications
@@ -407,6 +408,17 @@ match. Several were previously wrong; don't regress them.
 - Theme preference is three-way (`light`/`dark`/`system`) in `lib/theme.ts`
   under the existing `theme` key. `data-theme` always receives the *resolved*
   value (`light`/`dark`), so `[data-theme="dark"]` rules stay valid.
+- Color scheme preference is three-way (`polished`/`origin`/`blood-moon`) in
+  `lib/theme.ts` under key `cz-color-scheme`. It controls `data-color-scheme`
+  on `document.documentElement` (`polished` = mint/emerald modern palette,
+  `origin` = classic royal blue/indigo palette, `blood-moon` = deep crimson/scarlet).
+  High-contrast toast notifications enforce APCA/WCAG contrast across all modes.
+- Universal Upload Hub (`ActionPalette.svelte` & `fileRouter.ts`):
+  Selecting or dropping any file in universal upload opens a CloudConvert-style
+  dialog displaying file metadata, resolved execution profile hints
+  (WebCodecs GPU / WebGL2 / WASM SIMD, worker count), categorized target format
+  matrices (`PDF → DOCX/XLSX/PPTX/MD`, `Video → MP4/WebM/MKV/GIF/Audio`, etc.),
+  and direct 1-click action cards. All conversions and staging remain 100% offline.
 
 ## Adaptive Resource Guard
 

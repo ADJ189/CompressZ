@@ -118,6 +118,8 @@ CompressZ stores these keys in your browser's `localStorage`:
 
 - `theme` — your appearance preference: `light`, `dark`, or `system`
   (follow the operating system).
+- `cz-color-scheme` — the active color palette: `polished` (emerald),
+  `origin` (classic royal blue), or `blood-moon` (crimson scarlet).
 - `cz-settings-v2` — engine defaults, GPU toggles, the Adaptive Resource
   Guard mode and limits, local-AI options, and whether contextual
   suggestions are enabled.

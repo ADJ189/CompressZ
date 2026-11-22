@@ -17,6 +17,10 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 
 ### Added
 
+- **Multi-Theme Color Schemes (`lib/theme.ts`, `style.css`, `public/earlyTheme.js`, `SettingsDialog.svelte`)**: Introduced selectable color schemes—`Polished` (mint/emerald, default), `Origin` (classic blue/indigo), and `Blood Moon` (crimson/scarlet)—with `cz-color-scheme` persistence, early synchronous paint to eliminate theme flicker, and high-contrast semantic toast styling that guarantees APCA and WCAG compliance across all modes.
+- **CloudConvert-Style Universal Upload Modal (`ActionPalette.svelte`, `fileRouter.ts`)**: Upgraded the universal file drop palette into a comprehensive conversion hub. Displays file metadata, device-aware execution profile hints (WebCodecs GPU, WebGL2, WASM SIMD, concurrency), categorized target format matrices (PDF to Office/Images/Utilities, Video to MP4/WebM/MKV/GIF/Audio, etc.), and direct 1-click action cards.
+- **Wrapped Top Tool Header (`HubHeader.svelte`)**: Eliminated single-row horizontal scrolling in top tool collection strips in favor of responsive, multi-line wrapped chips with zero sideways scrolling.
+- **Refined Feature Badges (`Home.svelte`, `ToolCard.svelte`)**: Replaced cluttered 5–6 pill dumps with 1–2 high-signal capability badges using monospace typography, subtle borders, and balanced spacing.
 - **Interactive Tool-First Landing Pages & Card Grids (`ToolCard.svelte`, `ToolGrid.svelte`, `PdfSuite.svelte`, `Convert.svelte`, `ToolsMegaMenu.svelte`, `tests/toolLanding.test.ts`)**: Transformed PDF Suite and Multi-Format Convert workstations into tool-first landing experiences. Users can now browse and select any tool upfront from interactive rectangular card grids featuring authentic macOS squircle icons, plain-English naming (e.g., "Split PDF", "Password Protect", "Fill & Sign", "PDF to Office Documents", "Word to PDF", "Edit & Annotate", "Crop Pages", "Redact Content", "Repair File", "Extract to Markdown"), badges, and descriptions before uploading a file. Selecting any tool dynamically focuses and scopes the target dropzone, with full keyboard accessibility (`role="button"`, `tabindex="0"`, `:focus-visible`, Enter/Space keydown handling) and Hallmark CSS floor compliance. Standardized plain-English tool naming across `ToolsMegaMenu.svelte` and ensured pre-upload category and format tuning controls seamlessly preserve state across browser reloads.
 - **Legible Engine Failures (`engineError.ts`)**: Replaced generic error messages with informative, engine-specific diagnostic reports (`EngineError`) across FFmpeg, QPDF, PDF.js, pdf-lib, and Tesseract. Failures carry process exit codes and bounded logs rendered in expandable "Details" blocks on file cards and toasts.
 - **Searchable PDF output for OCR (`searchablePdf.ts`)**: printed-text OCR now
@@ -36,6 +40,11 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 
 ### Fixed
 
+- **Firefox E2E Test Isolation (`playwright.config.ts`)**: Added `-no-remote` to Firefox launch options to prevent Playwright instances from connecting to host Firefox processes and causing "could not find profile folder" errors.
+- **AI Sort Queue Reconciliation (`ImagesToPdf.svelte`)**: Asynchronous AI model classification results now reconcile against the live queue, preserving user additions, deletions, and clears while sorting.
+- **PDF Decoder Boundary Hardening (`compressPdf.ts`)**: Strictly enforced ISO 32000-1 §7.4.2 in `decodeAsciiHex` and handled decompression errors in `decompressFlateNode`, marking incomplete scans to prevent over-downsampling.
+- **Hardened SVG Entity Resolution (`optimizeSvg.ts`)**: Safely resolved internal entity declarations before stripping, neutralized entity-defined `javascript:` URLs, and enforced memory expansion limits.
+- **Search Keyword Collision (`Home.svelte`)**: Removed substring collisions from search keywords to ensure exact tool filtering.
 - **Archive readers no longer trust offsets or checksums**: `readZip` bounds-
   checks the EOCD, central directory, local headers and entry data before
   reading, and reports a truncated archive instead of throwing `RangeError`.
