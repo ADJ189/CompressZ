@@ -385,6 +385,107 @@ function stripDocTypeInternalSubset(docType: string): string {
   return docType;
 }
 
+const STANDARD_XML_ENTITIES = new Set(["amp", "lt", "gt", "quot", "apos"]);
+
+/**
+ * Safely resolves supported entity definitions from DOCTYPE internal subsets
+ * into document body and attributes before discarding the subset declarations,
+ * ensuring the resulting SVG remains valid XML that can open without error.
+ * Rejects external entities (SYSTEM/PUBLIC) to prevent XXE.
+ */
+export function resolveAndStripDocTypeEntities(svg: string): string {
+  const docTypeMatch = svg.match(/<!doctype\b/i);
+  if (!docTypeMatch || docTypeMatch.index === undefined) {
+    return svg;
+  }
+
+  const tagStart = docTypeMatch.index;
+  const docTypeEnd = findDocTypeEnd(svg, tagStart);
+  if (docTypeEnd === -1) return svg;
+
+  const rawDocType = svg.slice(tagStart, docTypeEnd + 1);
+
+  // Check for internal subset [...]
+  let inQuote: '"' | "'" | null = null;
+  let bracketStart = -1;
+  let bracketEnd = -1;
+
+  for (let i = 0; i < rawDocType.length; i++) {
+    const ch = rawDocType[i];
+    if (inQuote) {
+      if (ch === inQuote) inQuote = null;
+    } else if (ch === '"' || ch === "'") {
+      inQuote = ch;
+    } else if (ch === "[" && bracketStart === -1) {
+      bracketStart = i;
+    } else if (ch === "]" && bracketStart !== -1) {
+      bracketEnd = i;
+      break;
+    }
+  }
+
+  if (bracketStart === -1 || bracketEnd === -1) {
+    return svg;
+  }
+
+  const internalSubset = rawDocType.slice(bracketStart + 1, bracketEnd);
+
+  // Reject unsupported external entities (SYSTEM or PUBLIC) to prevent XXE
+  if (/\b(SYSTEM|PUBLIC)\b/i.test(internalSubset)) {
+    throw new Error("External DTD entities (SYSTEM/PUBLIC) are not supported in SVG");
+  }
+
+  // Parse supported internal <!ENTITY name "value">
+  const entityRegex = /<!ENTITY\s+([a-zA-Z0-9_.-]+)\s*(?:"([^"]*)"|'([^']*)')\s*>/gi;
+  const entities = new Map<string, string>();
+  let match: RegExpExecArray | null;
+  while ((match = entityRegex.exec(internalSubset)) !== null) {
+    const name = match[1];
+    const val = match[2] ?? match[3] ?? "";
+    entities.set(name, val);
+  }
+
+  // Expand entity values that reference other entities (up to 3 levels, bounded size)
+  for (let pass = 0; pass < 3; pass++) {
+    let changed = false;
+    for (const [name, val] of entities.entries()) {
+      const newVal = val.replace(/&([a-zA-Z0-9_.-]+);/g, (ref, refName) => {
+        if (STANDARD_XML_ENTITIES.has(refName)) return ref;
+        if (refName === name) {
+          throw new Error("Circular entity reference detected in SVG DTD");
+        }
+        if (entities.has(refName)) {
+          changed = true;
+          return entities.get(refName)!;
+        }
+        return ref;
+      });
+      if (newVal.length > 50_000) {
+        throw new Error("Entity expansion exceeded safety limit in SVG DTD");
+      }
+      if (newVal !== val) {
+        entities.set(name, newVal);
+      }
+    }
+    if (!changed) break;
+  }
+
+  // Clean DOCTYPE of internal subset
+  const cleanDocType = stripDocTypeInternalSubset(rawDocType);
+  let before = svg.slice(0, tagStart);
+  let after = svg.slice(docTypeEnd + 1);
+
+  // Resolve supported entity references in document body
+  for (const [name, val] of entities.entries()) {
+    if (STANDARD_XML_ENTITIES.has(name)) continue;
+    const refRegex = new RegExp(`&${name};`, "g");
+    after = after.replace(refRegex, val);
+    before = before.replace(refRegex, val);
+  }
+
+  return `${before}${cleanDocType}${after}`;
+}
+
 function isElementHidden(tagAttrs: string): boolean {
   // Parse actual attribute names and values with an attribute scanner,
   // never the whole tag string: an unrelated attribute such as
@@ -496,7 +597,8 @@ function isElementHidden(tagAttrs: string): boolean {
  * - Leaves text nodes completely untouched, protecting user visible text (e.g. onload=).
  * - Discards <script>, <foreignObject>, <metadata>, editor tags, and hidden elements.
  */
-function processSvgLinear(svg: string): string {
+function processSvgLinear(rawSvg: string): string {
+  const svg = resolveAndStripDocTypeEntities(rawSvg);
   const chunks: string[] = [];
   let pos = 0;
   const len = svg.length;

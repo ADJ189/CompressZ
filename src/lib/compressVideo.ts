@@ -418,12 +418,19 @@ async function videoViaMediaRecorder(
       /**/
     }
 
+    let recorderError: Error | null = null;
     rec = new MediaRecorder(combinedStream, {
       mimeType,
       videoBitsPerSecond: bitrate,
     });
     rec.ondataavailable = (e) => {
       if (e.data.size > 0) chunks.push(e.data);
+    };
+    rec.onerror = (e: any) => {
+      recorderError =
+        e?.error instanceof Error
+          ? e.error
+          : new Error(`MediaRecorder error: ${e?.error?.message ?? e?.message ?? "recording failed"}`);
     };
     rec.start(250);
 
@@ -442,16 +449,41 @@ async function videoViaMediaRecorder(
     // requestVideoFrameCallback fires once per actually-decoded frame and
     // hands back the frame's presentation time, so drawing there is frame-
     // accurate. Fall back to requestAnimationFrame on browsers without it.
-    await new Promise<void>((resolve) => {
+    await new Promise<void>((resolve, reject) => {
       let done = false;
       const finish = () => {
         if (!done) {
           done = true;
-          resolve();
+          if (recorderError) {
+            reject(recorderError);
+          } else if (rec?.state === "inactive") {
+            reject(
+              new Error("MediaRecorder stopped unexpectedly before video playback completed"),
+            );
+          } else {
+            resolve();
+          }
         }
       };
 
+      const checkRecorder = () => {
+        if (recorderError) {
+          done = true;
+          reject(recorderError);
+          return false;
+        }
+        if (rec?.state === "inactive") {
+          done = true;
+          reject(
+            new Error("MediaRecorder stopped unexpectedly before video playback completed"),
+          );
+          return false;
+        }
+        return true;
+      };
+
       const drawAndReport = (currentTime: number) => {
+        if (!checkRecorder()) return;
         ctx.drawImage(vid, 0, 0, w, h);
         onProgress?.(5 + Math.round((currentTime / Math.max(duration, 1)) * 90));
       };
@@ -461,29 +493,48 @@ async function videoViaMediaRecorder(
         const onFrame = (_now: number, metadata: { mediaTime: number }) => {
           if (done) return;
           drawAndReport(metadata.mediaTime);
-          rvfc(onFrame);
+          if (!done) rvfc(onFrame);
         };
         rvfc(onFrame);
       } else {
+        const raf =
+          typeof requestAnimationFrame === "function"
+            ? requestAnimationFrame
+            : (cb: () => void) => setTimeout(cb, 16);
         const onFrame = () => {
           if (done) return;
           drawAndReport(vid.currentTime);
-          requestAnimationFrame(onFrame);
+          if (!done) raf(onFrame);
         };
-        requestAnimationFrame(onFrame);
+        raf(onFrame);
       }
 
       vid.onended = finish;
       setTimeout(finish, (duration + 5) * 1000);
     });
 
-    if (rec.state !== "inactive") {
-      rec.stop();
-      await new Promise<void>((r) => {
-        if (rec) rec.onstop = () => r();
-        else r();
-      });
+    if (recorderError) {
+      throw recorderError;
     }
+    if (rec.state === "inactive") {
+      throw new Error("MediaRecorder stopped unexpectedly before video playback completed");
+    }
+
+    rec.stop();
+    await new Promise<void>((resolve, reject) => {
+      if (!rec) return resolve();
+      rec.onstop = () => {
+        if (recorderError) reject(recorderError);
+        else resolve();
+      };
+      rec.onerror = (e: any) => {
+        reject(
+          e?.error instanceof Error
+            ? e.error
+            : new Error(`MediaRecorder error: ${e?.error?.message ?? e?.message ?? "recording failed"}`),
+        );
+      };
+    });
   } finally {
     try {
       if (rec && rec.state !== "inactive") {
@@ -504,6 +555,10 @@ async function videoViaMediaRecorder(
       /**/
     }
     revokeUrl();
+  }
+
+  if (chunks.length === 0) {
+    throw new Error("MediaRecorder produced no video data");
   }
 
   const blob = new Blob(chunks, { type: mimeType });

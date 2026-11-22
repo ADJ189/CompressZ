@@ -324,66 +324,149 @@ export function calculateTargetQuality(
 export const MAX_PAGE_SCAN_STREAM_BYTES = 4 * 1024 * 1024; // 4 MiB limit per content stream
 export const MAX_PAGE_SCAN_TOTAL_BYTES = 32 * 1024 * 1024; // 32 MiB limit across all pages
 
+function concatChunks(chunks: Uint8Array[], total: number): Uint8Array {
+  const result = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) {
+    result.set(c, offset);
+    offset += c.length;
+  }
+  return result;
+}
+
+async function decompressFlateWeb(
+  bytes: Uint8Array,
+  maxBytes: number,
+  format: "deflate" | "deflate-raw",
+): Promise<Uint8Array | null> {
+  try {
+    const ds = new DecompressionStream(format);
+    const writer = ds.writable.getWriter();
+    void (async () => {
+      try {
+        await writer.write(bytes as any);
+        await writer.close();
+      } catch {
+        /**/
+      }
+    })();
+    const reader = ds.readable.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        if (total + value.length > maxBytes) {
+          const allowed = maxBytes - total;
+          if (allowed > 0) {
+            chunks.push(value.subarray(0, allowed));
+            total += allowed;
+          }
+          try {
+            await reader.cancel();
+          } catch {
+            /**/
+          }
+          break;
+        }
+        chunks.push(value);
+        total += value.length;
+      }
+    }
+    return concatChunks(chunks, total);
+  } catch {
+    return null;
+  }
+}
+
+async function decompressFlateNode(
+  bytes: Uint8Array,
+  maxBytes: number,
+): Promise<Uint8Array | null> {
+  try {
+    const zlibMod = "node:zlib";
+    const zlib = await import(/* @vite-ignore */ zlibMod);
+    return await new Promise<Uint8Array>((resolve) => {
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      const inf = zlib.createInflate();
+      inf.on("data", (chunk: any) => {
+        if (total < maxBytes) {
+          const take = Math.min(chunk.length, maxBytes - total);
+          chunks.push(new Uint8Array(chunk.buffer, chunk.byteOffset, take));
+          total += take;
+        }
+        if (total >= maxBytes) {
+          inf.destroy();
+        }
+      });
+      inf.on("end", () => resolve(concatChunks(chunks, total)));
+      inf.on("close", () => resolve(concatChunks(chunks, total)));
+      inf.on("error", () => {
+        // Fall back to raw inflate
+        const rawChunks: Uint8Array[] = [];
+        let rawTotal = 0;
+        const rawInf = zlib.createInflateRaw();
+        rawInf.on("data", (chunk: any) => {
+          if (rawTotal < maxBytes) {
+            const take = Math.min(chunk.length, maxBytes - rawTotal);
+            rawChunks.push(new Uint8Array(chunk.buffer, chunk.byteOffset, take));
+            rawTotal += take;
+          }
+          if (rawTotal >= maxBytes) {
+            rawInf.destroy();
+          }
+        });
+        rawInf.on("end", () => resolve(concatChunks(rawChunks, rawTotal)));
+        rawInf.on("close", () => resolve(concatChunks(rawChunks, rawTotal)));
+        rawInf.on("error", () => resolve(concatChunks(rawChunks, rawTotal)));
+        rawInf.end(Buffer.from(bytes));
+      });
+      inf.end(Buffer.from(bytes));
+    });
+  } catch {
+    return null;
+  }
+}
+
+function decodeAsciiHex(bytes: Uint8Array, maxBytes: number): Uint8Array {
+  const out: number[] = [];
+  let firstNibble = -1;
+  for (let i = 0; i < bytes.length && out.length < maxBytes; i++) {
+    const ch = bytes[i];
+    if (ch === 0x3e) break; // '>'
+    let nibble: number;
+    if (ch >= 0x30 && ch <= 0x39) nibble = ch - 0x30;
+    else if (ch >= 0x41 && ch <= 0x46) nibble = ch - 0x41 + 10;
+    else if (ch >= 0x61 && ch <= 0x66) nibble = ch - 0x61 + 10;
+    else continue;
+    if (firstNibble === -1) {
+      firstNibble = nibble;
+    } else {
+      out.push((firstNibble << 4) | nibble);
+      firstNibble = -1;
+    }
+  }
+  if (firstNibble !== -1 && out.length < maxBytes) {
+    out.push(firstNibble << 4);
+  }
+  return new Uint8Array(out);
+}
+
 export async function decompressFlate(
   bytes: Uint8Array,
   maxBytes = MAX_PAGE_SCAN_STREAM_BYTES,
 ): Promise<Uint8Array> {
   if (typeof DecompressionStream !== "undefined") {
-    try {
-      const ds = new DecompressionStream("deflate");
-      const writer = ds.writable.getWriter();
-      void (async () => {
-        try {
-          await writer.write(bytes as any);
-          await writer.close();
-        } catch {
-          /**/
-        }
-      })();
-      const reader = ds.readable.getReader();
-      const chunks: Uint8Array[] = [];
-      let total = 0;
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (value) {
-          if (maxBytes !== undefined && total + value.length > maxBytes) {
-            const allowed = maxBytes - total;
-            if (allowed > 0) {
-              chunks.push(value.subarray(0, allowed));
-            }
-            try {
-              await reader.cancel();
-            } catch {
-              /**/
-            }
-            break;
-          }
-          chunks.push(value);
-          total += value.length;
-        }
-      }
-      const totalLen = chunks.reduce((acc, c) => acc + c.length, 0);
-      const result = new Uint8Array(totalLen);
-      let offset = 0;
-      for (const c of chunks) {
-        result.set(c, offset);
-        offset += c.length;
-      }
-      return result;
-    } catch {
-      /**/
-    }
+    const webResult =
+      (await decompressFlateWeb(bytes, maxBytes, "deflate")) ??
+      (await decompressFlateWeb(bytes, maxBytes, "deflate-raw"));
+    if (webResult) return webResult;
   }
   if (typeof process !== "undefined" && (process as any).versions?.node) {
-    try {
-      const zlibMod = "node:zlib";
-      const zlib = await import(/* @vite-ignore */ zlibMod);
-      const inflated = zlib.inflateSync(bytes, maxBytes ? { maxOutputLength: maxBytes } : undefined);
-      return new Uint8Array(inflated);
-    } catch {
-      /**/
-    }
+    const nodeResult = await decompressFlateNode(bytes, maxBytes);
+    if (nodeResult) return nodeResult;
   }
   return bytes.subarray(0, maxBytes);
 }
@@ -391,19 +474,20 @@ export async function decompressFlate(
 export interface PageContentTextResult {
   text: string;
   bytesRead: number;
+  truncated: boolean;
 }
 
 export async function getPageContentText(
   page: any,
   pdfDoc: any,
-  decodePDFRawStream?: any,
+  _decodePDFRawStream?: any,
   maxStreamBytes = MAX_PAGE_SCAN_STREAM_BYTES,
 ): Promise<PageContentTextResult> {
   try {
     const contents =
       page.node.Contents?.() ??
       page.node.dict?.lookup?.(pdfDoc.context.obj("Contents"));
-    if (!contents) return { text: "", bytesRead: 0 };
+    if (!contents) return { text: "", bytesRead: 0, truncated: false };
 
     const streamItems: any[] = [];
     if (Array.isArray(contents)) {
@@ -418,65 +502,70 @@ export async function getPageContentText(
 
     let text = "";
     let totalBytes = 0;
+    let truncated = false;
+
     for (let item of streamItems) {
-      if (totalBytes >= maxStreamBytes) break;
+      if (totalBytes >= maxStreamBytes) {
+        truncated = true;
+        break;
+      }
       if (item?.constructor?.name === "PDFRef" || item?.objectNumber !== undefined) {
         item = pdfDoc.context.lookup(item);
       }
       if (!item) continue;
 
       const remainingBytes = maxStreamBytes - totalBytes;
+      let rawBytes: Uint8Array | null = null;
+      if (item.contents instanceof Uint8Array) {
+        rawBytes = item.contents;
+      } else if (typeof item.getContents === "function") {
+        rawBytes = item.getContents();
+      }
+      if (!rawBytes || rawBytes.length === 0) continue;
+
+      // DO NOT call decodePDFRawStream because it is unbounded and materializes
+      // full decompression bombs in memory before capping. Instead, decode
+      // supported content filters incrementally up to remainingBytes.
       let decodedBytes: Uint8Array | null = null;
-      if (typeof decodePDFRawStream === "function") {
-        try {
-          const decodedStream = decodePDFRawStream(item);
-          if (decodedStream?.contents instanceof Uint8Array) {
-            decodedBytes = decodedStream.contents;
-          } else if (typeof decodedStream?.getContents === "function") {
-            decodedBytes = decodedStream.getContents();
-          } else if (typeof decodedStream?.asUint8Array === "function") {
-            decodedBytes = decodedStream.asUint8Array();
-          }
-        } catch {
-          // Fall back to manual filter check
-        }
+      const filterObj = item.dict?.lookup?.(pdfDoc.context.obj("Filter"));
+      const filterName =
+        filterObj?.encodedName ?? filterObj?.name ?? filterObj?.toString?.() ?? "";
+      const isFlate =
+        filterName === "/FlateDecode" ||
+        filterName === "FlateDecode" ||
+        (Array.isArray(filterObj) &&
+          filterObj.some(
+            (f: any) =>
+              f?.encodedName === "/FlateDecode" || f?.name === "FlateDecode",
+          ));
+
+      if (isFlate) {
+        decodedBytes = await decompressFlate(rawBytes, remainingBytes);
+      } else if (!filterObj || filterName === "" || filterName === "/None") {
+        decodedBytes = rawBytes.subarray(0, remainingBytes);
+      } else if (filterName === "/ASCIIHexDecode" || filterName === "ASCIIHexDecode") {
+        decodedBytes = decodeAsciiHex(rawBytes, remainingBytes);
+      } else {
+        // Unsupported filter: skip rather than using an unbounded decoder
+        continue;
       }
 
-      if (!decodedBytes) {
-        let rawBytes: Uint8Array | null = null;
-        if (item.contents instanceof Uint8Array) {
-          rawBytes = item.contents;
-        } else if (typeof item.getContents === "function") {
-          rawBytes = item.getContents();
-        }
-        if (!rawBytes || rawBytes.length === 0) continue;
-
-        const filterObj = item.dict?.lookup?.(pdfDoc.context.obj("Filter"));
-        const filterName = filterObj?.encodedName ?? filterObj?.toString?.() ?? "";
-        if (
-          filterName === "/FlateDecode" ||
-          (Array.isArray(filterObj) && filterObj.some((f: any) => f?.encodedName === "/FlateDecode"))
-        ) {
-          decodedBytes = await decompressFlate(rawBytes, remainingBytes);
-        } else {
-          decodedBytes = rawBytes;
-        }
-      }
-
-      if (decodedBytes) {
-        if (decodedBytes.length > remainingBytes) {
+      if (decodedBytes && decodedBytes.length > 0) {
+        if (decodedBytes.length >= remainingBytes) {
+          truncated = true;
           decodedBytes = decodedBytes.subarray(0, remainingBytes);
         }
         totalBytes += decodedBytes.length;
         text += "\n" + new TextDecoder("latin1").decode(decodedBytes);
         if (totalBytes >= maxStreamBytes) {
+          truncated = true;
           break;
         }
       }
     }
-    return { text, bytesRead: totalBytes };
+    return { text, bytesRead: totalBytes, truncated };
   } catch {
-    return { text: "", bytesRead: 0 };
+    return { text: "", bytesRead: 0, truncated: false };
   }
 }
 
@@ -492,7 +581,7 @@ async function structuralCompress(
   stripMeta: boolean,
   targetSizeKB: number,
   onProgress?: (pct: number) => void,
-  decodePDFRawStream?: any,
+  _decodePDFRawStream?: any,
 ): Promise<CompressResult> {
   const pdfDoc = await PDFDocument.load(new Uint8Array(arrayBuffer), {
     ignoreEncryption: true,
@@ -502,25 +591,60 @@ async function structuralCompress(
   const pages = pdfDoc.getPages();
   const total = pages.length;
 
+  // Track image page references to detect shared images across pages
+  const imagePageReferences = new Map<string, Set<number>>();
+  for (let p = 0; p < total; p++) {
+    const resources = pages[p].node.Resources?.();
+    const xObjects = resources?.lookup?.(PDFName.of("XObject"));
+    if (xObjects) {
+      const keys: any[] = xObjects.keys?.() ?? [];
+      for (const key of keys) {
+        const rawRef = xObjects.dict ? xObjects.dict.get(key) : (xObjects.get?.(key) ?? null);
+        const refObj = rawRef?.objectNumber !== undefined ? rawRef : xObjects.lookup(key)?.ref;
+        const refKey = refObj?.objectNumber !== undefined
+          ? `${refObj.objectNumber}_${refObj.generationNumber ?? 0}`
+          : (key.name ?? key.encodedName?.replace(/^\//, ""));
+        if (refKey) {
+          let pageSet = imagePageReferences.get(refKey);
+          if (!pageSet) {
+            pageSet = new Set<number>();
+            imagePageReferences.set(refKey, pageSet);
+          }
+          pageSet.add(p);
+        }
+      }
+    }
+  }
+
   // Pre-scan content streams to find drawn dimensions across all pages
   const drawnSizesByRef = new Map<string, DrawnDimension[]>();
   const drawnSizesByName = new Map<string, DrawnDimension[]>();
+  const fullyScannedPages = new Set<number>();
+  let scanComplete = true;
 
   let totalScannedBytes = 0;
   for (let p = 0; p < total; p++) {
-    if (totalScannedBytes >= MAX_PAGE_SCAN_TOTAL_BYTES) break;
+    if (totalScannedBytes >= MAX_PAGE_SCAN_TOTAL_BYTES) {
+      scanComplete = false;
+      break;
+    }
     const page = pages[p];
     const streamLimit = Math.min(
       MAX_PAGE_SCAN_STREAM_BYTES,
       MAX_PAGE_SCAN_TOTAL_BYTES - totalScannedBytes,
     );
-    const { text: streamText, bytesRead } = await getPageContentText(
+    const { text: streamText, bytesRead, truncated } = await getPageContentText(
       page,
       pdfDoc,
-      decodePDFRawStream,
+      undefined,
       streamLimit,
     );
     totalScannedBytes += bytesRead;
+    if (truncated || bytesRead >= streamLimit) {
+      scanComplete = false;
+    } else {
+      fullyScannedPages.add(p);
+    }
     if (!streamText) continue;
 
     const pageDrawn = calculateImageDrawnSizes(streamText);
@@ -609,6 +733,22 @@ async function structuralCompress(
 
       // Resolve drawn dimensions across all occurrences
       const name = key.name ?? key.encodedName?.replace(/^\//, "");
+
+      // If the scan was incomplete, verify whether this image's placements are fully known.
+      // Shared images (appearing on multiple pages) or images referenced on an un-scanned page
+      // must skip resizing to prevent blurriness.
+      if (!scanComplete) {
+        const pageSet = (refKey ? imagePageReferences.get(refKey) : null) ??
+          (name ? imagePageReferences.get(name) : null);
+        const isShared = pageSet ? pageSet.size > 1 : false;
+        const hasUnscannedPage = pageSet
+          ? Array.from(pageSet).some((idx) => !fullyScannedPages.has(idx))
+          : true;
+        if (isShared || hasUnscannedPage) {
+          continue;
+        }
+      }
+
       const drawnPlacements =
         (refKey ? drawnSizesByRef.get(refKey) : null) ??
         drawnSizesByName.get(name) ??

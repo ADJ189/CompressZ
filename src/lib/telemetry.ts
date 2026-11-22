@@ -95,6 +95,12 @@ export function clearStoragePreservingTelemetry(storage?: Storage | null): void 
   }
 }
 
+const CONTEXT_PREFIX_WORDS =
+  "process(?:ing)?|read(?:ing)?|load(?:ing)?|pars(?:e|ing|er)|open(?:ing)?|convert(?:ing)?|compress(?:ing)?|decod(?:e|ing|er)|handl(?:e|ing)|fetch(?:ing)?|in|on|at|for|from|into|with|file|document|image|photo|picture|audio|video|clip|archive|target|source|name|error|exception|failed|failure";
+
+const KNOWN_FILE_EXTENSIONS =
+  "heic|heif|mov|m4v|mp4|webm|mkv|avi|wav|mp3|flac|aac|ogg|pdf|docx|xlsx|pptx|odt|ods|odp|png|jpe?g|webp|gif|svg|tiff?|bmp|zip|tar|gz|7z|[a-zA-Z0-9]{2,6}";
+
 /**
  * Thoroughly scrub filenames, system paths, and user-controlled strings from error text.
  * Handles Unicode, spaces, Windows/Unix paths, and unfamiliar extensions (e.g. HEIC, MOV, FLAC).
@@ -103,28 +109,29 @@ export function scrubDiagnosticText(text: string): string {
   if (!text) return "";
 
   return text
-    // Strip Windows drive paths (e.g. C:\Users\... or D:\Documents\...)
-    .replace(/[a-zA-Z]:\\[^"'\n\r\t<>:]+/g, "[path]")
-    // Strip Unix-style paths
-    .replace(/(?:\/[a-zA-Z0-9_.-]+){2,}/g, "[path]")
-    // Strip double and single quoted strings (frequent container of raw user filenames)
+    // 1. Strip complete Windows filesystem paths with spaces (e.g. C:\Users\Jane Doe\Docs\My Tax 2024.pdf)
+    .replace(/[a-zA-Z]:\\(?:[^"'\n\r\t<>:*?/|:\\]+\\)*[^"'\n\r\t<>:*?/|\\:]+/g, "[path]")
+    // 2. Strip complete Unix filesystem paths with spaces (e.g. /Users/jane doe/docs/My Tax 2024.pdf)
+    .replace(/(^|[\s(,:])((?:~|\.{1,2})?\/(?:[^"'\n\r\t<>:*?|/:]+\/)+[^"'\n\r\t<>:*?|/:]+)/g, "$1[path]")
+    // 3. Strip double and single quoted strings (frequent container of raw user filenames)
     .replace(/"[^"\r\n]{1,250}"/g, '"[redacted]"')
     .replace(/'[^'\r\n]{1,250}'/g, "'[redacted]'")
-    // Strip filenames with extensions containing spaces after action verbs, prepositions, or delimiters
+    // 4. Strip filenames containing spaces following context verbs, nouns or delimiters (using non-backtracking groups)
     .replace(
-      /(?<=\b(?:process(?:ing)?|read(?:ing)?|load(?:ing)?|pars(?:e|ing|er)|open(?:ing)?|convert(?:ing)?|compress(?:ing)?|decod(?:e|ing|er)|handl(?:e|ing)|fetch(?:ing)?|in|on|at|for|from|into|with|file|document|image|photo|picture|audio|video|clip|archive|target|source|name|error|exception|failed|failure)\b[:\s]+)[^\r\n/\\:?*"<>|]{1,120}\.(?:heic|heif|mov|m4v|mp4|webm|mkv|avi|wav|mp3|flac|aac|ogg|pdf|docx|xlsx|pptx|odt|ods|odp|png|jpe?g|webp|gif|svg|tiff?|bmp|zip|tar|gz|7z|[a-zA-Z0-9]{2,6})\b/giu,
+      new RegExp(`(\\b(?:${CONTEXT_PREFIX_WORDS})\\b[:\\s]+)([^\\r\\n/\\\\:?*"<>|]+?\\.(?:${KNOWN_FILE_EXTENSIONS}))\\b`, "giu"),
+      "$1[filename]",
+    )
+    // 5. Strip filenames at start of text or following punctuation delimiters
+    .replace(
+      new RegExp(`(^|[\\r\\n]|[:\\-–—=\\t(]\\s*)([^\\r\\n/\\\\:?*"<>|\\s][^\\r\\n/\\\\:?*"<>|]*?\\.(?:${KNOWN_FILE_EXTENSIONS}))\\b`, "giu"),
+      "$1[filename]",
+    )
+    // 6. Strip standalone filenames with extensions
+    .replace(
+      new RegExp(`\\b[^\\s/\\\\:?*"<>|]{1,80}\\.(?:${KNOWN_FILE_EXTENSIONS})\\b`, "giu"),
       "[filename]",
     )
-    .replace(
-      /(?<=^|[\r\n]|[:\-–—=\t(]\s*)[^\r\n/\\:?*"<>|]{1,120}\.(?:heic|heif|mov|m4v|mp4|webm|mkv|avi|wav|mp3|flac|aac|ogg|pdf|docx|xlsx|pptx|odt|ods|odp|png|jpe?g|webp|gif|svg|tiff?|bmp|zip|tar|gz|7z|[a-zA-Z0-9]{2,6})\b/giu,
-      "[filename]",
-    )
-    // Strip standalone filenames with extensions
-    .replace(
-      /(?:[^\s/\\:?*"<>|]{1,80})\.(?:heic|heif|mov|m4v|mp4|webm|mkv|avi|wav|mp3|flac|aac|ogg|pdf|docx|xlsx|pptx|odt|ods|odp|png|jpe?g|webp|gif|svg|tiff?|bmp|zip|tar|gz|7z|[a-zA-Z0-9]{2,6})\b/giu,
-      "[filename]",
-    )
-    // Collapse any redundant placeholders
+    // 7. Collapse any redundant placeholders
     .replace(/(\[filename\]\s*)+/g, "[filename] ")
     .replace(/(\[path\]\s*)+/g, "[path] ")
     .trim();
