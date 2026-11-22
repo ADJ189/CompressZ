@@ -349,6 +349,16 @@ Deno.test("optimizeSvg: expands repeated references to permitted entity within b
   assert(text.includes("CompressZ CompressZ"), "Entity replacements must be present in output");
 });
 
+Deno.test("optimizeSvg: out-of-range numeric character reference &#x110000; does not throw RangeError", async () => {
+  const chaosSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+    <a href="&#x110000;"><circle cx="50" cy="50" r="40" fill="green"/></a>
+  </svg>`;
+
+  const { text } = await optimize(chaosSvg, "chaos-codepoint.svg");
+  assert(text.includes("<circle"), "Circle must be preserved");
+  assert(text.includes("<a "), "Link must be preserved without throwing RangeError");
+});
+
 
 
 
