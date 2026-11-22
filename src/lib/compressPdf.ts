@@ -387,7 +387,15 @@ async function decompressFlateNode(
   try {
     const zlibMod = "node:zlib";
     const zlib = await import(/* @vite-ignore */ zlibMod);
-    return await new Promise<Uint8Array>((resolve) => {
+    return await new Promise<Uint8Array | null>((resolve) => {
+      let settled = false;
+      const finish = (val: Uint8Array | null) => {
+        if (!settled) {
+          settled = true;
+          resolve(val);
+        }
+      };
+
       const chunks: Uint8Array[] = [];
       let total = 0;
       const inf = zlib.createInflate();
@@ -401,8 +409,7 @@ async function decompressFlateNode(
           inf.destroy();
         }
       });
-      inf.on("end", () => resolve(concatChunks(chunks, total)));
-      inf.on("close", () => resolve(concatChunks(chunks, total)));
+      inf.on("end", () => finish(concatChunks(chunks, total)));
       inf.on("error", () => {
         // Fall back to raw inflate
         const rawChunks: Uint8Array[] = [];
@@ -418,9 +425,8 @@ async function decompressFlateNode(
             rawInf.destroy();
           }
         });
-        rawInf.on("end", () => resolve(concatChunks(rawChunks, rawTotal)));
-        rawInf.on("close", () => resolve(concatChunks(rawChunks, rawTotal)));
-        rawInf.on("error", () => resolve(concatChunks(rawChunks, rawTotal)));
+        rawInf.on("end", () => finish(concatChunks(rawChunks, rawTotal)));
+        rawInf.on("error", () => finish(null));
         rawInf.end(Buffer.from(bytes));
       });
       inf.end(Buffer.from(bytes));
@@ -430,17 +436,25 @@ async function decompressFlateNode(
   }
 }
 
-function decodeAsciiHex(bytes: Uint8Array, maxBytes: number): Uint8Array {
+export function decodeAsciiHex(bytes: Uint8Array, maxBytes: number): Uint8Array | null {
   const out: number[] = [];
   let firstNibble = -1;
+  let terminated = false;
   for (let i = 0; i < bytes.length && out.length < maxBytes; i++) {
     const ch = bytes[i];
-    if (ch === 0x3e) break; // '>'
+    if (ch === 0x3e) {
+      terminated = true;
+      break; // '>'
+    }
+    // PDF whitespace characters (ISO 32000-1 §7.2.2): NUL, TAB, LF, FF, CR, SP
+    if (ch === 0x00 || ch === 0x09 || ch === 0x0a || ch === 0x0c || ch === 0x0d || ch === 0x20) {
+      continue;
+    }
     let nibble: number;
     if (ch >= 0x30 && ch <= 0x39) nibble = ch - 0x30;
     else if (ch >= 0x41 && ch <= 0x46) nibble = ch - 0x41 + 10;
     else if (ch >= 0x61 && ch <= 0x66) nibble = ch - 0x61 + 10;
-    else continue;
+    else return null; // invalid non-hexadecimal character before '>'
     if (firstNibble === -1) {
       firstNibble = nibble;
     } else {
@@ -451,13 +465,16 @@ function decodeAsciiHex(bytes: Uint8Array, maxBytes: number): Uint8Array {
   if (firstNibble !== -1 && out.length < maxBytes) {
     out.push(firstNibble << 4);
   }
+  if (bytes.length > 0 && !terminated) {
+    return null; // stream was not properly terminated with '>'
+  }
   return new Uint8Array(out);
 }
 
 export async function decompressFlate(
   bytes: Uint8Array,
   maxBytes = MAX_PAGE_SCAN_STREAM_BYTES,
-): Promise<Uint8Array> {
+): Promise<Uint8Array | null> {
   if (typeof DecompressionStream !== "undefined") {
     const webResult =
       (await decompressFlateWeb(bytes, maxBytes, "deflate")) ??
@@ -468,7 +485,7 @@ export async function decompressFlate(
     const nodeResult = await decompressFlateNode(bytes, maxBytes);
     if (nodeResult) return nodeResult;
   }
-  return bytes.subarray(0, maxBytes);
+  return null;
 }
 
 export interface PageContentTextResult {
