@@ -15,9 +15,12 @@
     naturalCompare,
     type Recommendation,
   } from "../lib/recommendations";
+  import { smartAnalyze, sortByPredictedLabel, type AiModelTier } from "../lib/aiEngine";
+  import { getSettings } from "../lib/settings";
 
   let imagesToPdfState = $state<ImagesToPdfState>(imagesToPdfStore.get());
   let isConverting = $state(false);
+  let isAiSorting = $state(false);
   let convertedBlob = $state<Blob | null>(null);
   let dismissTrigger = $state(0);
   let draggedIndex = $state<number | null>(null);
@@ -154,6 +157,27 @@
   function reverseOrder() {
     updateStore({ files: [...imagesToPdfState.files].reverse() });
     toast("Reversed image order", "success");
+  }
+
+  /** Reorder images by predicted content class using on-device local AI */
+  async function handleAiSmartSort() {
+    if (imagesToPdfState.files.length < 2) return;
+    isAiSorting = true;
+    toast("Organizing images with on-device AI…");
+    try {
+      const rawFiles = imagesToPdfState.files;
+      const settings = getSettings();
+      const tier: AiModelTier = (settings.ai?.modelTier as AiModelTier) ?? "efficient";
+      const analyses = await smartAnalyze(rawFiles, tier);
+      const sortedFiles = sortByPredictedLabel(rawFiles, analyses);
+      updateStore({ files: sortedFiles });
+      toast("Organized images by predicted content class", "success");
+    } catch (err) {
+      console.warn("[imagesToPdf:aiSmartSort] fallback:", err);
+      sortNatural();
+    } finally {
+      isAiSorting = false;
+    }
   }
 
   function handleDragStart(index: number, e: DragEvent) {
@@ -357,6 +381,15 @@
             title="Reverse sequence order"
           >
             Reverse
+          </button>
+          <button
+            type="button"
+            class="cz-btn cz-btn-secondary cz-btn-sm cz-btn-ai"
+            disabled={isAiSorting || imagesToPdfState.files.length < 2}
+            onclick={handleAiSmartSort}
+            title="Sort images by predicted content class using on-device AI"
+          >
+            {isAiSorting ? "AI Sorting…" : "✨ AI Sort"}
           </button>
           <button
             type="button"
