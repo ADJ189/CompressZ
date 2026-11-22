@@ -245,6 +245,34 @@ Deno.test("optimizeSvg: attribute scanner handles slashes in unquoted and standa
   assert(text.includes("<rect"), "Must preserve rect element");
 });
 
+Deno.test("optimizeSvg: does not copy entity declarations and neutralizes entity-defined javascript href", async () => {
+  const entitySvg = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE svg [
+  <!ENTITY js "javascript:alert(1)">
+]>
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+  <a href="&js;"><circle cx="50" cy="50" r="40" fill="red"/></a>
+</svg>`;
+
+  const { text } = await optimize(entitySvg, "entity-js.svg");
+
+  assert(!text.includes("<!ENTITY"), "Must not copy entity declarations into optimized SVG");
+  assert(!text.includes("javascript:alert"), "Must not contain executable javascript URL");
+  assert(text.includes('href="#"'), "Must neutralize unresolved entity href to #");
+  assert(text.includes("<circle"), "Must preserve circle element");
+});
+
+Deno.test("optimizeSvg: does not delete visible element whose aria-label contains display none", async () => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+    <circle cx="50" cy="50" r="40" fill="red" aria-label='display="none" '/>
+  </svg>`;
+
+  const { text } = await optimize(svg, "aria-display.svg");
+
+  assert(text.includes("<circle"), "Must not delete element whose aria-label mentions display none");
+});
+
+
 
 
 

@@ -305,3 +305,34 @@ Deno.test("archives: plain tar extraction enforces MAX_DECOMPRESSED_BYTES limit"
   }
   assertEquals(/exceeds 256 MB limit/.test(message), true);
 });
+
+Deno.test("archives: streamCompressBytes propagates writer errors when stream aborts", async () => {
+  const origCS = globalThis.CompressionStream;
+  try {
+    (globalThis as any).CompressionStream = class MockFailingCompressionStream {
+      writable = {
+        getWriter: () => ({
+          write: () => Promise.reject(new Error("Writer stream disk failure")),
+          close: () => Promise.resolve(),
+          abort: () => Promise.resolve(),
+        }),
+      };
+      readable = {
+        getReader: () => ({
+          read: () => Promise.resolve({ done: true, value: undefined }),
+        }),
+      };
+    };
+
+    let caughtError = false;
+    try {
+      await streamCompressBytes(new Uint8Array([1, 2, 3, 4]));
+    } catch (err: any) {
+      caughtError = true;
+      assertEquals(err.message, "Writer stream disk failure");
+    }
+    assertEquals(caughtError, true);
+  } finally {
+    globalThis.CompressionStream = origCS;
+  }
+});

@@ -342,6 +342,15 @@ async function optimize(svg: string): Promise<string> {
   return await result.blob.text();
 }
 
+Deno.test("chaos/svg: out-of-range numeric character reference does not throw RangeError", async () => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+    <a href="&#x110000;"><text>Out of range</text></a>
+    <a href="&#99999999;"><text>Too large decimal</text></a>
+  </svg>`;
+  const text = await optimize(svg);
+  assert(text.includes("<a "), "SVG with out-of-range character reference must optimize cleanly without throwing");
+});
+
 Deno.test("chaos/svg: named-entity javascript and data URIs are neutralized", async () => {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
     <a href="javascript&colon;alert(1)"><text>A</text></a>

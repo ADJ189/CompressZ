@@ -89,6 +89,7 @@ Deno.test("telemetry: scrubDiagnosticText redacts paths, unfamiliar extensions, 
 
   const fileSpaces = scrubDiagnosticText("Failed to process My Tax 2024.pdf");
   assertEquals(fileSpaces.includes("My Tax 2024.pdf"), false);
+  assertEquals(fileSpaces.includes("My Tax"), false);
   assertEquals(fileSpaces.includes("[filename]"), true);
 
   // 2. Unfamiliar extensions (HEIC, HEIF, MOV, FLAC)

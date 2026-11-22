@@ -4,6 +4,10 @@ import {
   calculateEffectiveDpi,
   calculateDpiScale,
   calculateTargetQuality,
+  decompressFlate,
+  getPageContentText,
+  MAX_PAGE_SCAN_STREAM_BYTES,
+  MAX_PAGE_SCAN_TOTAL_BYTES,
 } from "../src/lib/compressPdf.ts";
 
 Deno.test("compressPdf: calculateImageDrawnSizes extracts drawn dimensions from CTM", () => {
@@ -118,3 +122,74 @@ Deno.test("compressPdf: calculateTargetQuality does not scale quality by pixel a
   const unconstrainedQuality = calculateTargetQuality(baseQuality, 0, 1000 * 1024);
   assertEquals(unconstrainedQuality, baseQuality);
 });
+
+Deno.test("compressPdf: decompressFlate respects decoded-byte limits", async () => {
+  assertEquals(MAX_PAGE_SCAN_STREAM_BYTES > 0, true);
+  assertEquals(MAX_PAGE_SCAN_TOTAL_BYTES > MAX_PAGE_SCAN_STREAM_BYTES, true);
+
+  // Compress a repeated sequence
+  const raw = new TextEncoder().encode("Hello world! ".repeat(1000)); // 13,000 bytes
+  let compressed: Uint8Array;
+  if (typeof CompressionStream !== "undefined") {
+    const cs = new CompressionStream("deflate");
+    const writer = cs.writable.getWriter();
+    void (async () => {
+      await writer.write(raw);
+      await writer.close();
+    })();
+    const reader = cs.readable.getReader();
+    const chunks: Uint8Array[] = [];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) chunks.push(value);
+    }
+    const len = chunks.reduce((s, c) => s + c.length, 0);
+    compressed = new Uint8Array(len);
+    let o = 0;
+    for (const c of chunks) {
+      compressed.set(c, o);
+      o += c.length;
+    }
+  } else {
+    return;
+  }
+
+  // Decompressing with limit of 100 bytes must cap output at 100 bytes
+  const bounded = await decompressFlate(compressed, 100);
+  assertEquals(bounded.length, 100);
+
+  // Decompressing without limit (or large limit) returns all bytes
+  const full = await decompressFlate(compressed, 50_000);
+  assertEquals(full.length, raw.length);
+});
+
+Deno.test("compressPdf: getPageContentText stops reading when decoded-byte limit is reached", async () => {
+  const item1 = {
+    contents: new TextEncoder().encode("q 100 0 0 100 0 0 cm /Im1 Do Q"),
+    dict: { lookup: () => null },
+  };
+  const item2 = {
+    contents: new TextEncoder().encode("q 200 0 0 200 0 0 cm /Im2 Do Q"),
+    dict: { lookup: () => null },
+  };
+
+  const mockPage = {
+    node: {
+      Contents: () => [item1, item2],
+    },
+  };
+  const mockPdfDoc = {
+    context: {
+      obj: (v: string) => v,
+      lookup: (v: any) => v,
+    },
+  };
+
+  // With a limit of 25 bytes, it reads item1 up to 25 bytes and stops before item2
+  const { text, bytesRead } = await getPageContentText(mockPage, mockPdfDoc, undefined, 25);
+  assertEquals(bytesRead, 25);
+  assertEquals(text.includes("/Im1"), true);
+  assertEquals(text.includes("/Im2"), false);
+});
+

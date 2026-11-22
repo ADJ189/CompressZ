@@ -199,3 +199,98 @@ Deno.test("compressVideo: videoViaMediaRecorder revokes blob URL when metadata l
     (globalThis as any).MediaRecorder = origMediaRecorder;
   }
 });
+
+Deno.test("compressVideo: videoViaMediaRecorder stops recorder and capture tracks when play() rejects", async () => {
+  const revokedUrls: string[] = [];
+  let recorderStopped = false;
+  let trackStopped = false;
+
+  const origCreate = URL.createObjectURL;
+  const origRevoke = URL.revokeObjectURL;
+  const origDoc = (globalThis as any).document;
+  const origNavDescriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  const origMediaRecorder = (globalThis as any).MediaRecorder;
+
+  try {
+    let createdCount = 0;
+    URL.createObjectURL = () => `blob:mock-play-fail-${++createdCount}`;
+    URL.revokeObjectURL = (u: string) => { revokedUrls.push(u); };
+
+    class MockMediaRecorder {
+      state = "inactive";
+      ondataavailable: any = null;
+      onstop: any = null;
+      static isTypeSupported() { return true; }
+      start() { this.state = "recording"; }
+      stop() {
+        this.state = "inactive";
+        recorderStopped = true;
+      }
+    }
+    (globalThis as any).MediaRecorder = MockMediaRecorder;
+
+    (globalThis as any).document = {
+      createElement: (tag: string) => {
+        if (tag === "video") {
+          const el: any = {
+            preload: "",
+            src: "",
+            videoWidth: 640,
+            videoHeight: 360,
+            duration: 10,
+            onloadedmetadata: null,
+            onerror: null,
+            pause: () => {},
+            play: () => Promise.reject(new Error("AutoplayNotAllowed")),
+          };
+          setTimeout(() => el.onloadedmetadata?.(), 5);
+          return el;
+        }
+        if (tag === "canvas") {
+          return {
+            width: 0,
+            height: 0,
+            getContext: () => ({ drawImage: () => {} }),
+            captureStream: () => ({
+              getVideoTracks: () => [
+                { stop: () => { trackStopped = true; } },
+              ],
+              getTracks: () => [
+                { stop: () => { trackStopped = true; } },
+              ],
+            }),
+          };
+        }
+        return {};
+      },
+    };
+
+    try {
+      Object.defineProperty(globalThis, "navigator", {
+        value: { userAgent: "Chrome" },
+        configurable: true,
+        writable: true,
+      });
+    } catch {
+      /**/
+    }
+
+    const file = new File(["dummy"], "test.mp4", { type: "video/mp4" });
+    await assertRejects(
+      () => videoViaMediaRecorder(file, {}),
+      "MediaRecorder fallback could not start playback",
+    );
+
+    assertEquals(recorderStopped, true);
+    assertEquals(trackStopped, true);
+    assertEquals(revokedUrls.includes("blob:mock-play-fail-2"), true);
+  } finally {
+    URL.createObjectURL = origCreate;
+    URL.revokeObjectURL = origRevoke;
+    (globalThis as any).document = origDoc;
+    if (origNavDescriptor) {
+      Object.defineProperty(globalThis, "navigator", origNavDescriptor);
+    }
+    (globalThis as any).MediaRecorder = origMediaRecorder;
+  }
+});
