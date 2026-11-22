@@ -4,6 +4,7 @@ import {
   calculateEffectiveDpi,
   calculateDpiScale,
   calculateTargetQuality,
+  decodeAsciiHex,
   decompressFlate,
   getPageContentText,
   MAX_PAGE_SCAN_STREAM_BYTES,
@@ -157,11 +158,13 @@ Deno.test("compressPdf: decompressFlate respects decoded-byte limits", async () 
 
   // Decompressing with limit of 100 bytes must cap output at 100 bytes
   const bounded = await decompressFlate(compressed, 100);
-  assertEquals(bounded.length, 100);
+  assert(bounded !== null);
+  assertEquals(bounded!.length, 100);
 
   // Decompressing without limit (or large limit) returns all bytes
   const full = await decompressFlate(compressed, 50_000);
-  assertEquals(full.length, raw.length);
+  assert(full !== null);
+  assertEquals(full!.length, raw.length);
 });
 
 Deno.test("compressPdf: getPageContentText stops reading when decoded-byte limit is reached", async () => {
@@ -346,3 +349,50 @@ Deno.test("compressPdf: getPageContentText marks incomplete: true on unsupported
   assertEquals(res.incomplete, true);
 });
 
+Deno.test("compressPdf: decodeAsciiHex handles valid hex and returns null on malformed content", () => {
+  // Valid hex with whitespace and termination '>'
+  const valid = new TextEncoder().encode(" 48 65 6c 6c 6f >");
+  const decoded = decodeAsciiHex(valid, 1000);
+  assert(decoded !== null);
+  assertEquals(new TextDecoder().decode(decoded!), "Hello");
+
+  // Invalid non-hexadecimal character before '>'
+  const invalidChar = new TextEncoder().encode("4865ZZ6c>");
+  assertEquals(decodeAsciiHex(invalidChar, 1000), null);
+
+  // Unterminated non-empty stream (missing '>')
+  const unterminated = new TextEncoder().encode("48656c6c6f");
+  assertEquals(decodeAsciiHex(unterminated, 1000), null);
+});
+
+Deno.test("compressPdf: decompressFlate returns null on corrupted or invalid zlib payload", async () => {
+  const corrupted = new Uint8Array([0x78, 0x9c, 0xff, 0xff, 0x00, 0x12, 0x34]);
+  const result = await decompressFlate(corrupted, 1000);
+  assertEquals(result, null);
+});
+
+Deno.test("compressPdf: getPageContentText marks incomplete: true when ASCIIHex or Flate decoding fails", async () => {
+  // 1. Malformed ASCIIHex content stream
+  const malformedHexItem = {
+    contents: new TextEncoder().encode("4865ZZ>"), // invalid hex character
+    dict: {
+      lookup: () => ({ encodedName: "/ASCIIHexDecode" }),
+    },
+  };
+  const mockPage1 = { node: { Contents: () => [malformedHexItem] } };
+  const mockPdfDoc1 = { context: { obj: (v: string) => v, lookup: (v: any) => v } };
+  const res1 = await getPageContentText(mockPage1, mockPdfDoc1);
+  assertEquals(res1.incomplete, true);
+
+  // 2. Corrupted Flate stream
+  const corruptedFlateItem = {
+    contents: new Uint8Array([0x78, 0x9c, 0xff, 0xee, 0xdd]),
+    dict: {
+      lookup: () => ({ encodedName: "/FlateDecode" }),
+    },
+  };
+  const mockPage2 = { node: { Contents: () => [corruptedFlateItem] } };
+  const mockPdfDoc2 = { context: { obj: (v: string) => v, lookup: (v: any) => v } };
+  const res2 = await getPageContentText(mockPage2, mockPdfDoc2);
+  assertEquals(res2.incomplete, true);
+});
