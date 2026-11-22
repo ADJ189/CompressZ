@@ -77,6 +77,7 @@ export default defineConfig({
       use: {
         ...devices["Desktop Firefox"],
         launchOptions: {
+          args: ["-no-remote"],
           firefoxUserPrefs: {
             // Firefox defaults to viewing webp/avif internally (opening a temp tab)
             // instead of triggering a download event. Clearing this forces downloads.
