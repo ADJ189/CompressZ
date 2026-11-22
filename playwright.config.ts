@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 import { execSync } from "node:child_process";
 
-const PORT = 4173;
+const PORT = Number(process.env.PORT || process.env.PW_PORT || 4173);
 const BASE_URL = process.env.BASE_URL || `http://127.0.0.1:${PORT}`;
 
 let hasNpm = false;
