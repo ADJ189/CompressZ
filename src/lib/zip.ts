@@ -306,6 +306,16 @@ export async function readZip(
   const bytes = new Uint8Array(buf);
   const dv = new DataView(buf);
 
+  // A ZIP has to be at least as long as an empty end-of-central-directory
+  // record. Checking first keeps the scan below from probing a negative
+  // DataView offset (which throws a raw RangeError instead of a useful
+  // "not a ZIP" message).
+  if (bytes.length < 22) {
+    throw new Error(
+      "Not a valid ZIP file (too small to contain an end-of-central-directory record)",
+    );
+  }
+
   let eocdOffset = -1;
   const scanFrom = Math.max(0, bytes.length - 22 - 65536);
   for (let i = bytes.length - 22; i >= scanFrom; i--) {
@@ -347,6 +357,14 @@ export async function readZip(
   let aggregateBytes = 0;
   let p = centralStart;
   for (let i = 0; i < entryCount; i++) {
+    // Every read below is bounds-checked against the actual buffer. A crafted
+    // central-directory offset used to reach straight into DataView and throw
+    // an opaque RangeError; callers should get a diagnosable corruption error.
+    if (p < 0 || p + 46 > bytes.length) {
+      throw new Error(
+        "Corrupt ZIP: central directory offset points outside the archive",
+      );
+    }
     if (dv.getUint32(p, true) !== 0x02014b50)
       throw new Error("Corrupt ZIP central directory");
     const method = dv.getUint16(p + 10, true);
@@ -356,6 +374,10 @@ export async function readZip(
     const extraLen = dv.getUint16(p + 30, true);
     const commentLen = dv.getUint16(p + 32, true);
     const localOffset = dv.getUint32(p + 42, true);
+
+    if (p + 46 + nameLen > bytes.length) {
+      throw new Error("Corrupt ZIP: central directory entry name is truncated");
+    }
     const name = new TextDecoder().decode(
       bytes.subarray(p + 46, p + 46 + nameLen),
     );
@@ -371,9 +393,19 @@ export async function readZip(
       );
     }
 
+    if (localOffset + 30 > bytes.length) {
+      throw new Error(
+        `"${name}" local file header points outside the archive`,
+      );
+    }
     const lNameLen = dv.getUint16(localOffset + 26, true);
     const lExtraLen = dv.getUint16(localOffset + 28, true);
     const dataStart = localOffset + 30 + lNameLen + lExtraLen;
+    if (dataStart > bytes.length || dataStart + compSize > bytes.length) {
+      throw new Error(
+        `"${name}" entry data points outside the archive (truncated ZIP)`,
+      );
+    }
     const raw = bytes.subarray(dataStart, dataStart + compSize);
 
     if (!name.endsWith("/")) {

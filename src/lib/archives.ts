@@ -59,7 +59,9 @@ export async function streamCompressBytes(
   const total = bytes.length;
   let written = 0;
 
-  // Stream write in background
+  // Stream write in background. A reader-side failure (or an early cancel)
+  // closes the writable side and rejects this promise; attach a handler now so
+  // that rejection is never reported as unhandled.
   const writePromise = (async () => {
     for (let offset = 0; offset < total; offset += chunkSize) {
       const slice = bytes.subarray(offset, Math.min(total, offset + chunkSize));
@@ -68,7 +70,7 @@ export async function streamCompressBytes(
       onProgress?.(total > 0 ? (written / total) * 0.7 : 0.5);
     }
     await writer.close();
-  })();
+  })().catch(() => {});
 
   // Collect compressed chunks
   const outChunks: Uint8Array[] = [];

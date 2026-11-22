@@ -19,6 +19,7 @@
  */
 import {
   getSettings,
+  onSettingsChange,
   resolveExecutionProfile,
   type ResourceMode,
 } from './settings';
@@ -263,6 +264,12 @@ class WeightedSemaphore {
 
   setCapacity(n: number): void {
     this.capacity = Math.max(1, n);
+    // A queued request may have been sized for the old (larger) capacity.
+    // Without clamping it, a shrink to capacity 1 would leave a weight-2
+    // waiter permanently un-grantable because used + 2 > 1 forever.
+    for (const waiter of this.queue) {
+      waiter.weight = Math.min(waiter.weight, this.capacity);
+    }
     this.drain();
   }
 
@@ -276,7 +283,10 @@ class WeightedSemaphore {
     return new Promise((resolve, reject) => {
       const waiter: Waiter = {
         weight: w,
-        grant: () => resolve(() => this.release(w)),
+        // Read `waiter.weight` at release time: a capacity change may clamp a
+        // queued request before it is granted, and the released weight must
+        // match the weight that was actually acquired.
+        grant: () => resolve(() => this.release(waiter.weight)),
         fail: reject,
         signal,
       };
@@ -333,15 +343,41 @@ const listeners = new Set<() => void>();
 function pools() {
   const p = getResourcePolicy();
   const key = `${p.heavyLimit}|${p.lightCapacity}`;
-  if (key !== poolsKey || !heavyPool || !lightPool) {
-    poolsKey = key;
+  if (!heavyPool || !lightPool) {
     heavyPool = new WeightedSemaphore(p.heavyLimit);
     lightPool = new WeightedSemaphore(p.lightCapacity);
+    poolsKey = key;
     // A pressure event must survive a profile/pool rebuild.
     if (pressure > 0) lightPool.setCapacity(1);
+  } else if (key !== poolsKey) {
+    // Adjust the existing semaphores instead of replacing them. Replacing them
+    // orphaned every queued waiter (it could never be granted, because its
+    // grant/release closures pointed at the discarded instance) while running
+    // jobs released into the old pool, so the new pool admitted a second wave
+    // on top of work that was still executing.
+    poolsKey = key;
+    heavyPool.setCapacity(p.heavyLimit);
+    lightPool.setCapacity(pressure > 0 ? 1 : p.lightCapacity);
   }
   return { heavy: heavyPool, light: lightPool, policy: p };
 }
+
+/**
+ * Apply a changed concurrency profile immediately. Without this, a user who
+ * raises Batch Concurrency while jobs are already queued would keep the old
+ * capacity until some later job happened to call `pools()`.
+ */
+function syncPoolCapacity(): void {
+  if (!heavyPool || !lightPool) return;
+  const p = getResourcePolicy();
+  const key = `${p.heavyLimit}|${p.lightCapacity}`;
+  if (key === poolsKey) return;
+  poolsKey = key;
+  heavyPool.setCapacity(p.heavyLimit);
+  lightPool.setCapacity(pressure > 0 ? 1 : p.lightCapacity);
+}
+
+onSettingsChange(syncPoolCapacity);
 
 function notify() {
   listeners.forEach((fn) => {

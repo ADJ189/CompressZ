@@ -71,6 +71,63 @@ function compactPathData(d: string): string {
 }
 
 /**
+ * Decode the HTML/XML character references that can hide a URI scheme from a
+ * plain-text check. Numeric forms were already handled; named forms such as
+ * `&colon;`, `&Tab;` and `&NewLine;` were not, so `javascript&colon;…` slipped
+ * through as a live link.
+ */
+const NAMED_ENTITIES: Record<string, string> = {
+  colon: ":",
+  tab: "\t",
+  newline: "\n",
+  sol: "/",
+  bsol: "\\",
+  lpar: "(",
+  rpar: ")",
+  num: "#",
+  quest: "?",
+  equals: "=",
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: "\u00a0",
+  period: ".",
+  comma: ",",
+  semi: ";",
+  excl: "!",
+  lowbar: "_",
+  hyphen: "-",
+  plus: "+",
+  percnt: "%",
+  ast: "*",
+  commat: "@",
+  grave: "`",
+  lsqb: "[",
+  rsqb: "]",
+  lbrack: "[",
+  rbrack: "]",
+  lcub: "{",
+  rcub: "}",
+  verbar: "|",
+};
+
+function decodeEntities(value: string): string {
+  return value
+    .replace(/&#x([0-9a-f]+);?/gi, (_m: string, hex: string) =>
+      String.fromCodePoint(Number.parseInt(hex, 16)),
+    )
+    .replace(/&#(\d+);?/g, (_m: string, dec: string) =>
+      String.fromCodePoint(Number(dec)),
+    )
+    .replace(/&([a-z][a-z0-9]+);?/gi, (match: string, name: string) => {
+      const decoded = NAMED_ENTITIES[name.toLowerCase()];
+      return decoded === undefined ? match : decoded;
+    });
+}
+
+/**
  * Clean element attributes strictly on tag headers, preserving text nodes.
  * Strips event handlers, unwanted editor namespaces, and neutralizes javascript: URIs.
  * Uses a single-pass deterministic scanner with zero regular expression backtracking.
@@ -190,9 +247,7 @@ function cleanElementAttributes(tagAttrs: string): string {
 
     // Neutralize javascript: and executable data URIs in href and xlink:href
     if (lowerAttrName === "href" || lowerAttrName === "xlink:href") {
-      const decoded = rawVal
-        .replace(/&#(\d+);?/g, (_: string, n: string) => String.fromCharCode(Number(n)))
-        .replace(/&#x([0-9a-f]+);?/gi, (_: string, h: string) => String.fromCharCode(Number.parseInt(h, 16)));
+      const decoded = decodeEntities(rawVal);
       let stripped = "";
       for (let c = 0; c < decoded.length; c++) {
         if (decoded.charCodeAt(c) > 32) {
@@ -287,10 +342,29 @@ function shouldDiscardElement(tagName: string): boolean {
 }
 
 function isElementHidden(tagAttrs: string): boolean {
-  return (
-    /\b(?:display\s*:\s*none|visibility\s*:\s*hidden)\b/i.test(tagAttrs) ||
-    /\b(?:display|visibility)\s*=\s*["'](?:none|hidden)["']/i.test(tagAttrs)
+  // Inspect the `style` attribute (or a real display/visibility attribute),
+  // never the whole tag text: an unrelated attribute such as
+  // aria-label="display:none" used to make a visible element disappear.
+  const styleMatch = /(?<![-\w:])style\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(
+    tagAttrs,
   );
+  if (styleMatch) {
+    const style = styleMatch[1] ?? styleMatch[2] ?? styleMatch[3] ?? "";
+    if (
+      /(?:^|;)\s*display\s*:\s*none(?:\s*!important)?\s*(?:;|$)/i.test(style) ||
+      /(?:^|;)\s*visibility\s*:\s*hidden(?:\s*!important)?\s*(?:;|$)/i.test(style)
+    ) {
+      return true;
+    }
+  }
+
+  const displayAttr =
+    /(?<![-\w:])display\s*=\s*(?:"none"|'none'|none)(?=[\s/>]|$)/i.test(tagAttrs);
+  const visibilityAttr =
+    /(?<![-\w:])visibility\s*=\s*(?:"hidden"|'hidden'|hidden)(?=[\s/>]|$)/i.test(
+      tagAttrs,
+    );
+  return displayAttr || visibilityAttr;
 }
 
 /**
@@ -413,7 +487,12 @@ function processSvgLinear(svg: string): string {
       chunks.push(`</${tagName}>`);
     } else {
       const cleanedAttrs = cleanElementAttributes(tagAttrs);
-      chunks.push(`<${tagName}${cleanedAttrs}${isSelfClosing ? " /" : ""}>`);
+      // Rounding and whitespace compaction are applied to the tag markup only.
+      // Running them over the joined document (as an earlier version did)
+      // rewrote visible text nodes, so `<text>v1.2345</text>` came out as
+      // `v1.23` and intentional spacing inside `<tspan>` was lost.
+      const tagOut = `<${tagName}${cleanedAttrs}${isSelfClosing ? " /" : ""}>`;
+      chunks.push(roundLongDecimals(tagOut));
     }
 
     pos = tagEnd + 1;
@@ -485,13 +564,10 @@ export async function optimizeSvg(
   svg = processSvgLinear(svg);
   onProgress?.(55);
 
-  // Round long decimals (≥3 decimal places → 2), e.g. 12.345678 -> 12.35, 10.0001 -> 10
-  svg = roundLongDecimals(svg);
+  // Decimal rounding already happened inside the tag pass above, so visible
+  // text nodes and CDATA sections keep their exact contents.
   onProgress?.(70);
 
-  // Collapse whitespace
-  svg = svg.replace(/>\s{2,}</g, "><");
-  svg = svg.replace(/\s{2,}/g, " ").trim();
   onProgress?.(80);
 
   // Add viewBox if missing from the root <svg> element (SVG viewBox coordinates must be unitless numbers in CSS pixels).
