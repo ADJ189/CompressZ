@@ -1,82 +1,81 @@
-# Privacy Policy
+# Privacy Policy — CompressZ
 
-_Last updated: October 2026_
+CompressZ is an open-source, local-first web application designed for
+compression, format conversion, structural editing, optical character
+recognition (OCR), and local machine learning classification of multimedia,
+documents, and office files.
 
-This is the same privacy policy shown at [/privacy](https://compressz.pages.dev/privacy)
-inside the app. It's mirrored here so it's readable directly from the
-repo without running the site.
+CompressZ is a client-side fork of [CompressF](https://github.com/ADJ189/CompressF).
+The deployed application is hosted at <https://compressz.pages.dev>.
 
-**The short version:** CompressZ processes all files locally in your
-browser. We do not have servers that receive your files. We collect no
-personal data, run no analytics, and set no cookies. Your files and
-their contents are never transmitted to us or any third party.
+**The core architectural guarantee of CompressZ is that your file bytes never
+leave your device.**
 
-## 1. Who we are
+---
 
-CompressZ is an open-source, client-side web application for file
-compression and OCR. The application is served as a static website
-hosted on Cloudflare Pages. Source code is publicly available on
-GitHub.
+## 1. Zero file uploads
 
-## 2. Data we do NOT collect
+All core file processing operations execute strictly within your local web
+browser runtime environment utilizing:
+- **HTML5 Canvas 2D and WebGL2** rendering contexts for raster operations,
+- **WebAssembly (WASM)** modules for binary format encoding, decoding, OCR,
+  and PDF manipulations,
+- **Hardware-accelerated WebCodecs API** for native client-side video and audio
+  transcoding, and
+- **WebGPU / WASM SIMD** for localized neural network tensor inference.
 
-- We do **not** collect or store any files you process.
-- We do **not** collect names, email addresses, or any personal identifiers.
-- We do **not** use cookies for tracking or advertising.
-- We do **not** run analytics scripts (no Google Analytics, Mixpanel, or similar).
-- We do **not** sell, share, or transfer user files to third parties (anonymous crash diagnostics may be transmitted to Sentry when enabled; see §7).
-- We do **not** have a backend server that touches your files.
+Your source files, converted outputs, extracted text, and document metadata are
+never transmitted across the network, stored on a remote server, or retained
+beyond your active browser session.
 
-## 3. How file processing works
+---
 
-All compression, conversion, PDF Suite & Studio operations (splitting, permanent cropping,
-watermarking, signing, AcroForm filling, true redaction with 300-DPI raster stream purge,
-AES-256 password protection, and corrupt file recovery), two-way Office document conversions,
-PDF to Markdown extraction, OCR (printed and English handwriting recognition), and local-AI
-operations run entirely inside your browser using WebAssembly, the Canvas API, and Web platform
-APIs. Your files are read from your device into browser memory (RAM), processed locally,
-and the output is written back to your device. At no point do your files traverse a network
-connection to our infrastructure.
+## 2. In-memory and local execution
 
-When extracting Markdown from a PDF, document layout analysis, reading order
-reconstruction, figure crop generation, and ZIP packaging run entirely client-side.
-When using the English handwriting recognition engine, line segmentation and
-TrOCR neural inference occur completely within your browser's WebGPU or WASM runtime.
-Zero text or visual crop data leaves your device.
+File data read via drag-and-drop or file pickers is retained exclusively in your
+browser tab's transient memory (`ArrayBuffer`, `Blob`, `ImageData`, or
+ephemeral `blob:` object URLs). Once a file card is removed, the queue is
+cleared, or the browser tab is closed, these references are dereferenced and
+garbage collected.
 
-You can verify this yourself by opening your browser's Network tab
-while using CompressZ — you will see no requests containing your file
-data.
+---
 
-## 4. Third-party libraries loaded at runtime
+## 3. Network activity and runtime dependencies
 
-Some processing engines and model weights are loaded from a CDN on
-first use and cached by your browser thereafter. Full attribution and
-licenses for all of these are in [CREDITS.md](CREDITS.md); the
-privacy-relevant summary is:
+CompressZ operates with minimal outbound network requests:
 
-- **FFmpeg.wasm** — loaded from `cdn.jsdelivr.net` (video/audio/GIF). The CDN serves
-  the JavaScript wrapper, core scripts, worker, and WebAssembly binaries; no
-  file data is sent to jsDelivr.
-- **Mediabunny** — loaded from `esm.sh` only when the browser supports
-  WebCodecs and the requested output codec configuration is encodable
-  (video fast path). It demuxes and muxes media in-memory; no file data is
-  sent to esm.sh.
-- **PDF.js** — loaded from `cdn.jsdelivr.net` (PDF rendering).
-- **pdf-lib** — loaded from `cdn.jsdelivr.net` (PDF generation).
-- **Tesseract.js** — loaded from `cdn.jsdelivr.net` and
-  `tessdata.projectnaptha.com` (OCR engine and trained language data).
-- **🤗 Transformers.js** — bundled at build time; model weights for image
-  classification (`Xenova/mobilenet_v2_1.0_224`, `Xenova/vit-base-patch16-224`)
-  and English handwriting recognition (`Xenova/trocr-small-handwritten`) are
-  downloaded from Hugging Face's CDN on first use, then cached by your browser.
-  Inference is executed on-device — nothing is uploaded to Hugging Face or anywhere else.
-- **PaddleOCR / PP-OCRv3** — loaded from `cdn.jsdelivr.net` and
-  `paddlejs.bj.bcebos.com` (optional OCR runtime and model weights).
-- **mammoth.js** and **html2canvas** — loaded from `cdn.jsdelivr.net`
-  (Word document conversion).
-- **heic2any** — loaded from `esm.sh` only when a HEIC/HEIF file can't
-  be decoded natively.
+### Static hosting
+The static HTML, JavaScript, CSS, and manifest assets are served via Cloudflare
+Pages. Cloudflare may collect standard HTTP transmission metadata (including
+client IP address and user agent) in accordance with
+[Cloudflare's Privacy Policy](https://www.cloudflare.com/privacypolicy/).
+
+### Content Delivery Networks (CDNs)
+To minimize initial bundle size and enable lazy evaluation of specialized
+engines, certain third-party libraries, WebAssembly binaries, and model
+weights are fetched on-demand from public CDNs upon first user invocation:
+
+- **FFmpeg.wasm** (`@ffmpeg/ffmpeg`, `@ffmpeg/core`) — loaded from
+  `unpkg.com` for advanced video, audio, and animated GIF transcoding.
+- **PDF.js** (`pdfjs-dist`) — loaded from `cdnjs.cloudflare.com` for vector
+  PDF rendering.
+- **pdf-lib** (`pdf-lib`) — loaded from `cdn.jsdelivr.net` for structural PDF
+  resampling, splitting, and merging.
+- **Tesseract.js** (`tesseract.js`, `tesseract.js-core`) and trained language
+  data — loaded from `cdn.jsdelivr.net` and `tessdata.projectnaptha.com`
+  for printed character OCR.
+- **PaddleOCR PP-OCRv3** (`@paddlejs-models/ocr`) — loaded from
+  `cdn.jsdelivr.net` for optional lightweight OCR.
+- **Transformers.js** (`@huggingface/transformers`) — model weights for
+  optional on-device image classification (`Xenova/mobilenet_v2_1.0_224`,
+  `Xenova/vit-base-patch16-224`, `Xenova/trocr-small-handwritten`) are fetched from
+  `huggingface.co` or `cdn.jsdelivr.net` on demand and cached locally via the
+  Cache API.
+- **heic2any** — loaded from `cdn.jsdelivr.net` if native HEIC/HEIF decoding
+  is unsupported by your browser.
+- **mammoth.js** — loaded from `cdnjs.cloudflare.com` for client-side DOCX
+  to HTML/PDF preview conversion.
+- **Mediabunny** — loaded from `esm.sh` for fast WebCodecs container muxing.
 - **onnxruntime-web** — loaded from `cdn.jsdelivr.net` for local AI
   inference.
 - **QPDF WASM** — loaded from `cdn.jsdelivr.net` for AES-256 PDF encryption,
@@ -138,40 +137,45 @@ CompressZ stores these keys in your browser's `localStorage`:
 
 These values never leave your device. Contextual suggestions are evaluated
 locally from metadata that is already in the page (file names, byte sizes,
-MIME types and the options you picked); the rules have no network access and
-never run a model unless you explicitly allow local AI for suggestions. No
-file metadata, file contents, or file paths are stored in localStorage. The
-home page's "Pinned & recent" panel stores tool route names only.
+page counts, pixel dimensions). Dismissals are stored only as the suggestion
+id, never the input file name.
 
-Model/binary caches are managed by the browser's own HTTP/IndexedDB cache and
-can be cleared through browser settings, or through
-Settings → AI engine → Clear model cache.
+---
 
-## 6. Hosting and infrastructure
+## 6. Cookies and tracking
 
-CompressZ is served from **Cloudflare Pages**. When you access the
-website, Cloudflare's servers handle the HTTP request to deliver the
-static HTML, CSS, and JavaScript files. Cloudflare may log access
-requests (IP address, browser user agent, timestamp) per their
-[privacy policy](https://www.cloudflare.com/privacypolicy/). These
-logs do not contain your file data.
+CompressZ does not use tracking cookies, advertising beacons, third-party
+analytics scripts, or device fingerprinting mechanisms. The only outbound
+telemetry is anonymous crash diagnostics (Sentry, enabled by default, opt-out
+in Settings) and static engine/model assets from CDNs.
 
-## 7. Children's privacy
+---
 
-CompressZ does not knowingly collect any information from anyone,
-including children under 13. Because we collect no personal data
-whatsoever, there is nothing age-specific to disclose.
+## 7. Fork parity with CompressF
 
-## 8. Changes to this policy
+CompressZ is an independent fork of CompressF. All privacy guarantees of
+CompressF (zero uploads, client-side only processing, no account requirements)
+are strictly maintained in CompressZ. In addition:
+- Added anonymous error diagnostics (Sentry, enabled by default, opt-out in Settings) with client-side scrubbing of filenames, paths, and user data.
+- Added English handwriting recognition (TrOCR candidate) running entirely
+  locally in the browser tab via WebGPU or WASM.
+- Expanded OCR capabilities to produce searchable PDFs with embedded invisible
+  text layers and page raster reconstructions completely client-side.
+- Added client-side PDF to Markdown extraction with LaTeX formula and GFM table
+  preservation.
 
-If we make material changes to this policy, we will update the "Last
-updated" date at the top, in both this file and the in-app privacy
-page. Because CompressZ collects no contact information, we cannot
-notify you directly — please check this page periodically if you are
-concerned.
+---
+
+## 8. Open source transparency
+
+The complete source code for CompressZ is publicly auditable at
+<https://github.com/ADJ189/compressz>. Users can inspect network calls via
+browser developer tools (Network tab) to verify zero file content transmission.
+
+---
 
 ## 9. Contact
 
-If you have questions about this privacy policy or CompressZ's data
-practices, please open an issue on our
-[GitHub repository](https://github.com/ADJ189/compressz).
+For security inquiries, audit verifications, or vulnerability disclosures,
+please open an issue on the GitHub repository:
+<https://github.com/ADJ189/compressz/issues>.

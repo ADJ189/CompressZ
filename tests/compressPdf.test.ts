@@ -396,5 +396,3 @@ Deno.test("compressPdf: getPageContentText marks incomplete: true when ASCIIHex 
   const res2 = await getPageContentText(mockPage2, mockPdfDoc2);
   assertEquals(res2.incomplete, true);
 });
-
-
