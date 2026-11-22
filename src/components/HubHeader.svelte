@@ -136,24 +136,12 @@
   }
   .cz-hub-tools-row {
     display: flex;
-    flex-wrap: nowrap;
-    gap: 0.45rem;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding-bottom: 4px;
-    scrollbar-width: thin;
-    -webkit-overflow-scrolling: touch;
-    mask-image: linear-gradient(to right, black calc(100% - 24px), transparent 100%);
-    -webkit-mask-image: linear-gradient(to right, black calc(100% - 24px), transparent 100%);
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
     min-width: 0;
     max-width: 100%;
-  }
-  .cz-hub-tools-row::-webkit-scrollbar {
-    height: 4px;
-  }
-  .cz-hub-tools-row::-webkit-scrollbar-thumb {
-    background: var(--border);
-    border-radius: 4px;
+    margin-top: 0.25rem;
   }
   .cz-hub-tool-chip {
     display: inline-flex;
