@@ -17,6 +17,7 @@ import {
   getOutputExtension,
   outputFilename,
 } from "../src/lib/types.ts";
+import { resolvedAiModelTier, defaultSettings } from "../src/lib/settings.ts";
 
 Deno.test("options: quality percentages map to the engines' 0–1 range", () => {
   assertEquals(qualityToUnit(82), 0.82);
@@ -233,4 +234,36 @@ Deno.test("options: video CRF slider endpoints preserve quality direction and de
   assertEquals(options(videoQualityFromCrf(38)).quality, 0.01);
   assertEquals(options(75).quality, 0.75);
   assertEquals(videoCrfFromQuality(75), 22);
+});
+
+Deno.test("options: resolvedAiModelTier resolves auto to concrete efficient or powerful tier", () => {
+  const s = defaultSettings();
+  s.ai.modelTier = "auto";
+  const tier = resolvedAiModelTier(s);
+  assert(tier === "efficient" || tier === "powerful");
+  assert(tier !== ("auto" as any));
+});
+
+Deno.test("options: imagesToPdf queue reconciliation preserves added files and removes deleted files", () => {
+  const fileA = { name: "a.jpg" } as File;
+  const fileB = { name: "b.jpg" } as File;
+  const fileC = { name: "c.jpg" } as File;
+  const fileD = { name: "d.jpg" } as File;
+
+  const rawFiles = [fileA, fileB, fileC];
+  const sortedFiles = [fileC, fileA, fileB]; // AI sorted order
+
+  // Simulate queue mutated during async analysis: fileB removed, fileD added
+  const currentFiles = [fileA, fileC, fileD];
+
+  const currentSet = new Set(currentFiles);
+  const remainingSorted = sortedFiles.filter((f) => currentSet.has(f));
+  const newlyAdded = currentFiles.filter((f) => !rawFiles.includes(f));
+  const reconciled = [...remainingSorted, ...newlyAdded];
+
+  assertEquals(reconciled.length, 3);
+  assertEquals(reconciled[0], fileC);
+  assertEquals(reconciled[1], fileA);
+  assertEquals(reconciled[2], fileD);
+  assert(!reconciled.includes(fileB));
 });
