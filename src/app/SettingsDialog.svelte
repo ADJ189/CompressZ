@@ -13,7 +13,15 @@
     type ResourceMode,
   } from "../lib/settings";
   import { syncEngineSettingsToStores } from "../store";
-  import { getThemePreference, setThemePreference, THEME_EVENT } from "../lib/theme";
+  import {
+    getThemePreference,
+    setThemePreference,
+    THEME_EVENT,
+    getColorScheme,
+    setColorScheme,
+    type ColorScheme,
+    COLOR_SCHEME_EVENT,
+  } from "../lib/theme";
   import {
     clearDismissedRecommendations,
     dismissedRecommendationCount,
@@ -38,6 +46,7 @@
 
   let settings = $state<Settings>(getSettings());
   let themePref = $state<"light" | "dark" | "system">(getThemePreference());
+  let colorScheme = $state<ColorScheme>(getColorScheme());
   let activeSection = $state<
     | "general"
     | "appearance"
@@ -59,6 +68,7 @@
   function reloadSettings() {
     settings = getSettings();
     themePref = getThemePreference();
+    colorScheme = getColorScheme();
     dismissedCount = dismissedRecommendationCount();
     telemetryEnabled = !isTelemetryOptedOut();
     optOutArmed = false;
@@ -132,8 +142,10 @@
   onMount(() => {
     reloadSettings();
     document.addEventListener(THEME_EVENT, reloadSettings);
+    document.addEventListener(COLOR_SCHEME_EVENT, reloadSettings);
     return () => {
       document.removeEventListener(THEME_EVENT, reloadSettings);
+      document.removeEventListener(COLOR_SCHEME_EVENT, reloadSettings);
     };
   });
 
@@ -180,6 +192,12 @@
     setThemePreference(val);
     themePref = val;
     toast(`Theme set to ${val}`, "success");
+  }
+
+  function handleColorSchemeChange(val: ColorScheme) {
+    setColorScheme(val);
+    colorScheme = val;
+    toast(`Color scheme set to ${val}`, "success");
   }
 
   function handleClose() {
@@ -449,6 +467,39 @@
                   onclick={() => handleThemeChange("dark")}
                 >
                   Dark
+                </button>
+              </div>
+            </div>
+
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">Color Scheme</div>
+                <div class="cz-settings-desc">Palette aesthetic & accent tones</div>
+              </div>
+              <div class="cz-segmented-track" role="group" aria-label="Color scheme selection">
+                <button
+                  type="button"
+                  class="cz-segmented-item {colorScheme === 'polished' ? 'is-active' : ''}"
+                  aria-pressed={colorScheme === "polished" ? "true" : "false"}
+                  onclick={() => handleColorSchemeChange("polished")}
+                >
+                  Polished
+                </button>
+                <button
+                  type="button"
+                  class="cz-segmented-item {colorScheme === 'origin' ? 'is-active' : ''}"
+                  aria-pressed={colorScheme === "origin" ? "true" : "false"}
+                  onclick={() => handleColorSchemeChange("origin")}
+                >
+                  Origin
+                </button>
+                <button
+                  type="button"
+                  class="cz-segmented-item {colorScheme === 'blood-moon' ? 'is-active' : ''}"
+                  aria-pressed={colorScheme === "blood-moon" ? "true" : "false"}
+                  onclick={() => handleColorSchemeChange("blood-moon")}
+                >
+                  Blood Moon
                 </button>
               </div>
             </div>
