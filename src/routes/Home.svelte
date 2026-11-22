@@ -34,8 +34,8 @@
       iconName: "image",
       name: "Compress Images",
       desc: "GPU-accelerated encoding via OffscreenCanvas. Binary search to hit exact target sizes. SSIM quality guard.",
-      tags: ["JPEG", "PNG", "WebP", "AVIF", "HEIC", "✨ AI"],
-      keywords: "image photo jpg jpeg png webp avif jxl svg gif compress quality reduce shrink ssim",
+      tags: ["WebP · AVIF · JPEG", "✨ SSIM Guard"],
+      keywords: "image photo jpg jpeg png webp avif jxl svg gif heic compress quality reduce shrink ssim ai",
     },
     {
       id: "pdf",
@@ -44,8 +44,8 @@
       iconName: "pdf",
       name: "Compress PDF",
       desc: "Structural image resampling — text and vectors untouched. Compress to exact MB/KB target.",
-      tags: ["Structural", "pdf-lib", "Target size"],
-      keywords: "pdf document shrink compress clean fonts downscale dpi",
+      tags: ["Structural", "Target Size"],
+      keywords: "pdf document shrink compress clean fonts downscale dpi structural pdf-lib target size",
     },
     {
       id: "merge",
@@ -54,8 +54,8 @@
       iconName: "merge",
       name: "Merge PDF",
       desc: "Combine multiple PDFs into one, in any order — pages copied directly, nothing rasterised.",
-      tags: ["pdf-lib", "Reorderable", "Preview"],
-      keywords: "merge pdf combine join concatenate append reorder pages",
+      tags: ["Vector Native", "Reorderable"],
+      keywords: "merge pdf combine join concatenate append reorder pages vector pdf-lib preview",
     },
     {
       id: "pdf-markdown",
@@ -64,8 +64,8 @@
       iconName: "markdown",
       name: "PDF to Markdown",
       desc: "High-fidelity structural extraction with column-aware reading order, table preservation, and figure crops.",
-      tags: ["Markdown", "TrOCR", "ZIP Bundle", "✨ New"],
-      keywords: "pdf markdown convert export extract tables text layout doc handwriting math",
+      tags: ["Markdown", "Tables & Math"],
+      keywords: "pdf markdown convert export extract tables text layout doc handwriting math zip bundle",
     },
     {
       id: "pdf-suite",
@@ -74,7 +74,7 @@
       iconName: "studio",
       name: "PDF Suite & Studio",
       desc: "Split, organize, watermark, crop margins, fill forms, redact, sign, and repair PDF files in browser.",
-      tags: ["Split", "Watermark", "Redact", "Sign", "✨ Studio"],
+      tags: ["Edit & Annotate", "Fill & Sign"],
       keywords: "pdf suite studio edit split organize watermark crop forms redact sign repair",
     },
     {
@@ -84,8 +84,8 @@
       iconName: "image",
       name: "Images to PDF",
       desc: "Combine photos or screenshots into one PDF, one page each, reorderable with visual previews.",
-      tags: ["pdf-lib", "Reorderable", "GPU", "✨ AI"],
-      keywords: "images to pdf photo jpg png sequence pages sheet album",
+      tags: ["Image Sequence", "✨ AI Sort"],
+      keywords: "images to pdf photo jpg png sequence pages sheet album pdf-lib reorderable gpu ai",
     },
     {
       id: "video",
@@ -94,8 +94,8 @@
       iconName: "video",
       name: "Compress Video",
       desc: "WebCodecs hardware acceleration with FFmpeg.wasm multi-threaded fallback for edit proxies.",
-      tags: ["H.264", "H.265", "VP9", "AV1"],
-      keywords: "video mp4 webm h264 h265 av1 webcodecs mediabunny ffmpeg",
+      tags: ["WebCodecs", "Hardware"],
+      keywords: "video mp4 webm h264 h265 av1 vp9 webcodecs mediabunny ffmpeg hardware",
     },
     {
       id: "audio",
@@ -104,8 +104,8 @@
       iconName: "audio",
       name: "Compress Audio",
       desc: "FFmpeg.wasm encodes to 6 formats with custom bitrate, sample rate, and volume normalization.",
-      tags: ["MP3", "AAC", "Opus", "FLAC", "WAV"],
-      keywords: "audio mp3 aac opus flac wav normalize bitrate transcode",
+      tags: ["FFmpeg", "Bitrate Control"],
+      keywords: "audio mp3 aac opus flac wav normalize bitrate transcode ffmpeg",
     },
     {
       id: "gif",
@@ -114,8 +114,8 @@
       iconName: "gif",
       name: "Compress GIF",
       desc: "Gold-standard two-pass palettegen + paletteuse Bayer dithering or WebM VP9 conversion.",
-      tags: ["GIF", "WebM VP9", "FFmpeg"],
-      keywords: "gif webm vp9 palettegen animation motion",
+      tags: ["Two-Pass Bayer", "WebM Export"],
+      keywords: "gif webm vp9 palettegen animation motion ffmpeg bayer",
     },
     {
       id: "ocr",
@@ -124,8 +124,8 @@
       iconName: "ocr",
       name: "Searchable PDF OCR",
       desc: "Turn scanned PDFs and images into searchable PDFs. Tesseract.js LSTM neural OCR in WebAssembly (100+ langs).",
-      tags: ["Tesseract", "WASM", "Searchable PDF"],
-      keywords: "ocr pdf searchable tesseract scanned text document extract",
+      tags: ["Tesseract 5", "Searchable PDF"],
+      keywords: "ocr pdf searchable tesseract scanned text document extract wasm",
     },
     {
       id: "convert",
@@ -134,8 +134,8 @@
       iconName: "convert",
       name: "Convert Formats",
       desc: "Format conversion for video, audio, images, PDF ⇄ images, Word DOCX, and PowerPoint PPTX.",
-      tags: ["Video", "DOCX", "PPTX", "PDF"],
-      keywords: "convert video audio images docx pptx pdf transcode",
+      tags: ["Cross-Format", "Office & Media"],
+      keywords: "convert video audio images docx pptx pdf transcode office media",
     },
   ];
 </script>

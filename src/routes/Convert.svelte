@@ -437,44 +437,91 @@
     let matchedCat: Category | null = null;
     let matchedTarget: string | null = null;
 
-    if (staged.actionId === "pdf-to-word") {
-      matchedCat = "pdf2office";
-      matchedTarget = "docx";
-    } else if (staged.actionId === "pdf-to-excel") {
-      matchedCat = "pdf2office";
-      matchedTarget = "xlsx";
-    } else if (staged.actionId === "pdf-to-ppt") {
-      matchedCat = "pdf2office";
-      matchedTarget = "pptx";
-    } else if (staged.actionId === "pdf-to-images") {
-      matchedCat = "pdf2img";
-      matchedTarget = "png";
-    } else if (staged.actionId === "docx-to-pdf") {
-      matchedCat = "docx";
-      matchedTarget = "pdf";
-    } else if (staged.actionId === "docx-to-txt") {
-      matchedCat = "docx";
-      matchedTarget = "txt";
-    } else if (staged.actionId === "xlsx-to-pdf") {
-      matchedCat = "xlsx";
-      matchedTarget = "pdf";
-    } else if (staged.actionId === "xlsx-to-csv") {
-      matchedCat = "xlsx";
-      matchedTarget = "csv";
-    } else if (staged.actionId === "pptx-to-pdf") {
-      matchedCat = "pptx";
-      matchedTarget = "pdf";
-    } else if (staged.actionId === "pptx-to-txt") {
-      matchedCat = "pptx";
-      matchedTarget = "txt";
-    } else if (staged.actionId === "convert-image") {
-      matchedCat = "image";
-      matchedTarget = "webp";
-    } else {
-      const detected = detectCategoryForFile(staged.file);
-      if (detected) {
-        matchedCat = detected.cat;
-        matchedTarget = detected.target;
+    if (staged.targetRoute && staged.targetRoute.includes("?")) {
+      const qs = staged.targetRoute.split("?")[1];
+      const params = new URLSearchParams(qs);
+      const qFrom = params.get("from");
+      const qTo = params.get("to");
+      const qCat = params.get("cat");
+      if (qCat && Object.hasOwn(CATS, qCat)) {
+        matchedCat = qCat as Category;
+        matchedTarget = qTo || CATS[matchedCat].targets[0].value;
+      } else if (qFrom === "pdf" && qTo === "docx") {
+        matchedCat = "pdf2office";
+        matchedTarget = "docx";
+      } else if (qFrom === "pdf" && qTo === "xlsx") {
+        matchedCat = "pdf2office";
+        matchedTarget = "xlsx";
+      } else if (qFrom === "pdf" && qTo === "pptx") {
+        matchedCat = "pdf2office";
+        matchedTarget = "pptx";
+      } else if (qFrom === "pdf" && qTo === "images") {
+        matchedCat = "pdf2img";
+        matchedTarget = "png";
+      } else if (qFrom === "docx" && qTo === "pdf") {
+        matchedCat = "docx";
+        matchedTarget = "pdf";
+      } else if (qFrom === "docx" && qTo === "txt") {
+        matchedCat = "docx";
+        matchedTarget = "txt";
+      } else if (qFrom === "xlsx" && qTo === "pdf") {
+        matchedCat = "xlsx";
+        matchedTarget = "pdf";
+      } else if (qFrom === "xlsx" && qTo === "csv") {
+        matchedCat = "xlsx";
+        matchedTarget = "csv";
+      } else if (qFrom === "pptx" && qTo === "pdf") {
+        matchedCat = "pptx";
+        matchedTarget = "pdf";
+      } else if (qFrom === "pptx" && qTo === "txt") {
+        matchedCat = "pptx";
+        matchedTarget = "txt";
+      } else if (qFrom === "html" || qTo === "html") {
+        matchedCat = "html";
+        matchedTarget = "pdf";
+      }
+    }
+
+    if (!matchedCat) {
+      if (staged.actionId === "pdf-to-word") {
+        matchedCat = "pdf2office";
+        matchedTarget = "docx";
+      } else if (staged.actionId === "pdf-to-excel") {
+        matchedCat = "pdf2office";
+        matchedTarget = "xlsx";
+      } else if (staged.actionId === "pdf-to-ppt") {
+        matchedCat = "pdf2office";
+        matchedTarget = "pptx";
+      } else if (staged.actionId === "pdf-to-images") {
+        matchedCat = "pdf2img";
+        matchedTarget = "png";
+      } else if (staged.actionId === "docx-to-pdf") {
+        matchedCat = "docx";
+        matchedTarget = "pdf";
+      } else if (staged.actionId === "docx-to-txt") {
+        matchedCat = "docx";
+        matchedTarget = "txt";
+      } else if (staged.actionId === "xlsx-to-pdf") {
+        matchedCat = "xlsx";
+        matchedTarget = "pdf";
+      } else if (staged.actionId === "xlsx-to-csv") {
+        matchedCat = "xlsx";
+        matchedTarget = "csv";
+      } else if (staged.actionId === "pptx-to-pdf") {
+        matchedCat = "pptx";
+        matchedTarget = "pdf";
+      } else if (staged.actionId === "pptx-to-txt") {
+        matchedCat = "pptx";
+        matchedTarget = "txt";
+      } else if (staged.actionId === "convert-image") {
+        matchedCat = "image";
+        matchedTarget = "webp";
+      } else {
+        const detected = detectCategoryForFile(staged.file);
+        if (detected) {
+          matchedCat = detected.cat;
+          matchedTarget = detected.target;
+        }
       }
     }
 
