@@ -742,8 +742,8 @@
     .cz-dialog {
       width: calc(100vw - 16px);
       max-width: calc(100vw - 16px);
-      max-height: 92dvh;
       max-height: calc(100vh - 24px);
+      max-height: 92dvh;
       border-radius: var(--r, 16px);
       margin: 0;
     }
