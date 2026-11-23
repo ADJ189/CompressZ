@@ -380,7 +380,7 @@ async function decompressFlateWeb(
   }
 }
 
-async function decompressFlateNode(
+export async function decompressFlateNode(
   bytes: Uint8Array,
   maxBytes: number,
 ): Promise<Uint8Array | null> {
@@ -406,11 +406,13 @@ async function decompressFlateNode(
           total += take;
         }
         if (total >= maxBytes) {
+          finish(concatChunks(chunks, total));
           inf.destroy();
         }
       });
       inf.on("end", () => finish(concatChunks(chunks, total)));
       inf.on("error", () => {
+        if (settled) return;
         // Fall back to raw inflate
         const rawChunks: Uint8Array[] = [];
         let rawTotal = 0;
@@ -422,6 +424,7 @@ async function decompressFlateNode(
             rawTotal += take;
           }
           if (rawTotal >= maxBytes) {
+            finish(concatChunks(rawChunks, rawTotal));
             rawInf.destroy();
           }
         });
@@ -440,7 +443,8 @@ export function decodeAsciiHex(bytes: Uint8Array, maxBytes: number): Uint8Array 
   const out: number[] = [];
   let firstNibble = -1;
   let terminated = false;
-  for (let i = 0; i < bytes.length && out.length < maxBytes; i++) {
+  let i = 0;
+  for (; i < bytes.length && out.length < maxBytes; i++) {
     const ch = bytes[i];
     if (ch === 0x3e) {
       terminated = true;
@@ -464,6 +468,30 @@ export function decodeAsciiHex(bytes: Uint8Array, maxBytes: number): Uint8Array 
   }
   if (firstNibble !== -1 && out.length < maxBytes) {
     out.push(firstNibble << 4);
+  }
+  if (!terminated && out.length >= maxBytes) {
+    const termIdx = bytes.indexOf(0x3e, i);
+    if (termIdx !== -1) {
+      let validHex = true;
+      for (let j = i; j < termIdx; j++) {
+        const ch = bytes[j];
+        if (ch === 0x00 || ch === 0x09 || ch === 0x0a || ch === 0x0c || ch === 0x0d || ch === 0x20) {
+          continue;
+        }
+        if (
+          (ch >= 0x30 && ch <= 0x39) ||
+          (ch >= 0x41 && ch <= 0x46) ||
+          (ch >= 0x61 && ch <= 0x66)
+        ) {
+          continue;
+        }
+        validHex = false;
+        break;
+      }
+      if (validHex) {
+        terminated = true;
+      }
+    }
   }
   if (bytes.length > 0 && !terminated) {
     return null; // stream was not properly terminated with '>'

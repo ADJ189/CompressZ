@@ -294,8 +294,8 @@ const PDF_CONVERSION_GROUPS: ConversionGroup[] = [
   {
     category: "Convert to Images",
     targets: [
-      { id: "pdf-to-images-png", name: "Lossless PNG Pages", format: "PNG", route: "convert?from=pdf&to=images", hub: "convert" },
-      { id: "pdf-to-images-jpeg", name: "Compact JPEG Pages", format: "JPEG", route: "convert?from=pdf&to=images", hub: "convert" },
+      { id: "pdf-to-images-png", name: "Lossless PNG Pages", format: "PNG", route: "convert?cat=pdf2img&to=png", hub: "convert" },
+      { id: "pdf-to-images-jpeg", name: "Compact JPEG Pages", format: "JPEG", route: "convert?cat=pdf2img&to=jpeg", hub: "convert" },
     ],
   },
   {
@@ -367,7 +367,7 @@ const IMAGE_CONVERSION_GROUPS: ConversionGroup[] = [
       { id: "image-to-webp", name: "WebP Image", format: "WebP", route: "convert?cat=image&to=webp", hub: "convert", badge: "Recommended" },
       { id: "image-to-avif", name: "AVIF Image", format: "AVIF", route: "convert?cat=image&to=avif", hub: "convert", badge: "Next-Gen" },
       { id: "image-to-png", name: "PNG Image", format: "PNG", route: "convert?cat=image&to=png", hub: "convert", badge: "Lossless" },
-      { id: "image-to-jpeg", name: "JPEG Image", format: "JPEG", route: "convert?cat=image&to=jpg", hub: "convert" },
+      { id: "image-to-jpeg", name: "JPEG Image", format: "JPEG", route: "convert?cat=image&to=jpeg", hub: "convert" },
     ],
   },
   {
