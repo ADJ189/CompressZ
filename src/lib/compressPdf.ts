@@ -439,7 +439,21 @@ export async function decompressFlateNode(
   }
 }
 
-export function decodeAsciiHex(bytes: Uint8Array, maxBytes: number): Uint8Array | null {
+export type DecodedAsciiHex = Uint8Array & {
+  bytes: Uint8Array;
+  terminated: boolean;
+};
+
+export function decodeAsciiHex(
+  bytes: Uint8Array,
+  maxBytes: number,
+): DecodedAsciiHex | null {
+  if (maxBytes <= 0) {
+    const empty = new Uint8Array(0) as DecodedAsciiHex;
+    empty.bytes = empty;
+    empty.terminated = bytes.length === 0;
+    return empty;
+  }
   const out: number[] = [];
   let firstNibble = -1;
   let terminated = false;
@@ -469,34 +483,30 @@ export function decodeAsciiHex(bytes: Uint8Array, maxBytes: number): Uint8Array 
   if (firstNibble !== -1 && out.length < maxBytes) {
     out.push(firstNibble << 4);
   }
-  if (!terminated && out.length >= maxBytes) {
-    const termIdx = bytes.indexOf(0x3e, i);
-    if (termIdx !== -1) {
-      let validHex = true;
-      for (let j = i; j < termIdx; j++) {
-        const ch = bytes[j];
-        if (ch === 0x00 || ch === 0x09 || ch === 0x0a || ch === 0x0c || ch === 0x0d || ch === 0x20) {
-          continue;
-        }
-        if (
-          (ch >= 0x30 && ch <= 0x39) ||
-          (ch >= 0x41 && ch <= 0x46) ||
-          (ch >= 0x61 && ch <= 0x66)
-        ) {
-          continue;
-        }
-        validHex = false;
-        break;
+  if (!terminated) {
+    let j = i;
+    while (j < bytes.length) {
+      const ch = bytes[j];
+      if (ch === 0x00 || ch === 0x09 || ch === 0x0a || ch === 0x0c || ch === 0x0d || ch === 0x20) {
+        j++;
+        continue;
       }
-      if (validHex) {
+      if (ch === 0x3e) {
         terminated = true;
       }
+      break;
     }
   }
-  if (bytes.length > 0 && !terminated) {
+  // Distinguish output-cap exhaustion from genuinely missing terminator:
+  // Only reject as malformed if the stream ended without reaching maxBytes
+  // and without seeing '>'.
+  if (out.length < maxBytes && bytes.length > 0 && !terminated) {
     return null; // stream was not properly terminated with '>'
   }
-  return new Uint8Array(out);
+  const result = new Uint8Array(out) as DecodedAsciiHex;
+  result.bytes = result;
+  result.terminated = terminated;
+  return result;
 }
 
 export async function decompressFlate(
@@ -635,10 +645,10 @@ export async function getPageContentText(
               failedOrUnsupported = true;
               break;
             }
-            if (next.length >= remainingBytes) {
+            if (!next.terminated) {
               incomplete = true;
             }
-            currentBytes = next;
+            currentBytes = next.bytes;
           } else if (norm === "FlateDecode") {
             const next = await decompressFlate(currentBytes, remainingBytes);
             if (!next) {
