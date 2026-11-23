@@ -445,7 +445,11 @@
       const qCat = params.get("cat");
       if (qCat && Object.hasOwn(CATS, qCat)) {
         matchedCat = qCat as Category;
-        matchedTarget = qTo || CATS[matchedCat].targets[0].value;
+        let reqTarget = qTo || CATS[matchedCat].targets[0].value;
+        if (reqTarget === "jpg" && CATS[matchedCat].targets.some((t) => t.value === "jpeg")) {
+          reqTarget = "jpeg";
+        }
+        matchedTarget = reqTarget;
       } else if (qFrom === "pdf" && qTo === "docx") {
         matchedCat = "pdf2office";
         matchedTarget = "docx";
@@ -457,7 +461,13 @@
         matchedTarget = "pptx";
       } else if (qFrom === "pdf" && qTo === "images") {
         matchedCat = "pdf2img";
-        matchedTarget = "png";
+        const qFmt = params.get("fmt");
+        matchedTarget =
+          qFmt && CATS.pdf2img.targets.some((t) => t.value === qFmt)
+            ? qFmt
+            : qFmt === "jpg"
+              ? "jpeg"
+              : "png";
       } else if (qFrom === "docx" && qTo === "pdf") {
         matchedCat = "docx";
         matchedTarget = "pdf";
@@ -492,9 +502,15 @@
       } else if (staged.actionId === "pdf-to-ppt") {
         matchedCat = "pdf2office";
         matchedTarget = "pptx";
-      } else if (staged.actionId === "pdf-to-images") {
+      } else if (staged.actionId === "pdf-to-images" || staged.actionId === "pdf-to-images-png") {
         matchedCat = "pdf2img";
         matchedTarget = "png";
+      } else if (staged.actionId === "pdf-to-images-jpeg") {
+        matchedCat = "pdf2img";
+        matchedTarget = "jpeg";
+      } else if (staged.actionId === "image-to-jpeg") {
+        matchedCat = "image";
+        matchedTarget = "jpeg";
       } else if (staged.actionId === "docx-to-pdf") {
         matchedCat = "docx";
         matchedTarget = "pdf";
