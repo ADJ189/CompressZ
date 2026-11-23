@@ -358,3 +358,8 @@ Deno.test("optimizeSvg: out-of-range numeric character reference &#x110000; does
   assert(text.includes("<circle"), "Circle must be preserved");
   assert(text.includes("<a "), "Link must be preserved without throwing RangeError");
 });
+
+
+
+
+

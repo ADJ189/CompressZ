@@ -6,6 +6,7 @@ import {
   calculateTargetQuality,
   decodeAsciiHex,
   decompressFlate,
+  decompressFlateNode,
   getPageContentText,
   MAX_PAGE_SCAN_STREAM_BYTES,
   MAX_PAGE_SCAN_TOTAL_BYTES,
@@ -396,3 +397,59 @@ Deno.test("compressPdf: getPageContentText marks incomplete: true when ASCIIHex 
   const res2 = await getPageContentText(mockPage2, mockPdfDoc2);
   assertEquals(res2.incomplete, true);
 });
+
+Deno.test("compressPdf: valid ASCIIHex stream exceeding cap returns prefix and counts toward budget", async () => {
+  // A valid ASCIIHex stream with 760 chars (repeated 20 times) ending with '>'
+  const rawChunk = "q 100 0 0 100 0 0 cm /AsciiImage Do Q\n";
+  const repeated = rawChunk.repeat(20);
+  let hexStr = "";
+  for (let i = 0; i < repeated.length; i++) {
+    hexStr += repeated.charCodeAt(i).toString(16).padStart(2, "0");
+  }
+  hexStr += " >";
+  const hexBytes = new TextEncoder().encode(hexStr);
+
+  // 1. Direct decodeAsciiHex with small maxBytes returns capped bytes and is not treated as null
+  const cappedDecoded = decodeAsciiHex(hexBytes, 50);
+  assert(cappedDecoded !== null);
+  assertEquals(cappedDecoded!.length, 50);
+  assertEquals(new TextDecoder().decode(cappedDecoded!).startsWith("q 100 0 0"), true);
+
+  // 2. In getPageContentText, bytesRead must count the 50 bytes toward budget, and mark truncated & incomplete
+  const mockItem = {
+    contents: hexBytes,
+    dict: {
+      lookup: () => ({ encodedName: "/ASCIIHexDecode" }),
+    },
+  };
+  const mockPage = { node: { Contents: () => [mockItem] } };
+  const mockPdfDoc = { context: { obj: (v: string) => v, lookup: (v: any) => v } };
+  const res = await getPageContentText(mockPage, mockPdfDoc, undefined, 50);
+
+  assertEquals(res.bytesRead, 50);
+  assertEquals(res.truncated, true);
+  assertEquals(res.incomplete, true);
+  assertEquals(res.text.includes("/AsciiImage"), true);
+});
+
+Deno.test("compressPdf: decompressFlateNode settles at maxBytes limit for normal and raw inflate", async () => {
+  const zlib = await import("node:zlib");
+  const payload = Buffer.from("q 10 0 0 10 0 0 cm /NodeFlateImage Do Q\n".repeat(100)); // ~4000 bytes
+
+  // Normal zlib inflate
+  const normalDeflated = new Uint8Array(zlib.deflateSync(payload));
+  const normalResult = await decompressFlateNode(normalDeflated, 50);
+  assert(normalResult !== null);
+  assertEquals(normalResult!.length, 50);
+  assertEquals(new TextDecoder().decode(normalResult!).startsWith("q 10 0 0"), true);
+
+  // Raw deflate (no zlib headers)
+  const rawDeflated = new Uint8Array(zlib.deflateRawSync(payload));
+  const rawResult = await decompressFlateNode(rawDeflated, 50);
+  assert(rawResult !== null);
+  assertEquals(rawResult!.length, 50);
+  assertEquals(new TextDecoder().decode(rawResult!).startsWith("q 10 0 0"), true);
+});
+
+
+

@@ -267,3 +267,4 @@ Deno.test("options: imagesToPdf queue reconciliation preserves added files and r
   assertEquals(reconciled[2], fileD);
   assert(!reconciled.includes(fileB));
 });
+
