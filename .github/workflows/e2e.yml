@@ -49,7 +49,7 @@ jobs:
       # Download and cache only the browser binary required for the current matrix project,
       # rather than installing all three browser engines in every job.
       - name: Cache Playwright browser
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
