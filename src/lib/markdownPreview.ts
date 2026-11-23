@@ -261,9 +261,11 @@ function renderInline(text: string): string {
   // Images ![alt](src) (handled before links)
   result = result.replace(/!\[([^[\n\]]*)\]\(([^)\n]+)\)/g, (_match, alt, src) => {
     const safe = safeImgSrc(src);
-    if (!safe) return `<!-- [image: ${escapeHtml(alt)}] -->`;
+    // `alt` was already HTML-escaped when `result` was built, so escaping it
+    // again would render `&amp;` as `&amp;amp;` in the visible alt text.
+    if (!safe) return `<!-- [image: ${alt}] -->`;
     return stash(
-      `<img src="${safe}" alt="${escapeHtml(alt)}" class="cz-rendered-img" />`,
+      `<img src="${safe}" alt="${alt}" class="cz-rendered-img" />`,
     );
   });
 

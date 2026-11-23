@@ -59,8 +59,9 @@ async function runCompressGif(
     const q = options.quality ?? 0.82;
     const colors = Math.round(16 + q * 240);
 
+    // Invariant #1: never upscale. Cap maxWidth without enlarging smaller GIFs.
     const scalePart = options.maxWidth
-      ? `scale=${options.maxWidth}:-1:flags=lanczos,`
+      ? `scale='min(${options.maxWidth},iw)':-1:flags=lanczos,`
       : "";
     const fpsPart = options.fps ? `fps=${options.fps},` : "";
     const pre = `${fpsPart}${scalePart}`;

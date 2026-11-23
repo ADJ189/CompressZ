@@ -5,6 +5,7 @@
     type RedactionRegion,
     transformVisualPointToPdf,
     transformVisualRectToPdf,
+    applyTrueRedaction,
   } from "../lib/pdfTools/redactPdf";
   import { sanitizeWinAnsi } from "../lib/pdfTools/watermarkPdf";
   import SignaturePad from "./SignaturePad.svelte";
@@ -367,7 +368,6 @@
 
     // If true redactions exist, apply irreversible raster burn-in to sanitize document
     if (trueRedactionRegions.length > 0) {
-      const { applyTrueRedaction } = await import("../lib/pdfTools/redactPdf");
       modified = await applyTrueRedaction(modified, {
         regions: trueRedactionRegions,
       });

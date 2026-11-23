@@ -15,9 +15,13 @@
     naturalCompare,
     type Recommendation,
   } from "../lib/recommendations";
+  import { smartAnalyze, sortByPredictedLabel } from "../lib/aiEngine";
+  import { getSettings, resolvedAiModelTier } from "../lib/settings";
 
   let imagesToPdfState = $state<ImagesToPdfState>(imagesToPdfStore.get());
   let isConverting = $state(false);
+  let isAiSorting = $state(false);
+  let aiEnabled = $state(getSettings().ai?.enabled ?? true);
   let convertedBlob = $state<Blob | null>(null);
   let dismissTrigger = $state(0);
   let draggedIndex = $state<number | null>(null);
@@ -105,6 +109,7 @@
   }
 
   onMount(() => {
+    aiEnabled = getSettings().ai?.enabled ?? true;
     applyStagedFile();
   });
 
@@ -154,6 +159,43 @@
   function reverseOrder() {
     updateStore({ files: [...imagesToPdfState.files].reverse() });
     toast("Reversed image order", "success");
+  }
+
+  /** Reorder images by predicted content class using on-device local AI */
+  async function handleAiSmartSort() {
+    if (imagesToPdfState.files.length < 2) return;
+    const settings = getSettings();
+    if (!settings.ai?.enabled) return;
+    isAiSorting = true;
+    toast("Organizing images with on-device AI…");
+    try {
+      const rawFiles = imagesToPdfState.files;
+      const tier = resolvedAiModelTier(settings);
+      const analyses = await smartAnalyze(rawFiles, tier);
+      const currentFiles = imagesToPdfState.files;
+      if (currentFiles.length === 0) return;
+
+      const hasPredictions = analyses.some((a) => Boolean(a.tag?.label));
+      if (!hasPredictions) {
+        const sorted = [...currentFiles].sort((a, b) => naturalCompare(a.name, b.name));
+        updateStore({ files: sorted });
+        toast("Could not classify images; sorted numerically", "warn");
+        return;
+      }
+
+      const sortedFiles = sortByPredictedLabel(rawFiles, analyses);
+      // Reconcile: keep files still in currentFiles in sorted order, append any newly added files
+      const currentSet = new Set(currentFiles);
+      const remainingSorted = sortedFiles.filter((f) => currentSet.has(f));
+      const newlyAdded = currentFiles.filter((f) => !rawFiles.includes(f));
+      updateStore({ files: [...remainingSorted, ...newlyAdded] });
+      toast("Organized images by predicted content class", "success");
+    } catch (err) {
+      console.warn("[imagesToPdf:aiSmartSort] fallback:", err);
+      sortNatural();
+    } finally {
+      isAiSorting = false;
+    }
   }
 
   function handleDragStart(index: number, e: DragEvent) {
@@ -358,6 +400,17 @@
           >
             Reverse
           </button>
+          {#if aiEnabled}
+            <button
+              type="button"
+              class="cz-btn cz-btn-secondary cz-btn-sm cz-btn-ai"
+              disabled={isAiSorting || imagesToPdfState.files.length < 2}
+              onclick={handleAiSmartSort}
+              title="Sort images by predicted content class using on-device AI"
+            >
+              {isAiSorting ? "AI Sorting…" : "✨ AI Sort"}
+            </button>
+          {/if}
           <button
             type="button"
             class="cz-btn cz-btn-primary cz-btn-sm"

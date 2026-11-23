@@ -487,6 +487,7 @@ test("every Settings section opens with its own content", async ({ page }) => {
     ["Compression", /engine/i],
     ["Privacy & data", /Stored in this browser/],
     ["Diagnostics", /This Device|Image path|Capabilities/i],
+    ["Support & Issues", /GitHub|Troubleshooting|Report/i],
   ];
 
   await expect(page.locator("#settings-nav .cz-settings__nav-btn")).toHaveCount(

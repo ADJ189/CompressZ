@@ -51,9 +51,10 @@ CompressF is still maintained as its own project.
 Settings is a dialog split into eight sections: **General**, **Appearance**, **Performance**, **AI engine**,
 **Suggestions**, **Compression**, **Privacy &amp; data**, and **Diagnostics**.
 
-- **Appearance** — `Light`, `Dark`, or `System` (follow the operating system). The header button remains a quick
+- **Appearance** — `Light`, `Dark`, or `System` (follow the operating system) theme mode, alongside three distinct Color Schemes: `Polished` (modern emerald/mint, default), `Origin` (classic blue/indigo), and `Blood Moon` (deep crimson/scarlet) with calibrated high-contrast status messages and WCAG-compliant readability. The header button remains a quick
   light/dark flip; picking a side there opts out of `System`. The resolved value is always written to
-  `data-theme`, so the whole stylesheet keeps working unchanged.
+  `data-theme` and `data-color-scheme`, so the whole stylesheet keeps working seamlessly without flicker.
+- **Universal Upload Hub** — Clicking or dropping any file in the universal upload opens a CloudConvert-style conversion modal showing file metadata, detected device acceleration hints (WebCodecs GPU, WebGL2, WASM SIMD, worker count), target format matrices, and direct 1-click tools.
 - **This Device / Diagnostics** — a read-only snapshot of what your browser exposes locally (OS, CPU cores,
   memory, GPU/WebGL2/WebGPU, cross-origin isolation, network type) plus the execution profile CompressZ derived
   from it. Nothing here is sent anywhere; it is computed by `src/lib/platform.ts`. **Copy diagnostics** writes a
@@ -398,6 +399,13 @@ CompressZ runs 100% client-side. See [LIMITATIONS.md](LIMITATIONS.md) for detail
 ## Privacy
 
 CompressZ has no backend. Files never leave your browser. See [PRIVACY.md](PRIVACY.md) (also live at [/privacy](https://compressz.pages.dev/privacy)) for full details.
+
+### Architecture & Policy Documentation
+- [docs/ENGINE_POLICY.md](docs/ENGINE_POLICY.md) — Comprehensive media, PDF, office, and archive engine specifications.
+- [docs/AI_ENGINE_POLICY.md](docs/AI_ENGINE_POLICY.md) — On-device AI/ML runtime, zero-cloud inference, and weight caching policy.
+- [docs/TELEMETRY_POLICY.md](docs/TELEMETRY_POLICY.md) — Error reporting, payload scrubbing pipeline, and opt-out controls.
+- [LIMITATIONS.md](LIMITATIONS.md) — Operational thresholds, WebAssembly memory ceilings, and 4 GiB ZIP boundaries.
+- [SECURITY.md](SECURITY.md) — Security model, local-first isolation, and vulnerability disclosure policy.
 
 ---
 

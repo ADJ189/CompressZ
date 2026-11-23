@@ -62,25 +62,46 @@ export function planVideoSize(
   };
 }
 
-/** Resolve display dimensions + duration from a video element. */
-export function getVideoMeta(file: File): Promise<VideoMeta> {
+/** Resolve display dimensions + duration from a video element with timeout guards. */
+export function getVideoMeta(file: File, timeoutMs: number = 10_000): Promise<VideoMeta> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const v = document.createElement("video");
     v.preload = "metadata";
-    v.src = url;
-    v.onloadedmetadata = () => {
+    let settled = false;
+
+    const cleanup = () => {
+      settled = true;
+      clearTimeout(timer);
+      v.onloadedmetadata = null;
+      v.onerror = null;
       URL.revokeObjectURL(url);
+    };
+
+    const timer = setTimeout(() => {
+      if (settled) return;
+      cleanup();
+      reject(new Error("Timed out reading video metadata"));
+    }, timeoutMs);
+
+    v.onloadedmetadata = () => {
+      if (settled) return;
       const duration = Number.isFinite(v.duration) ? v.duration : 30;
-      resolve({
+      const meta = {
         width: v.videoWidth || 1280,
         height: v.videoHeight || 720,
         duration: duration > 0 ? duration : 30,
-      });
+      };
+      cleanup();
+      resolve(meta);
     };
+
     v.onerror = () => {
-      URL.revokeObjectURL(url);
+      if (settled) return;
+      cleanup();
       reject(new Error("Cannot read video metadata"));
     };
+
+    v.src = url;
   });
 }

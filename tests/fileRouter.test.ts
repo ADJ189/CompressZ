@@ -126,3 +126,33 @@ Deno.test("fileRouter: MPEG audio sync detection and UTF-16LE BOM rejection", ()
   assertEquals(identifyHeader(allOnes), "unknown");
 });
 
+Deno.test("fileRouter: JPEG conversion routes map to valid target values", () => {
+  const pdfFile = new File(["test pdf content"], "sample.pdf", {
+    type: "application/pdf",
+  });
+  const pdfResult = detectFileTypeAndActions(pdfFile);
+  const pdfImageGroup = pdfResult.conversionGroups?.find(
+    (g) => g.category === "Convert to Images",
+  );
+  assertEquals(pdfImageGroup !== undefined, true);
+
+  const pngTarget = pdfImageGroup!.targets.find((t) => t.id === "pdf-to-images-png");
+  assertEquals(pngTarget?.route, "convert?cat=pdf2img&to=png");
+
+  const jpegTarget = pdfImageGroup!.targets.find((t) => t.id === "pdf-to-images-jpeg");
+  assertEquals(jpegTarget?.route, "convert?cat=pdf2img&to=jpeg");
+
+  const imgFile = new File(["fake image content"], "photo.png", {
+    type: "image/png",
+  });
+  const imgResult = detectFileTypeAndActions(imgFile);
+  const imgGroup = imgResult.conversionGroups?.find(
+    (g) => g.category === "Convert Image Format",
+  );
+  assertEquals(imgGroup !== undefined, true);
+
+  const imgJpegTarget = imgGroup!.targets.find((t) => t.id === "image-to-jpeg");
+  assertEquals(imgJpegTarget?.route, "convert?cat=image&to=jpeg");
+});
+
+

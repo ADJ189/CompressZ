@@ -48,10 +48,11 @@ export async function encryptFileAesGcm(
     ["encrypt"],
   );
 
+  const plainBytes = bytes.slice();
   const cipherBuffer = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv: iv as BufferSource },
     key,
-    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as BufferSource,
+    plainBytes as BufferSource,
   );
 
   const magic = new TextEncoder().encode("CZ25");
@@ -80,24 +81,11 @@ export async function decryptFileAesGcm(
     throw new Error("Invalid file header: not a CompressZ AES-256 encrypted payload.");
   }
 
-  const salt = new Uint8Array(
-    encryptedBytes.buffer.slice(
-      encryptedBytes.byteOffset + 4,
-      encryptedBytes.byteOffset + 20,
-    ),
-  );
-  const iv = new Uint8Array(
-    encryptedBytes.buffer.slice(
-      encryptedBytes.byteOffset + 20,
-      encryptedBytes.byteOffset + 32,
-    ),
-  );
-  const ciphertext = new Uint8Array(
-    encryptedBytes.buffer.slice(
-      encryptedBytes.byteOffset + 32,
-      encryptedBytes.byteOffset + encryptedBytes.byteLength,
-    ),
-  );
+  // Create independent copies of salt, iv, and ciphertext before any async boundaries
+  // to guard against caller-mutable buffer modifications during crypto operations.
+  const salt = new Uint8Array(encryptedBytes.subarray(4, 20));
+  const iv = new Uint8Array(encryptedBytes.subarray(20, 32));
+  const ciphertext = new Uint8Array(encryptedBytes.subarray(32));
 
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
