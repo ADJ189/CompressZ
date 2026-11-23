@@ -230,7 +230,12 @@ const PDF_ACTION_DEFS: ActionTuple[] = [
 
 const OFFICE_CONFIGS: Record<
   "docx" | "pptx" | "xlsx",
-  { label: string; mime: string; actions: ActionTuple[] }
+  {
+    label: string;
+    mime: string;
+    actions: ActionTuple[];
+    conversionGroups: ConversionGroup[];
+  }
 > = {
   docx: {
     label: "Microsoft Word Document",
@@ -238,6 +243,15 @@ const OFFICE_CONFIGS: Record<
     actions: [
       ["docx-to-pdf", "Word to PDF", "📄", "Convert DOCX to high-fidelity PDF with styles & tables", "convert?from=docx&to=pdf", "convert"],
       ["docx-to-txt", "Extract Text", "📝", "Extract raw document text without formatting", "convert?from=docx&to=txt", "convert"],
+    ],
+    conversionGroups: [
+      {
+        category: "Convert Document",
+        targets: [
+          { id: "docx-to-pdf", name: "PDF Document", format: "PDF", route: "convert?from=docx&to=pdf", hub: "convert", badge: "Recommended" },
+          { id: "docx-to-txt", name: "Plain Text", format: "TXT", route: "convert?from=docx&to=txt", hub: "convert" },
+        ],
+      },
     ],
   },
   pptx: {
@@ -247,6 +261,15 @@ const OFFICE_CONFIGS: Record<
       ["pptx-to-pdf", "PowerPoint to PDF", "📊", "Convert slides into multi-page landscape PDF", "convert?from=pptx&to=pdf", "convert"],
       ["pptx-to-txt", "Extract Slide Text", "📝", "Extract text content from every slide in order", "convert?from=pptx&to=txt", "convert"],
     ],
+    conversionGroups: [
+      {
+        category: "Convert Presentation",
+        targets: [
+          { id: "pptx-to-pdf", name: "PDF Slides", format: "PDF", route: "convert?from=pptx&to=pdf", hub: "convert", badge: "Recommended" },
+          { id: "pptx-to-txt", name: "Slide Text", format: "TXT", route: "convert?from=pptx&to=txt", hub: "convert" },
+        ],
+      },
+    ],
   },
   xlsx: {
     label: "Excel Spreadsheet",
@@ -254,6 +277,15 @@ const OFFICE_CONFIGS: Record<
     actions: [
       ["xlsx-to-pdf", "Excel to PDF", "📈", "Convert spreadsheet sheets into formatted PDF tables", "convert?from=xlsx&to=pdf", "convert"],
       ["xlsx-to-csv", "Convert to CSV", "📑", "Export active sheet to comma-separated values", "convert?from=xlsx&to=csv", "convert"],
+    ],
+    conversionGroups: [
+      {
+        category: "Convert Spreadsheet",
+        targets: [
+          { id: "xlsx-to-pdf", name: "PDF Document", format: "PDF", route: "convert?from=xlsx&to=pdf", hub: "convert" },
+          { id: "xlsx-to-csv", name: "Comma-Separated Values", format: "CSV", route: "convert?from=xlsx&to=csv", hub: "convert", badge: "Standard" },
+        ],
+      },
     ],
   },
 };
@@ -380,36 +412,6 @@ const IMAGE_CONVERSION_GROUPS: ConversionGroup[] = [
   },
 ];
 
-const DOCX_CONVERSION_GROUPS: ConversionGroup[] = [
-  {
-    category: "Convert Document",
-    targets: [
-      { id: "docx-to-pdf", name: "PDF Document", format: "PDF", route: "convert?from=docx&to=pdf", hub: "convert", badge: "Recommended" },
-      { id: "docx-to-txt", name: "Plain Text", format: "TXT", route: "convert?from=docx&to=txt", hub: "convert" },
-    ],
-  },
-];
-
-const XLSX_CONVERSION_GROUPS: ConversionGroup[] = [
-  {
-    category: "Convert Spreadsheet",
-    targets: [
-      { id: "xlsx-to-pdf", name: "PDF Document", format: "PDF", route: "convert?from=xlsx&to=pdf", hub: "convert" },
-      { id: "xlsx-to-csv", name: "Comma-Separated Values", format: "CSV", route: "convert?from=xlsx&to=csv", hub: "convert", badge: "Standard" },
-    ],
-  },
-];
-
-const PPTX_CONVERSION_GROUPS: ConversionGroup[] = [
-  {
-    category: "Convert Presentation",
-    targets: [
-      { id: "pptx-to-pdf", name: "PDF Slides", format: "PDF", route: "convert?from=pptx&to=pdf", hub: "convert", badge: "Recommended" },
-      { id: "pptx-to-txt", name: "Slide Text", format: "TXT", route: "convert?from=pptx&to=txt", hub: "convert" },
-    ],
-  },
-];
-
 const HTML_CONVERSION_GROUPS: ConversionGroup[] = [
   {
     category: "Convert Web Document",
@@ -426,6 +428,42 @@ const GENERIC_CONVERSION_GROUPS: ConversionGroup[] = [
       { id: "convert-general", name: "Convert Format", format: "Convert", route: "convert", hub: "convert" },
       { id: "repair-general", name: "Attempt File Repair", format: "Repair", route: "pdf/repair", hub: "pdf" },
     ],
+  },
+];
+
+interface MediaConfig {
+  category: "image" | "video" | "audio";
+  label: string;
+  defaultMime: string;
+  extensions: string[];
+  actions: ActionTuple[];
+  conversionGroups: ConversionGroup[];
+}
+
+const MEDIA_CONFIGS: MediaConfig[] = [
+  {
+    category: "image",
+    label: "Image File",
+    defaultMime: "image/jpeg",
+    extensions: ["jpg", "jpeg", "png", "webp", "avif", "heic", "heif", "bmp"],
+    actions: IMAGE_ACTIONS,
+    conversionGroups: IMAGE_CONVERSION_GROUPS,
+  },
+  {
+    category: "video",
+    label: "Video File",
+    defaultMime: "video/mp4",
+    extensions: ["mp4", "webm", "mov", "mkv", "avi"],
+    actions: VIDEO_ACTIONS,
+    conversionGroups: VIDEO_CONVERSION_GROUPS,
+  },
+  {
+    category: "audio",
+    label: "Audio File",
+    defaultMime: "audio/mpeg",
+    extensions: ["mp3", "m4a", "aac", "ogg", "opus", "flac", "wav"],
+    actions: AUDIO_ACTIONS,
+    conversionGroups: AUDIO_CONVERSION_GROUPS,
   },
 ];
 
@@ -478,66 +516,30 @@ export function detectFileTypeAndActions(
   // Check Office formats
   if (ext === "docx" || ext === "pptx" || ext === "xlsx") {
     const cfg = OFFICE_CONFIGS[ext];
-    const conversionGroups =
-      ext === "docx"
-        ? DOCX_CONVERSION_GROUPS
-        : ext === "xlsx"
-          ? XLSX_CONVERSION_GROUPS
-          : PPTX_CONVERSION_GROUPS;
     return {
       category: ext,
       label: cfg.label,
       mime: cfg.mime,
       actions: buildActions(cfg.actions),
-      conversionGroups,
+      conversionGroups: cfg.conversionGroups,
     };
   }
 
-  // Check Images
-  if (
-    headerCategory === "image" ||
-    file.type.startsWith("image/") ||
-    ["jpg", "jpeg", "png", "webp", "avif", "heic", "heif", "bmp"].includes(
-      ext,
-    )
-  ) {
-    return {
-      category: "image",
-      label: "Image File",
-      mime: file.type || "image/jpeg",
-      actions: buildActions(IMAGE_ACTIONS),
-      conversionGroups: IMAGE_CONVERSION_GROUPS,
-    };
-  }
-
-  // Check Videos
-  if (
-    headerCategory === "video" ||
-    file.type.startsWith("video/") ||
-    ["mp4", "webm", "mov", "mkv", "avi"].includes(ext)
-  ) {
-    return {
-      category: "video",
-      label: "Video File",
-      mime: file.type || "video/mp4",
-      actions: buildActions(VIDEO_ACTIONS),
-      conversionGroups: VIDEO_CONVERSION_GROUPS,
-    };
-  }
-
-  // Check Audio
-  if (
-    headerCategory === "audio" ||
-    file.type.startsWith("audio/") ||
-    ["mp3", "m4a", "aac", "ogg", "opus", "flac", "wav"].includes(ext)
-  ) {
-    return {
-      category: "audio",
-      label: "Audio File",
-      mime: file.type || "audio/mpeg",
-      actions: buildActions(AUDIO_ACTIONS),
-      conversionGroups: AUDIO_CONVERSION_GROUPS,
-    };
+  // Check Media formats (image, video, audio)
+  for (const cfg of MEDIA_CONFIGS) {
+    if (
+      headerCategory === cfg.category ||
+      file.type.startsWith(`${cfg.category}/`) ||
+      cfg.extensions.includes(ext)
+    ) {
+      return {
+        category: cfg.category,
+        label: cfg.label,
+        mime: file.type || cfg.defaultMime,
+        actions: buildActions(cfg.actions),
+        conversionGroups: cfg.conversionGroups,
+      };
+    }
   }
 
   // Default unknown file: offer repair & general convert
