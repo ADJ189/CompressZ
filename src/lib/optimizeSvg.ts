@@ -1,4 +1,819 @@
-import type { CompressResult } from './types';
+import type { CompressResult } from "./types";
+
+/**
+ * Parse an SVG dimension value with units into user-unit numbers (CSS pixels).
+ * Converts absolute units (pt, in, cm, mm, pc, px, unitless).
+ * Rejects percentages (%) and relative font-relative units (em, rem, etc.) whose
+ * user-unit equivalent cannot be established without an external context.
+ */
+export function parseSvgLength(value: string): number | null {
+  const match = value.trim().match(/^([\d.]+)\s*(px|pt|in|cm|mm|pc)?$/i);
+  if (!match) return null;
+  const num = Number.parseFloat(match[1]);
+  if (Number.isNaN(num) || num <= 0) return null;
+  const unit = (match[2] ?? "px").toLowerCase();
+  switch (unit) {
+    case "px":
+      return num;
+    case "pt":
+      return (num * 4) / 3;
+    case "in":
+      return num * 96;
+    case "cm":
+      return (num * 96) / 2.54;
+    case "mm":
+      return (num * 96) / 25.4;
+    case "pc":
+      return num * 16;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Deterministic, linear-time path data compactor (O(N) with zero regex backtracking).
+ * Strips whitespace around path commands (M, L, C, etc.) and commas without ReDoS risk.
+ */
+function compactPathData(d: string): string {
+  let out = "";
+  let pendingSpace = false;
+  for (let i = 0; i < d.length; i++) {
+    const ch = d[i];
+    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+      pendingSpace = true;
+      continue;
+    }
+    if (ch === ",") {
+      out += ",";
+      pendingSpace = false;
+      continue;
+    }
+    const isCmd = (ch >= "A" && ch <= "Z") || (ch >= "a" && ch <= "z");
+    if (isCmd) {
+      out += ch;
+      pendingSpace = false;
+      continue;
+    }
+    if (pendingSpace) {
+      const last = out[out.length - 1];
+      if (
+        last &&
+        last !== "," &&
+        !((last >= "A" && last <= "Z") || (last >= "a" && last <= "z"))
+      ) {
+        out += " ";
+      }
+      pendingSpace = false;
+    }
+    out += ch;
+  }
+  return out;
+}
+
+/**
+ * Decode the HTML/XML character references that can hide a URI scheme from a
+ * plain-text check. Numeric forms were already handled; named forms such as
+ * `&colon;`, `&Tab;` and `&NewLine;` were not, so `javascript&colon;…` slipped
+ * through as a live link.
+ */
+const NAMED_ENTITIES: Record<string, string> = {
+  colon: ":",
+  tab: "\t",
+  newline: "\n",
+  sol: "/",
+  bsol: "\\",
+  lpar: "(",
+  rpar: ")",
+  num: "#",
+  quest: "?",
+  equals: "=",
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: "\u00a0",
+  period: ".",
+  comma: ",",
+  semi: ";",
+  excl: "!",
+  lowbar: "_",
+  hyphen: "-",
+  plus: "+",
+  percnt: "%",
+  ast: "*",
+  commat: "@",
+  grave: "`",
+  lsqb: "[",
+  rsqb: "]",
+  lbrack: "[",
+  rbrack: "]",
+  lcub: "{",
+  rcub: "}",
+  verbar: "|",
+};
+
+function safeCodePoint(n: number): string {
+  return Number.isInteger(n) && n >= 0 && n <= 0x10FFFF
+    ? String.fromCodePoint(n)
+    : "\uFFFD";
+}
+
+function decodeEntities(value: string): string {
+  return value
+    .replace(/&#x([0-9a-f]+);?/gi, (_m: string, hex: string) =>
+      safeCodePoint(Number.parseInt(hex, 16)),
+    )
+    .replace(/&#(\d+);?/g, (_m: string, dec: string) =>
+      safeCodePoint(Number(dec)),
+    )
+    .replace(/&([a-z][a-z0-9]+);?/gi, (match: string, name: string) => {
+      const decoded = NAMED_ENTITIES[name.toLowerCase()];
+      return decoded === undefined ? match : decoded;
+    });
+}
+
+/**
+ * Clean element attributes strictly on tag headers, preserving text nodes.
+ * Strips event handlers, unwanted editor namespaces, and neutralizes javascript: URIs.
+ * Uses a single-pass deterministic scanner with zero regular expression backtracking.
+ */
+function cleanElementAttributes(tagAttrs: string): string {
+  let out = "";
+  let i = 0;
+  const len = tagAttrs.length;
+
+  while (i < len) {
+    const loopStart = i;
+
+    if (tagAttrs[i] === " " || tagAttrs[i] === "\t" || tagAttrs[i] === "\n" || tagAttrs[i] === "\r") {
+      out += tagAttrs[i];
+      i++;
+      continue;
+    }
+
+    if (tagAttrs[i] === "/" || tagAttrs[i] === ">") {
+      out += tagAttrs[i];
+      i++;
+      continue;
+    }
+
+    const nameStart = i;
+    while (
+      i < len &&
+      tagAttrs[i] !== "=" &&
+      tagAttrs[i] !== " " &&
+      tagAttrs[i] !== "\t" &&
+      tagAttrs[i] !== "\n" &&
+      tagAttrs[i] !== "\r" &&
+      tagAttrs[i] !== "/" &&
+      tagAttrs[i] !== ">"
+    ) {
+      i++;
+    }
+    const rawAttrName = tagAttrs.slice(nameStart, i);
+    const lowerAttrName = rawAttrName.toLowerCase();
+
+    if (rawAttrName.length === 0 && (i >= len || tagAttrs[i] !== "=")) {
+      if (i < len) {
+        out += tagAttrs[i];
+        i++;
+      }
+      continue;
+    }
+
+    let spacingAfterName = "";
+    while (i < len && (tagAttrs[i] === " " || tagAttrs[i] === "\t" || tagAttrs[i] === "\n" || tagAttrs[i] === "\r")) {
+      spacingAfterName += tagAttrs[i];
+      i++;
+    }
+
+    let hasEquals = false;
+    let spacingAfterEquals = "";
+    let rawVal = "";
+    let quoteChar: '"' | "'" | "" = "";
+
+    if (i < len && tagAttrs[i] === "=") {
+      hasEquals = true;
+      i++;
+      while (i < len && (tagAttrs[i] === " " || tagAttrs[i] === "\t" || tagAttrs[i] === "\n" || tagAttrs[i] === "\r")) {
+        spacingAfterEquals += tagAttrs[i];
+        i++;
+      }
+      if (i < len && (tagAttrs[i] === '"' || tagAttrs[i] === "'")) {
+        quoteChar = tagAttrs[i] as '"' | "'";
+        i++;
+        const valStart = i;
+        while (i < len && tagAttrs[i] !== quoteChar) {
+          i++;
+        }
+        rawVal = tagAttrs.slice(valStart, i);
+        if (i < len && tagAttrs[i] === quoteChar) {
+          i++;
+        }
+      } else {
+        const valStart = i;
+        while (
+          i < len &&
+          tagAttrs[i] !== " " &&
+          tagAttrs[i] !== "\t" &&
+          tagAttrs[i] !== "\n" &&
+          tagAttrs[i] !== "\r" &&
+          !(tagAttrs[i] === "/" && (i + 1 === len || tagAttrs[i + 1] === ">")) &&
+          tagAttrs[i] !== ">"
+        ) {
+          i++;
+        }
+        rawVal = tagAttrs.slice(valStart, i);
+      }
+    }
+
+    // Strip inline event-handler attributes (onload, onclick, onmouseover, …)
+    if (lowerAttrName.startsWith("on") && lowerAttrName.length > 2) {
+      continue;
+    }
+
+    // Strip editor namespace declarations
+    if (
+      lowerAttrName === "xmlns:inkscape" ||
+      lowerAttrName === "xmlns:sodipodi" ||
+      lowerAttrName === "xmlns:sketch" ||
+      lowerAttrName === "xmlns:dc" ||
+      lowerAttrName === "xmlns:cc" ||
+      lowerAttrName === "xmlns:rdf" ||
+      lowerAttrName === "xmlns:xlink"
+    ) {
+      continue;
+    }
+
+    // Strip editor attributes (inkscape:*, sodipodi:*)
+    if (lowerAttrName.startsWith("inkscape:") || lowerAttrName.startsWith("sodipodi:")) {
+      continue;
+    }
+
+    // Neutralize javascript: and executable data URIs in href and xlink:href,
+    // and neutralize URI attributes containing unresolved entity references
+    if (lowerAttrName === "href" || lowerAttrName === "xlink:href") {
+      const decoded = decodeEntities(rawVal);
+      let stripped = "";
+      for (let c = 0; c < decoded.length; c++) {
+        if (decoded.charCodeAt(c) > 32) {
+          stripped += decoded[c];
+        }
+      }
+      if (
+        /^javascript:/i.test(stripped) ||
+        /^data:text\/(?:html|javascript)/i.test(stripped) ||
+        /&[a-z][a-z0-9_.-]*;/i.test(decoded)
+      ) {
+        out += `${rawAttrName}="#"`;
+        continue;
+      }
+    }
+
+    // Compact path data inside d attributes deterministically without backtracking
+    if (lowerAttrName === "d" && quoteChar) {
+      out += `${rawAttrName}=${quoteChar}${compactPathData(rawVal)}${quoteChar}`;
+      continue;
+    }
+
+    if (hasEquals) {
+      if (quoteChar) {
+        out += `${rawAttrName}${spacingAfterName}=${spacingAfterEquals}${quoteChar}${rawVal}${quoteChar}`;
+      } else {
+        out += `${rawAttrName}${spacingAfterName}=${spacingAfterEquals}${rawVal}`;
+      }
+    } else {
+      out += rawAttrName;
+    }
+
+    if (i <= loopStart) {
+      if (i < len) {
+        out += tagAttrs[i];
+        i++;
+      } else {
+        break;
+      }
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Finds the matching '>' closing a DOCTYPE declaration, respecting quotes and internal subsets [...].
+ */
+function findDocTypeEnd(str: string, startIndex: number): number {
+  let inQuote: '"' | "'" | null = null;
+  let inBracket = false;
+  for (let i = startIndex; i < str.length; i++) {
+    const ch = str[i];
+    if (inQuote) {
+      if (ch === inQuote) inQuote = null;
+    } else if (ch === '"' || ch === "'") {
+      inQuote = ch;
+    } else if (ch === "[" && !inBracket) {
+      inBracket = true;
+    } else if (ch === "]" && inBracket) {
+      inBracket = false;
+    } else if (ch === ">" && !inBracket) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Finds the matching '>' closing a tag, respecting quoted attribute values.
+ */
+function findTagEnd(str: string, startIndex: number): number {
+  let inQuote: '"' | "'" | null = null;
+  for (let i = startIndex; i < str.length; i++) {
+    const ch = str[i];
+    if (inQuote) {
+      if (ch === inQuote) inQuote = null;
+    } else if (ch === '"' || ch === "'") {
+      inQuote = ch;
+    } else if (ch === ">") {
+      return i;
+    }
+  }
+  return -1;
+}
+
+const DISCARD_TAGS = new Set(["script", "foreignobject", "metadata"]);
+
+function shouldDiscardElement(tagName: string): boolean {
+  const lower = tagName.toLowerCase();
+  return (
+    DISCARD_TAGS.has(lower) ||
+    lower.startsWith("sodipodi:") ||
+    lower.startsWith("inkscape:")
+  );
+}
+
+/**
+ * Strips internal subsets [...] containing entity declarations from DOCTYPE.
+ */
+function stripDocTypeInternalSubset(docType: string): string {
+  let inQuote: '"' | "'" | null = null;
+  let bracketStart = -1;
+  let bracketEnd = -1;
+
+  for (let i = 0; i < docType.length; i++) {
+    const ch = docType[i];
+    if (inQuote) {
+      if (ch === inQuote) inQuote = null;
+    } else if (ch === '"' || ch === "'") {
+      inQuote = ch;
+    } else if (ch === "[" && bracketStart === -1) {
+      bracketStart = i;
+    } else if (ch === "]" && bracketStart !== -1) {
+      bracketEnd = i;
+      break;
+    }
+  }
+
+  if (bracketStart !== -1 && bracketEnd !== -1) {
+    const before = docType.slice(0, bracketStart).trimEnd();
+    const after = docType.slice(bracketEnd + 1).trimStart();
+    const afterClean = after.startsWith(">") ? ">" : ` ${after}`;
+    const joined = `${before}${afterClean}`.trim();
+    return joined.endsWith(">") ? joined : `${joined}>`;
+  }
+
+  return docType;
+}
+
+const STANDARD_XML_ENTITIES = new Set(["amp", "lt", "gt", "quot", "apos"]);
+
+export const MAX_EXPANDED_SVG_BYTES = 4 * 1024 * 1024; // 4 MiB safety ceiling
+
+/**
+ * Safely resolves supported entity definitions from DOCTYPE internal subsets
+ * into document body and attributes before discarding the subset declarations,
+ * ensuring the resulting SVG remains valid XML that can open without error.
+ * Rejects external entities (SYSTEM/PUBLIC) to prevent XXE.
+ */
+export function resolveAndStripDocTypeEntities(svg: string): string {
+  const docTypeMatch = svg.match(/<!doctype\b/i);
+  if (!docTypeMatch || docTypeMatch.index === undefined) {
+    return svg;
+  }
+
+  const tagStart = docTypeMatch.index;
+  const docTypeEnd = findDocTypeEnd(svg, tagStart);
+  if (docTypeEnd === -1) return svg;
+
+  const rawDocType = svg.slice(tagStart, docTypeEnd + 1);
+
+  // Check for internal subset [...]
+  let inQuote: '"' | "'" | null = null;
+  let bracketStart = -1;
+  let bracketEnd = -1;
+
+  for (let i = 0; i < rawDocType.length; i++) {
+    const ch = rawDocType[i];
+    if (inQuote) {
+      if (ch === inQuote) inQuote = null;
+    } else if (ch === '"' || ch === "'") {
+      inQuote = ch;
+    } else if (ch === "[" && bracketStart === -1) {
+      bracketStart = i;
+    } else if (ch === "]" && bracketStart !== -1) {
+      bracketEnd = i;
+      break;
+    }
+  }
+
+  if (bracketStart === -1 || bracketEnd === -1) {
+    return svg;
+  }
+
+  const internalSubset = rawDocType.slice(bracketStart + 1, bracketEnd);
+
+  // Reject unsupported external entities (SYSTEM or PUBLIC) to prevent XXE
+  if (/\b(SYSTEM|PUBLIC)\b/i.test(internalSubset)) {
+    throw new Error("External DTD entities (SYSTEM/PUBLIC) are not supported in SVG");
+  }
+
+  // Parse supported internal <!ENTITY name "value">
+  const entityRegex = /<!ENTITY\s+([a-zA-Z0-9_.-]+)\s*(?:"([^"]*)"|'([^']*)')\s*>/gi;
+  const entities = new Map<string, string>();
+  let match: RegExpExecArray | null;
+  while ((match = entityRegex.exec(internalSubset)) !== null) {
+    const name = match[1];
+    const val = match[2] ?? match[3] ?? "";
+    entities.set(name, val);
+  }
+
+  // Expand entity values that reference other entities (up to 3 levels, bounded size)
+  for (let pass = 0; pass < 3; pass++) {
+    let changed = false;
+    for (const [name, val] of entities.entries()) {
+      const newVal = val.replace(/&([a-zA-Z0-9_.-]+);/g, (ref, refName) => {
+        if (STANDARD_XML_ENTITIES.has(refName)) return ref;
+        if (refName === name) {
+          throw new Error("Circular entity reference detected in SVG DTD");
+        }
+        if (entities.has(refName)) {
+          changed = true;
+          return entities.get(refName)!;
+        }
+        return ref;
+      });
+      if (newVal.length > 50_000) {
+        throw new Error("Entity expansion exceeded safety limit in SVG DTD");
+      }
+      if (newVal !== val) {
+        entities.set(name, newVal);
+      }
+    }
+    if (!changed) break;
+  }
+
+  // Clean DOCTYPE of internal subset
+  const cleanDocType = stripDocTypeInternalSubset(rawDocType);
+  let before = svg.slice(0, tagStart);
+  let after = svg.slice(docTypeEnd + 1);
+
+  // Calculate projected total size of all entity reference replacements before allocating strings.
+  // Rejects billion laughs and repeated reference expansion attacks before large memory allocations.
+  let projectedSize = before.length + cleanDocType.length + after.length;
+
+  for (const text of [before, after]) {
+    for (const m of text.matchAll(/&([a-zA-Z0-9_.-]+);/g)) {
+      const refName = m[1];
+      if (entities.has(refName) && !STANDARD_XML_ENTITIES.has(refName)) {
+        const val = entities.get(refName)!;
+        projectedSize += val.length - m[0].length;
+      }
+    }
+  }
+
+  if (projectedSize > MAX_EXPANDED_SVG_BYTES) {
+    throw new Error(
+      `Projected entity expansion (${projectedSize} bytes) exceeded safety limit (${MAX_EXPANDED_SVG_BYTES} bytes)`,
+    );
+  }
+
+  // Resolve supported entity references in a single pass across document body
+  const replaceRefs = (text: string): string => {
+    return text.replace(/&([a-zA-Z0-9_.-]+);/g, (ref, refName) => {
+      if (STANDARD_XML_ENTITIES.has(refName)) return ref;
+      if (entities.has(refName)) {
+        return entities.get(refName)!;
+      }
+      return ref;
+    });
+  };
+
+  before = replaceRefs(before);
+  after = replaceRefs(after);
+
+  return `${before}${cleanDocType}${after}`;
+}
+
+function isElementHidden(tagAttrs: string): boolean {
+  // Parse actual attribute names and values with an attribute scanner,
+  // never the whole tag string: an unrelated attribute such as
+  // aria-label='display="none" ' must not match and delete the element.
+  let i = 0;
+  const len = tagAttrs.length;
+
+  while (i < len) {
+    while (
+      i < len &&
+      (tagAttrs[i] === " " ||
+        tagAttrs[i] === "\t" ||
+        tagAttrs[i] === "\n" ||
+        tagAttrs[i] === "\r" ||
+        tagAttrs[i] === "/")
+    ) {
+      i++;
+    }
+    if (i >= len || tagAttrs[i] === ">") break;
+
+    const start = i;
+    while (
+      i < len &&
+      tagAttrs[i] !== " " &&
+      tagAttrs[i] !== "\t" &&
+      tagAttrs[i] !== "\n" &&
+      tagAttrs[i] !== "\r" &&
+      tagAttrs[i] !== "=" &&
+      tagAttrs[i] !== "/" &&
+      tagAttrs[i] !== ">"
+    ) {
+      i++;
+    }
+    const rawAttrName = tagAttrs.slice(start, i);
+    const lowerAttrName = rawAttrName.toLowerCase();
+
+    while (
+      i < len &&
+      (tagAttrs[i] === " " ||
+        tagAttrs[i] === "\t" ||
+        tagAttrs[i] === "\n" ||
+        tagAttrs[i] === "\r")
+    ) {
+      i++;
+    }
+
+    let rawVal = "";
+    if (i < len && tagAttrs[i] === "=") {
+      i++;
+      while (
+        i < len &&
+        (tagAttrs[i] === " " ||
+          tagAttrs[i] === "\t" ||
+          tagAttrs[i] === "\n" ||
+          tagAttrs[i] === "\r")
+      ) {
+        i++;
+      }
+      if (i < len && (tagAttrs[i] === '"' || tagAttrs[i] === "'")) {
+        const q = tagAttrs[i];
+        i++;
+        const valStart = i;
+        while (i < len && tagAttrs[i] !== q) {
+          i++;
+        }
+        rawVal = tagAttrs.slice(valStart, i);
+        if (i < len && tagAttrs[i] === q) {
+          i++;
+        }
+      } else {
+        const valStart = i;
+        while (
+          i < len &&
+          tagAttrs[i] !== " " &&
+          tagAttrs[i] !== "\t" &&
+          tagAttrs[i] !== "\n" &&
+          tagAttrs[i] !== "\r" &&
+          !(tagAttrs[i] === "/" && (i + 1 === len || tagAttrs[i + 1] === ">")) &&
+          tagAttrs[i] !== ">"
+        ) {
+          i++;
+        }
+        rawVal = tagAttrs.slice(valStart, i);
+      }
+    }
+
+    if (lowerAttrName === "display" && rawVal.trim().toLowerCase() === "none") {
+      return true;
+    }
+    if (lowerAttrName === "visibility" && rawVal.trim().toLowerCase() === "hidden") {
+      return true;
+    }
+    if (lowerAttrName === "style") {
+      if (
+        /(?:^|;)\s*display\s*:\s*none(?:\s*!important)?\s*(?:;|$)/i.test(rawVal) ||
+        /(?:^|;)\s*visibility\s*:\s*hidden(?:\s*!important)?\s*(?:;|$)/i.test(rawVal)
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Linear-pass SVG parser and optimizer (O(N) single pass).
+ * - Collects surviving ranges into chunks and joins once, eliminating quadratic string copies.
+ * - Leaves text nodes completely untouched, protecting user visible text (e.g. onload=).
+ * - Discards <script>, <foreignObject>, <metadata>, editor tags, and hidden elements.
+ */
+function processSvgLinear(rawSvg: string): string {
+  const svg = resolveAndStripDocTypeEntities(rawSvg);
+  const chunks: string[] = [];
+  let pos = 0;
+  const len = svg.length;
+
+  let discardDepth = 0;
+  let discardTag = "";
+
+  while (pos < len) {
+    const tagStart = svg.indexOf("<", pos);
+    if (tagStart === -1) {
+      // Remaining trailing text node
+      if (discardDepth === 0) {
+        chunks.push(svg.slice(pos));
+      }
+      break;
+    }
+
+    // Text before the tag
+    if (tagStart > pos && discardDepth === 0) {
+      chunks.push(svg.slice(pos, tagStart));
+    }
+
+    // Handle XML comments <!-- ... -->
+    if (svg.startsWith("<!--", tagStart)) {
+      const commentEnd = svg.indexOf("-->", tagStart + 4);
+      pos = commentEnd === -1 ? len : commentEnd + 3;
+      continue;
+    }
+
+    // Handle XML declaration <?xml ... ?>
+    if (svg.startsWith("<?", tagStart)) {
+      const declEnd = svg.indexOf("?>", tagStart + 2);
+      pos = declEnd === -1 ? len : declEnd + 2;
+      continue;
+    }
+
+    // Handle CDATA <![CDATA[ ... ]]>
+    if (svg.startsWith("<![CDATA[", tagStart)) {
+      const cdataEnd = svg.indexOf("]]>", tagStart + 9);
+      const endPos = cdataEnd === -1 ? len : cdataEnd + 3;
+      if (discardDepth === 0) {
+        chunks.push(svg.slice(tagStart, endPos));
+      }
+      pos = endPos;
+      continue;
+    }
+
+    // Handle DOCTYPE <!DOCTYPE ... >
+    if (/^<!doctype\b/i.test(svg.slice(tagStart, tagStart + 10))) {
+      const docTypeEnd = findDocTypeEnd(svg, tagStart);
+      const endPos = docTypeEnd === -1 ? len : docTypeEnd + 1;
+      if (discardDepth === 0) {
+        const rawDocType = svg.slice(tagStart, endPos);
+        const cleanDocType = stripDocTypeInternalSubset(rawDocType);
+        if (cleanDocType) {
+          chunks.push(cleanDocType);
+        }
+      }
+      pos = endPos;
+      continue;
+    }
+
+    // Discard standalone <!ENTITY ... > declarations
+    if (/^<!entity\b/i.test(svg.slice(tagStart, tagStart + 9))) {
+      const tagEnd = findTagEnd(svg, tagStart);
+      pos = tagEnd === -1 ? len : tagEnd + 1;
+      continue;
+    }
+
+    const tagEnd = findTagEnd(svg, tagStart);
+    if (tagEnd === -1) {
+      // Unclosed tag at EOF
+      break;
+    }
+
+    const isClose = svg[tagStart + 1] === "/";
+    const rawTagContent = svg.slice(tagStart + (isClose ? 2 : 1), tagEnd);
+    const isSelfClosing = !isClose && rawTagContent.trimEnd().endsWith("/");
+    const tagContent = isSelfClosing
+      ? rawTagContent.slice(0, rawTagContent.lastIndexOf("/")).trimEnd()
+      : rawTagContent;
+
+    const nameMatch = tagContent.match(/^([a-z0-9:-]+)/i);
+    const tagName = nameMatch ? nameMatch[1] : "";
+    const lowerName = tagName.toLowerCase();
+
+    // If currently inside a discarded container element
+    if (discardDepth > 0) {
+      if (isClose && lowerName === discardTag) {
+        discardDepth--;
+      } else if (!isClose && !isSelfClosing && lowerName === discardTag) {
+        discardDepth++;
+      }
+      pos = tagEnd + 1;
+      continue;
+    }
+
+    // Check if element should be discarded (script, foreignObject, metadata, editor namespaces)
+    if (shouldDiscardElement(tagName)) {
+      if (!isClose && !isSelfClosing) {
+        discardDepth = 1;
+        discardTag = lowerName;
+      }
+      pos = tagEnd + 1;
+      continue;
+    }
+
+    // Check if element is hidden (display:none or visibility:hidden)
+    // Never discard the root <svg> container
+    const tagAttrs = tagContent.slice(tagName.length);
+    if (!isClose && lowerName !== "svg" && isElementHidden(tagAttrs)) {
+      if (!isSelfClosing) {
+        discardDepth = 1;
+        discardTag = lowerName;
+      }
+      pos = tagEnd + 1;
+      continue;
+    }
+
+    // Surviving tag: clean attributes only on opening/self-closing tags
+    if (isClose) {
+      chunks.push(`</${tagName}>`);
+    } else {
+      const cleanedAttrs = cleanElementAttributes(tagAttrs);
+      // Rounding and whitespace compaction are applied to the tag markup only.
+      // Running them over the joined document (as an earlier version did)
+      // rewrote visible text nodes, so `<text>v1.2345</text>` came out as
+      // `v1.23` and intentional spacing inside `<tspan>` was lost.
+      const tagOut = `<${tagName}${cleanedAttrs}${isSelfClosing ? " /" : ""}>`;
+      chunks.push(roundLongDecimals(tagOut));
+    }
+
+    pos = tagEnd + 1;
+  }
+
+  let result = chunks.join("");
+
+  // Remove empty groups and defs
+  result = result.replace(/<g[^>]*>\s*<\/g>/gi, "");
+  result = result.replace(/<g\s*\/>/gi, "");
+  result = result.replace(/<defs>\s*<\/defs>/gi, "");
+
+  return result;
+}
+
+/**
+ * Round long decimals (≥3 decimal places → 2), e.g. 12.345678 -> 12.35, 10.0001 -> 10.
+ * Single-pass linear scan with zero regex backtracking.
+ */
+function roundLongDecimals(str: string): string {
+  let out = "";
+  let i = 0;
+  const len = str.length;
+
+  while (i < len) {
+    const ch = str[i];
+    if (ch >= "0" && ch <= "9") {
+      const numStart = i;
+      while (i < len && str[i] >= "0" && str[i] <= "9") {
+        i++;
+      }
+      if (i < len && str[i] === ".") {
+        i++;
+        const fracStart = i;
+        while (i < len && str[i] >= "0" && str[i] <= "9") {
+          i++;
+        }
+        const fracLen = i - fracStart;
+        if (fracLen >= 3) {
+          const numStr = str.slice(numStart, i);
+          const rounded = Number(Number.parseFloat(numStr).toFixed(2)).toString();
+          out += rounded;
+          continue;
+        } else {
+          out += str.slice(numStart, i);
+          continue;
+        }
+      } else {
+        out += str.slice(numStart, i);
+        continue;
+      }
+    }
+    out += ch;
+    i++;
+  }
+  return out;
+}
 
 export async function optimizeSvg(
   file: File,
@@ -8,85 +823,46 @@ export async function optimizeSvg(
   let svg = await file.text();
   onProgress?.(15);
 
-  // Remove XML declaration
-  svg = svg.replace(/<\?xml[^?]*\?>/gi, '');
-
-  // Remove comments
-  let prev: string;
-  do { prev = svg; svg = svg.replace(/<!--[\s\S]*?-->/g, ''); } while (svg !== prev);
-
-  // Remove metadata, editor namespaces
-  svg = svg.replace(/<metadata[\s\S]*?<\/metadata>/gi, '');
-  svg = svg.replace(/<sodipodi:[^/]*(\/>|[\s\S]*?<\/sodipodi:[^>]*>)/gi, '');
-  svg = svg.replace(/<inkscape:[^/]*(\/>|[\s\S]*?<\/inkscape:[^>]*>)/gi, '');
-  svg = svg.replace(/\s+xmlns:(inkscape|sodipodi|sketch|dc|cc|rdf|xlink)="[^"]*"/gi, '');
-  svg = svg.replace(/\s+(inkscape|sodipodi):[a-z-]+="[^"]*"/gi, '');
-  onProgress?.(35);
-
-  // Remove empty groups and defs
-  svg = svg.replace(/<g[^>]*>\s*<\/g>/gi, '');
-  svg = svg.replace(/<g\s*\/>/gi, '');
-  svg = svg.replace(/<defs>\s*<\/defs>/gi, '');
-
-  // Round long decimals (≥3 decimal places → 2)
-  svg = svg.replace(/(\d+\.\d{3,})/g, m =>
-    parseFloat(m).toFixed(2).replace(/\.?0+$/, ''));
+  // Linear-pass parser: removes comments, hidden elements, scripts, unwanted attributes, and namespaces
+  // while strictly leaving text nodes untouched
+  svg = processSvgLinear(svg);
   onProgress?.(55);
 
-  // Compact path data
-  svg = svg.replace(/\s+([MmZzLlHhVvCcSsQqTtAa])/g, '$1');
-  svg = svg.replace(/([MmZzLlHhVvCcSsQqTtAa])\s+/g, '$1');
-  svg = svg.replace(/,\s+/g, ',');
+  // Decimal rounding already happened inside the tag pass above, so visible
+  // text nodes and CDATA sections keep their exact contents.
+  onProgress?.(70);
 
-  // Strip embedded scripts (security)
-  do {
-    prev = svg;
-    svg  = svg.replace(/<script\b[^>]*(?:\/>|>[\s\S]*?<\/script(?:\s[^>]*)?>)/gi, '');
-  } while (svg !== prev);
-
-  // Strip inline event-handler attributes (onload, onclick, onmouseover, …)
-  // and javascript: URIs — <script> removal alone leaves these XSS vectors
-  // intact if the SVG is ever rendered inline (e.g. via innerHTML or <object>).
-  do {
-    prev = svg;
-    svg = svg.replace(/\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
-  } while (svg !== prev);
-  svg = svg.replace(/(href|xlink:href)\s*=\s*"(\s*javascript:[^"]*)"/gi, '$1="#"');
-  svg = svg.replace(/(href|xlink:href)\s*=\s*'(\s*javascript:[^']*)'/gi, "$1='#'");
-
-  // Remove hidden elements
-  do {
-    prev = svg;
-    svg = svg.replace(/<[^>]+(?:display\s*:\s*none|visibility\s*:\s*hidden)[^>]*(\/>|[\s\S]*?<\/[a-z]+>)/gi, '');
-  } while (svg !== prev);
-
-  // Re-strip embedded scripts in case hidden-element removal exposes new tags
-  do {
-    prev = svg;
-    svg  = svg.replace(/<script\b[^>]*(?:\/>|>[\s\S]*?<\/script(?:\s[^>]*)?>)/gi, '');
-  } while (svg !== prev);
-
-  // Collapse whitespace
-  svg = svg.replace(/>\s{2,}</g, '><');
-  svg = svg.replace(/\s{2,}/g, ' ').trim();
   onProgress?.(80);
 
-  // Add viewBox if missing
-  if (!svg.includes('viewBox') && svg.includes('width=') && svg.includes('height=')) {
-    const w = svg.match(/width="([^"]+)"/)?.[1];
-    const h = svg.match(/height="([^"]+)"/)?.[1];
-    if (w && h && !isNaN(parseFloat(w)) && !isNaN(parseFloat(h)))
-      svg = svg.replace('<svg', `<svg viewBox="0 0 ${w} ${h}"`);
+  // Add viewBox if missing from the root <svg> element (SVG viewBox coordinates must be unitless numbers in CSS pixels).
+  // Read width and height only from exact attributes on the root svg element, avoiding data-width or descendant attributes.
+  const rootSvgMatch = svg.match(/<svg\b([^>]*)>/i);
+  if (rootSvgMatch) {
+    const rootAttrs = rootSvgMatch[1];
+    const hasViewBox = /(?<![a-zA-Z0-9_-])viewBox\s*=/i.test(rootAttrs);
+    if (!hasViewBox) {
+      const wMatch = rootAttrs.match(/(?<![a-zA-Z0-9_-])width\s*=\s*["']([^"']+)["']/i);
+      const hMatch = rootAttrs.match(/(?<![a-zA-Z0-9_-])height\s*=\s*["']([^"']+)["']/i);
+      if (wMatch && hMatch) {
+        const numW = parseSvgLength(wMatch[1]);
+        const numH = parseSvgLength(hMatch[1]);
+        if (numW !== null && numH !== null) {
+          const fmtW = Number(numW.toFixed(2));
+          const fmtH = Number(numH.toFixed(2));
+          svg = svg.replace(/<svg\b/i, `<svg viewBox="0 0 ${fmtW} ${fmtH}"`);
+        }
+      }
+    }
   }
 
   onProgress?.(100);
-  const blob = new Blob([svg], { type: 'image/svg+xml' });
+  const blob = new Blob([svg], { type: "image/svg+xml" });
 
   return {
     blob,
-    originalSize:     file.size,
-    compressedSize:   blob.size,
+    originalSize: file.size,
+    compressedSize: blob.size,
     compressionRatio: file.size / blob.size,
-    format:           'SVG (optimised · pure TS)',
+    format: "SVG (optimised · pure TS)",
   };
 }

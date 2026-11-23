@@ -35,14 +35,59 @@ export function sanitizeTarPath(raw: string): string {
 function writeString(buf: Uint8Array, offset: number, str: string, length: number): void {
   const enc = new TextEncoder();
   const encoded = enc.encode(str);
-  const copyLen = Math.min(encoded.length, length);
+  let copyLen = Math.min(encoded.length, length);
+  // Never cut a multi-byte UTF-8 sequence in half: the trailing bytes would
+  // decode as U+FFFD in every compliant TAR reader.
+  if (copyLen < encoded.length) {
+    while (copyLen > 0 && (encoded[copyLen] & 0xc0) === 0x80) copyLen--;
+  }
   buf.set(encoded.subarray(0, copyLen), offset);
 }
 
 function writeOctal(buf: Uint8Array, offset: number, val: number, length: number): void {
-  const octal = Math.floor(val).toString(8).padStart(length - 1, "0");
-  writeString(buf, offset, octal, length - 1);
+  if (!Number.isFinite(val) || val < 0) {
+    throw new Error(`Cannot encode TAR field: ${val} is not a nonnegative integer.`);
+  }
+  const octal = Math.floor(val).toString(8);
+  // Silently truncating the leading digits would produce a different (and
+  // potentially negative-looking) number in the header.
+  if (octal.length > length - 1) {
+    throw new Error(
+      `TAR field value ${val} does not fit in ${length - 1} octal digits.`,
+    );
+  }
+  writeString(buf, offset, octal.padStart(length - 1, "0"), length - 1);
   buf[offset + length - 1] = 0; // null terminator
+}
+
+/**
+ * Verify the UStar header checksum. Historic writers occasionally leave the
+ * field blank; that is tolerated so older archives still open, but a checksum
+ * that *is* present must match (unsigned or, for pre-POSIX writers, signed).
+ */
+function verifyHeaderChecksum(bytes: Uint8Array, offset: number): void {
+  let end = offset + 148;
+  while (end < offset + 156 && bytes[end] !== 0 && bytes[end] !== 0x20) end++;
+  const raw = new TextDecoder().decode(bytes.subarray(offset + 148, end)).trim();
+  if (raw === "") return;
+  if (!/^[0-7]+$/.test(raw)) {
+    throw new Error(
+      `Invalid TAR header: checksum field "${raw}" is not a nonnegative octal integer.`,
+    );
+  }
+  const stored = Number.parseInt(raw, 8);
+  let unsigned = 0;
+  let signed = 0;
+  for (let i = 0; i < 512; i++) {
+    const b = i >= 148 && i < 156 ? 0x20 : bytes[offset + i];
+    unsigned += b;
+    signed += b > 127 ? b - 256 : b;
+  }
+  if (stored !== unsigned && stored !== signed) {
+    throw new Error(
+      `Invalid TAR header: checksum mismatch (stored ${stored}, computed ${unsigned}) — archive may be corrupt.`,
+    );
+  }
 }
 
 /**
@@ -171,6 +216,9 @@ export function readTar(tarBytes: Uint8Array, options: ReadTarOptions = {}): Tar
       );
     }
 
+    // Reject a corrupt header before trusting any of its offset fields.
+    verifyHeaderChecksum(tarBytes, offset);
+
     // Read name (0..100)
     let nameEnd = offset;
     while (nameEnd < offset + 100 && tarBytes[nameEnd] !== 0) nameEnd++;
@@ -224,6 +272,16 @@ export function readTar(tarBytes: Uint8Array, options: ReadTarOptions = {}): Tar
 
     // GNU long filename extension ('L')
     if (typeflag === "L") {
+      // Metadata payloads still consume memory while they are decoded, so they
+      // count against the same aggregate budget as file data. Otherwise a
+      // crafted archive could fill the heap with long-name records that never
+      // appear in `entries`.
+      totalBytes += size;
+      if (totalBytes > maxTotalBytes) {
+        throw new Error(
+          `Decompressed data exceeds ${Math.round(maxTotalBytes / (1024 * 1024))} MB limit.`,
+        );
+      }
       const rawLongName = dec.decode(tarBytes.subarray(dataOffset, dataOffset + size));
       const nul = rawLongName.indexOf("\0");
       pendingName = (nul === -1 ? rawLongName : rawLongName.slice(0, nul)).trim();
@@ -233,6 +291,12 @@ export function readTar(tarBytes: Uint8Array, options: ReadTarOptions = {}): Tar
 
     // PAX extended header ('x')
     if (typeflag === "x") {
+      totalBytes += size;
+      if (totalBytes > maxTotalBytes) {
+        throw new Error(
+          `Decompressed data exceeds ${Math.round(maxTotalBytes / (1024 * 1024))} MB limit.`,
+        );
+      }
       const paxText = dec.decode(tarBytes.subarray(dataOffset, dataOffset + size));
       for (const line of paxText.split("\n")) {
         const match = /^\d+\s+path=(.*)$/.exec(line);
@@ -246,6 +310,12 @@ export function readTar(tarBytes: Uint8Array, options: ReadTarOptions = {}): Tar
 
     // Global PAX extended header ('g') - ignore
     if (typeflag === "g") {
+      totalBytes += size;
+      if (totalBytes > maxTotalBytes) {
+        throw new Error(
+          `Decompressed data exceeds ${Math.round(maxTotalBytes / (1024 * 1024))} MB limit.`,
+        );
+      }
       offset = nextHeaderOffset;
       continue;
     }
@@ -278,6 +348,9 @@ export function readTar(tarBytes: Uint8Array, options: ReadTarOptions = {}): Tar
           data: new Uint8Array(tarBytes.subarray(dataOffset, dataOffset + size)),
         });
       }
+    } else {
+      // Any other non-regular entry (symlink, hardlink, fifo, etc.) skips without leaking pending name
+      pendingName = null;
     }
 
     offset = nextHeaderOffset;

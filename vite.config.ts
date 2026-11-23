@@ -42,7 +42,7 @@ const CSP = [
   "script-src 'self' 'wasm-unsafe-eval' blob: https://cdn.jsdelivr.net https://esm.sh",
   "worker-src 'self' blob: https://cdn.jsdelivr.net",
   "child-src 'self' blob:",
-  "connect-src 'self' blob: data: https://cdn.jsdelivr.net https://esm.sh https://tessdata.projectnaptha.com https://paddlejs.bj.bcebos.com https://huggingface.co https://cdn-lfs.huggingface.co https://fonts.googleapis.com https://fonts.gstatic.com",
+  "connect-src 'self' blob: data: https://cdn.jsdelivr.net https://esm.sh https://tessdata.projectnaptha.com https://paddlejs.bj.bcebos.com https://huggingface.co https://cdn-lfs.huggingface.co https://fonts.googleapis.com https://fonts.gstatic.com https://*.ingest.us.sentry.io https://*.sentry.io",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
   "img-src 'self' blob: data: https:",
@@ -65,6 +65,7 @@ export default defineConfig({
   build: {
     outDir: "dist",
     target: "esnext",
+    sourcemap: true,
     rollupOptions: {
       input: {
         main: "index.html",

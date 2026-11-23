@@ -88,7 +88,7 @@
       icon: "docs",
       items: [
         { route: "docs", name: "Documentation", desc: "Engine specifications, limits, and technical guides", icon: "docs" },
-        { route: "privacy", name: "Privacy Guarantee", desc: "Local-only invariants and zero-telemetry guarantee", icon: "security" },
+        { route: "privacy", name: "Privacy Guarantee", desc: "Local-only document processing & privacy guarantee", icon: "security" },
         { route: "about", name: "About CompressZ", desc: "Architecture, mission, and offline privacy model", icon: "home" },
       ],
     },
@@ -740,36 +740,103 @@
   /* Narrow-screen mobile responsiveness */
   @media (max-width: 520px) {
     .cz-dialog {
-      width: 95%;
-      max-height: 90vh;
-      border-radius: var(--r-lg, 16px);
+      width: calc(100vw - 16px);
+      max-width: calc(100vw - 16px);
+      max-height: calc(100vh - 24px);
+      max-height: 92dvh;
+      border-radius: var(--r, 16px);
+      margin: 0;
     }
     .cz-dialog-header {
-      padding: 0.85rem 0.85rem 0.75rem;
+      padding: 0.75rem 0.85rem;
+    }
+    .cz-mac-traffic-lights {
+      width: auto;
+      gap: 5px;
+    }
+    .cz-mac-dot-min,
+    .cz-mac-dot-zoom {
+      display: none;
+    }
+    .cz-mac-dot-close {
+      width: 14px;
+      height: 14px;
+    }
+    .cz-dialog-title {
+      font-size: 0.95rem;
+    }
+    .cz-dialog-count {
+      font-size: 0.68rem;
+      padding: 0.1rem 0.35rem;
+    }
+    .cz-mac-close-btn {
+      width: 32px;
+      height: 32px;
+      min-width: 32px;
+      min-height: 32px;
     }
     .cz-dialog-universal-upload {
-      padding: 0.65rem 0.85rem 0.45rem;
+      padding: 0.55rem 0.85rem 0.35rem;
     }
     .cz-dialog-toolbar {
-      padding: 0.55rem 0.85rem;
+      padding: 0.5rem 0.85rem;
+      gap: 0.5rem;
+    }
+    .cz-mac-segmented-bar {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      padding: 3px 2px;
+    }
+    .cz-mac-segmented-bar::-webkit-scrollbar {
+      display: none;
+    }
+    .cz-mac-seg-btn {
+      flex: 0 0 auto;
+      min-height: 34px;
+      padding: 0.35rem 0.65rem;
+      font-size: 0.78rem;
+    }
+    .cz-dialog-search-wrap {
+      width: 100%;
+      min-width: 0;
+    }
+    .cz-dialog-input {
+      font-size: 16px; /* Prevents iOS auto-zoom on input focus */
+      padding: 0.45rem 1.8rem 0.45rem 2rem;
     }
     .cz-dialog-body {
-      padding: 0.85rem 0.85rem 1.25rem;
+      padding: 0.85rem 0.85rem calc(1.25rem + env(safe-area-inset-bottom, 0px));
       overflow-x: hidden;
       gap: 1.15rem;
     }
     .cz-tools-grid {
       grid-template-columns: 1fr;
       gap: 0.55rem;
+      width: 100%;
     }
     .cz-tool-card {
-      padding: 0.65rem 0.8rem;
+      padding: 0.7rem 0.85rem;
+      min-height: 48px;
     }
-    .cz-mac-traffic-lights {
-      width: 48px;
+    .cz-tool-name {
+      font-size: 0.88rem;
     }
-    .cz-dialog-search-wrap {
-      min-width: 100%;
+    .cz-tool-desc {
+      font-size: 0.75rem;
+    }
+  }
+
+  @media (max-width: 360px) {
+    .cz-dialog-header {
+      padding: 0.65rem 0.65rem;
+    }
+    .cz-dialog-title-block {
+      gap: 0.35rem;
+    }
+    .cz-dialog-count {
+      display: none;
     }
   }
 

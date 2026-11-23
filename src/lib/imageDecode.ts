@@ -92,7 +92,7 @@ export async function decodeImageBitmap(file: File): Promise<ImageBitmap> {
         return await createImageBitmap(png);
       } catch (heicErr: any) {
         throw new Error(
-          `"${file.name}" is a HEIC/HEIF photo this browser can't decode natively, and the ` +
+          `The selected file is a HEIC/HEIF photo this browser can't decode natively, and the ` +
             `built-in HEIC converter couldn't read it either${heicErr?.message ? ` (${heicErr.message})` : ""}. ` +
             `It may be a Live Photo or a corrupted export — try re-exporting it as JPEG from your Photos app.`,
           { cause: heicErr },
@@ -105,7 +105,7 @@ export async function decodeImageBitmap(file: File): Promise<ImageBitmap> {
     try {
       return await loadViaImgTag(file);
     } catch {
-      throw new Error(`"${file.name}" isn't a readable image.`);
+      throw new Error("The selected file isn't a readable image.");
     }
   }
 }

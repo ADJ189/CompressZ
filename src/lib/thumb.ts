@@ -90,9 +90,10 @@ async function renderImageThumb(file: File): Promise<string | null> {
 }
 
 async function renderPdfThumb(file: File): Promise<string | null> {
+  let doc: any = null;
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const doc = await openPdfDocument(bytes);
+    doc = await openPdfDocument(bytes);
     const page = await doc.getPage(1);
     const base = page.getViewport({ scale: 1 });
     const scale = THUMB_PX / Math.max(base.width, base.height);
@@ -104,10 +105,13 @@ async function renderPdfThumb(file: File): Promise<string | null> {
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     await page.render({ canvasContext: ctx, viewport }).promise;
-    await doc.destroy?.();
     return await canvasToJpegUrl(canvas);
   } catch {
     return null;
+  } finally {
+    if (doc) {
+      await doc.destroy?.().catch(() => {});
+    }
   }
 }
 

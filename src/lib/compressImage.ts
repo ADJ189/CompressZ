@@ -171,6 +171,7 @@ export async function compressImage(
   let outW = measured?.width || w,
     outH = measured?.height || h;
   if (
+    !needsResize &&
     format === "image/png" &&
     blob.size >= file.size &&
     (await isPngSource(file))

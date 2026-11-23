@@ -13,7 +13,15 @@
     type ResourceMode,
   } from "../lib/settings";
   import { syncEngineSettingsToStores } from "../store";
-  import { getThemePreference, setThemePreference, THEME_EVENT } from "../lib/theme";
+  import {
+    getThemePreference,
+    setThemePreference,
+    THEME_EVENT,
+    getColorScheme,
+    setColorScheme,
+    type ColorScheme,
+    COLOR_SCHEME_EVENT,
+  } from "../lib/theme";
   import {
     clearDismissedRecommendations,
     dismissedRecommendationCount,
@@ -21,6 +29,13 @@
   import { toast } from "../toast";
   import { onMount } from "svelte";
   import MacIcon from "../components/MacIcon.svelte";
+  import {
+    isTelemetryOptedOut,
+    setTelemetryOptOut,
+    disableTelemetry,
+    enableTelemetry,
+    clearStoragePreservingTelemetry,
+  } from "../lib/telemetry";
 
   interface Props {
     open: boolean;
@@ -31,6 +46,7 @@
 
   let settings = $state<Settings>(getSettings());
   let themePref = $state<"light" | "dark" | "system">(getThemePreference());
+  let colorScheme = $state<ColorScheme>(getColorScheme());
   let activeSection = $state<
     | "general"
     | "appearance"
@@ -40,23 +56,96 @@
     | "compression"
     | "privacy"
     | "diagnostics"
+    | "support"
   >("general");
 
   let resetArmed = $state(false);
   let clearArmed = $state(false);
+  let optOutArmed = $state(false);
+  let telemetryEnabled = $state(!isTelemetryOptedOut());
   let dismissedCount = $state(0);
 
   function reloadSettings() {
     settings = getSettings();
     themePref = getThemePreference();
+    colorScheme = getColorScheme();
     dismissedCount = dismissedRecommendationCount();
+    telemetryEnabled = !isTelemetryOptedOut();
+    optOutArmed = false;
+  }
+
+  let telemetryTransitionId = 0;
+
+  async function handleConfirmOptOut() {
+    telemetryEnabled = false;
+    optOutArmed = false;
+    const currentId = ++telemetryTransitionId;
+    const saved = setTelemetryOptOut(true);
+    await disableTelemetry();
+    if (currentId !== telemetryTransitionId || telemetryEnabled) return;
+    if (saved) {
+      toast("Anonymous error diagnostics disabled", "info");
+    } else {
+      toast("Diagnostics disabled for session (storage unavailable)", "info");
+    }
+  }
+
+  function handleEnableTelemetry() {
+    telemetryTransitionId++;
+    telemetryEnabled = true;
+    optOutArmed = false;
+    const saved = setTelemetryOptOut(false);
+    enableTelemetry();
+    if (saved) {
+      toast("Anonymous error diagnostics enabled", "success");
+    } else {
+      toast("Diagnostics enabled for session (storage unavailable)", "success");
+    }
+  }
+
+  function getDiagnosticReport(): string {
+    const isIsolated = typeof crossOriginIsolated !== "undefined" && crossOriginIsolated;
+    const hasWebCodecs = typeof VideoEncoder !== "undefined";
+    const hasWebGpu = typeof navigator !== "undefined" && "gpu" in navigator;
+    const ua = typeof navigator !== "undefined" ? navigator.userAgent : "Unknown";
+    const cores = typeof navigator !== "undefined" ? navigator.hardwareConcurrency : "Unknown";
+    const screenRes = typeof window !== "undefined" ? `${window.screen.width}x${window.screen.height} (DPR ${window.devicePixelRatio})` : "N/A";
+
+    return [
+      `### CompressZ Diagnostic Information`,
+      `- **App Version:** ${appVersion}`,
+      `- **User Agent:** ${ua}`,
+      `- **Screen:** ${screenRes}`,
+      `- **Hardware Cores:** ${cores}`,
+      `- **Cross-Origin Isolation:** ${isIsolated ? "Enabled (COOP/COEP active)" : "Disabled"}`,
+      `- **WebCodecs Support:** ${hasWebCodecs ? "Available" : "Unavailable (Fallback to WASM)"}`,
+      `- **WebGPU Support:** ${hasWebGpu ? "Available" : "Unavailable (Fallback to CPU/WASM)"}`,
+      `- **Resource Mode:** ${settings.resourceMode} (${resolvedConcurrency(settings)} concurrent jobs)`,
+      `- **Anonymous Diagnostics:** ${telemetryEnabled ? "Active" : "Opted out (Disabled)"}`,
+    ].join("\n");
+  }
+
+  async function handleCopyDiagnostics() {
+    try {
+      const text = getDiagnosticReport();
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+        await navigator.clipboard.writeText(text);
+        toast("Diagnostic information copied to clipboard", "success");
+      } else {
+        toast("Clipboard API unavailable", "error");
+      }
+    } catch {
+      toast("Failed to copy to clipboard", "error");
+    }
   }
 
   onMount(() => {
     reloadSettings();
     document.addEventListener(THEME_EVENT, reloadSettings);
+    document.addEventListener(COLOR_SCHEME_EVENT, reloadSettings);
     return () => {
       document.removeEventListener(THEME_EVENT, reloadSettings);
+      document.removeEventListener(COLOR_SCHEME_EVENT, reloadSettings);
     };
   });
 
@@ -103,6 +192,12 @@
     setThemePreference(val);
     themePref = val;
     toast(`Theme set to ${val}`, "success");
+  }
+
+  function handleColorSchemeChange(val: ColorScheme) {
+    setColorScheme(val);
+    colorScheme = val;
+    toast(`Color scheme set to ${val}`, "success");
   }
 
   function handleClose() {
@@ -237,6 +332,14 @@
         >
           Diagnostics
         </button>
+        <button
+          type="button"
+          class="cz-settings-nav-btn cz-settings__nav-btn {activeSection === 'support' ? 'is-active' : ''}"
+          aria-current={activeSection === "support" ? "true" : undefined}
+          onclick={() => (activeSection = "support")}
+        >
+          Support & Issues
+        </button>
       </nav>
 
       <!-- Right Inset Content -->
@@ -315,11 +418,16 @@
                   type="button"
                   class="cz-btn cz-btn-danger cz-btn-sm cz-btn-pill"
                   onclick={() => {
-                    localStorage.clear();
-                    resetSettings();
-                    settings = getSettings();
+                    try {
+                      localStorage.removeItem("cz-recent-tools");
+                      localStorage.removeItem("cz-favourite-tools");
+                      localStorage.removeItem("cz-recommendations-v1");
+                    } catch {
+                      /* storage access restricted */
+                    }
+                    dismissedCount = 0;
                     clearArmed = false;
-                    toast("Local data cleared", "success");
+                    toast("Local cache cleared", "success");
                   }}
                 >
                   Confirm Clear
@@ -359,6 +467,39 @@
                   onclick={() => handleThemeChange("dark")}
                 >
                   Dark
+                </button>
+              </div>
+            </div>
+
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">Color Scheme</div>
+                <div class="cz-settings-desc">Palette aesthetic & accent tones</div>
+              </div>
+              <div class="cz-segmented-track" role="group" aria-label="Color scheme selection">
+                <button
+                  type="button"
+                  class="cz-segmented-item {colorScheme === 'polished' ? 'is-active' : ''}"
+                  aria-pressed={colorScheme === "polished" ? "true" : "false"}
+                  onclick={() => handleColorSchemeChange("polished")}
+                >
+                  Polished
+                </button>
+                <button
+                  type="button"
+                  class="cz-segmented-item {colorScheme === 'origin' ? 'is-active' : ''}"
+                  aria-pressed={colorScheme === "origin" ? "true" : "false"}
+                  onclick={() => handleColorSchemeChange("origin")}
+                >
+                  Origin
+                </button>
+                <button
+                  type="button"
+                  class="cz-segmented-item {colorScheme === 'blood-moon' ? 'is-active' : ''}"
+                  aria-pressed={colorScheme === "blood-moon" ? "true" : "false"}
+                  onclick={() => handleColorSchemeChange("blood-moon")}
+                >
+                  Blood Moon
                 </button>
               </div>
             </div>
@@ -708,6 +849,46 @@
               </div>
               <span class="cz-tier-tag">Client Only</span>
             </div>
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">Anonymous Error Diagnostics</div>
+                <div class="cz-settings-desc">
+                  Detects application crashes and errors to improve stability. Strips all file names, URLs, and personal data.
+                </div>
+              </div>
+              {#if telemetryEnabled}
+                {#if !optOutArmed}
+                  <button
+                    type="button"
+                    class="cz-btn cz-btn-ghost cz-btn-sm cz-btn-pill"
+                    onclick={() => (optOutArmed = true)}
+                  >
+                    Active · Opt out
+                  </button>
+                {:else}
+                  <button
+                    type="button"
+                    class="cz-btn cz-btn-danger cz-btn-sm cz-btn-pill"
+                    onclick={handleConfirmOptOut}
+                  >
+                    Confirm Opt-Out
+                  </button>
+                {/if}
+              {:else}
+                <button
+                  type="button"
+                  class="cz-btn cz-btn-primary cz-btn-sm cz-btn-pill"
+                  onclick={handleEnableTelemetry}
+                >
+                  Disabled · Enable
+                </button>
+              {/if}
+            </div>
+            {#if optOutArmed}
+              <div class="cz-warning-banner" role="alert">
+                ⚠️ <strong>Warning:</strong> Disabling anonymous error diagnostics stops crash reports from being sent. Bugs and unexpected failures you encounter cannot be automatically detected or fixed by the team.
+              </div>
+            {/if}
           </div>
 
         {:else if activeSection === "diagnostics"}
@@ -745,6 +926,88 @@
                 <div class="cz-settings-desc">SSIM quality protection</div>
               </div>
               <span class="cz-tier-tag device-info-val">Active (never silently rescales)</span>
+            </div>
+          </div>
+
+        {:else if activeSection === "support"}
+          <div class="cz-settings-group">
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">GitHub Issue Tracker</div>
+                <div class="cz-settings-desc">Found a bug, crash, or unexpected behavior? Report it on GitHub.</div>
+              </div>
+              <a
+                href="https://github.com/ADJ189/CompressZ/issues/new"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="cz-btn cz-btn-primary cz-btn-sm cz-btn-pill cz-github-pill"
+              >
+                Report Issue on GitHub ↗
+              </a>
+            </div>
+
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">System Context & Troubleshooting Info</div>
+                <div class="cz-settings-desc">Diagnostic details to include in your bug report for faster triage</div>
+              </div>
+              <button
+                type="button"
+                class="cz-btn cz-btn-ghost cz-btn-sm cz-btn-pill"
+                onclick={handleCopyDiagnostics}
+              >
+                Copy Diagnostics
+              </button>
+            </div>
+
+            <div class="cz-settings-row device-info-row">
+              <div>
+                <div class="cz-settings-label">App version</div>
+                <div class="cz-settings-desc">Current shipped build</div>
+              </div>
+              <span class="cz-tier-tag device-info-val">v{appVersion}</span>
+            </div>
+
+            <div class="cz-settings-row device-info-row">
+              <div>
+                <div class="cz-settings-label">Cross-Origin Isolation</div>
+                <div class="cz-settings-desc">COOP/COEP for multithreaded WASM & SharedArrayBuffer</div>
+              </div>
+              <span class="cz-tier-tag device-info-val">
+                {typeof crossOriginIsolated !== "undefined" && crossOriginIsolated ? "Enabled" : "Disabled"}
+              </span>
+            </div>
+
+            <div class="cz-settings-row device-info-row">
+              <div>
+                <div class="cz-settings-label">Hardware WebCodecs & WebGPU</div>
+                <div class="cz-settings-desc">Hardware encoding and GPU pipeline support</div>
+              </div>
+              <span class="cz-tier-tag device-info-val">
+                {typeof VideoEncoder !== "undefined" ? "WebCodecs ✓" : "WebCodecs ✗"} ·
+                {typeof navigator !== "undefined" && "gpu" in navigator ? "WebGPU ✓" : "WebGPU ✗"}
+              </span>
+            </div>
+
+            <div class="cz-settings-row device-info-row">
+              <div>
+                <div class="cz-settings-label">Error Diagnostics Status</div>
+                <div class="cz-settings-desc">Automated crash and stability reporting</div>
+              </div>
+              <span class="cz-tier-tag device-info-val">
+                {telemetryEnabled ? "Active (Anonymous)" : "Opted out (Disabled)"}
+              </span>
+            </div>
+
+            <div class="cz-settings-row device-info-row">
+              <div>
+                <div class="cz-settings-label">Troubleshooting Tips</div>
+                <div class="cz-settings-desc">
+                  • <strong>Video slow/failing:</strong> WebCodecs hardware encoding depends on browser codec support. Try WebM (VP9) for broad browser compatibility.<br />
+                  • <strong>Out of memory on large files:</strong> Switch Resource Guard to "Memory Saver" in the Performance tab.<br />
+                  • <strong>Multithreaded WASM issues:</strong> Verify that your browser or network does not strip COOP/COEP isolation headers.
+                </div>
+              </div>
             </div>
           </div>
         {/if}
@@ -989,6 +1252,22 @@
   }
   .cz-btn-pill {
     border-radius: 9999px;
+  }
+  .cz-warning-banner {
+    padding: 0.75rem 1rem;
+    border-radius: var(--r-sm);
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    color: var(--text);
+    font-size: 0.8rem;
+    line-height: 1.4;
+    margin-top: 0.35rem;
+  }
+  .cz-github-pill {
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
   }
 
   @media (max-width: 680px) {

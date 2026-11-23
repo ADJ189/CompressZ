@@ -321,9 +321,101 @@ type SavedSettings = {
   resourceLimits?: Partial<ResourceLimits>;
 };
 
-function merge(base: AppSettings, raw: unknown): AppSettings {
+const IMAGE_FORMATS: readonly ImageFormat[] = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/avif',
+];
+const PDF_LEVELS: readonly PdfLevel[] = ['low', 'recommended', 'extreme'];
+const VIDEO_CODECS: readonly VideoCodec[] = ['h264', 'h265', 'vp9', 'vp8', 'av1'];
+const VIDEO_PRESETS: readonly EngineDefaults['video']['preset'][] = [
+  'ultrafast',
+  'fast',
+  'medium',
+  'slow',
+];
+const AUDIO_FORMATS: readonly AudioFormat[] = [
+  'mp3',
+  'aac',
+  'ogg',
+  'opus',
+  'flac',
+  'wav',
+];
+const OCR_ENGINES: readonly EngineDefaults['ocr']['engine'][] = ['paddle', 'tesseract'];
+const PERFORMANCE_MODES: readonly (PerformanceTier | 'auto')[] = [
+  'auto',
+  'efficient',
+  'balanced',
+  'powerful',
+];
+const AI_MODEL_TIERS: readonly (AiModelTier | 'auto')[] = [
+  'auto',
+  'efficient',
+  'powerful',
+];
+const AI_BACKENDS: readonly AiSettings['backend'][] = ['auto', 'webgpu', 'wasm'];
+
+function asBoolean(value: unknown, fallback: boolean): boolean {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+function asEnum<T extends string>(
+  value: unknown,
+  allowed: readonly T[],
+  fallback: T,
+): T {
+  return typeof value === 'string' && (allowed as readonly string[]).includes(value)
+    ? (value as T)
+    : fallback;
+}
+
+/** Clamp a persisted number into a sane range; reject NaN/Infinity/strings. */
+function asInt(value: unknown, min: number, max: number, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+function asAutoInt(
+  value: unknown,
+  min: number,
+  max: number,
+  fallback: number | 'auto',
+): number | 'auto' {
+  if (value === 'auto') return 'auto';
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+function asLanguage(value: unknown, fallback: string): string {
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.trim();
+  return /^[a-z0-9_+.-]{1,32}$/i.test(trimmed) ? trimmed : fallback;
+}
+
+/**
+ * Merge a persisted (and therefore untrusted) blob over the defaults.
+ *
+ * localStorage is writable by hand, by older app versions and by other code on
+ * the same origin. A blind spread used to let a corrupted `quality`, `bitrate`
+ * or `concurrency` reach an engine (or a semaphore capacity) unchanged. Every
+ * field is now type-checked and range-clamped, with unknown keys dropped.
+ */
+export function mergeSettings(base: AppSettings, raw: unknown): AppSettings {
   if (!raw || typeof raw !== 'object') return base;
   const saved = raw as SavedSettings;
+  const gpu = saved.gpu ?? {};
+  const images = saved.engines?.images ?? base.engines.images;
+  const pdf = saved.engines?.pdf ?? base.engines.pdf;
+  const video = saved.engines?.video ?? base.engines.video;
+  const audio = saved.engines?.audio ?? base.engines.audio;
+  const gif = saved.engines?.gif ?? base.engines.gif;
+  const ocr = saved.engines?.ocr ?? base.engines.ocr;
+  const ai = saved.ai ?? {};
+  const recommendations = saved.recommendations ?? {};
+  const limits = saved.resourceLimits ?? {};
+
   const resourceMode: ResourceMode =
     saved.resourceMode === 'auto' ||
     saved.resourceMode === 'memory-saver' ||
@@ -333,21 +425,76 @@ function merge(base: AppSettings, raw: unknown): AppSettings {
       : saved.performanceMode !== undefined
         ? migrateLegacyResourceMode(saved.performanceMode)
         : base.resourceMode;
+
   return {
-    gpu: { ...base.gpu, ...(saved.gpu ?? {}) },
-    engines: {
-      images: { ...base.engines.images, ...(saved.engines?.images ?? {}) },
-      pdf:    { ...base.engines.pdf,    ...(saved.engines?.pdf    ?? {}) },
-      video:  { ...base.engines.video,  ...(saved.engines?.video  ?? {}) },
-      audio:  { ...base.engines.audio,  ...(saved.engines?.audio  ?? {}) },
-      gif:    { ...base.engines.gif,    ...(saved.engines?.gif    ?? {}) },
-      ocr:    { ...base.engines.ocr,    ...(saved.engines?.ocr    ?? {}) },
+    gpu: {
+      images: asBoolean(gpu.images, base.gpu.images),
+      pdf: asBoolean(gpu.pdf, base.gpu.pdf),
+      ocr: asBoolean(gpu.ocr, base.gpu.ocr),
+      video: asBoolean(gpu.video, base.gpu.video),
+      gif: asBoolean(gpu.gif, base.gpu.gif),
+      audio: asBoolean(gpu.audio, base.gpu.audio),
     },
-    performanceMode: saved.performanceMode ?? base.performanceMode,
+    engines: {
+      images: {
+        format: asEnum(images.format, IMAGE_FORMATS, base.engines.images.format),
+        quality: asInt(images.quality, 0, 100, base.engines.images.quality),
+        maxDim: asInt(images.maxDim, 0, 100_000, base.engines.images.maxDim),
+      },
+      pdf: {
+        level: asEnum(pdf.level, PDF_LEVELS, base.engines.pdf.level),
+        renderScale: asInt(pdf.renderScale, 1, 4, base.engines.pdf.renderScale),
+      },
+      video: {
+        codec: asEnum(video.codec, VIDEO_CODECS, base.engines.video.codec),
+        preset: asEnum(video.preset, VIDEO_PRESETS, base.engines.video.preset),
+        crfQuality: asInt(video.crfQuality, 0, 100, base.engines.video.crfQuality),
+      },
+      audio: {
+        format: asEnum(audio.format, AUDIO_FORMATS, base.engines.audio.format),
+        bitrate: asInt(audio.bitrate, 8, 512, base.engines.audio.bitrate),
+      },
+      gif: {
+        quality: asInt(gif.quality, 0, 100, base.engines.gif.quality),
+      },
+      ocr: {
+        engine: asEnum(ocr.engine, OCR_ENGINES, base.engines.ocr.engine),
+        lang: asLanguage(ocr.lang, base.engines.ocr.lang),
+      },
+    },
+    performanceMode: asEnum(
+      saved.performanceMode,
+      PERFORMANCE_MODES,
+      base.performanceMode,
+    ),
     resourceMode,
-    ai: { ...base.ai, ...(saved.ai ?? {}) },
-    recommendations: { ...base.recommendations, ...(saved.recommendations ?? {}) },
-    resourceLimits: { ...base.resourceLimits, ...(saved.resourceLimits ?? {}) },
+    ai: {
+      enabled: asBoolean(ai.enabled, base.ai.enabled),
+      modelTier: asEnum(ai.modelTier, AI_MODEL_TIERS, base.ai.modelTier),
+      backend: asEnum(ai.backend, AI_BACKENDS, base.ai.backend),
+      autoApplySuggestions: asBoolean(
+        ai.autoApplySuggestions,
+        base.ai.autoApplySuggestions,
+      ),
+    },
+    recommendations: {
+      enabled: asBoolean(recommendations.enabled, base.recommendations.enabled),
+      allowAi: asBoolean(recommendations.allowAi, base.recommendations.allowAi),
+    },
+    resourceLimits: {
+      concurrency: asAutoInt(
+        limits.concurrency,
+        1,
+        16,
+        base.resourceLimits.concurrency,
+      ),
+      maxImageDim: asAutoInt(
+        limits.maxImageDim,
+        0,
+        100_000,
+        base.resourceLimits.maxImageDim,
+      ),
+    },
   };
 }
 
@@ -358,7 +505,7 @@ export function getSettings(): AppSettings {
 
   const savedV2 = readRaw();
   if (savedV2) {
-    _settings = merge(defaults(), savedV2);
+    _settings = mergeSettings(defaults(), savedV2);
     // Persist the merged shape so one-time migrations (legacy performanceMode
     // → resourceMode, newly added fields) survive a later reload.
     writeRaw(_settings);
@@ -375,7 +522,7 @@ export function getSettings(): AppSettings {
   } catch { /* ignore */ }
 
   const isFirstRun = !legacy;
-  _settings = applyAutoDefaults(merge(defaults(), legacy), isFirstRun);
+  _settings = applyAutoDefaults(mergeSettings(defaults(), legacy), isFirstRun);
   writeRaw(_settings);
   return _settings;
 }

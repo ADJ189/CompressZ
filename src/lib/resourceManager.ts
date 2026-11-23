@@ -19,6 +19,7 @@
  */
 import {
   getSettings,
+  onSettingsChange,
   resolveExecutionProfile,
   type ResourceMode,
 } from './settings';
@@ -248,7 +249,8 @@ export function isAllocationFailure(err: unknown): boolean {
 // ── Weighted semaphore ────────────────────────────────────────
 
 interface Waiter {
-  weight: number;
+  requestedWeight: number;
+  grantedWeight?: number;
   grant: () => void;
   fail: (err: unknown) => void;
   signal?: AbortSignal;
@@ -272,11 +274,20 @@ class WeightedSemaphore {
 
   acquire(weight: number, signal?: AbortSignal): Promise<() => void> {
     if (signal?.aborted) return Promise.reject(abortError());
-    const w = Math.min(Math.max(1, weight), this.capacity);
+    const req = Math.max(1, weight);
     return new Promise((resolve, reject) => {
+      let released = false;
       const waiter: Waiter = {
-        weight: w,
-        grant: () => resolve(() => this.release(w)),
+        requestedWeight: req,
+        grant: () => {
+          const granted = waiter.grantedWeight ?? Math.min(req, this.capacity);
+          resolve(() => {
+            if (!released) {
+              released = true;
+              this.release(granted);
+            }
+          });
+        },
         fail: reject,
         signal,
       };
@@ -301,16 +312,23 @@ class WeightedSemaphore {
   private drain(): void {
     while (this.queue.length) {
       const next = this.queue[0];
-      if (this.used + next.weight > this.capacity) break;
+      // Compute effective weight against the current capacity so a shrink to 1
+      // does not leave a weight-2 waiter permanently ungrantable.
+      // Do not permanently mutate the waiter's requested weight.
+      const effectiveWeight = Math.min(next.requestedWeight, this.capacity);
+      if (this.used + effectiveWeight > this.capacity) break;
       this.queue.shift();
       if (next.signal && next.onAbort) {
         next.signal.removeEventListener('abort', next.onAbort);
       }
-      this.used += next.weight;
+      next.grantedWeight = effectiveWeight;
+      this.used += effectiveWeight;
       next.grant();
     }
   }
 }
+
+export { WeightedSemaphore };
 
 function abortError(): Error {
   const err = new Error('Job cancelled');
@@ -333,15 +351,41 @@ const listeners = new Set<() => void>();
 function pools() {
   const p = getResourcePolicy();
   const key = `${p.heavyLimit}|${p.lightCapacity}`;
-  if (key !== poolsKey || !heavyPool || !lightPool) {
-    poolsKey = key;
+  if (!heavyPool || !lightPool) {
     heavyPool = new WeightedSemaphore(p.heavyLimit);
     lightPool = new WeightedSemaphore(p.lightCapacity);
+    poolsKey = key;
     // A pressure event must survive a profile/pool rebuild.
     if (pressure > 0) lightPool.setCapacity(1);
+  } else if (key !== poolsKey) {
+    // Adjust the existing semaphores instead of replacing them. Replacing them
+    // orphaned every queued waiter (it could never be granted, because its
+    // grant/release closures pointed at the discarded instance) while running
+    // jobs released into the old pool, so the new pool admitted a second wave
+    // on top of work that was still executing.
+    poolsKey = key;
+    heavyPool.setCapacity(p.heavyLimit);
+    lightPool.setCapacity(pressure > 0 ? 1 : p.lightCapacity);
   }
   return { heavy: heavyPool, light: lightPool, policy: p };
 }
+
+/**
+ * Apply a changed concurrency profile immediately. Without this, a user who
+ * raises Batch Concurrency while jobs are already queued would keep the old
+ * capacity until some later job happened to call `pools()`.
+ */
+function syncPoolCapacity(): void {
+  if (!heavyPool || !lightPool) return;
+  const p = getResourcePolicy();
+  const key = `${p.heavyLimit}|${p.lightCapacity}`;
+  if (key === poolsKey) return;
+  poolsKey = key;
+  heavyPool.setCapacity(p.heavyLimit);
+  lightPool.setCapacity(pressure > 0 ? 1 : p.lightCapacity);
+}
+
+onSettingsChange(syncPoolCapacity);
 
 function notify() {
   listeners.forEach((fn) => {
@@ -402,8 +446,13 @@ export interface RunOptions {
 }
 
 async function waitUntilVisible(signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) throw abortError();
   if (typeof document === 'undefined' || !document.hidden) return;
   await new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortError());
+      return;
+    }
     const onVisibility = () => {
       if (document.hidden) return;
       cleanup();

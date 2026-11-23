@@ -84,8 +84,16 @@ import { entryError } from "../lib/engineError";
       const saved = localStorage.getItem("cz-pdfsuite-profile");
       if (saved) {
         const p = JSON.parse(saved);
-        if (p.encryptionStandard) encryptionStandard = p.encryptionStandard;
-        if (p.renderDpi) renderDpi = p.renderDpi;
+        const standards = new Set<PdfEncryptionStandard>([
+          "aes-256-r6",
+          "aes-256-r5",
+          "aes-128",
+        ]);
+        if (standards.has(p.encryptionStandard)) {
+          encryptionStandard = p.encryptionStandard;
+        }
+        const dpi = Number(p.renderDpi);
+        if (dpi === 150 || dpi === 300 || dpi === 600) renderDpi = dpi;
         if (typeof p.allowPrinting === "boolean") allowPrinting = p.allowPrinting;
         if (typeof p.allowCopying === "boolean") allowCopying = p.allowCopying;
       }

@@ -130,7 +130,8 @@ export async function imagesToPdf(
 
   const bytes = await pdfDoc.save();
   onProgress?.(100);
-  return new Blob([bytes], { type: "application/pdf" });
+  const unshared = new Uint8Array(bytes).buffer;
+  return new Blob([unshared], { type: "application/pdf" });
 }
 
 function encodeJpeg(

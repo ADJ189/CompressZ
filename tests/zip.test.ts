@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "./assert.ts";
-import { writeZip, readZip, sanitizeZipPath } from "../src/lib/zip.ts";
+import { writeZip, readZip, sanitizeZipPath, estimateZipArchiveSize } from "../src/lib/zip.ts";
 
 Deno.test("zip: sanitizeZipPath strips directory traversal and leading slashes", () => {
   assertEquals(sanitizeZipPath("../secret.txt"), "secret.txt");
@@ -79,3 +79,40 @@ Deno.test("zip: stored entry exceeding maxEntryBytes is rejected before allocati
   }
   assertEquals(/safety limit/.test(message), true);
 });
+
+Deno.test("zip: estimateZipArchiveSize accurately accounts for deduplicated filename lengths", () => {
+  const items = [
+    { name: "report.pdf", size: 100 },
+    { name: "report.pdf", size: 200 },
+    { name: "./report.pdf", size: 300 },
+  ];
+  // Deduplicated names will be: "report.pdf", "report (2).pdf", "report (3).pdf"
+  const estimated = estimateZipArchiveSize(items);
+  const baseLen = new TextEncoder().encode("report.pdf").length; // 10
+  const dup1Len = new TextEncoder().encode("report (2).pdf").length; // 14
+  const dup2Len = new TextEncoder().encode("report (3).pdf").length; // 14
+  const expectedTotal =
+    22 /* EOCD */ +
+    (100 + 76 + 2 * baseLen) +
+    (200 + 76 + 2 * dup1Len) +
+    (300 + 76 + 2 * dup2Len);
+  assertEquals(estimated, expectedTotal);
+});
+
+Deno.test("zip: writeZip rejects archive with 65535 or more entries to prevent 16-bit truncation", async () => {
+  // Array of 65535 entries (0xffff)
+  const dummyData = new Uint8Array(0);
+  const entries = new Array(0xffff).fill(null).map((_, i) => ({
+    name: `f${i}.txt`,
+    data: dummyData,
+  }));
+
+  let message = "";
+  try {
+    await writeZip(entries);
+  } catch (err) {
+    message = String((err as Error)?.message || err);
+  }
+  assert(/65534 entries/i.test(message) || /65535 entries/i.test(message), `Expected 16-bit limit error, got: "${message}"`);
+});
+
