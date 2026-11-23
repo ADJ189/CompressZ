@@ -12,6 +12,49 @@ import {
   MAX_PAGE_SCAN_TOTAL_BYTES,
 } from "../src/lib/compressPdf.ts";
 
+async function compressWithDeflate(data: Uint8Array): Promise<Uint8Array | null> {
+  if (typeof CompressionStream === "undefined") return null;
+  const cs = new CompressionStream("deflate");
+  const writer = cs.writable.getWriter();
+  void (async () => {
+    await writer.write(data as any);
+    await writer.close();
+  })();
+  const reader = cs.readable.getReader();
+  const chunks: Uint8Array[] = [];
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) chunks.push(value);
+  }
+  const len = chunks.reduce((s, c) => s + c.length, 0);
+  const out = new Uint8Array(len);
+  let offset = 0;
+  for (const c of chunks) {
+    out.set(c, offset);
+    offset += c.length;
+  }
+  return out;
+}
+
+function createMockPdfDoc() {
+  return {
+    context: {
+      obj: (v: string) => v,
+      lookup: (v: any) => v,
+    },
+  };
+}
+
+function createMockPageAndDoc(items: any[]) {
+  const mockPage = {
+    node: {
+      Contents: () => items,
+    },
+  };
+  return { mockPage, mockPdfDoc: createMockPdfDoc() };
+}
+
 Deno.test("compressPdf: calculateImageDrawnSizes extracts drawn dimensions from CTM", () => {
   const stream = `
     q
@@ -131,31 +174,8 @@ Deno.test("compressPdf: decompressFlate respects decoded-byte limits", async () 
 
   // Compress a repeated sequence
   const raw = new TextEncoder().encode("Hello world! ".repeat(1000)); // 13,000 bytes
-  let compressed: Uint8Array;
-  if (typeof CompressionStream !== "undefined") {
-    const cs = new CompressionStream("deflate");
-    const writer = cs.writable.getWriter();
-    void (async () => {
-      await writer.write(raw);
-      await writer.close();
-    })();
-    const reader = cs.readable.getReader();
-    const chunks: Uint8Array[] = [];
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value) chunks.push(value);
-    }
-    const len = chunks.reduce((s, c) => s + c.length, 0);
-    compressed = new Uint8Array(len);
-    let o = 0;
-    for (const c of chunks) {
-      compressed.set(c, o);
-      o += c.length;
-    }
-  } else {
-    return;
-  }
+  const compressed = await compressWithDeflate(raw);
+  if (!compressed) return;
 
   // Decompressing with limit of 100 bytes must cap output at 100 bytes
   const bounded = await decompressFlate(compressed, 100);
@@ -178,17 +198,7 @@ Deno.test("compressPdf: getPageContentText stops reading when decoded-byte limit
     dict: { lookup: () => null },
   };
 
-  const mockPage = {
-    node: {
-      Contents: () => [item1, item2],
-    },
-  };
-  const mockPdfDoc = {
-    context: {
-      obj: (v: string) => v,
-      lookup: (v: any) => v,
-    },
-  };
+  const { mockPage, mockPdfDoc } = createMockPageAndDoc([item1, item2]);
 
   // With a limit of 25 bytes, it reads item1 up to 25 bytes and stops before item2
   const { text, bytesRead, truncated } = await getPageContentText(mockPage, mockPdfDoc, undefined, 25);
@@ -201,31 +211,8 @@ Deno.test("compressPdf: getPageContentText stops reading when decoded-byte limit
 Deno.test("compressPdf: production decoder path limits highly compressible Flate stream incrementally", async () => {
   // Create a highly compressible stream (e.g. 200,000 bytes repeating)
   const expanded = new TextEncoder().encode("q 100 0 0 100 0 0 cm /HugeImage Do Q\n".repeat(5000)); // ~185,000 bytes
-  let compressedStream: Uint8Array;
-  if (typeof CompressionStream !== "undefined") {
-    const cs = new CompressionStream("deflate");
-    const writer = cs.writable.getWriter();
-    void (async () => {
-      await writer.write(expanded);
-      await writer.close();
-    })();
-    const reader = cs.readable.getReader();
-    const chunks: Uint8Array[] = [];
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value) chunks.push(value);
-    }
-    const len = chunks.reduce((s, c) => s + c.length, 0);
-    compressedStream = new Uint8Array(len);
-    let o = 0;
-    for (const c of chunks) {
-      compressedStream.set(c, o);
-      o += c.length;
-    }
-  } else {
-    return;
-  }
+  const compressedStream = await compressWithDeflate(expanded);
+  if (!compressedStream) return;
 
   const mockItem = {
     contents: compressedStream,
@@ -233,17 +220,7 @@ Deno.test("compressPdf: production decoder path limits highly compressible Flate
       lookup: () => ({ encodedName: "/FlateDecode" }),
     },
   };
-  const mockPage = {
-    node: {
-      Contents: () => [mockItem],
-    },
-  };
-  const mockPdfDoc = {
-    context: {
-      obj: (v: string) => v,
-      lookup: (v: any) => v,
-    },
-  };
+  const { mockPage, mockPdfDoc } = createMockPageAndDoc([mockItem]);
 
   // Decode with remaining budget of 500 bytes: must stop decoding and not expand the full 185 KB
   const cap = 500;
@@ -259,31 +236,8 @@ Deno.test("compressPdf: getPageContentText handles PDFArray filter chains (ASCII
   const rawBytes = new TextEncoder().encode(rawText);
 
   // Compress with Flate
-  let compressed: Uint8Array;
-  if (typeof CompressionStream !== "undefined") {
-    const cs = new CompressionStream("deflate");
-    const writer = cs.writable.getWriter();
-    void (async () => {
-      await writer.write(rawBytes);
-      await writer.close();
-    })();
-    const reader = cs.readable.getReader();
-    const chunks: Uint8Array[] = [];
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value) chunks.push(value);
-    }
-    const len = chunks.reduce((s, c) => s + c.length, 0);
-    compressed = new Uint8Array(len);
-    let o = 0;
-    for (const c of chunks) {
-      compressed.set(c, o);
-      o += c.length;
-    }
-  } else {
-    return;
-  }
+  const compressed = await compressWithDeflate(rawBytes);
+  if (!compressed) return;
 
   // Convert to ASCIIHex
   let hexString = "";
@@ -309,17 +263,7 @@ Deno.test("compressPdf: getPageContentText handles PDFArray filter chains (ASCII
       lookup: () => new MockPDFArray(),
     },
   };
-  const mockPage = {
-    node: {
-      Contents: () => [mockItem],
-    },
-  };
-  const mockPdfDoc = {
-    context: {
-      obj: (v: string) => v,
-      lookup: (v: any) => v,
-    },
-  };
+  const { mockPage, mockPdfDoc } = createMockPageAndDoc([mockItem]);
 
   const res = await getPageContentText(mockPage, mockPdfDoc);
   assertEquals(res.incomplete, false);
@@ -334,17 +278,7 @@ Deno.test("compressPdf: getPageContentText marks incomplete: true on unsupported
       lookup: () => ({ encodedName: "/ASCII85Decode" }),
     },
   };
-  const mockPage = {
-    node: {
-      Contents: () => [mockItem],
-    },
-  };
-  const mockPdfDoc = {
-    context: {
-      obj: (v: string) => v,
-      lookup: (v: any) => v,
-    },
-  };
+  const { mockPage, mockPdfDoc } = createMockPageAndDoc([mockItem]);
 
   const res = await getPageContentText(mockPage, mockPdfDoc);
   assertEquals(res.incomplete, true);
@@ -380,8 +314,7 @@ Deno.test("compressPdf: getPageContentText marks incomplete: true when ASCIIHex 
       lookup: () => ({ encodedName: "/ASCIIHexDecode" }),
     },
   };
-  const mockPage1 = { node: { Contents: () => [malformedHexItem] } };
-  const mockPdfDoc1 = { context: { obj: (v: string) => v, lookup: (v: any) => v } };
+  const { mockPage: mockPage1, mockPdfDoc: mockPdfDoc1 } = createMockPageAndDoc([malformedHexItem]);
   const res1 = await getPageContentText(mockPage1, mockPdfDoc1);
   assertEquals(res1.incomplete, true);
 
@@ -392,8 +325,7 @@ Deno.test("compressPdf: getPageContentText marks incomplete: true when ASCIIHex 
       lookup: () => ({ encodedName: "/FlateDecode" }),
     },
   };
-  const mockPage2 = { node: { Contents: () => [corruptedFlateItem] } };
-  const mockPdfDoc2 = { context: { obj: (v: string) => v, lookup: (v: any) => v } };
+  const { mockPage: mockPage2, mockPdfDoc: mockPdfDoc2 } = createMockPageAndDoc([corruptedFlateItem]);
   const res2 = await getPageContentText(mockPage2, mockPdfDoc2);
   assertEquals(res2.incomplete, true);
 });
@@ -422,8 +354,7 @@ Deno.test("compressPdf: valid ASCIIHex stream exceeding cap returns prefix and c
       lookup: () => ({ encodedName: "/ASCIIHexDecode" }),
     },
   };
-  const mockPage = { node: { Contents: () => [mockItem] } };
-  const mockPdfDoc = { context: { obj: (v: string) => v, lookup: (v: any) => v } };
+  const { mockPage, mockPdfDoc } = createMockPageAndDoc([mockItem]);
   const res = await getPageContentText(mockPage, mockPdfDoc, undefined, 50);
 
   assertEquals(res.bytesRead, 50);
@@ -472,8 +403,7 @@ Deno.test("compressPdf: valid ASCIIHex stream exceeding per-stream limit MAX_PAG
       lookup: () => ({ encodedName: "/ASCIIHexDecode" }),
     },
   };
-  const mockPage = { node: { Contents: () => [mockItem] } };
-  const mockPdfDoc = { context: { obj: (v: string) => v, lookup: (v: any) => v } };
+  const { mockPage, mockPdfDoc } = createMockPageAndDoc([mockItem]);
   const res = await getPageContentText(mockPage, mockPdfDoc);
 
   assertEquals(res.bytesRead, MAX_PAGE_SCAN_STREAM_BYTES);
