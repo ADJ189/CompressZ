@@ -9,11 +9,7 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 
 ## [Unreleased]
 
-<!-- coderabbit-ai-generated:v1 -->
-
-<!-- coderabbit-ai-generated-section:v1:90fc2b03938cb327bf47dbf4f84e7d40cfbb06f7df76d34636d796cf82c445e4 -->
-
-## [Unreleased]
+## [1.15.5] - 2026-11-23
 
 ### Added
 

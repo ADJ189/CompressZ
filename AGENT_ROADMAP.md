@@ -2,7 +2,7 @@
 
 > **Universal Contributor & AI Agent Playbook**  
 > *Targeted for Autonomous Coding Agents, LLMs, and System Engineers*  
-> *Last Updated: November 2026 | Engine Version: 1.15.0+*
+> *Last Updated: November 2026 | Engine Version: 1.15.5+*
 
 ---
 
@@ -319,7 +319,7 @@ timeline
         Unified Option Contract : options.ts for all route-engine bindings
         Adaptive Resource Guard : Concurrency scheduling and OOM recovery
         29 Offline Test Suites : 100% pass under Deno and Node
-    section Phase 2 : Current Patches (1.15.0 - Unreleased)
+    section Phase 2 : Current Patches (1.15.5 - Shipped)
         Searchable PDF OCR : Invisible Noto Sans text layer embedding
         Standalone PDF -> Markdown : MathML & LaTeX $$ formula reconstruction
         Multi-File Archives : Native Streams tar.gz, tgz, tar, zip
