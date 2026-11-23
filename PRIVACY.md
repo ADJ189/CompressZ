@@ -55,14 +55,14 @@ first use and cached by your browser thereafter. Full attribution and
 licenses for all of these are in [CREDITS.md](CREDITS.md); the
 privacy-relevant summary is:
 
-- **FFmpeg.wasm** — loaded from `esm.sh` and `cdn.jsdelivr.net` (video/audio/GIF). `esm.sh` serves
-  the package wrapper and utilities; `cdn.jsdelivr.net` serves the core scripts, worker, and WebAssembly binaries.
+- **FFmpeg.wasm** — loaded from `esm.sh` and jsDelivr (`cdn.jsdelivr.net`) (video/audio/GIF). `esm.sh` serves
+  the package wrapper and utilities; jsDelivr (`cdn.jsdelivr.net`) serves the core scripts, worker, and WebAssembly binaries.
   No file data is sent to either host.
 - **Mediabunny** — loaded from `esm.sh` only when the browser supports
   WebCodecs and the requested output codec configuration is encodable
   (video fast path). It demuxes and muxes media in-memory; no file data is
   sent to esm.sh.
-- **PDF.js** — loaded from `cdn.jsdelivr.net` (PDF rendering).
+- **PDF.js** — loaded from jsDelivr (`cdn.jsdelivr.net`) (PDF rendering).
 - **pdf-lib** — loaded from `cdn.jsdelivr.net` (PDF generation).
 - **Tesseract.js** — loaded from `cdn.jsdelivr.net` and
   `tessdata.projectnaptha.com` (OCR engine and trained language data).
@@ -73,7 +73,7 @@ privacy-relevant summary is:
   Inference is executed on-device — nothing is uploaded to Hugging Face or anywhere else.
 - **PaddleOCR / PP-OCRv3** — loaded from `cdn.jsdelivr.net` and
   `paddlejs.bj.bcebos.com` (optional OCR runtime and model weights).
-- **mammoth.js** and **html2canvas** — loaded from `cdn.jsdelivr.net`
+- **mammoth.js** and **html2canvas** — loaded from jsDelivr (`cdn.jsdelivr.net`)
   (Word document conversion).
 - **heic2any** — loaded from `esm.sh` only when a HEIC/HEIF file can't
   be decoded natively.
