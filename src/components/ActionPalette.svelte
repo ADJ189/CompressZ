@@ -8,6 +8,7 @@
   } from "../lib/fileRouter";
   import { formatBytes } from "../lib/types";
   import { resolveExecutionProfile, getSettings } from "../lib/settings";
+  import { hasWebGL2 } from "../lib/webgl";
   import { stagedUniversalFile } from "../store";
   import { navigate } from "../router";
   import { toast } from "../toast";
@@ -27,8 +28,18 @@
 
   const profile = $derived(resolveExecutionProfile(getSettings()));
   const accelSummary = $derived.by(() => {
-    if (profile.gpu) {
-      return `Hardware Accelerated · WebCodecs & WebGL2 Ready (${profile.maxConcurrentImages} Workers)`;
+    const hasGpuEnabled = Object.values(profile.gpu).some(Boolean);
+    const hasGl2 = hasWebGL2();
+    const hasWebCodecs =
+      typeof VideoEncoder !== "undefined" &&
+      typeof VideoDecoder !== "undefined";
+
+    const ready: string[] = [];
+    if (hasWebCodecs) ready.push("WebCodecs");
+    if (hasGl2) ready.push("WebGL2");
+
+    if (hasGpuEnabled && ready.length > 0) {
+      return `Hardware Accelerated · ${ready.join(" & ")} Ready (${profile.maxConcurrentImages} Workers)`;
     }
     return `WASM SIMD Multi-Threaded Profile (${profile.maxConcurrentImages} Workers)`;
   });
@@ -250,7 +261,7 @@
             <span class="cz-palette-prompt">Quick Direct Actions:</span>
           </div>
           <div class="cz-palette-grid">
-            {#each detection.actions.slice(0, 6) as action}
+            {#each detection.actions as action}
               <button
                 type="button"
                 class="cz-palette-card"
