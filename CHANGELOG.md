@@ -7,13 +7,9 @@ carry an `-a`/`-b` prerelease suffix (`-a` = early/alpha, `-b` = beta,
 close to ready) with a trailing counter, e.g. `1.12.0-b1`, `1.12.0-b2`.
 The suffix is dropped on the release that ships it (`1.12.0`).
 
-## [Unreleased]
 
-<!-- coderabbit-ai-generated:v1 -->
 
-<!-- coderabbit-ai-generated-section:v1:90fc2b03938cb327bf47dbf4f84e7d40cfbb06f7df76d34636d796cf82c445e4 -->
-
-## [Unreleased]
+## [1.15.5] - 2026-11-23
 
 ### Added
 
