@@ -635,6 +635,9 @@ export async function getPageContentText(
               failedOrUnsupported = true;
               break;
             }
+            if (next.length >= remainingBytes) {
+              incomplete = true;
+            }
             currentBytes = next;
           } else if (norm === "FlateDecode") {
             const next = await decompressFlate(currentBytes, remainingBytes);
