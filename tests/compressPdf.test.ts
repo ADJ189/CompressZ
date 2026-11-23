@@ -451,5 +451,59 @@ Deno.test("compressPdf: decompressFlateNode settles at maxBytes limit for normal
   assertEquals(new TextDecoder().decode(rawResult!).startsWith("q 10 0 0"), true);
 });
 
+Deno.test("compressPdf: valid ASCIIHex stream exceeding per-stream limit MAX_PAGE_SCAN_STREAM_BYTES is capped and accounted for", async () => {
+  // Construct a valid ASCIIHex stream that decodes to more than the 4 MiB per-stream limit
+  const decodedTargetLen = MAX_PAGE_SCAN_STREAM_BYTES + 2048;
+  const hexInput = new Uint8Array(decodedTargetLen * 2 + 1);
+  hexInput.fill(0x30); // Valid hex '0' digits
+  hexInput[hexInput.length - 1] = 0x3e; // Terminating '>'
+
+  // 1. decodeAsciiHex caps at MAX_PAGE_SCAN_STREAM_BYTES and marks terminated: false
+  const directDecoded = decodeAsciiHex(hexInput, MAX_PAGE_SCAN_STREAM_BYTES);
+  assert(directDecoded !== null);
+  assertEquals(directDecoded!.length, MAX_PAGE_SCAN_STREAM_BYTES);
+  assertEquals(directDecoded!.terminated, false);
+
+  // 2. getPageContentText processes up to MAX_PAGE_SCAN_STREAM_BYTES, marks truncated & incomplete,
+  // and counts all capped bytes toward the PDF budget
+  const mockItem = {
+    contents: hexInput,
+    dict: {
+      lookup: () => ({ encodedName: "/ASCIIHexDecode" }),
+    },
+  };
+  const mockPage = { node: { Contents: () => [mockItem] } };
+  const mockPdfDoc = { context: { obj: (v: string) => v, lookup: (v: any) => v } };
+  const res = await getPageContentText(mockPage, mockPdfDoc);
+
+  assertEquals(res.bytesRead, MAX_PAGE_SCAN_STREAM_BYTES);
+  assertEquals(res.truncated, true);
+  assertEquals(res.incomplete, true);
+});
+
+Deno.test("compressPdf: decodeAsciiHex distinguishes output cap from terminator and terminated streams decode cleanly", () => {
+  // A stream with 5 bytes 'Hello' terminated by '>'
+  const text = "48656c6c6f>";
+  const bytes = new TextEncoder().encode(text);
+
+  // Decoded with exact budget: terminated is true
+  const exact = decodeAsciiHex(bytes, 5);
+  assert(exact !== null);
+  assertEquals(exact!.length, 5);
+  assertEquals(exact!.terminated, true);
+
+  // Decoded with cap smaller than available: terminated is false, does not fail
+  const capped = decodeAsciiHex(bytes, 3);
+  assert(capped !== null);
+  assertEquals(capped!.length, 3);
+  assertEquals(capped!.terminated, false);
+
+  // Unterminated stream with cap larger than available: returns null (genuinely missing terminator)
+  const unterminated = new TextEncoder().encode("48656c6c6f");
+  const malformed = decodeAsciiHex(unterminated, 10);
+  assertEquals(malformed, null);
+});
+
+
 
 
