@@ -112,9 +112,12 @@
     thumbEl.style.width = `${linkRect.width}px`;
     thumbEl.style.opacity = "1";
 
-    activeLink.scrollIntoView({
-      block: "nearest",
-      inline: "center",
+    const targetScroll = Math.max(
+      0,
+      left - (scrollContainer.clientWidth - linkRect.width) / 2,
+    );
+    scrollContainer.scrollTo({
+      left: targetScroll,
       behavior: "smooth",
     });
   }
@@ -197,6 +200,7 @@
     align-items: center;
     justify-content: center;
     width: 100%;
+    overflow: hidden;
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
   }

@@ -35,6 +35,7 @@
       icon: "pdf",
       items: [
         { route: "pdf/split", name: "Split PDF", desc: "Extract page ranges, chunk into N-parts, or burst to ZIP", icon: "split", badge: "Studio" },
+        { route: "pdf/remove-pages", name: "Remove Pages", desc: "Delete unwanted pages or ranges with instant preview", icon: "remove-pages", badge: "Fast" },
         { route: "pdf/organize", name: "Organize Pages", desc: "Drag-drop visual reorder, rotate, duplicate, and delete pages", icon: "organize", badge: "Studio" },
         { route: "compress/merge-pdf", name: "Merge PDFs", desc: "Combine multiple PDF documents without rasterisation", icon: "merge" },
         { route: "pdf/edit", name: "Edit & Annotate", desc: "FreeText annotations, ink drawing, highlighting, and stamps", icon: "studio", badge: "New" },
