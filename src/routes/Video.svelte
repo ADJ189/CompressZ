@@ -60,37 +60,41 @@ import { entryError } from "../lib/engineError";
   async function compressSingle(entry: FileEntry) {
     if (entry.status === "compressing") return;
 
-    updateStore({
-      files: videoState.files.map((f) =>
+    videoStore.update((curr) => ({
+      ...curr,
+      files: curr.files.map((f) =>
         f.id === entry.id ? { ...f, status: "compressing", error: undefined } : f,
       ),
-    });
+    }));
 
     try {
-      const options = videoOptions(videoState);
+      const options = videoOptions(videoStore.get());
       const res = await runScheduled(
         { kind: "video", label: entry.name, bytes: entry.file.size },
         () => compressVideo(entry.file, options),
       );
 
-      updateStore({
-        files: videoState.files.map((f) =>
+      videoStore.update((curr) => ({
+        ...curr,
+        files: curr.files.map((f) =>
           f.id === entry.id
             ? {
                 ...f,
                 status: "done",
                 compressedBlob: res.blob,
                 compressedSize: res.blob.size,
+                result: res,
               }
             : f,
         ),
-      });
+      }));
       toast(`Compressed ${entry.name}`, "success");
     } catch (err) {
       console.error("[videoCompress] error:", err);
       const failure = entryError(err, "Video compression failed");
-      updateStore({
-        files: videoState.files.map((f) =>
+      videoStore.update((curr) => ({
+        ...curr,
+        files: curr.files.map((f) =>
           f.id === entry.id
             ? {
                 ...f,
@@ -100,7 +104,7 @@ import { entryError } from "../lib/engineError";
               }
             : f,
         ),
-      });
+      }));
       toast(`${entry.name}: ${failure.error}`, "error", undefined, {
         log: failure.errorLog,
       });
@@ -109,11 +113,16 @@ import { entryError } from "../lib/engineError";
 
   async function handleCompressAll() {
     isBusy = true;
-    const idleEntries = videoState.files.filter((f) => f.status === "idle" || f.status === "error");
-    for (const entry of idleEntries) {
-      await compressSingle(entry);
+    try {
+      const idleEntries = videoStore
+        .get()
+        .files.filter((f) => f.status === "idle" || f.status === "error");
+      for (const entry of idleEntries) {
+        await compressSingle(entry);
+      }
+    } finally {
+      isBusy = false;
     }
-    isBusy = false;
   }
 
   function handleDownloadSingle(entry: FileEntry) {
@@ -157,7 +166,7 @@ import { entryError } from "../lib/engineError";
   <div class="cz-tool-header">
     <h1 class="cz-tool-title">Video Compressor</h1>
     <p class="cz-tool-desc">
-      Hardware accelerated video compression via WebCodecs with seamless FFmpeg.wasm fallback.
+      Browser-native video compression via WebCodecs + Mediabunny with seamless FFmpeg.wasm fallback.
       Processes entirely within this browser tab.
     </p>
   </div>
