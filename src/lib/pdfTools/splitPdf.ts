@@ -133,6 +133,9 @@ export async function splitPdf(
 
   const { PDFDocument } = await getPdfLib();
   const srcDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+  if (srcDoc.isEncrypted) {
+    throw new Error("The PDF is encrypted with a password. Please unlock or decrypt it in PDF Protect / Unlock before splitting pages.");
+  }
   const totalPages = srcDoc.getPageCount();
 
   if (totalPages === 0) {

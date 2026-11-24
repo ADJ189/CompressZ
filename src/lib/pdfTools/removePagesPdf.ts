@@ -1,20 +1,31 @@
 /**
  * removePagesPdf.ts — Delete specific pages or ranges from PDF documents.
  *
- * Direct structural page manipulation via pdf-lib without re-rasterisation.
- * Preserves vector graphics, fonts, form appearance, and hyperlinks.
+ * Direct structural page manipulation via in-place page removal (pdfDoc.removePage).
+ * Operates in descending index order so that page indices do not shift, preserving
+ * document-level metadata (title, author, subject, etc.), document catalog dictionaries,
+ * outlines/bookmarks, vector crispness, fonts, and hyperlinks.
+ *
+ * Interactive form fields on retained pages remain fully editable by default; form
+ * flattening is opt-in via options.flattenForms.
  */
 
 import { getPdfLib } from "../pdfLibs";
+import { EngineError, toErrorMessage } from "../engineError";
 
 export interface RemovePagesOptions {
   /**
    * Set of 0-based page indices, array of 1-based page numbers or 0-based indices,
-   * or a comma-separated range string (e.g. "1, 3-5, 8").
+   * or a comma-separated/space-separated range string (e.g. "1, 3-5, 8" or "1 3-5").
    */
   pagesToRemove: string | number[] | Set<number>;
   /** Optional 0-based flag if pagesToRemove array uses 0-based indices (defaults to false for string/numbers) */
   zeroBased?: boolean;
+  /**
+   * Optional flag to flatten interactive form fields into static vectors.
+   * Defaults to false: form fields on retained pages remain interactive and editable.
+   */
+  flattenForms?: boolean;
   onProgress?: (pct: number) => void;
 }
 
@@ -27,45 +38,62 @@ export interface RemovePagesResult {
 }
 
 /**
- * Parse a human-facing page specification (e.g. "1, 3-5, 8") into a sorted,
+ * Parse a human-facing page specification (e.g. "1, 3-5, 8" or "1 3-5") into a sorted,
  * deduplicated array of 0-based page indices within [0, totalPages - 1].
+ *
+ * Handles mixed whitespace, commas, semicolons, and newlines. Rejects unrecognized tokens
+ * visibly with a descriptive error instead of silently dropping parts of the user's selection.
  */
 export function parseRemovalRange(input: string, totalPages: number): number[] {
   if (totalPages <= 0) return [];
   const trimmed = input.trim();
   if (!trimmed) return [];
 
-  const indices = new Set<number>();
-  // Split on comma, semicolon, or newline first so tokens with spaces around dashes (e.g. "2 - 4") stay together
-  const parts = trimmed.split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean);
+  // Normalize whitespace around hyphens/dashes: "3 - 5" or "3 – 5" -> "3-5"
+  const normalized = trimmed.replace(/(\d+)\s*[-–—]\s*(\d+)/g, "$1-$2");
 
-  for (const part of parts) {
-    // Check for range pattern e.g. "2-5" or "2 - 5" or "2–5"
-    const rangeMatch = part.match(/^(\d+)\s*[-–—]\s*(\d+)$/);
+  // Tokenize on commas, semicolons, newlines, and whitespace
+  const tokens = normalized.split(/[,;\s\n]+/).map((s) => s.trim()).filter(Boolean);
+
+  const indices = new Set<number>();
+
+  for (const token of tokens) {
+    // 1. Check for range pattern e.g. "2-5" or "5-2"
+    const rangeMatch = token.match(/^(\d+)[-–—](\d+)$/);
     if (rangeMatch) {
       const start = parseInt(rangeMatch[1], 10);
       const end = parseInt(rangeMatch[2], 10);
-      if (Number.isFinite(start) && Number.isFinite(end)) {
-        const low = Math.max(1, Math.min(start, end));
-        const high = Math.min(totalPages, Math.max(start, end));
-        for (let p = low; p <= high; p++) {
+      if (start <= 0 || end <= 0) {
+        throw new Error(`Page numbers must be 1 or greater (got "${token}").`);
+      }
+      const low = Math.min(start, end);
+      const high = Math.max(start, end);
+      if (low <= totalPages) {
+        const clampedHigh = Math.min(totalPages, high);
+        for (let p = low; p <= clampedHigh; p++) {
           indices.add(p - 1);
         }
       }
       continue;
     }
 
-    // Also support space-separated single numbers within a part (e.g. "1 3 5")
-    const subTokens = part.split(/\s+/).filter(Boolean);
-    for (const sub of subTokens) {
-      const singleMatch = sub.match(/^(\d+)$/);
-      if (singleMatch) {
-        const page = parseInt(singleMatch[1], 10);
-        if (page >= 1 && page <= totalPages) {
-          indices.add(page - 1);
-        }
+    // 2. Check for single page number e.g. "3"
+    const singleMatch = token.match(/^(\d+)$/);
+    if (singleMatch) {
+      const page = parseInt(singleMatch[1], 10);
+      if (page <= 0) {
+        throw new Error(`Page numbers must be 1 or greater (got "${token}").`);
       }
+      if (page <= totalPages) {
+        indices.add(page - 1);
+      }
+      continue;
     }
+
+    // 3. Unrecognized token: reject visibly instead of silently applying partial selection
+    throw new Error(
+      `Unrecognized page token: "${token}". Expected a page number or range (e.g. "3" or "3-5").`,
+    );
   }
 
   return Array.from(indices).sort((a, b) => a - b);
@@ -132,18 +160,24 @@ export function planPageRemoval(
     throw new Error("Document must have at least 1 page.");
   }
 
-  let toRemoveIndices: number[] = [];
-  if (typeof pagesToRemove === "string") {
-    toRemoveIndices = parseRemovalRange(pagesToRemove, totalPages);
-  } else if (pagesToRemove instanceof Set) {
-    toRemoveIndices = Array.from(pagesToRemove)
-      .map((idx) => (zeroBased ? idx : idx >= 1 ? idx - 1 : idx))
-      .filter((idx) => idx >= 0 && idx < totalPages);
-  } else if (Array.isArray(pagesToRemove)) {
-    toRemoveIndices = pagesToRemove
-      .map((idx) => (zeroBased ? idx : idx >= 1 ? idx - 1 : idx))
-      .filter((idx) => idx >= 0 && idx < totalPages);
-  }
+  const toRemoveIndices: number[] =
+    typeof pagesToRemove === "string"
+      ? parseRemovalRange(pagesToRemove, totalPages)
+      : (pagesToRemove instanceof Set
+          ? Array.from(pagesToRemove)
+          : Array.isArray(pagesToRemove)
+            ? pagesToRemove
+            : []
+        )
+          .map((idx) => {
+            if (typeof idx !== "number" || !Number.isFinite(idx)) return -1;
+            if (zeroBased) {
+              return idx >= 0 && idx < totalPages ? Math.floor(idx) : -1;
+            }
+            // 1-based indexing: page 1 is index 0. Values < 1 are invalid in a 1-based scheme.
+            return idx >= 1 && idx <= totalPages ? Math.floor(idx) - 1 : -1;
+          })
+          .filter((idx) => idx >= 0);
 
   const toRemoveSet = new Set(toRemoveIndices);
 
@@ -172,6 +206,8 @@ export function planPageRemoval(
 
 /**
  * Execute page removal on a PDF document.
+ * Removes pages in-place in descending index order so that page indices do not shift,
+ * preserving document metadata, bookmarks, catalog properties, and form field interactiveness.
  */
 export async function removePagesFromPdf(
   pdfBytes: Uint8Array,
@@ -180,34 +216,54 @@ export async function removePagesFromPdf(
   options.onProgress?.(10);
 
   const { PDFDocument } = await getPdfLib();
-  const srcDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
-  const totalPages = srcDoc.getPageCount();
 
+  let srcDoc: any;
+  try {
+    srcDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+  } catch (err: any) {
+    throw new EngineError(
+      `Failed to load PDF: ${toErrorMessage(err, "corrupt or invalid format")}`,
+      "pdflib",
+    );
+  }
+
+  // Reject encrypted documents with a clear, user-facing error
+  if (srcDoc.isEncrypted) {
+    throw new EngineError(
+      "The PDF is encrypted with a password. Please unlock or decrypt the document before removing pages.",
+      "pdflib",
+    );
+  }
+
+  const totalPages = srcDoc.getPageCount();
   const plan = planPageRemoval(totalPages, options.pagesToRemove, options.zeroBased);
 
   options.onProgress?.(30);
 
-  // Flatten interactive form fields if present to permanently preserve vector appearances
-  try {
-    const form = srcDoc.getForm();
-    if (form && form.getFields().length > 0) {
-      form.flatten();
+  // If explicit form flattening is opted into, flatten the interactive fields
+  if (options.flattenForms) {
+    try {
+      const form = srcDoc.getForm();
+      if (form && typeof form.flatten === "function") {
+        form.flatten();
+      }
+    } catch {
+      // Proceed if form flattening fails or document has no form
     }
-  } catch {
-    // If PDF has no AcroForm or flattening fails, proceed
   }
 
   options.onProgress?.(50);
 
-  const newDoc = await PDFDocument.create();
-  const copiedPages = await newDoc.copyPages(srcDoc, plan.remainingIndices);
-  for (const page of copiedPages) {
-    newDoc.addPage(page);
+  // In-place removal: delete pages in descending index order so subsequent target indices remain valid.
+  // This preserves document outlines (bookmarks), metadata (title/author), and interactive form fields.
+  const descendingIndices = [...plan.toRemoveIndices].sort((a, b) => b - a);
+  for (const idx of descendingIndices) {
+    srcDoc.removePage(idx);
   }
 
   options.onProgress?.(80);
 
-  const outBytes = await newDoc.save();
+  const outBytes = await srcDoc.save();
 
   options.onProgress?.(100);
 
