@@ -52,11 +52,11 @@ GitHub re-review and Cloudflare Pages deployment specification, see
 
 ### Verification checklist (run all before calling work done)
 
-1. `npm test` (or `deno test --allow-read` locally) — runs all 30 suites (153 tests) offline (quality guard, recommendations, resource manager, zip/tar security, settings, OCR engines, searchable PDF, PDF to Markdown, output fidelity, engine errors, privacy parity, package standards, tool landing, and Hallmark anti-slop rules).
+1. `npm test` (or `deno test --allow-read --allow-env` locally) — runs all 38 suites (280+ tests) offline (quality guard, recommendations, resource manager, zip/tar security, settings, OCR engines, searchable PDF, PDF to Markdown, output fidelity, engine errors, privacy parity, package standards, tool landing, and Hallmark anti-slop rules).
 2. `npm run typecheck` — must be clean. This runs `tsc --noEmit` **and**
    `svelte-check`; `tsc` alone never inspects `.svelte` files, so a clean
    `tsc` is not evidence that the UI type-checks.
-3. `npm run lint` — must be **0 errors**. The repo currently has ~100
+3. `npm run lint` — must be **0 errors**. The repo currently has ~190
    pre-existing `@typescript-eslint/no-explicit-any` warnings; do not add new
    ones, but do not treat the existing count as failure.
 4. `npm run build` — must succeed. The log should show
@@ -321,7 +321,7 @@ match. Several were previously wrong; don't regress them.
     real crash bug.
 - **English Handwriting Recognition:**
   - Dedicated mode in `src/lib/ocrHandwriting.ts`, distinct from printed OCR.
-  - Candidate model: `Xenova/trocr-small-handwritten` (~60 MB weights).
+  - Candidate model: `Xenova/trocr-small-handwritten` (~145 MB estimated download, cached on-device).
   - Explicitly scoped to English handwriting only; surfaces a clear disclaimer
     and size disclosure before download.
   - Operates on cropped, line-segmented text crops (`detectTextLines`) via
@@ -416,7 +416,7 @@ match. Several were previously wrong; don't regress them.
 - Universal Upload Hub (`ActionPalette.svelte` & `fileRouter.ts`):
   Selecting or dropping any file in universal upload opens a CloudConvert-style
   dialog displaying file metadata, resolved execution profile hints
-  (WebCodecs GPU / WebGL2 / WASM SIMD, worker count), categorized target format
+  (WebCodecs / WebGL2 Resize / WASM SIMD, worker count), categorized target format
   matrices (`PDF → DOCX/XLSX/PPTX/MD`, `Video → MP4/WebM/MKV/GIF/Audio`, etc.),
   and direct 1-click action cards. All conversions and staging remain 100% offline.
 
@@ -448,8 +448,9 @@ match. Several were previously wrong; don't regress them.
   and Latin/RTL/Indic → Tesseract. Do not add an AI-dependent suggestion
   without gating it on `settings.recommendations.allowAi`.
 - Dismissals persist in `cz-recommendations-v1` as `scope:rule:action` keys.
-- UI: `createRecommendationNotice()` renders one primary suggestion plus a
-  collapsed "Other suggestions (N)"; never a modal or repeated toast.
+- UI: recommendation banners in the Svelte routes (`Images.svelte`, `Pdf.svelte`,
+  `Ocr.svelte`, `ImagesToPdf.svelte`, `MergePdf.svelte`) render one primary
+  suggestion at a time; never a modal or repeated toast.
 - Applying a suggestion is reversible: each page snapshots the previous
   state and passes an Undo action to `toast()`. Destructive Settings actions
   (`Reset all settings`, `Clear local data`) use a two-step confirm button,
@@ -561,4 +562,4 @@ Do not claim these ship until they do:
 - Add user-visible changes under `## [Unreleased]` in `CHANGELOG.md`.
 - Versioning is `1.MM.P`, with `-a1`/`-b1` prerelease suffixes.
 - Keep `README.md`, `PRIVACY.md`, `CREDITS.md`, `CONTRIBUTING.md`, and the
-  in-app templates in `index.html` consistent with this file.
+  Svelte views in `src/routes/` consistent with this file.

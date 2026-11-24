@@ -46,11 +46,11 @@ This document specifies the technical standards, toolchain invariants, and deplo
 
 ## 4. Pre-Upload Manual Re-Review Checklist
 
-- [ ] Run test suite with multiple workers: `deno test --parallel --allow-read tests/` (100% pass rate).
+- [ ] Run test suite with multiple workers: `deno test --parallel --allow-read --allow-env tests/` (100% pass rate).
 - [ ] Run Node.js test runner: `node scripts/test.mjs` (100% pass rate).
-- [ ] Run Playwright E2E via Deno (max 3 workers): `deno run -A npm:@playwright/test test --workers=3`.
+- [ ] Run Playwright E2E via Node: `npm run test:e2e`.
 - [ ] Typecheck all engine modules: `deno check tests/*.ts src/lib/*.ts`.
 - [ ] Verify Hallmark test: `deno test --allow-read tests/hallmark.test.ts`.
 - [ ] Verify build asset sizes are under 24 MiB.
 - [ ] Confirm no user file bytes are sent to any external server.
-- [ ] For changes touching Safari/WebKit, verify `docs/SAFARI_DEVICE_CHECKLIST.md`.
+- [ ] For changes touching Safari/WebKit, verify real-hardware Safari/iOS limits per [LIMITATIONS.md](LIMITATIONS.md).

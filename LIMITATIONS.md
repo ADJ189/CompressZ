@@ -10,7 +10,7 @@ Because computation takes place entirely on client hardware within the browser s
 
 | Workload | Inherent Browser Boundary | Safe Operating Ceiling | Processing Engine |
 | :--- | :--- | :--- | :--- |
-| **Video Transcoding** | 2 GiB WASM 32-bit linear memory ceiling | 1.5 GiB per file (1080p / 4K under 15 min) | WebCodecs (GPU) / ffmpeg.wasm |
+| **Video Transcoding** | 2 GiB WASM 32-bit linear memory ceiling | 1.5 GiB per file (1080p / 4K under 15 min) | WebCodecs (HW/SW) / ffmpeg.wasm |
 | **Audio Processing** | Buffer limits for uncompressed audio frames | 500 MB per batch (unlimited duration) | ffmpeg.wasm software pipeline |
 | **Image Compression** | Canvas texture limits (16384x16384 px) | 100 MB per image, 150 images per batch | OffscreenCanvas + WASM SSIM Guard |
 | **PDF Merging & Shrink** | In-memory document buffers & vector trees | 200 MB per document, 500 pages per merge | pdf-lib + PDF.js parser |
@@ -44,11 +44,11 @@ Because computation takes place entirely on client hardware within the browser s
 
 ---
 
-### 3. WebCodecs Hardware Acceleration
+### 3. WebCodecs Browser Encoding Constraints
 
-- **OS & GPU Dependency**: WebCodecs leverages hardware-accelerated video encoders and decoders through the OS graphics driver. Availability depends on the host system:
+- **Browser Hardware / Software Selection**: WebCodecs (`VideoEncoder` / `VideoDecoder`) delegates codec execution to the browser and OS media stack; whether encoding runs on dedicated hardware or software depends on the host driver and codec profile:
   - **H.264 / AVC**: Widely supported across Windows, macOS, Android, and iOS.
-  - **VP9 / AV1**: Hardware encoding is typically limited to recent GPU architectures (Intel 11th Gen+, Apple M-series, AMD RDNA3, NVIDIA RTX 30/40 series). In the absence of hardware encoder support, CompressZ gracefully falls back to WASM software encoding.
+  - **VP9 / AV1**: Hardware encoding is typically limited to recent GPU architectures (Intel 11th Gen+, Apple M-series, AMD RDNA3, NVIDIA RTX 30/40 series). When the requested configuration is unsupported or unavailable, CompressZ falls back to FFmpeg.wasm and then MediaRecorder.
 - **Variable Bitrate Control**: Some browser WebCodecs implementations restrict fine-grained CRF (Constant Rate Factor) rate control, instead operating in Constant Bitrate (CBR) or Variable Bitrate (VBR) target modes.
 
 ---
