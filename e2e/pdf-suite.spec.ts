@@ -79,4 +79,37 @@ test.describe("PDF Suite workstation", () => {
     expect(bytes.subarray(0, 4).toString("latin1")).toBe("%PDF");
     expect(download.suggestedFilename()).toMatch(/repaired-.*\.pdf$/);
   });
+
+  test("PDF Suite: page-numbers inserts counters and downloads", async ({ page }) => {
+    const { download, bytes } = await executeSuiteWorkbench(
+      page,
+      "/pdf/page-numbers",
+      fixtures.pdf,
+      "Add Page Numbers & Download",
+    );
+    expect(bytes.subarray(0, 4).toString("latin1")).toBe("%PDF");
+    expect(download.suggestedFilename()).toMatch(/-numbered\.pdf$/);
+  });
+
+  test("PDF Suite: nup generates multi-page sheet and downloads", async ({ page }) => {
+    const { download, bytes } = await executeSuiteWorkbench(
+      page,
+      "/pdf/nup",
+      fixtures.pdf,
+      "Generate 2-Up PDF & Download",
+    );
+    expect(bytes.subarray(0, 4).toString("latin1")).toBe("%PDF");
+    expect(download.suggestedFilename()).toMatch(/-2up\.pdf$/);
+  });
+
+  test("PDF Suite: metadata strips and downloads sanitized document", async ({ page }) => {
+    const { download, bytes } = await executeSuiteWorkbench(
+      page,
+      "/pdf/metadata",
+      fixtures.pdf,
+      "Strip All Metadata & Dates (Privacy Mode)",
+    );
+    expect(bytes.subarray(0, 4).toString("latin1")).toBe("%PDF");
+    expect(download.suggestedFilename()).toMatch(/-sanitized\.pdf$/);
+  });
 });
