@@ -253,37 +253,35 @@ function renderInline(text: string): string {
     return stash(`<code class="cz-math-inline">${math}</code>`);
   });
 
+  const applyEmphasis = (s: string) =>
+    s
+      .replace(/\*\*([^*\n]+?)\*\*/g, (_match, bold) => `<strong>${bold}</strong>`)
+      .replace(/(?<!\*)\*([^*\n]+?)\*(?!\*)/g, (_match, italic) => `<em>${italic}</em>`);
+
   // Inline code `...`
   result = result.replace(/`([^`\n]+?)`/g, (_match, code) => {
     return stash(`<code>${code}</code>`);
   });
 
-  // Images ![alt](src) (handled before links)
+  // Images ![alt](src) (handled before links and emphasis so URLs/alts are never altered)
   result = result.replace(/!\[([^[\n\]]*)\]\(([^)\n]+)\)/g, (_match, alt, src) => {
     const safe = safeImgSrc(src);
     // `alt` was already HTML-escaped when `result` was built, so escaping it
     // again would render `&amp;` as `&amp;amp;` in the visible alt text.
-    if (!safe) return `<!-- [image: ${alt}] -->`;
+    if (!safe) return stash(`<!-- [image: ${alt}] -->`);
     return stash(
       `<img src="${safe}" alt="${alt}" class="cz-rendered-img" />`,
     );
   });
 
-  // Bold **...**
-  result = result.replace(/\*\*([^*\n]+?)\*\*/g, (_match, bold) => {
-    return `<strong>${bold}</strong>`;
-  });
-
-  // Italic *...*
-  result = result.replace(/(?<!\*)\*([^*\n]+?)\*(?!\*)/g, (_match, italic) => {
-    return `<em>${italic}</em>`;
-  });
-
-  // Links [text](url) — disallowing nested brackets and newlines prevents superlinear backtracking
+  // Links [text](url) — stash before emphasis so URLs with `*` are untouched
   result = result.replace(/\[([^[\n\]]+)\]\(([^)\n]+)\)/g, (_match, label, href) => {
     const safeHrefValue = safeHref(href) ?? "#";
-    return stash(`<a href="${safeHrefValue}" target="_blank" rel="noopener noreferrer">${label}</a>`);
+    return stash(`<a href="${safeHrefValue}" target="_blank" rel="noopener noreferrer">${applyEmphasis(label)}</a>`);
   });
+
+  // Bold **...** and Italic *...* outside already-stashed tokens/URLs
+  result = applyEmphasis(result);
 
   // Restore stashed tokens (loop handles tokens nested inside labels, e.g. [<code>](url))
   while (/\u0000(\d+)\u0000/.test(result)) {
@@ -452,18 +450,30 @@ export function renderMarkdownToHtml(markdown: string): string {
       closeList();
       flushTable();
       const tableLines: string[] = [line];
-      if (!trimmed.toLowerCase().includes("</table>")) {
-        while (i + 1 < lines.length) {
-          i++;
-          tableLines.push(lines[i]);
-          if (lines[i].toLowerCase().includes("</table>")) break;
+      let closed = trimmed.toLowerCase().includes("</table>");
+      if (!closed) {
+        let j = i + 1;
+        while (j < lines.length) {
+          tableLines.push(lines[j]);
+          if (lines[j].toLowerCase().includes("</table>")) {
+            closed = true;
+            break;
+          }
+          j++;
+        }
+        if (closed) {
+          i = j;
+        } else {
+          tableLines.length = 1;
         }
       }
-      const rawTable = tableLines.join("\n").trim();
-      const renderedTable = renderSupportedHtmlTable(rawTable);
-      if (renderedTable) {
-        out.push(renderedTable);
-        continue;
+      if (closed) {
+        const rawTable = tableLines.join("\n").trim();
+        const renderedTable = renderSupportedHtmlTable(rawTable);
+        if (renderedTable) {
+          out.push(renderedTable);
+          continue;
+        }
       }
       for (const tLine of tableLines) {
         if (tLine.trim()) out.push(`<p>${renderInline(tLine.trim())}</p>`);
@@ -476,18 +486,30 @@ export function renderMarkdownToHtml(markdown: string): string {
       closeList();
       flushTable();
       const mathLines: string[] = [line];
-      if (!trimmed.toLowerCase().includes("</math>")) {
-        while (i + 1 < lines.length) {
-          i++;
-          mathLines.push(lines[i]);
-          if (lines[i].toLowerCase().includes("</math>")) break;
+      let closed = trimmed.toLowerCase().includes("</math>");
+      if (!closed) {
+        let j = i + 1;
+        while (j < lines.length) {
+          mathLines.push(lines[j]);
+          if (lines[j].toLowerCase().includes("</math>")) {
+            closed = true;
+            break;
+          }
+          j++;
+        }
+        if (closed) {
+          i = j;
+        } else {
+          mathLines.length = 1;
         }
       }
-      const rawMath = mathLines.join("\n").trim();
-      const renderedMath = renderSupportedHtmlMath(rawMath);
-      if (renderedMath) {
-        out.push(renderedMath);
-        continue;
+      if (closed) {
+        const rawMath = mathLines.join("\n").trim();
+        const renderedMath = renderSupportedHtmlMath(rawMath);
+        if (renderedMath) {
+          out.push(renderedMath);
+          continue;
+        }
       }
       for (const mLine of mathLines) {
         if (mLine.trim()) out.push(`<p>${renderInline(mLine.trim())}</p>`);

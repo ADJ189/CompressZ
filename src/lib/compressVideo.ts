@@ -186,7 +186,7 @@ async function videoViaFFmpeg(
   else if (codec === "vp9")
     vArgs.push(
       "-speed",
-      preset === "slow" ? "1" : preset === "fast" ? "3" : "2",
+      preset === "slow" ? "1" : preset === "fast" ? "3" : preset === "ultrafast" ? "4" : "2",
     );
 
   if (opts.maxWidth)
@@ -290,14 +290,18 @@ async function videoViaFFmpeg(
   const blob = new Blob([data], { type: mime });
   onProgress?.(100);
 
+  const planned = planVideoSize(meta.width, meta.height, opts.maxWidth);
+  const outWidth = opts.maxWidth ? planned.width : meta.width;
+  const outHeight = opts.maxWidth ? planned.height : meta.height;
+
   return {
     blob,
     originalSize: file.size,
     compressedSize: blob.size,
     compressionRatio: file.size / blob.size,
     format: `${mime} · FFmpeg.wasm${ffHasMT() ? " MT" : ""}${tenBit ? " · 10-bit" : ""}${opts.videoProxy ? " · Proxy" : ""}${twoPass ? " · 2-pass" : ""}${audioTrackMode === "all" ? " · multi-audio" : ""}${subtitleMode === "all" ? " · subs" : ""}`,
-    width: meta.width,
-    height: meta.height,
+    width: outWidth,
+    height: outHeight,
     duration: meta.duration,
   };
 }
@@ -441,6 +445,13 @@ async function videoViaMediaRecorder(
     };
     rec.start(250);
 
+    let mediaEnded = false;
+    let onPlaybackEnd: (() => void) | null = null;
+    vid.onended = () => {
+      mediaEnded = true;
+      onPlaybackEnd?.();
+    };
+
     try {
       await vid.play();
     } catch (err) {
@@ -519,8 +530,12 @@ async function videoViaMediaRecorder(
         raf(onFrame);
       }
 
-      vid.onended = finish;
-      playbackTimer = setTimeout(finish, (duration + 5) * 1000);
+      onPlaybackEnd = finish;
+      if (mediaEnded) {
+        finish();
+      } else {
+        playbackTimer = setTimeout(finish, (duration + 5) * 1000);
+      }
     });
 
     if (recorderError) {

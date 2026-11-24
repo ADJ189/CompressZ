@@ -650,125 +650,133 @@ export async function convertPdfToMarkdown(
       );
 
       const page = await pdfDoc.getPage(pageNum);
+      const baseViewport = page.getViewport({ scale: 1 });
       const viewport = page.getViewport({ scale: dpi / 72 });
-      const textContent = await page.getTextContent();
-
-      // Check native text extraction
-      const rawItems: RawTextItem[] = [];
-
-      for (const item of textContent.items as any[]) {
-        const str = item.str ?? "";
-        const tx = item.transform;
-        const fontSize = Math.hypot(tx[0], tx[1]);
-        rawItems.push({
-          str,
-          x: tx[4],
-          y: tx[5],
-          w: item.width ?? 0,
-          h: item.height ?? fontSize,
-          fontSize,
-          fontName: item.fontName ?? "",
-        });
-      }
-
-      // Native text heuristic: digital text content is present
-      const hasNativeText = rawItems.some((item) => item.str.trim().length > 0);
-      const isNative = hasNativeText && profile !== "printed" && profile !== "handwriting";
-      let pageBlocks: ExtractedBlock[] = [];
-      let pageEngine: "native" | "tesseract" | "trocr" = "native";
-      let pageConfidence = 100;
-
-      // Render page canvas for visuals or OCR
       let pageCanvas: HTMLCanvasElement | null = null;
-      if (!isNative || includeVisuals) {
-        pageCanvas = document.createElement("canvas");
-        pageCanvas.width = viewport.width;
-        pageCanvas.height = viewport.height;
-        const ctx = pageCanvas.getContext("2d");
-        if (ctx) {
-          await page.render({ canvasContext: ctx, viewport }).promise;
-        }
-      }
+      try {
+        const textContent = await page.getTextContent();
 
-      if (isNative) {
-        // Native text extraction
-        pageBlocks = reconstructReadingOrder(rawItems, viewport.width, viewport.height);
+        // Check native text extraction
+        const rawItems: RawTextItem[] = [];
+
+        for (const item of textContent.items as any[]) {
+          const str = item.str ?? "";
+          const tx = item.transform;
+          const fontSize = Math.hypot(tx[0], tx[1]);
+          rawItems.push({
+            str,
+            x: tx[4],
+            y: tx[5],
+            w: item.width ?? 0,
+            h: item.height ?? fontSize,
+            fontSize,
+            fontName: item.fontName ?? "",
+          });
+        }
+
+        // Native text heuristic: digital text content is present
+        const hasNativeText = rawItems.some((item) => item.str.trim().length > 0);
+        const isNative = hasNativeText && profile !== "printed" && profile !== "handwriting";
+        let pageBlocks: ExtractedBlock[] = [];
+        let pageEngine: "native" | "tesseract" | "trocr" = "native";
+        let pageConfidence = 100;
+
+        // Render page canvas for visuals or OCR
+        if (!isNative || includeVisuals) {
+          pageCanvas = document.createElement("canvas");
+          pageCanvas.width = viewport.width;
+          pageCanvas.height = viewport.height;
+          const ctx = pageCanvas.getContext("2d");
+          if (ctx) {
+            await page.render({ canvasContext: ctx, viewport }).promise;
+          }
+        }
+
+        if (isNative) {
+          // Native text extraction uses PDF-point coordinates matching scale 1 viewport
+          pageBlocks = reconstructReadingOrder(rawItems, baseViewport.width, baseViewport.height);
+          for (const b of pageBlocks) {
+            b.pageNumber = pageNum;
+          }
+        } else if (pageCanvas) {
+          // OCR fallback for scanned or handwriting requested pages
+          if (profile === "handwriting") {
+            pageEngine = "trocr";
+            const handwritingResult = await runHandwritingOcr(pageCanvas, {
+              onProgress: (p: number, msg: string) => onProgress?.(0.15 + ((pageNum - 1 + p) / pageCount) * 0.7, msg),
+            });
+            pageConfidence = handwritingResult.confidence;
+            pageBlocks = handwritingResult.lines.map((l: any, idx: number) => ({
+              type: "paragraph",
+              pageNumber: pageNum,
+              readingOrder: idx,
+              text: l.text,
+              bbox: l.bbox,
+              confidence: l.confidence,
+              source: "ocr-handwriting",
+            }));
+            if (handwritingResult.warnings) warnings.push(...handwritingResult.warnings);
+          } else {
+            // Printed text OCR
+            pageEngine = "tesseract";
+            const ocrResult = await runPrintedOcr(pageCanvas, {
+              language,
+              onProgress: (p: number, msg: string) => onProgress?.(0.15 + ((pageNum - 1 + p) / pageCount) * 0.7, msg),
+            });
+            pageConfidence = ocrResult.confidence;
+            pageBlocks = ocrResult.lines.map((l: any, idx: number) => ({
+              type: "paragraph",
+              pageNumber: pageNum,
+              readingOrder: idx,
+              text: l.text,
+              bbox: l.bbox,
+              confidence: l.confidence,
+              source: "ocr-printed",
+            }));
+            if (ocrResult.warnings) warnings.push(...ocrResult.warnings);
+          }
+        }
+
+        // Store visual preview
+        if (pageCanvas && includeVisuals) {
+          const previewPngPath = `assets/pages/page-${String(pageNum).padStart(4, "0")}.png`;
+          const blob = await new Promise<Blob | null>((res) => pageCanvas!.toBlob(res, "image/png"));
+          if (blob) {
+            const buf = new Uint8Array(await blob.arrayBuffer());
+            assets.push({ path: previewPngPath, bytes: buf });
+
+            // Add visual reference block
+            pageBlocks.push({
+              type: "figure",
+              pageNumber: pageNum,
+              readingOrder: pageBlocks.length,
+              text: `Page ${pageNum} Visual Preview`,
+              assetPath: previewPngPath,
+              source: "visual-preservation",
+              confidence: 100,
+            });
+          }
+        }
+
         for (const b of pageBlocks) {
-          b.pageNumber = pageNum;
+          if (!b.source) b.source = pageEngine as any;
+          if (!b.confidence) b.confidence = pageConfidence;
         }
-      } else if (pageCanvas) {
-        // OCR fallback for scanned or handwriting requested pages
-        if (profile === "handwriting") {
-          pageEngine = "trocr";
-          const handwritingResult = await runHandwritingOcr(pageCanvas, {
-            onProgress: (p: number, msg: string) => onProgress?.(0.15 + ((pageNum - 1 + p) / pageCount) * 0.7, msg),
-          });
-          pageConfidence = handwritingResult.confidence;
-          pageBlocks = handwritingResult.lines.map((l: any, idx: number) => ({
-            type: "paragraph",
-            pageNumber: pageNum,
-            readingOrder: idx,
-            text: l.text,
-            bbox: l.bbox,
-            confidence: l.confidence,
-            source: "ocr-handwriting",
-          }));
-          if (handwritingResult.warnings) warnings.push(...handwritingResult.warnings);
-        } else {
-          // Printed text OCR
-          pageEngine = "tesseract";
-          const ocrResult = await runPrintedOcr(pageCanvas, {
-            language,
-            onProgress: (p: number, msg: string) => onProgress?.(0.15 + ((pageNum - 1 + p) / pageCount) * 0.7, msg),
-          });
-          pageConfidence = ocrResult.confidence;
-          pageBlocks = ocrResult.lines.map((l: any, idx: number) => ({
-            type: "paragraph",
-            pageNumber: pageNum,
-            readingOrder: idx,
-            text: l.text,
-            bbox: l.bbox,
-            confidence: l.confidence,
-            source: "ocr-printed",
-          }));
-          if (ocrResult.warnings) warnings.push(...ocrResult.warnings);
+
+        pagesBlockList.push({ pageNum, blocks: pageBlocks });
+        allBlocks.push(...pageBlocks);
+      } finally {
+        // Clean up page canvas and PDF.js page resources
+        if (pageCanvas) {
+          pageCanvas.width = 0;
+          pageCanvas.height = 0;
+          pageCanvas = null;
         }
-      }
-
-      // Store visual preview
-      if (pageCanvas && includeVisuals) {
-        const previewPngPath = `assets/pages/page-${String(pageNum).padStart(4, "0")}.png`;
-        const blob = await new Promise<Blob | null>((res) => pageCanvas!.toBlob(res, "image/png"));
-        if (blob) {
-          const buf = new Uint8Array(await blob.arrayBuffer());
-          assets.push({ path: previewPngPath, bytes: buf });
-
-          // Add visual reference block
-          pageBlocks.push({
-            type: "figure",
-            pageNumber: pageNum,
-            readingOrder: pageBlocks.length,
-            text: `Page ${pageNum} Visual Preview`,
-            assetPath: previewPngPath,
-            source: "visual-preservation",
-            confidence: 100,
-          });
+        try {
+          page.cleanup?.();
+        } catch {
+          // Ignored
         }
-      }
-
-      for (const b of pageBlocks) {
-        if (!b.source) b.source = pageEngine as any;
-        if (!b.confidence) b.confidence = pageConfidence;
-      }
-
-      pagesBlockList.push({ pageNum, blocks: pageBlocks });
-      allBlocks.push(...pageBlocks);
-
-      // Clean up page canvas
-      if (pageCanvas) {
-        pageCanvas.width = 0;
-        pageCanvas.height = 0;
-        pageCanvas = null;
       }
     }
   } finally {

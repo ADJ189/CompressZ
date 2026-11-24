@@ -219,6 +219,9 @@ const PDF_ACTION_DEFS: ActionTuple[] = [
   ["pdf-to-images", "Extract Images", "🖼️", "Extract all pages as high-res PNG/JPEG ZIP", "convert?from=pdf&to=images", "convert"],
   ["split-pdf", "Split PDF", "✂️", "Extract page ranges, chunk by N pages, or burst to ZIP", "pdf/split", "pdf"],
   ["remove-pages", "Remove Pages", "🗑️", "Delete specific pages, ranges, or even/odd pages", "pdf/remove-pages", "pdf"],
+  ["page-numbers", "Page Numbers & Bates", "🔢", "Add page numbers, header/footers, or Bates stamping", "pdf/page-numbers", "pdf"],
+  ["nup-pdf", "Multi-Page (N-Up)", "📑", "Combine 2, 4, or 9 pages per sheet for printing", "pdf/nup", "pdf"],
+  ["metadata-pdf", "Edit & Strip Metadata", "🏷️", "Inspect, update, or erase PDF metadata & dates for privacy", "pdf/metadata", "pdf"],
   ["organize-pdf", "Organize & Rotate", "🗂️", "Visual drag-and-drop grid, reorder, rotate & delete pages", "pdf/organize", "pdf"],
   ["watermark-pdf", "Add Watermark", "🏷️", "Add diagonal or repeating text & image watermark", "pdf/watermark", "pdf"],
   ["crop-pdf", "Crop PDF", "📐", "Trim margins and adjust visual CropBox boundary", "pdf/crop", "pdf"],
@@ -299,7 +302,7 @@ const IMAGE_ACTIONS: ActionTuple[] = [
 ];
 
 const VIDEO_ACTIONS: ActionTuple[] = [
-  ["compress-video", "Compress Video", "🎬", "WebCodecs hardware acceleration and FFmpeg transcoding", "compress/video", "compress"],
+  ["compress-video", "Compress Video", "🎬", "WebCodecs + Mediabunny fast path and FFmpeg transcoding", "compress/video", "compress"],
   ["convert-video", "Convert Video Format", "🔁", "Transcode to MP4, WebM, MOV, MKV with custom bitrate", "convert?cat=video", "convert"],
   ["video-to-gif", "Convert to Animated GIF", "🎞️", "Two-pass palettegen Bayer dithering GIF conversion", "compress/gif", "compress"],
 ];
@@ -339,6 +342,9 @@ const PDF_CONVERSION_GROUPS: ConversionGroup[] = [
       { id: "ocr-pdf", name: "Searchable OCR", format: "PDF", route: "compress/ocr", hub: "ai", badge: "Tesseract 5" },
       { id: "split-pdf", name: "Split Pages", format: "PDF", route: "pdf/split", hub: "pdf" },
       { id: "remove-pages", name: "Remove Pages", format: "PDF", route: "pdf/remove-pages", hub: "pdf" },
+      { id: "page-numbers", name: "Page Numbers", format: "PDF", route: "pdf/page-numbers", hub: "pdf" },
+      { id: "nup-pdf", name: "Multi-Page (N-Up)", format: "PDF", route: "pdf/nup", hub: "pdf" },
+      { id: "metadata-pdf", name: "PDF Metadata", format: "PDF", route: "pdf/metadata", hub: "pdf" },
       { id: "organize-pdf", name: "Organize & Rotate", format: "PDF", route: "pdf/organize", hub: "pdf" },
       { id: "fill-forms", name: "Fill Forms", format: "PDF", route: "pdf/forms", hub: "pdf" },
       { id: "protect-pdf", name: "Protect (AES-256)", format: "PDF", route: "pdf/protect", hub: "pdf" },
@@ -369,7 +375,7 @@ const VIDEO_CONVERSION_GROUPS: ConversionGroup[] = [
   {
     category: "Video Utilities",
     targets: [
-      { id: "compress-video", name: "Compress Video", format: "Video", route: "compress/video", hub: "compress", badge: "Hardware Accel" },
+      { id: "compress-video", name: "Compress Video", format: "Video", route: "compress/video", hub: "compress", badge: "Fast Path" },
     ],
   },
 ];
@@ -418,7 +424,7 @@ const HTML_CONVERSION_GROUPS: ConversionGroup[] = [
   {
     category: "Convert Web Document",
     targets: [
-      { id: "convert-html-pdf", name: "PDF Document", format: "PDF", route: "convert?cat=html&to=pdf", hub: "convert", badge: "Vector Print" },
+      { id: "convert-html-pdf", name: "PDF Document", format: "PDF", route: "convert?cat=html&to=pdf", hub: "convert", badge: "PDF Export" },
     ],
   },
 ];
@@ -509,7 +515,7 @@ export function detectFileTypeAndActions(
       label: "HTML Document",
       mime: "text/html",
       actions: buildActions([
-        ["convert-html-pdf", "Convert HTML to PDF", "📄", "Render responsive HTML document to vector PDF", "convert?cat=html", "convert"],
+        ["convert-html-pdf", "Convert HTML to PDF", "📄", "Render HTML document to PDF pages", "convert?cat=html", "convert"],
       ]),
       conversionGroups: HTML_CONVERSION_GROUPS,
     };

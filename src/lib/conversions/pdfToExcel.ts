@@ -116,9 +116,14 @@ export function generateWorksheetXml(grid: string[][]): string {
       if (!cellVal || cellVal.trim().length === 0) continue;
 
       const cellRef = `${columnToLetter(c)}${rowNum}`;
-      const numVal = Number(cellVal.replace(/,/g, ""));
+      const trimmed = cellVal.trim();
+      const normalized = trimmed.replace(/,/g, "");
+      const isNumericLiteral =
+        /^[+-]?(?:(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(trimmed) &&
+        !/^[+-]?0\d/.test(normalized);
+      const numVal = isNumericLiteral ? Number(normalized) : NaN;
 
-      if (!Number.isNaN(numVal) && cellVal.trim() !== "" && !cellVal.startsWith("0") || cellVal === "0") {
+      if (Number.isFinite(numVal)) {
         rowXml += `<c r="${cellRef}"><v>${numVal}</v></c>`;
       } else {
         rowXml += `<c r="${cellRef}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(cellVal)}</t></is></c>`;
