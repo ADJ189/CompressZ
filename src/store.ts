@@ -284,7 +284,12 @@ if (typeof window !== "undefined") {
     const detail = (e as CustomEvent<UniversalStagedItem>).detail;
     if (detail?.file) {
       stagedUniversalFile.set(detail);
-      currentRoute.set(detail.targetRoute || "convert");
+      const target = (detail.targetRoute || "convert").replace(/^\/+/, "");
+      const metaEnv = (import.meta as ImportMeta & { env?: { BASE_URL?: string } }).env;
+      const base = metaEnv?.BASE_URL ?? "/";
+      const baseNorm = base.endsWith("/") ? base : base + "/";
+      history.pushState({}, "", baseNorm + target);
+      currentRoute.set(target.split("?")[0]);
     }
   });
 }
@@ -398,6 +403,5 @@ export function syncEngineSettingsToStores(): void {
   pdfStore.update((s) => ({
     ...s,
     level: current.pdf.level,
-    renderScale: current.pdf.renderScale,
   }));
 }

@@ -74,5 +74,5 @@ export function init() {
     e.preventDefault();
     navigate(el.dataset.nav ?? "");
   });
-  dispatch(location.pathname);
+  dispatch(location.pathname + location.search);
 }
