@@ -36,6 +36,9 @@
       items: [
         { route: "pdf/split", name: "Split PDF", desc: "Extract page ranges, chunk into N-parts, or burst to ZIP", icon: "split", badge: "Studio" },
         { route: "pdf/remove-pages", name: "Remove Pages", desc: "Delete unwanted pages or ranges with instant preview", icon: "remove-pages", badge: "Fast" },
+        { route: "pdf/page-numbers", name: "Page Numbers & Bates", desc: "Add custom page numbers, header/footer, or Bates legal numbering", icon: "page-numbers", badge: "Bates" },
+        { route: "pdf/nup", name: "Multi-Page (N-Up)", desc: "Combine 2, 4, or 9 pages per sheet for compact printing", icon: "nup", badge: "Layout" },
+        { route: "pdf/metadata", name: "Edit & Strip Metadata", desc: "Inspect, update, or erase document metadata and dates for privacy", icon: "metadata", badge: "Privacy" },
         { route: "pdf/organize", name: "Organize Pages", desc: "Drag-drop visual reorder, rotate, duplicate, and delete pages", icon: "organize", badge: "Studio" },
         { route: "compress/merge-pdf", name: "Merge PDFs", desc: "Combine multiple PDF documents without rasterisation", icon: "merge" },
         { route: "pdf/edit", name: "Edit & Annotate", desc: "FreeText annotations, ink drawing, highlighting, and stamps", icon: "studio", badge: "New" },
@@ -55,9 +58,9 @@
       items: [
         { route: "compress/images", name: "Compress Images", desc: "Compress WebP, JPEG, PNG, AVIF with SSIM quality guard", icon: "image" },
         { route: "compress/pdf", name: "Compress PDF", desc: "Reduce document size via downsampling and deduplication", icon: "pdf" },
-        { route: "compress/video", name: "Compress Video", desc: "WebCodecs hardware acceleration and FFmpeg transcoding", icon: "video" },
+        { route: "compress/video", name: "Compress Video", desc: "WebCodecs + Mediabunny fast path and FFmpeg transcoding", icon: "video" },
         { route: "compress/audio", name: "Compress Audio", desc: "Optimize MP3, AAC, OGG, Opus, FLAC, and WAV", icon: "audio" },
-        { route: "compress/gif", name: "Compress GIF", desc: "Lossy LZW compression and GIF-to-video conversion", icon: "gif" },
+        { route: "compress/gif", name: "Compress GIF", desc: "FFmpeg two-pass palettegen optimization and GIF-to-WebM export", icon: "gif" },
       ],
     },
     {

@@ -27,8 +27,13 @@
     dismissedRecommendationCount,
   } from "../lib/recommendations";
   import { toast } from "../toast";
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import MacIcon from "../components/MacIcon.svelte";
+  import {
+    getResourceSnapshot,
+    subscribeResource,
+    type ResourceSnapshot,
+  } from "../lib/resourceManager";
   import {
     isTelemetryOptedOut,
     setTelemetryOptOut,
@@ -64,6 +69,8 @@
   let optOutArmed = $state(false);
   let telemetryEnabled = $state(!isTelemetryOptedOut());
   let dismissedCount = $state(0);
+  let resourceSnap = $state<ResourceSnapshot>(getResourceSnapshot());
+  let dialogEl: HTMLElement | undefined = $state();
 
   function reloadSettings() {
     settings = getSettings();
@@ -141,9 +148,13 @@
 
   onMount(() => {
     reloadSettings();
+    const unsubRes = subscribeResource(() => {
+      resourceSnap = getResourceSnapshot();
+    });
     document.addEventListener(THEME_EVENT, reloadSettings);
     document.addEventListener(COLOR_SCHEME_EVENT, reloadSettings);
     return () => {
+      unsubRes();
       document.removeEventListener(THEME_EVENT, reloadSettings);
       document.removeEventListener(COLOR_SCHEME_EVENT, reloadSettings);
     };
@@ -154,6 +165,12 @@
       reloadSettings();
       resetArmed = false;
       clearArmed = false;
+      void tick().then(() => {
+        const focusTarget = dialogEl?.querySelector<HTMLElement>(
+          "#settings-nav button, button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])",
+        );
+        focusTarget?.focus();
+      });
     }
   });
 
@@ -208,8 +225,30 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === "Escape" && open) {
+    if (!open) return;
+    if (e.key === "Escape") {
       handleClose();
+      return;
+    }
+    if (e.key === "Tab" && dialogEl) {
+      const focusables = Array.from(
+        dialogEl.querySelectorAll<HTMLElement>(
+          "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
+        ),
+      );
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      } else if (!dialogEl.contains(document.activeElement)) {
+        e.preventDefault();
+        first.focus();
+      }
     }
   }
 
@@ -244,6 +283,7 @@
 {#if open}
   <div class="cz-dialog-backdrop" onclick={handleClose} role="presentation"></div>
   <div
+    bind:this={dialogEl}
     id="settings-dialog"
     class="cz-dialog cz-settings-dialog"
     role="dialog"
@@ -575,7 +615,7 @@
               <span class="cz-tier-tag">Active</span>
             </div>
             <div class="cz-sidebar-meta">
-              0 running · 0 queued · admission: safe heuristics · not a memory meter
+              {resourceSnap.activeHeavy + resourceSnap.activeLight} running · {resourceSnap.queued} queued · admission: safe heuristics · not a memory meter
             </div>
           </div>
 
@@ -717,8 +757,8 @@
 
             <div class="cz-settings-row">
               <div>
-                <div class="cz-settings-label">Image SSIM Quality Floor ({settings.engines.images.quality}%)</div>
-                <div class="cz-settings-desc">Visual quality threshold protected by SSIM Quality Guard</div>
+                <div class="cz-settings-label">Default Image Quality ({settings.engines.images.quality}%)</div>
+                <div class="cz-settings-desc">Baseline encoding quality; SSIM guard protects ≥ 0.90</div>
               </div>
               <div style="display: flex; align-items: center; gap: 0.75rem;">
                 <input
@@ -916,7 +956,7 @@
             <div class="cz-settings-row device-info-row">
               <div>
                 <div class="cz-settings-label">Video path</div>
-                <div class="cz-settings-desc">WebCodecs hardware acceleration</div>
+                <div class="cz-settings-desc">WebCodecs + Mediabunny (browser selects HW/SW)</div>
               </div>
               <span class="cz-tier-tag device-info-val">WebCodecs + Mediabunny (FFmpeg fallback)</span>
             </div>
