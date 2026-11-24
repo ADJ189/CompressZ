@@ -48,6 +48,7 @@
   let pageThumbnails = $state<Record<number, string>>({});
   let isDrawing = false;
   let currentStrokePoints: { x: number; y: number }[] = [];
+  let pendingTextAnnotation = $state<{ x: number; y: number; value: string } | null>(null);
 
   // Color & styling options
   let activeColor = $state<string>("#ef4444"); // Red for text
@@ -147,21 +148,7 @@
     const y = (e.clientY - rect.top) / (zoomLevel * 1.5);
 
     if (activeTool === "text") {
-      const text = prompt("Enter text annotation:", "Note");
-      if (text) {
-        const ann: Annotation = {
-          id: `ann-${Date.now()}`,
-          type: "text",
-          x,
-          y,
-          width: 120,
-          height: 30,
-          text,
-          color: activeColor,
-          fontSize: 16,
-        };
-        addAnnotation(ann);
-      }
+      pendingTextAnnotation = { x, y, value: "Note" };
     } else if (activeTool === "ink" || activeTool === "highlighter") {
       isDrawing = true;
       try {
@@ -242,6 +229,25 @@
       addAnnotation(ann);
     }
     currentStrokePoints = [];
+  }
+
+  function commitPendingText() {
+    if (!pendingTextAnnotation) return;
+    const trimmed = pendingTextAnnotation.value.trim();
+    if (trimmed) {
+      addAnnotation({
+        id: `ann-${Date.now()}`,
+        type: "text",
+        x: pendingTextAnnotation.x,
+        y: pendingTextAnnotation.y,
+        width: 120,
+        height: 30,
+        text: trimmed,
+        color: activeColor,
+        fontSize: 16,
+      });
+    }
+    pendingTextAnnotation = null;
   }
 
   function addAnnotation(ann: Annotation) {
@@ -585,6 +591,30 @@
             />
           {/if}
         {/each}
+
+        {#if pendingTextAnnotation}
+          <div
+            class="cz-inline-text-popover"
+            style="left: {pendingTextAnnotation.x * zoomLevel * 1.5}px; top: {pendingTextAnnotation.y * zoomLevel * 1.5}px;"
+          >
+            <input
+              type="text"
+              class="cz-inline-text-input"
+              aria-label="Text annotation"
+              bind:value={pendingTextAnnotation.value}
+              onkeydown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitPendingText();
+                } else if (e.key === "Escape") {
+                  pendingTextAnnotation = null;
+                }
+              }}
+            />
+            <button type="button" class="cz-btn cz-btn-primary cz-btn-sm" onclick={commitPendingText}>Add</button>
+            <button type="button" class="cz-btn cz-btn-ghost cz-btn-sm" onclick={() => (pendingTextAnnotation = null)}>Cancel</button>
+          </div>
+        {/if}
       </div>
     </main>
   </div>
@@ -778,6 +808,29 @@
     font-weight: 700;
     pointer-events: none;
     text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+  }
+
+  .cz-inline-text-popover {
+    position: absolute;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    box-shadow: var(--shadow-md);
+  }
+
+  .cz-inline-text-input {
+    width: 150px;
+    padding: 0.25rem 0.45rem;
+    border: 1px solid var(--border);
+    border-radius: var(--r-xs);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.85rem;
   }
 
   .cz-floating-stamp {

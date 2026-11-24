@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import { navigate } from "../router";
   import MacIcon from "./MacIcon.svelte";
 
@@ -10,6 +11,16 @@
   let { open, onClose }: Props = $props();
 
   let searchQuery = $state("");
+  let trayEl: HTMLElement | undefined = $state();
+  let searchInputEl: HTMLInputElement | undefined = $state();
+
+  $effect(() => {
+    if (open) {
+      void tick().then(() => {
+        searchInputEl?.focus();
+      });
+    }
+  });
 
   interface ToolItem {
     id: string;
@@ -33,6 +44,9 @@
       items: [
         { id: "pdf-split", route: "pdf/split", name: "Split PDF", desc: "Extract ranges, chunk into N parts, or burst to ZIP", icon: "split", badge: "Studio" },
         { id: "pdf-remove", route: "pdf/remove-pages", name: "Remove Pages", desc: "Delete unwanted pages or page ranges from PDF", icon: "remove-pages", badge: "Fast" },
+        { id: "pdf-numbers", route: "pdf/page-numbers", name: "Page Numbers & Bates", desc: "Add page numbers, header/footer, or Bates stamping", icon: "page-numbers", badge: "Bates" },
+        { id: "pdf-nup", route: "pdf/nup", name: "Multi-Page (N-Up)", desc: "Combine 2, 4, or 9 pages per sheet for printing", icon: "nup", badge: "Layout" },
+        { id: "pdf-metadata", route: "pdf/metadata", name: "Edit & Strip Metadata", desc: "Inspect, update, or strip PDF metadata for privacy", icon: "metadata", badge: "Privacy" },
         { id: "pdf-organize", route: "pdf/organize", name: "Organize Pages", desc: "Reorder, rotate, duplicate, and delete pages visually", icon: "organize", badge: "Studio" },
         { id: "pdf-merge", route: "compress/merge-pdf", name: "Merge PDFs", desc: "Combine multiple PDFs without rasterisation", icon: "merge" },
         { id: "pdf-studio", route: "pdf/edit", name: "Edit & Annotate", desc: "FreeText annotations, ink drawing, and stamps", icon: "studio", badge: "New" },
@@ -52,7 +66,7 @@
       items: [
         { id: "cmp-images", route: "compress/images", name: "Compress Images", desc: "WebP, JPEG, PNG, AVIF with SSIM quality guard", icon: "image" },
         { id: "cmp-pdf", route: "compress/pdf", name: "Compress PDF", desc: "Downsample embedded images to target size", icon: "pdf" },
-        { id: "cmp-video", route: "compress/video", name: "Compress Video", desc: "WebCodecs hardware acceleration & FFmpeg transcode", icon: "video" },
+        { id: "cmp-video", route: "compress/video", name: "Compress Video", desc: "WebCodecs + Mediabunny fast path & FFmpeg transcode", icon: "video" },
         { id: "cmp-audio", route: "compress/audio", name: "Compress Audio", desc: "Optimize MP3, AAC, OGG, Opus, FLAC, and WAV", icon: "audio" },
         { id: "cmp-gif", route: "compress/gif", name: "Compress GIF", desc: "Two-pass palettegen Bayer dithering & WebM export", icon: "gif" },
       ],
@@ -102,8 +116,30 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === "Escape" && open) {
+    if (!open) return;
+    if (e.key === "Escape") {
       onClose();
+      return;
+    }
+    if (e.key === "Tab" && trayEl) {
+      const focusables = Array.from(
+        trayEl.querySelectorAll<HTMLElement>(
+          "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
+        ),
+      );
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      } else if (!trayEl.contains(document.activeElement)) {
+        e.preventDefault();
+        first.focus();
+      }
     }
   }
 </script>
@@ -118,6 +154,7 @@
   ></div>
 
   <div
+    bind:this={trayEl}
     class="cz-mega-tray"
     role="dialog"
     aria-modal="true"
@@ -128,6 +165,7 @@
       <div class="cz-mega-search-wrap">
         <MacIcon name="search" size={16} color="var(--text-3)" />
         <input
+          bind:this={searchInputEl}
           type="search"
           class="cz-mega-search"
           placeholder="Search features (e.g. Split, Word, WebP, Markdown)..."

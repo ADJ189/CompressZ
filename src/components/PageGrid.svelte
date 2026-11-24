@@ -11,6 +11,7 @@
 
   let draggedIndex = $state<number | null>(null);
   let dragOverIndex = $state<number | null>(null);
+  let copyCounter = 0;
 
   function handleRotate(index: number) {
     const updated = pages.map((p, i) => {
@@ -36,7 +37,7 @@
     const target = pages[index];
     const newPage: PageSpec = {
       ...target,
-      id: `${target.id}-copy-${Date.now()}`,
+      id: `${target.id}-copy-${++copyCounter}`,
       duplicateCount: 1,
     };
     const next = [...pages];
