@@ -5,6 +5,13 @@
   import PdfCanvasEditor from "../components/PdfCanvasEditor.svelte";
   import SignaturePad from "../components/SignaturePad.svelte";
   import { splitPdf, type SplitResult } from "../lib/pdfTools/splitPdf";
+  import {
+    removePagesFromPdf,
+    parseRemovalRange,
+    formatRemovalRange,
+    getEvenPageIndices,
+    getOddPageIndices,
+  } from "../lib/pdfTools/removePagesPdf";
   import { reorganizePdf, type PageSpec } from "../lib/pdfTools/organizePdf";
   import { applyPdfCrop } from "../lib/pdfTools/cropPdf";
   import { applyPdfWatermark } from "../lib/pdfTools/watermarkPdf";
@@ -25,6 +32,7 @@ import { entryError } from "../lib/engineError";
 
   type SubTool =
     | "split"
+    | "remove"
     | "organize"
     | "crop"
     | "watermark"
@@ -46,6 +54,74 @@ import { entryError } from "../lib/engineError";
   let splitMode = $state<"ranges" | "chunk" | "burst">("ranges");
   let splitRanges = $state<string>("1-2, 3");
   let splitChunkSize = $state<number>(2);
+
+  // Remove Pages tool state
+  let removePagesInput = $state<string>("");
+  let pagesToRemoveSet = $state<Set<number>>(new Set<number>());
+
+  function handleRemoveInputChange(e: Event) {
+    const val = (e.target as HTMLInputElement).value;
+    removePagesInput = val;
+    if (!totalPages) return;
+    const indices = parseRemovalRange(val, totalPages);
+    pagesToRemoveSet = new Set(indices);
+  }
+
+  function togglePageRemoval(index0Based: number) {
+    const next = new Set(pagesToRemoveSet);
+    if (next.has(index0Based)) {
+      next.delete(index0Based);
+    } else {
+      next.add(index0Based);
+    }
+    pagesToRemoveSet = next;
+    removePagesInput = formatRemovalRange(Array.from(next));
+  }
+
+  function selectAllEvenPages() {
+    if (!totalPages) return;
+    const evens = getEvenPageIndices(totalPages);
+    const next = new Set(pagesToRemoveSet);
+    for (const idx of evens) next.add(idx);
+    pagesToRemoveSet = next;
+    removePagesInput = formatRemovalRange(Array.from(next));
+  }
+
+  function selectAllOddPages() {
+    if (!totalPages) return;
+    const odds = getOddPageIndices(totalPages);
+    const next = new Set(pagesToRemoveSet);
+    for (const idx of odds) next.add(idx);
+    pagesToRemoveSet = next;
+    removePagesInput = formatRemovalRange(Array.from(next));
+  }
+
+  function selectFirstPage() {
+    if (!totalPages) return;
+    togglePageRemoval(0);
+  }
+
+  function selectLastPage() {
+    if (!totalPages) return;
+    togglePageRemoval(totalPages - 1);
+  }
+
+  function clearPageRemoval() {
+    pagesToRemoveSet = new Set();
+    removePagesInput = "";
+  }
+
+  function invertPageRemoval() {
+    if (!totalPages) return;
+    const next = new Set<number>();
+    for (let i = 0; i < totalPages; i++) {
+      if (!pagesToRemoveSet.has(i)) {
+        next.add(i);
+      }
+    }
+    pagesToRemoveSet = next;
+    removePagesInput = formatRemovalRange(Array.from(next));
+  }
 
   // Organize tool state
   let pageSpecs = $state<PageSpec[]>([]);
@@ -166,6 +242,13 @@ import { entryError } from "../lib/engineError";
       badge: "Fast",
     },
     {
+      id: "remove",
+      name: "Remove Pages",
+      description: "Delete specific pages, ranges, or even/odd pages with live visual preview.",
+      icon: "remove-pages",
+      badge: "Fast",
+    },
+    {
       id: "organize",
       name: "Organize Pages",
       description: "Reorder pages visually with drag & drop, rotate 90°, duplicate, or delete unwanted pages.",
@@ -248,6 +331,8 @@ import { entryError } from "../lib/engineError";
     formFields = [];
     pageThumbnails = {};
     pageSpecs = [];
+    removePagesInput = "";
+    pagesToRemoveSet = new Set();
 
     let pdfJs: any = null;
     try {
@@ -266,8 +351,8 @@ import { entryError } from "../lib/engineError";
         rotation: 0,
       }));
 
-      // Generate thumbnails for the first 12 pages
-      for (let i = 1; i <= Math.min(totalPages, 12); i++) {
+      // Generate thumbnails for the first 24 pages
+      for (let i = 1; i <= Math.min(totalPages, 24); i++) {
         if (mySeq !== loadSeq) return;
         const p = await pdfJs.getPage(i);
         if (mySeq !== loadSeq) return;
@@ -343,6 +428,28 @@ import { entryError } from "../lib/engineError";
           );
           toast("PDF split completed", "success");
         }
+      } else if (activeTool === "remove") {
+        if (pagesToRemoveSet.size === 0) {
+          toast("Please select at least 1 page to remove.", "error");
+          return;
+        }
+        if (pagesToRemoveSet.size >= totalPages) {
+          toast(`Cannot remove all ${totalPages} pages. At least 1 page must remain.`, "error");
+          return;
+        }
+        const result = await removePagesFromPdf(
+          pdfBytes!,
+          {
+            pagesToRemove: pagesToRemoveSet,
+            zeroBased: true,
+            onProgress: (p: number) => (progressPct = p),
+          },
+        );
+        downloadBlob(
+          bytesBlob(result.bytes, "application/pdf"),
+          `${selectedFile?.name.replace(/\.pdf$/i, "")}-pages-removed.pdf`,
+        );
+        toast(`Removed ${result.removedCount} page${result.removedCount === 1 ? "" : "s"} successfully`, "success");
       } else if (activeTool === "organize") {
         const out = await reorganizePdf(pdfBytes!, pageSpecs, (p) => (progressPct = p));
         downloadBlob(
@@ -500,6 +607,7 @@ import { entryError } from "../lib/engineError";
     const parts = path.split("/").filter(Boolean);
     const sub = parts[parts.length - 1];
     if (sub === "split") activeTool = "split";
+    else if (sub === "remove" || sub === "remove-pages" || sub === "delete-pages") activeTool = "remove";
     else if (sub === "organize") activeTool = "organize";
     else if (sub === "crop") activeTool = "crop";
     else if (sub === "forms") activeTool = "forms";
@@ -515,6 +623,7 @@ import { entryError } from "../lib/engineError";
     if (staged?.file) {
       loadFile(staged.file);
       if (staged.actionId === "split-pdf") activeTool = "split";
+      else if (staged.actionId === "remove-pages" || staged.actionId === "delete-pages") activeTool = "remove";
       else if (staged.actionId === "organize-pdf") activeTool = "organize";
       else if (staged.actionId === "watermark-pdf") activeTool = "watermark";
       else if (staged.actionId === "crop-pdf") activeTool = "crop";
@@ -811,6 +920,161 @@ import { entryError } from "../lib/engineError";
                   onclick={handleExecuteTool}
                 >
                   {isProcessing ? "Splitting…" : "Execute PDF Split"}
+                </button>
+              </div>
+            </div>
+          {:else if activeTool === "remove"}
+            <div class="cz-panel-section">
+              <div class="cz-section-header">
+                <h3>Remove Pages from PDF</h3>
+                <p>Click page thumbnails below or type page ranges to delete unwanted pages. Vector crispness and text are 100% preserved.</p>
+              </div>
+
+              <!-- Quick Range / Filter Input -->
+              <div class="cz-settings-row">
+                <label for="remove-pages-input">Pages or Ranges to Remove (e.g. 1, 3-5, 8)</label>
+                <div class="cz-remove-input-wrap">
+                  <input
+                    id="remove-pages-input"
+                    type="text"
+                    class="cz-input"
+                    placeholder="e.g. 1, 3-5, 8"
+                    value={removePagesInput}
+                    oninput={handleRemoveInputChange}
+                  />
+                  {#if removePagesInput}
+                    <button
+                      type="button"
+                      class="cz-btn cz-btn-ghost cz-btn-sm"
+                      onclick={clearPageRemoval}
+                    >
+                      Clear
+                    </button>
+                  {/if}
+                </div>
+              </div>
+
+              <!-- Quick Selection Chips -->
+              <div class="cz-settings-row">
+                <span class="cz-label">Quick Selection</span>
+                <div class="cz-chips-row">
+                  <button
+                    type="button"
+                    class="cz-chip-btn"
+                    onclick={selectAllEvenPages}
+                  >
+                    Even Pages
+                  </button>
+                  <button
+                    type="button"
+                    class="cz-chip-btn"
+                    onclick={selectAllOddPages}
+                  >
+                    Odd Pages
+                  </button>
+                  <button
+                    type="button"
+                    class="cz-chip-btn"
+                    onclick={selectFirstPage}
+                  >
+                    First Page
+                  </button>
+                  {#if totalPages > 1}
+                    <button
+                      type="button"
+                      class="cz-chip-btn"
+                      onclick={selectLastPage}
+                    >
+                      Last Page
+                    </button>
+                  {/if}
+                  <button
+                    type="button"
+                    class="cz-chip-btn"
+                    onclick={invertPageRemoval}
+                  >
+                    Invert Selection
+                  </button>
+                </div>
+              </div>
+
+              <!-- Live Status Banner -->
+              <div class="cz-remove-summary-banner" class:is-invalid={pagesToRemoveSet.size >= totalPages}>
+                <div class="cz-summary-info">
+                  {#if pagesToRemoveSet.size === 0}
+                    <span>No pages selected for removal. Click page thumbnails below to mark them for deletion.</span>
+                  {:else if pagesToRemoveSet.size >= totalPages}
+                    <strong class="cz-warn-text">Cannot remove all {totalPages} pages! At least 1 page must remain.</strong>
+                  {:else}
+                    <span>
+                      Marked for removal: <strong>{pagesToRemoveSet.size} page{pagesToRemoveSet.size === 1 ? '' : 's'}</strong>
+                      ({formatRemovalRange(Array.from(pagesToRemoveSet))}) ·
+                      <strong>{totalPages - pagesToRemoveSet.size} page{totalPages - pagesToRemoveSet.size === 1 ? '' : 's'}</strong> remaining
+                    </span>
+                  {/if}
+                </div>
+              </div>
+
+              <!-- Visual Page Grid -->
+              <div class="cz-remove-page-grid" role="list" aria-label="PDF pages to remove">
+                {#each Array.from({ length: totalPages }, (_, i) => i) as idx (idx)}
+                  {@const isRemoved = pagesToRemoveSet.has(idx)}
+                  {@const thumb = pageThumbnails[idx]}
+
+                  <div
+                    class="cz-remove-card"
+                    class:is-removed={isRemoved}
+                    role="button"
+                    tabindex="0"
+                    aria-pressed={isRemoved}
+                    aria-label="Page {idx + 1}, {isRemoved ? 'marked for removal' : 'kept'}"
+                    onclick={() => togglePageRemoval(idx)}
+                    onkeydown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        togglePageRemoval(idx);
+                      }
+                    }}
+                  >
+                    <div class="cz-remove-card-thumb">
+                      {#if thumb}
+                        <img src={thumb} alt="Page {idx + 1}" class="cz-remove-thumb-img" />
+                      {:else}
+                        <div class="cz-remove-placeholder">
+                          <MacIcon name="pdf" size={28} />
+                          <span>Page {idx + 1}</span>
+                        </div>
+                      {/if}
+
+                      <div class="cz-remove-badge" class:is-removed-badge={isRemoved}>
+                        {#if isRemoved}
+                          <MacIcon name="remove-pages" size={12} />
+                          <span>REMOVE</span>
+                        {:else}
+                          <span>KEEP</span>
+                        {/if}
+                      </div>
+                    </div>
+
+                    <div class="cz-remove-card-footer">
+                      <span class="cz-page-num">Page {idx + 1}</span>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+
+              <div class="cz-action-footer">
+                <button
+                  type="button"
+                  class="cz-btn cz-btn-primary"
+                  disabled={isProcessing || pagesToRemoveSet.size === 0 || pagesToRemoveSet.size >= totalPages}
+                  onclick={handleExecuteTool}
+                >
+                  {isProcessing
+                    ? "Removing Pages…"
+                    : pagesToRemoveSet.size === 0
+                      ? "Select Pages to Remove"
+                      : `Remove ${pagesToRemoveSet.size} Page${pagesToRemoveSet.size === 1 ? "" : "s"} & Download PDF`}
                 </button>
               </div>
             </div>
@@ -1800,5 +2064,154 @@ import { entryError } from "../lib/engineError";
   }
   .cz-redact-del-btn:hover {
     color: var(--rose, #dc2626);
+  }
+
+  /* Remove Pages Tool Styles */
+  .cz-remove-input-wrap {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    width: 100%;
+  }
+  .cz-chips-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+  }
+  .cz-chip-btn {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.78rem;
+    font-weight: 500;
+    border-radius: var(--r-full, 9999px);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-2);
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+  .cz-chip-btn:hover {
+    background: var(--surface3, var(--surface));
+    border-color: var(--accent);
+    color: var(--text);
+  }
+  .cz-chip-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .cz-remove-summary-banner {
+    padding: 0.75rem 1rem;
+    border-radius: var(--r-sm);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    font-size: 0.84rem;
+    color: var(--text-2);
+    margin: 1rem 0;
+  }
+  .cz-remove-summary-banner.is-invalid {
+    background: var(--rose-soft, #fee2e2);
+    border-color: var(--rose, #dc2626);
+    color: var(--rose, #dc2626);
+  }
+  .cz-warn-text {
+    color: var(--rose, #dc2626);
+  }
+  .cz-remove-page-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 1rem;
+    margin: 1.25rem 0;
+    max-height: 480px;
+    overflow-y: auto;
+    padding: 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface2);
+  }
+  .cz-remove-card {
+    display: flex;
+    flex-direction: column;
+    border-radius: var(--r-sm);
+    background: var(--surface);
+    border: 2px solid var(--border);
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    user-select: none;
+  }
+  .cz-remove-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--border-hover, var(--text-3));
+  }
+  .cz-remove-card:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .cz-remove-card.is-removed {
+    border-color: var(--rose, #dc2626);
+    background: var(--rose-soft, #fff1f2);
+  }
+  .cz-remove-card-thumb {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1.414;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #ffffff;
+    overflow: hidden;
+  }
+  .cz-remove-thumb-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+  .cz-remove-card.is-removed .cz-remove-thumb-img {
+    opacity: 0.45;
+    filter: grayscale(80%);
+  }
+  .cz-remove-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--text-3);
+    font-size: 0.75rem;
+  }
+  .cz-remove-badge {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    padding: 0.2rem 0.45rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    border-radius: var(--r-xs, 4px);
+    background: rgba(0, 0, 0, 0.65);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    letter-spacing: 0.03em;
+  }
+  .cz-remove-badge.is-removed-badge {
+    background: var(--rose, #dc2626);
+    box-shadow: 0 1px 4px rgba(220, 38, 38, 0.4);
+  }
+  .cz-remove-card-footer {
+    padding: 0.4rem 0.5rem;
+    text-align: center;
+    border-top: 1px solid var(--border);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-2);
+  }
+  .cz-remove-card.is-removed .cz-remove-card-footer {
+    color: var(--rose, #dc2626);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cz-remove-card, .cz-chip-btn {
+      transition: none !important;
+      transform: none !important;
+    }
   }
 </style>

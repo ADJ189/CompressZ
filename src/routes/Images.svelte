@@ -552,13 +552,7 @@ import { entryError } from "../lib/engineError";
     height: 4px;
   }
   .cz-select-pill {
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text);
-    border-radius: 9999px;
-    padding: 0.25rem 0.65rem;
-    font-size: 0.78rem;
-    font-family: var(--sans);
+    display: none;
   }
   .cz-opt-divider {
     width: 1px;
@@ -741,6 +735,31 @@ import { entryError } from "../lib/engineError";
     .cz-apple-workbench {
       grid-template-columns: 1fr;
       padding: 1.25rem 1rem 3.5rem;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .cz-options-pill-bar {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.85rem;
+      padding: 0.75rem;
+    }
+    .cz-opt-group {
+      width: 100%;
+      flex-wrap: wrap;
+    }
+    .cz-opt-divider {
+      display: none;
+    }
+    .cz-segmented-track {
+      width: 100%;
+      display: flex;
+    }
+    .cz-segmented-item {
+      flex: 1;
+      justify-content: center;
+      text-align: center;
     }
   }
 </style>

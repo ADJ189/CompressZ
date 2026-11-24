@@ -315,4 +315,30 @@ import { entryError } from "../lib/engineError";
     font-weight: 600;
     box-shadow: var(--shadow-xs);
   }
+
+  @media (max-width: 640px) {
+    .cz-tool-settings-bar {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 1rem;
+      padding: 0.85rem;
+    }
+    .cz-setting-item {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.4rem;
+      width: 100%;
+    }
+    .cz-segmented-track {
+      width: 100%;
+      display: flex;
+    }
+    .cz-segmented-item {
+      flex: 1;
+      justify-content: center;
+      text-align: center;
+      padding: 0.35rem 0.4rem;
+      font-size: 0.72rem;
+    }
+  }
 </style>
