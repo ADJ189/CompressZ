@@ -2,14 +2,16 @@
  * removePagesPdf.test.ts — Unit tests for PDF page removal logic and engine.
  */
 
-import { assertEquals, assertThrows } from "./assert.ts";
+import { assertEquals, assertThrows, assertRejects } from "./assert.ts";
 import {
   parseRemovalRange,
   formatRemovalRange,
   getEvenPageIndices,
   getOddPageIndices,
   planPageRemoval,
+  removePagesFromPdf,
 } from "../src/lib/pdfTools/removePagesPdf.ts";
+import { setPdfLibForTesting, resetPdfLibForTesting } from "../src/lib/pdfLibs.ts";
 
 Deno.test("removePagesPdf: parseRemovalRange parses single pages and ranges", () => {
   const result = parseRemovalRange("1, 3, 5-7", 10);
@@ -26,20 +28,46 @@ Deno.test("removePagesPdf: parseRemovalRange handles whitespace and reverse rang
   assertEquals(reverse, [3, 4, 5]);
 });
 
+Deno.test("removePagesPdf: parseRemovalRange tokenizes mixed whitespace and ranges (1 3-5 regression)", () => {
+  // Regression test: "1 3-5" should tokenize into "1" and "3-5"
+  const result = parseRemovalRange("1 3-5", 10);
+  assertEquals(result, [0, 2, 3, 4]);
+
+  // Multiple spaces and ranges: "1   3 - 5   8"
+  const multiSpace = parseRemovalRange("1   3 - 5   8", 10);
+  assertEquals(multiSpace, [0, 2, 3, 4, 7]);
+});
+
 Deno.test("removePagesPdf: parseRemovalRange clamps out-of-bounds indices", () => {
   const result = parseRemovalRange("1-3, 8-12", 5);
   // Total pages is 5, so 8-12 is discarded, only 1-3 remains -> 0-based [0, 1, 2]
   assertEquals(result, [0, 1, 2]);
-
-  const zeroOrNegative = parseRemovalRange("0, -2, 2", 5);
-  // Page 0 / negative ignored, only page 2 remains -> 0-based [1]
-  assertEquals(zeroOrNegative, [1]);
 });
 
-Deno.test("removePagesPdf: parseRemovalRange handles empty or invalid strings gracefully", () => {
+Deno.test("removePagesPdf: parseRemovalRange rejects non-positive pages and unrecognized tokens visibly", () => {
+  // Non-positive page numbers throw descriptive error
+  assertThrows(
+    () => parseRemovalRange("0", 5),
+    "Page numbers must be 1 or greater",
+  );
+  assertThrows(
+    () => parseRemovalRange("0-3", 5),
+    "Page numbers must be 1 or greater",
+  );
+
+  // Unrecognized tokens throw visibly rather than silently applying partial selection
+  assertThrows(
+    () => parseRemovalRange("abc, xyz", 5),
+    "Unrecognized page token",
+  );
+  assertThrows(
+    () => parseRemovalRange("1, invalid-token, 3", 5),
+    "Unrecognized page token",
+  );
+
+  // Empty or whitespace strings return empty array cleanly
   assertEquals(parseRemovalRange("", 5), []);
   assertEquals(parseRemovalRange("   ", 5), []);
-  assertEquals(parseRemovalRange("abc, xyz", 5), []);
 });
 
 Deno.test("removePagesPdf: formatRemovalRange formats compact page strings", () => {
@@ -61,16 +89,26 @@ Deno.test("removePagesPdf: getEvenPageIndices and getOddPageIndices calculate co
   assertEquals(getOddPageIndices(1), [0]);
 });
 
-Deno.test("removePagesPdf: planPageRemoval plans removal of target pages", () => {
-  // 5 total pages, remove "2, 4"
-  const plan = planPageRemoval(5, "2, 4");
-  assertEquals(plan.toRemoveIndices, [1, 3]);
-  assertEquals(plan.remainingIndices, [0, 2, 4]);
+Deno.test("removePagesPdf: planPageRemoval handles 1-based indexing without collapsing [0, 1]", () => {
+  // Bug fix verification: [0, 1] with zeroBased=false must NOT collapse 0 and 1 to 0.
+  // 0 is invalid in 1-based, page 1 maps to index 0.
+  const planArray = planPageRemoval(5, [0, 1], false);
+  assertEquals(planArray.toRemoveIndices, [0]);
+  assertEquals(planArray.remainingIndices, [1, 2, 3, 4]);
 
-  // 6 total pages, remove via Set
-  const planSet = planPageRemoval(6, new Set([1, 3, 5]), true);
-  assertEquals(planSet.toRemoveIndices, [1, 3, 5]);
-  assertEquals(planSet.remainingIndices, [0, 2, 4]);
+  const planSet = planPageRemoval(5, new Set([0, 1]), false);
+  assertEquals(planSet.toRemoveIndices, [0]);
+  assertEquals(planSet.remainingIndices, [1, 2, 3, 4]);
+
+  // Valid 1-based pages [1, 3]
+  const plan1Based = planPageRemoval(5, [1, 3], false);
+  assertEquals(plan1Based.toRemoveIndices, [0, 2]);
+  assertEquals(plan1Based.remainingIndices, [1, 3, 4]);
+
+  // Explicit 0-based indices [0, 1]
+  const plan0Based = planPageRemoval(5, [0, 1], true);
+  assertEquals(plan0Based.toRemoveIndices, [0, 1]);
+  assertEquals(plan0Based.remainingIndices, [2, 3, 4]);
 });
 
 Deno.test("removePagesPdf: planPageRemoval rejects when 0 pages or all pages are selected", () => {
@@ -85,4 +123,196 @@ Deno.test("removePagesPdf: planPageRemoval rejects when 0 pages or all pages are
     () => planPageRemoval(3, "1-3"),
     "Cannot remove all 3 pages from the PDF. At least 1 page must remain.",
   );
+});
+
+// Mock document infrastructure for engine-level testing
+interface MockPage {
+  pageNum: number;
+  content: string;
+}
+
+interface MockDocState {
+  title: string;
+  author: string;
+  subject: string;
+  bookmarks: string[];
+  isEncrypted: boolean;
+  formFlattened: boolean;
+  formFields: { name: string; value: string; isEditable: boolean }[];
+  pages: MockPage[];
+  removedIndices: number[];
+}
+
+function createMockPdfDocument(state: MockDocState) {
+  return {
+    isEncrypted: state.isEncrypted,
+    getPageCount: () => state.pages.length,
+    getTitle: () => state.title,
+    getAuthor: () => state.author,
+    getSubject: () => state.subject,
+    getBookmarks: () => [...state.bookmarks],
+    getPages: () => [...state.pages],
+    getPage: (idx: number) => state.pages[idx],
+    removePage: (idx: number) => {
+      state.removedIndices.push(idx);
+      state.pages.splice(idx, 1);
+    },
+    getForm: () => ({
+      getFields: () => state.formFields,
+      flatten: () => {
+        state.formFlattened = true;
+        for (const f of state.formFields) {
+          f.isEditable = false;
+        }
+      },
+    }),
+    save: async () => {
+      return new TextEncoder().encode(JSON.stringify(state));
+    },
+  };
+}
+
+function createMockPdfLib() {
+  return {
+    PDFDocument: {
+      load: async (bytes: Uint8Array, _options?: unknown) => {
+        const text = new TextDecoder().decode(bytes);
+        const state: MockDocState = JSON.parse(text);
+        return createMockPdfDocument(state);
+      },
+    },
+  };
+}
+
+Deno.test("removePagesPdf: removePagesFromPdf removes target pages in-place and preserves metadata and forms", async () => {
+  const initialDocState: MockDocState = {
+    title: "Quarterly Financial Report",
+    author: "CompressZ Team",
+    subject: "Audit 2026",
+    bookmarks: ["Cover", "Balance Sheet", "Disclosures"],
+    isEncrypted: false,
+    formFlattened: false,
+    formFields: [{ name: "ApprovedBy", value: "CFO", isEditable: true }],
+    pages: [
+      { pageNum: 1, content: "Page 1 - Executive Summary" },
+      { pageNum: 2, content: "Page 2 - Confidential Draft" },
+      { pageNum: 3, content: "Page 3 - Balance Sheet" },
+    ],
+    removedIndices: [],
+  };
+
+  const initialBytes = new TextEncoder().encode(JSON.stringify(initialDocState));
+  const mockLib = createMockPdfLib();
+  setPdfLibForTesting(mockLib);
+
+  try {
+    // Remove Page 2 (1-based: "2") with default flattenForms: false
+    let progressCalls = 0;
+    const result = await removePagesFromPdf(initialBytes, {
+      pagesToRemove: "2",
+      onProgress: (pct) => {
+        progressCalls++;
+        assertEquals(pct >= 0 && pct <= 100, true);
+      },
+    });
+
+    assertEquals(result.removedCount, 1);
+    assertEquals(result.remainingCount, 2);
+    assertEquals(result.removedPages, [2]);
+    assertEquals(result.remainingPages, [1, 3]);
+    assertEquals(progressCalls > 0, true);
+
+    // Reopen the result bytes and verify contents, metadata, and form fields
+    const reopenedDoc = await mockLib.PDFDocument.load(result.bytes);
+    assertEquals(reopenedDoc.getPageCount(), 2);
+
+    const pages = reopenedDoc.getPages();
+    assertEquals(pages[0].content, "Page 1 - Executive Summary");
+    assertEquals(pages[1].content, "Page 3 - Balance Sheet");
+
+    // Verify document-level properties are preserved
+    assertEquals(reopenedDoc.getTitle(), "Quarterly Financial Report");
+    assertEquals(reopenedDoc.getAuthor(), "CompressZ Team");
+    assertEquals(reopenedDoc.getSubject(), "Audit 2026");
+    assertEquals(reopenedDoc.getBookmarks(), ["Cover", "Balance Sheet", "Disclosures"]);
+
+    // Verify form fields remain editable by default
+    const form = reopenedDoc.getForm();
+    const fields = form.getFields();
+    assertEquals(fields.length, 1);
+    assertEquals(fields[0].isEditable, true);
+    assertEquals(fields[0].value, "CFO");
+  } finally {
+    resetPdfLibForTesting();
+  }
+});
+
+Deno.test("removePagesPdf: removePagesFromPdf flattens forms when flattenForms is true", async () => {
+  const initialDocState: MockDocState = {
+    title: "Interactive Form",
+    author: "Legal Dept",
+    subject: "NDA",
+    bookmarks: [],
+    isEncrypted: false,
+    formFlattened: false,
+    formFields: [{ name: "Signature", value: "John Doe", isEditable: true }],
+    pages: [
+      { pageNum: 1, content: "Page 1 - Agreement" },
+      { pageNum: 2, content: "Page 2 - Signature Block" },
+    ],
+    removedIndices: [],
+  };
+
+  const initialBytes = new TextEncoder().encode(JSON.stringify(initialDocState));
+  const mockLib = createMockPdfLib();
+  setPdfLibForTesting(mockLib);
+
+  try {
+    // Remove Page 1 with explicit flattenForms: true
+    const result = await removePagesFromPdf(initialBytes, {
+      pagesToRemove: [1], // 1-based: remove page 1
+      flattenForms: true,
+    });
+
+    assertEquals(result.remainingCount, 1);
+
+    // Reopen result and assert form fields are flattened
+    const reopened = await mockLib.PDFDocument.load(result.bytes);
+    const form = reopened.getForm();
+    const fields = form.getFields();
+    assertEquals(fields[0].isEditable, false);
+  } finally {
+    resetPdfLibForTesting();
+  }
+});
+
+Deno.test("removePagesPdf: removePagesFromPdf rejects encrypted PDFs with clear security error", async () => {
+  const encryptedDocState: MockDocState = {
+    title: "Locked Doc",
+    author: "Admin",
+    subject: "Secret",
+    bookmarks: [],
+    isEncrypted: true, // Encrypted!
+    formFlattened: false,
+    formFields: [],
+    pages: [{ pageNum: 1, content: "Secret Page" }, { pageNum: 2, content: "Secret Page 2" }],
+    removedIndices: [],
+  };
+
+  const initialBytes = new TextEncoder().encode(JSON.stringify(encryptedDocState));
+  const mockLib = createMockPdfLib();
+  setPdfLibForTesting(mockLib);
+
+  try {
+    await assertRejects(
+      async () => {
+        await removePagesFromPdf(initialBytes, {
+          pagesToRemove: "1",
+        });
+      },
+      "encrypted",
+    );
+  } finally {
+    resetPdfLibForTesting();
+  }
 });

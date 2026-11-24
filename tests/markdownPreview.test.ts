@@ -159,3 +159,17 @@ Deno.test("markdownPreview: renders converter HTML table and MathML with strict 
     }
   }
 });
+
+Deno.test("markdownPreview: preserves URLs containing asterisks and avoids swallowing doc after unclosed table/math", () => {
+  const withWildcards = renderMarkdownToHtml("[**Docs**](https://example.com/*a*/*b*) ![alt *tag*](javascript:alert(1))");
+  assert(withWildcards.includes('href="https://example.com/*a*/*b*"'), `URL corrupted: ${withWildcards}`);
+  assert(withWildcards.includes("<strong>Docs</strong>"), `Link label bold failed: ${withWildcards}`);
+  assert(!withWildcards.includes("<em>a</em>"), `Corrupted URL with <em>: ${withWildcards}`);
+  assert(withWildcards.includes("<!-- [image: alt *tag*] -->"), `Fallback comment corrupted: ${withWildcards}`);
+
+  const unclosedTable = renderMarkdownToHtml("<table><tr><td>broken\n\n# Real Heading");
+  assert(unclosedTable.includes("<h1>Real Heading</h1>"), `Unclosed <table> swallowed heading: ${unclosedTable}`);
+
+  const unclosedMath = renderMarkdownToHtml("<math><mi>x</mi>\n\nAfter math paragraph");
+  assert(unclosedMath.includes("<p>After math paragraph</p>"), `Unclosed <math> swallowed paragraph: ${unclosedMath}`);
+});

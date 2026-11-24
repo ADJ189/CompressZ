@@ -49,6 +49,10 @@ Deno.test("tool landing: PdfSuite and Convert implement tool-first interactive l
   // Check that all essential PDF subtools are present in TOOLS definition
   const requiredPdfTools = [
     "split",
+    "remove",
+    "page-numbers",
+    "nup",
+    "metadata",
     "organize",
     "studio",
     "watermark",
