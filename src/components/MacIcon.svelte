@@ -76,6 +76,10 @@
         <line x1="20" y1="4" x2="8.12" y2="15.88" />
         <line x1="14.47" y1="14.48" x2="20" y2="20" />
         <line x1="8.12" y1="8.12" x2="12" y2="12" />
+      {:else if name === "remove-pages" || name === "delete-pages" || name === "remove"}
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="8" y1="15" x2="16" y2="15" stroke-width={strokeWidth + 0.8} />
       {:else if name === "organize"}
         <rect x="3" y="3" width="7" height="9" rx="1.5" />
         <rect x="14" y="3" width="7" height="5" rx="1.5" />
@@ -183,6 +187,10 @@
       <line x1="20" y1="4" x2="8.12" y2="15.88" />
       <line x1="14.47" y1="14.48" x2="20" y2="20" />
       <line x1="8.12" y1="8.12" x2="12" y2="12" />
+    {:else if name === "remove-pages" || name === "delete-pages" || name === "remove"}
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="8" y1="15" x2="16" y2="15" stroke-width={strokeWidth} />
     {:else if name === "organize"}
       <rect x="3" y="3" width="7" height="9" rx="1.5" />
       <rect x="14" y="3" width="7" height="5" rx="1.5" />
@@ -337,6 +345,7 @@
   .cz-sq-gif { background: linear-gradient(135deg, #ff375f, #ff9f0a); }
   .cz-sq-merge { background: linear-gradient(135deg, #ff453a, #ff9f0a); }
   .cz-sq-split { background: linear-gradient(135deg, #ff2d55, #ff375f); }
+  .cz-sq-remove, .cz-sq-remove-pages, .cz-sq-delete-pages { background: linear-gradient(135deg, #ff453a, #d70015); }
   .cz-sq-organize { background: linear-gradient(135deg, #0a84ff, #30d158); }
   .cz-sq-studio { background: linear-gradient(135deg, #ffd60a, #ff9f0a); }
   .cz-sq-sign { background: linear-gradient(135deg, #64d2ff, #0a84ff); }

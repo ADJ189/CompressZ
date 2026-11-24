@@ -125,6 +125,7 @@
       "pdf-to-ppt": "ppt",
       "pdf-to-images": "image",
       "split-pdf": "split",
+      "remove-pages": "remove-pages",
       "organize-pdf": "organize",
       "watermark-pdf": "watermark",
       "crop-pdf": "crop",
