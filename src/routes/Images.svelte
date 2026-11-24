@@ -18,7 +18,7 @@ import { entryError } from "../lib/engineError";
   } from "../lib/recommendations";
   import { smartAnalyze, sortByPredictedLabel, type AiModelTier } from "../lib/aiEngine";
   import { getPlatformInfo } from "../lib/platform";
-  import { getSettings, updateSettings } from "../lib/settings";
+  import { getSettings, resolvedConcurrency, updateSettings } from "../lib/settings";
   import MacIcon from "../components/MacIcon.svelte";
 
   let imageState = $state<ImageState>(imageStore.get());
@@ -159,37 +159,41 @@ import { entryError } from "../lib/engineError";
   async function compressSingle(entry: FileEntry) {
     if (entry.status === "compressing") return;
 
-    updateStore({
-      files: imageState.files.map((f) =>
+    imageStore.update((curr) => ({
+      ...curr,
+      files: curr.files.map((f) =>
         f.id === entry.id ? { ...f, status: "compressing", error: undefined } : f,
       ),
-    });
+    }));
 
     try {
-      const options = imageOptions(imageState);
+      const options = imageOptions(imageStore.get());
       const res = await runScheduled(
         { kind: "image", label: entry.name, bytes: entry.file.size },
         () => compressImage(entry.file, options),
       );
 
-      updateStore({
-        files: imageState.files.map((f) =>
+      imageStore.update((curr) => ({
+        ...curr,
+        files: curr.files.map((f) =>
           f.id === entry.id
             ? {
                 ...f,
                 status: "done",
                 compressedBlob: res.blob,
                 compressedSize: res.blob.size,
+                result: res,
               }
             : f,
         ),
-      });
+      }));
       toast(`Compressed ${entry.name}`, "success");
     } catch (err) {
       console.error("[imageCompress] error:", err);
       const failure = entryError(err, "Compression failed");
-      updateStore({
-        files: imageState.files.map((f) =>
+      imageStore.update((curr) => ({
+        ...curr,
+        files: curr.files.map((f) =>
           f.id === entry.id
             ? {
                 ...f,
@@ -199,7 +203,7 @@ import { entryError } from "../lib/engineError";
               }
             : f,
         ),
-      });
+      }));
       toast(`${entry.name}: ${failure.error}`, "error", undefined, {
         log: failure.errorLog,
       });
@@ -208,11 +212,16 @@ import { entryError } from "../lib/engineError";
 
   async function handleCompressAll() {
     isBusy = true;
-    const idleEntries = imageState.files.filter((f) => f.status === "idle" || f.status === "error");
-    for (const entry of idleEntries) {
-      await compressSingle(entry);
+    try {
+      const idleEntries = imageStore
+        .get()
+        .files.filter((f) => f.status === "idle" || f.status === "error");
+      for (const entry of idleEntries) {
+        await compressSingle(entry);
+      }
+    } finally {
+      isBusy = false;
     }
-    isBusy = false;
   }
 
   function handleDownloadSingle(entry: FileEntry) {
@@ -325,7 +334,7 @@ import { entryError } from "../lib/engineError";
         </div>
         <select
           id="fmt-sel"
-          class="cz-select-pill"
+          class="cz-select-pill cz-select-pill-format"
           value={imageState.format}
           onchange={(e) => updateStore({ format: (e.target as HTMLSelectElement).value as any })}
           aria-label="Format selection"
@@ -362,6 +371,7 @@ import { entryError } from "../lib/engineError";
         <select
           id="img-dim"
           class="cz-select-pill"
+          aria-label="Max dimension ceiling"
           value={imageState.maxDim}
           onchange={(e) => updateStore({ maxDim: Number((e.target as HTMLSelectElement).value) })}
         >
@@ -460,7 +470,7 @@ import { entryError } from "../lib/engineError";
         <div class="cz-sidebar-meta">
           <span>WebGL2: {platform?.webgl2 ? "Enabled" : "Off"}</span>
           <span>·</span>
-          <span>Workers: 3</span>
+          <span>Workers: {resolvedConcurrency(settings)}</span>
         </div>
       </div>
     </div>
@@ -552,7 +562,22 @@ import { entryError } from "../lib/engineError";
     height: 4px;
   }
   .cz-select-pill {
-    display: none;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    border-radius: 9999px;
+    padding: 0.25rem 0.65rem;
+    font-size: 0.78rem;
+    font-family: inherit;
+    outline: none;
+    cursor: pointer;
+    transition: border-color var(--t);
+  }
+  .cz-select-pill:focus {
+    border-color: var(--accent);
+  }
+  .cz-select-pill-format {
+    display: inline-block;
   }
   .cz-opt-divider {
     width: 1px;

@@ -82,7 +82,7 @@
             <td><strong>Video Transcoding</strong></td>
             <td>2 GiB WASM address space</td>
             <td>1.5 GiB per file (1080p / 4K)</td>
-            <td>WebCodecs (GPU) / FFmpeg.wasm</td>
+            <td>WebCodecs (HW/SW) / FFmpeg.wasm</td>
           </tr>
           <tr>
             <td><strong>Audio Processing</strong></td>

@@ -94,6 +94,14 @@
   }
 
   function updateStore(patch: Partial<ImagesToPdfState>) {
+    if (
+      patch.files !== undefined ||
+      patch.pageSize !== undefined ||
+      patch.quality !== undefined ||
+      patch.maxDim !== undefined
+    ) {
+      convertedBlob = null;
+    }
     imagesToPdfStore.update((curr) => ({ ...curr, ...patch }));
   }
 

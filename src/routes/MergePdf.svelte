@@ -43,6 +43,9 @@
   });
 
   function updateStore(patch: Partial<MergeState>) {
+    if (patch.files !== undefined) {
+      mergedBlob = null;
+    }
     mergeStore.update((curr) => ({ ...curr, ...patch }));
   }
 

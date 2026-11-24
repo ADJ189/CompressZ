@@ -12,6 +12,20 @@
     getEvenPageIndices,
     getOddPageIndices,
   } from "../lib/pdfTools/removePagesPdf";
+  import {
+    applyPdfPageNumbers,
+    type PageNumberPosition,
+    type PageNumberFormat,
+  } from "../lib/pdfTools/pageNumbersPdf";
+  import {
+    createNupPdf,
+    type NupPagesPerSheet,
+  } from "../lib/pdfTools/nupPdf";
+  import {
+    readPdfMetadata,
+    updatePdfMetadata,
+    type PdfMetadataInfo,
+  } from "../lib/pdfTools/metadataPdf";
   import { reorganizePdf, type PageSpec } from "../lib/pdfTools/organizePdf";
   import { applyPdfCrop } from "../lib/pdfTools/cropPdf";
   import { applyPdfWatermark } from "../lib/pdfTools/watermarkPdf";
@@ -20,6 +34,7 @@
   import { protectPdf, unlockPdf, type PdfEncryptionStandard } from "../lib/pdfTools/securityPdf";
   import { repairCorruptPdf, inspectAndRepairMp4Moov } from "../lib/pdfTools/repairPdf";
   import { openPdfDocument, getPdfLib } from "../lib/pdfLibs";
+  import { runScheduled } from "../lib/resourceManager";
   import { consumeStagedUniversalFile, currentRoute } from "../store";
   import { formatBytes } from "../lib/types";
 import { entryError } from "../lib/engineError";
@@ -33,6 +48,9 @@ import { entryError } from "../lib/engineError";
   type SubTool =
     | "split"
     | "remove"
+    | "page-numbers"
+    | "nup"
+    | "metadata"
     | "organize"
     | "crop"
     | "watermark"
@@ -47,6 +65,7 @@ import { entryError } from "../lib/engineError";
   let selectedFile = $state<File | null>(null);
   let pdfBytes = $state<Uint8Array | null>(null);
   let totalPages = $state<number>(0);
+  let isFileLoading = $state<boolean>(false);
   let isProcessing = $state<boolean>(false);
   let progressPct = $state<number>(0);
 
@@ -58,16 +77,28 @@ import { entryError } from "../lib/engineError";
   // Remove Pages tool state
   let removePagesInput = $state<string>("");
   let pagesToRemoveSet = $state<Set<number>>(new Set<number>());
+  let removeRangeError = $state<string | null>(null);
 
   function handleRemoveInputChange(e: Event) {
     const val = (e.target as HTMLInputElement).value;
     removePagesInput = val;
-    if (!totalPages) return;
-    const indices = parseRemovalRange(val, totalPages);
-    pagesToRemoveSet = new Set(indices);
+    removeRangeError = null;
+    if (!totalPages || !val.trim()) {
+      pagesToRemoveSet = new Set();
+      return;
+    }
+    try {
+      const indices = parseRemovalRange(val, totalPages);
+      pagesToRemoveSet = new Set(indices);
+    } catch (err: any) {
+      removeRangeError = err?.message || "Invalid page specification";
+      pagesToRemoveSet = new Set();
+    }
   }
 
   function togglePageRemoval(index0Based: number) {
+    if (isFileLoading || !totalPages) return;
+    removeRangeError = null;
     const next = new Set(pagesToRemoveSet);
     if (next.has(index0Based)) {
       next.delete(index0Based);
@@ -79,7 +110,8 @@ import { entryError } from "../lib/engineError";
   }
 
   function selectAllEvenPages() {
-    if (!totalPages) return;
+    if (isFileLoading || !totalPages) return;
+    removeRangeError = null;
     const evens = getEvenPageIndices(totalPages);
     const next = new Set(pagesToRemoveSet);
     for (const idx of evens) next.add(idx);
@@ -88,7 +120,8 @@ import { entryError } from "../lib/engineError";
   }
 
   function selectAllOddPages() {
-    if (!totalPages) return;
+    if (isFileLoading || !totalPages) return;
+    removeRangeError = null;
     const odds = getOddPageIndices(totalPages);
     const next = new Set(pagesToRemoveSet);
     for (const idx of odds) next.add(idx);
@@ -97,22 +130,32 @@ import { entryError } from "../lib/engineError";
   }
 
   function selectFirstPage() {
-    if (!totalPages) return;
-    togglePageRemoval(0);
+    if (isFileLoading || !totalPages) return;
+    removeRangeError = null;
+    const next = new Set(pagesToRemoveSet);
+    next.add(0);
+    pagesToRemoveSet = next;
+    removePagesInput = formatRemovalRange(Array.from(next));
   }
 
   function selectLastPage() {
-    if (!totalPages) return;
-    togglePageRemoval(totalPages - 1);
+    if (isFileLoading || !totalPages) return;
+    removeRangeError = null;
+    const next = new Set(pagesToRemoveSet);
+    next.add(totalPages - 1);
+    pagesToRemoveSet = next;
+    removePagesInput = formatRemovalRange(Array.from(next));
   }
 
   function clearPageRemoval() {
+    removeRangeError = null;
     pagesToRemoveSet = new Set();
     removePagesInput = "";
   }
 
   function invertPageRemoval() {
-    if (!totalPages) return;
+    if (isFileLoading || !totalPages) return;
+    removeRangeError = null;
     const next = new Set<number>();
     for (let i = 0; i < totalPages; i++) {
       if (!pagesToRemoveSet.has(i)) {
@@ -122,6 +165,41 @@ import { entryError } from "../lib/engineError";
     pagesToRemoveSet = next;
     removePagesInput = formatRemovalRange(Array.from(next));
   }
+
+  // Page Numbers tool state
+  let pageNumFormat = $state<PageNumberFormat>("page-n-of-total");
+  let pageNumCustomPattern = $state<string>("Page {n} of {total}");
+  let pageNumPosition = $state<PageNumberPosition>("bottom-center");
+  let pageNumStart = $state<number>(1);
+  let pageNumRange = $state<string>("all");
+  let pageNumFont = $state<"Helvetica" | "TimesRoman" | "Courier">("Helvetica");
+  let pageNumSize = $state<number>(10);
+  let pageNumColor = $state<string>("#333333");
+  let pageNumOpacity = $state<number>(1.0);
+  let pageNumMarginX = $state<number>(36);
+  let pageNumMarginY = $state<number>(36);
+  let batesPrefix = $state<string>("BATES-");
+  let batesDigits = $state<number>(6);
+  let batesSuffix = $state<string>("");
+
+  // N-Up Multi-Page tool state
+  let nupPagesPerSheet = $state<NupPagesPerSheet>(2);
+  let nupSheetSize = $state<"a4" | "letter" | "source">("a4");
+  let nupOrientation = $state<"portrait" | "landscape" | "auto">("auto");
+  let nupMargin = $state<number>(24);
+  let nupSpacing = $state<number>(16);
+  let nupDrawBorder = $state<boolean>(false);
+
+  // Metadata tool state
+  let metaTitle = $state<string>("");
+  let metaAuthor = $state<string>("");
+  let metaSubject = $state<string>("");
+  let metaKeywords = $state<string>("");
+  let metaCreator = $state<string>("");
+  let metaProducer = $state<string>("");
+  let metaCreationDate = $state<string>("");
+  let metaModificationDate = $state<string>("");
+  let metaStripAll = $state<boolean>(false);
 
   // Organize tool state
   let pageSpecs = $state<PageSpec[]>([]);
@@ -249,6 +327,27 @@ import { entryError } from "../lib/engineError";
       badge: "Fast",
     },
     {
+      id: "page-numbers",
+      name: "Page Numbers",
+      description: "Insert customizable page numbers, header/footers, or Bates legal stamping.",
+      icon: "page-numbers",
+      badge: "Bates",
+    },
+    {
+      id: "nup",
+      name: "Multi-Page (N-Up)",
+      description: "Combine 2, 4, or 9 pages per sheet for compact printing and handouts.",
+      icon: "nup",
+      badge: "Layout",
+    },
+    {
+      id: "metadata",
+      name: "Edit Metadata",
+      description: "Inspect, update, or strip document metadata and timestamps for privacy.",
+      icon: "metadata",
+      badge: "Privacy",
+    },
+    {
       id: "organize",
       name: "Organize Pages",
       description: "Reorder pages visually with drag & drop, rotate 90°, duplicate, or delete unwanted pages.",
@@ -324,6 +423,10 @@ import { entryError } from "../lib/engineError";
   async function loadFile(file: File) {
     const mySeq = ++loadSeq;
     selectedFile = file;
+    isFileLoading = true;
+    totalPages = 0;
+    pdfBytes = null;
+    removeRangeError = null;
 
     // Reset per-file state immediately
     redactionList = [];
@@ -338,10 +441,10 @@ import { entryError } from "../lib/engineError";
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
       if (mySeq !== loadSeq) return;
-      pdfBytes = bytes;
 
       pdfJs = await openPdfDocument(bytes);
       if (mySeq !== loadSeq) return;
+      pdfBytes = bytes;
       totalPages = pdfJs.numPages;
 
       // Initialize page specs for organize tool
@@ -373,9 +476,33 @@ import { entryError } from "../lib/engineError";
       for (const f of formInfo.fields) {
         formValues[f.name] = f.value;
       }
+
+      // Inspect metadata for Metadata tool
+      try {
+        const meta = await readPdfMetadata(bytes);
+        if (mySeq === loadSeq) {
+          metaTitle = meta.title || "";
+          metaAuthor = meta.author || "";
+          metaSubject = meta.subject || "";
+          metaKeywords = (meta.keywords || []).join(", ");
+          metaCreator = meta.creator || "";
+          metaProducer = meta.producer || "";
+          metaCreationDate = meta.creationDate || "";
+          metaModificationDate = meta.modificationDate || "";
+        }
+      } catch (mErr) {
+        console.warn("[PdfSuite] Metadata inspection error:", mErr);
+      }
     } catch (err) {
-      console.warn("[PdfSuite] Inspection error (file might need repair):", err);
+      if (mySeq === loadSeq) {
+        console.warn("[PdfSuite] Inspection error (file might need repair):", err);
+        totalPages = 0;
+        pdfBytes = null;
+      }
     } finally {
+      if (mySeq === loadSeq) {
+        isFileLoading = false;
+      }
       if (pdfJs && typeof pdfJs.destroy === "function") {
         await pdfJs.destroy().catch(() => {});
       }
@@ -401,12 +528,15 @@ import { entryError } from "../lib/engineError";
   }
 
   async function handleExecuteTool() {
-    if (!pdfBytes && activeTool !== "repair") return;
+    if ((!pdfBytes || isFileLoading || totalPages === 0) && activeTool !== "repair") return;
     isProcessing = true;
     progressPct = 10;
 
     try {
-      if (activeTool === "split") {
+      const jobBytes = pdfBytes?.byteLength ?? selectedFile?.size ?? 0;
+      const jobLabel = `${currentToolMeta?.name ?? activeTool}: ${selectedFile?.name ?? "document"}`;
+      await runScheduled({ kind: "pdf", label: jobLabel, bytes: jobBytes }, async () => {
+        if (activeTool === "split") {
         const result = await splitPdf(
           pdfBytes!,
           {
@@ -429,6 +559,10 @@ import { entryError } from "../lib/engineError";
           toast("PDF split completed", "success");
         }
       } else if (activeTool === "remove") {
+        if (removeRangeError) {
+          toast(removeRangeError, "error");
+          return;
+        }
         if (pagesToRemoveSet.size === 0) {
           toast("Please select at least 1 page to remove.", "error");
           return;
@@ -450,6 +584,69 @@ import { entryError } from "../lib/engineError";
           `${selectedFile?.name.replace(/\.pdf$/i, "")}-pages-removed.pdf`,
         );
         toast(`Removed ${result.removedCount} page${result.removedCount === 1 ? "" : "s"} successfully`, "success");
+      } else if (activeTool === "page-numbers") {
+        const out = await applyPdfPageNumbers(
+          pdfBytes!,
+          {
+            format: pageNumFormat,
+            customPattern: pageNumCustomPattern,
+            position: pageNumPosition,
+            startNumber: pageNumStart,
+            pageRange: pageNumRange,
+            fontFamily: pageNumFont,
+            fontSize: pageNumSize,
+            colorHex: pageNumColor,
+            opacity: pageNumOpacity,
+            marginX: pageNumMarginX,
+            marginY: pageNumMarginY,
+            batesPrefix,
+            batesDigits,
+            batesSuffix,
+            onProgress: (p: number) => (progressPct = p),
+          },
+        );
+        downloadBlob(
+          bytesBlob(out, "application/pdf"),
+          `${selectedFile?.name.replace(/\.pdf$/i, "")}-numbered.pdf`,
+        );
+        toast("Page numbers applied successfully", "success");
+      } else if (activeTool === "nup") {
+        const out = await createNupPdf(
+          pdfBytes!,
+          {
+            pagesPerSheet: nupPagesPerSheet,
+            sheetSize: nupSheetSize,
+            orientation: nupOrientation,
+            margin: nupMargin,
+            spacing: nupSpacing,
+            drawBorder: nupDrawBorder,
+            onProgress: (p: number) => (progressPct = p),
+          },
+        );
+        downloadBlob(
+          bytesBlob(out, "application/pdf"),
+          `${selectedFile?.name.replace(/\.pdf$/i, "")}-${nupPagesPerSheet}up.pdf`,
+        );
+        toast(`Generated ${nupPagesPerSheet}-Up multi-page PDF`, "success");
+      } else if (activeTool === "metadata") {
+        const out = await updatePdfMetadata(
+          pdfBytes!,
+          {
+            title: metaTitle,
+            author: metaAuthor,
+            subject: metaSubject,
+            keywords: metaKeywords ? metaKeywords.split(/[,;\s]+/).map((k) => k.trim()).filter(Boolean) : [],
+            creator: metaCreator,
+            producer: metaProducer,
+          },
+          metaStripAll,
+        );
+        downloadBlob(
+          bytesBlob(out, "application/pdf"),
+          `${selectedFile?.name.replace(/\.pdf$/i, "")}-${metaStripAll ? "sanitized" : "metadata"}.pdf`,
+        );
+        toast(metaStripAll ? "All metadata stripped for privacy" : "PDF metadata updated successfully", "success");
+        metaStripAll = false;
       } else if (activeTool === "organize") {
         const out = await reorganizePdf(pdfBytes!, pageSpecs, (p) => (progressPct = p));
         downloadBlob(
@@ -591,6 +788,7 @@ import { entryError } from "../lib/engineError";
         );
         toast("True redaction applied and sanitized", "success");
       }
+      });
     } catch (err) {
       console.error("[PdfSuite] error:", err);
       const failure = entryError(err, "the tool did not complete");
@@ -608,6 +806,9 @@ import { entryError } from "../lib/engineError";
     const sub = parts[parts.length - 1];
     if (sub === "split") activeTool = "split";
     else if (sub === "remove" || sub === "remove-pages" || sub === "delete-pages") activeTool = "remove";
+    else if (sub === "page-numbers" || sub === "number-pages" || sub === "bates") activeTool = "page-numbers";
+    else if (sub === "nup" || sub === "multi-page" || sub === "2-up" || sub === "4-up") activeTool = "nup";
+    else if (sub === "metadata" || sub === "edit-metadata" || sub === "strip-metadata") activeTool = "metadata";
     else if (sub === "organize") activeTool = "organize";
     else if (sub === "crop") activeTool = "crop";
     else if (sub === "forms") activeTool = "forms";
@@ -624,6 +825,9 @@ import { entryError } from "../lib/engineError";
       loadFile(staged.file);
       if (staged.actionId === "split-pdf") activeTool = "split";
       else if (staged.actionId === "remove-pages" || staged.actionId === "delete-pages") activeTool = "remove";
+      else if (staged.actionId === "page-numbers") activeTool = "page-numbers";
+      else if (staged.actionId === "nup-pdf") activeTool = "nup";
+      else if (staged.actionId === "metadata-pdf") activeTool = "metadata";
       else if (staged.actionId === "organize-pdf") activeTool = "organize";
       else if (staged.actionId === "watermark-pdf") activeTool = "watermark";
       else if (staged.actionId === "crop-pdf") activeTool = "crop";
@@ -736,7 +940,9 @@ import { entryError } from "../lib/engineError";
             <span class="cz-file-icon"><MacIcon name="pdf" size={16} /></span>
             <span class="cz-file-name">{selectedFile.name}</span>
             <span class="cz-file-size">{formatBytes(selectedFile.size)}</span>
-            {#if totalPages > 0}
+            {#if isFileLoading}
+              <span class="cz-file-pages">Loading document…</span>
+            {:else if totalPages > 0}
               <span class="cz-file-pages">{totalPages} pages</span>
             {/if}
           </div>
@@ -745,7 +951,16 @@ import { entryError } from "../lib/engineError";
             <button
               type="button"
               class="cz-btn cz-btn-ghost cz-btn-sm"
-              onclick={() => { selectedFile = null; pdfBytes = null; }}
+              onclick={() => {
+                loadSeq++;
+                selectedFile = null;
+                pdfBytes = null;
+                totalPages = 0;
+                isFileLoading = false;
+                pagesToRemoveSet = new Set();
+                removePagesInput = "";
+                removeRangeError = null;
+              }}
             >
               Change File
             </button>
@@ -847,7 +1062,7 @@ import { entryError } from "../lib/engineError";
                 <button
                   type="button"
                   class="cz-btn cz-btn-primary"
-                  disabled={isProcessing}
+                  disabled={isProcessing || isFileLoading || totalPages === 0}
                   onclick={handleExecuteTool}
                 >
                   {isProcessing ? "Reorganizing…" : "Save Reorganized PDF"}
@@ -916,7 +1131,7 @@ import { entryError } from "../lib/engineError";
                 <button
                   type="button"
                   class="cz-btn cz-btn-primary"
-                  disabled={isProcessing}
+                  disabled={isProcessing || isFileLoading || totalPages === 0}
                   onclick={handleExecuteTool}
                 >
                   {isProcessing ? "Splitting…" : "Execute PDF Split"}
@@ -938,9 +1153,11 @@ import { entryError } from "../lib/engineError";
                     id="remove-pages-input"
                     type="text"
                     class="cz-input"
+                    class:is-invalid={!!removeRangeError}
                     placeholder="e.g. 1, 3-5, 8"
                     value={removePagesInput}
                     oninput={handleRemoveInputChange}
+                    disabled={isFileLoading || totalPages === 0}
                   />
                   {#if removePagesInput}
                     <button
@@ -952,6 +1169,9 @@ import { entryError } from "../lib/engineError";
                     </button>
                   {/if}
                 </div>
+                {#if removeRangeError}
+                  <div class="cz-field-error-text" role="alert">{removeRangeError}</div>
+                {/if}
               </div>
 
               <!-- Quick Selection Chips -->
@@ -961,6 +1181,7 @@ import { entryError } from "../lib/engineError";
                   <button
                     type="button"
                     class="cz-chip-btn"
+                    disabled={isFileLoading || totalPages === 0}
                     onclick={selectAllEvenPages}
                   >
                     Even Pages
@@ -968,6 +1189,7 @@ import { entryError } from "../lib/engineError";
                   <button
                     type="button"
                     class="cz-chip-btn"
+                    disabled={isFileLoading || totalPages === 0}
                     onclick={selectAllOddPages}
                   >
                     Odd Pages
@@ -975,6 +1197,7 @@ import { entryError } from "../lib/engineError";
                   <button
                     type="button"
                     class="cz-chip-btn"
+                    disabled={isFileLoading || totalPages === 0}
                     onclick={selectFirstPage}
                   >
                     First Page
@@ -983,6 +1206,7 @@ import { entryError } from "../lib/engineError";
                     <button
                       type="button"
                       class="cz-chip-btn"
+                      disabled={isFileLoading || totalPages === 0}
                       onclick={selectLastPage}
                     >
                       Last Page
@@ -991,6 +1215,7 @@ import { entryError } from "../lib/engineError";
                   <button
                     type="button"
                     class="cz-chip-btn"
+                    disabled={isFileLoading || totalPages === 0}
                     onclick={invertPageRemoval}
                   >
                     Invert Selection
@@ -999,9 +1224,13 @@ import { entryError } from "../lib/engineError";
               </div>
 
               <!-- Live Status Banner -->
-              <div class="cz-remove-summary-banner" class:is-invalid={pagesToRemoveSet.size >= totalPages}>
+              <div class="cz-remove-summary-banner" class:is-invalid={pagesToRemoveSet.size >= totalPages || !!removeRangeError}>
                 <div class="cz-summary-info">
-                  {#if pagesToRemoveSet.size === 0}
+                  {#if isFileLoading}
+                    <span>Loading PDF pages and layout…</span>
+                  {:else if removeRangeError}
+                    <strong class="cz-warn-text">{removeRangeError}</strong>
+                  {:else if pagesToRemoveSet.size === 0}
                     <span>No pages selected for removal. Click page thumbnails below to mark them for deletion.</span>
                   {:else if pagesToRemoveSet.size >= totalPages}
                     <strong class="cz-warn-text">Cannot remove all {totalPages} pages! At least 1 page must remain.</strong>
@@ -1067,7 +1296,7 @@ import { entryError } from "../lib/engineError";
                 <button
                   type="button"
                   class="cz-btn cz-btn-primary"
-                  disabled={isProcessing || pagesToRemoveSet.size === 0 || pagesToRemoveSet.size >= totalPages}
+                  disabled={isProcessing || isFileLoading || totalPages === 0 || pagesToRemoveSet.size === 0 || pagesToRemoveSet.size >= totalPages || !!removeRangeError}
                   onclick={handleExecuteTool}
                 >
                   {isProcessing
@@ -1075,6 +1304,471 @@ import { entryError } from "../lib/engineError";
                     : pagesToRemoveSet.size === 0
                       ? "Select Pages to Remove"
                       : `Remove ${pagesToRemoveSet.size} Page${pagesToRemoveSet.size === 1 ? "" : "s"} & Download PDF`}
+                </button>
+              </div>
+            </div>
+          {:else if activeTool === "page-numbers"}
+            <div class="cz-panel-section">
+              <div class="cz-section-header">
+                <h3>Page Numbering & Bates Stamping</h3>
+                <p>Insert vector-crisp page counters, custom labels, header/footers, or legal Bates numbering.</p>
+              </div>
+
+              <!-- Format Selector -->
+              <div class="cz-settings-row">
+                <span class="cz-label">Numbering Format</span>
+                <div class="cz-segmented-control cz-segmented-wrap">
+                  <button
+                    type="button"
+                    class="cz-segment-btn"
+                    class:active={pageNumFormat === "page-n-of-total"}
+                    onclick={() => (pageNumFormat = "page-n-of-total")}
+                  >
+                    Page 1 of {totalPages || 10}
+                  </button>
+                  <button
+                    type="button"
+                    class="cz-segment-btn"
+                    class:active={pageNumFormat === "n-of-total"}
+                    onclick={() => (pageNumFormat = "n-of-total")}
+                  >
+                    1 of {totalPages || 10}
+                  </button>
+                  <button
+                    type="button"
+                    class="cz-segment-btn"
+                    class:active={pageNumFormat === "page-n"}
+                    onclick={() => (pageNumFormat = "page-n")}
+                  >
+                    Page 1
+                  </button>
+                  <button
+                    type="button"
+                    class="cz-segment-btn"
+                    class:active={pageNumFormat === "n"}
+                    onclick={() => (pageNumFormat = "n")}
+                  >
+                    1, 2, 3…
+                  </button>
+                  <button
+                    type="button"
+                    class="cz-segment-btn"
+                    class:active={pageNumFormat === "roman-lower"}
+                    onclick={() => (pageNumFormat = "roman-lower")}
+                  >
+                    i, ii, iii…
+                  </button>
+                  <button
+                    type="button"
+                    class="cz-segment-btn"
+                    class:active={pageNumFormat === "bates"}
+                    onclick={() => (pageNumFormat = "bates")}
+                  >
+                    Bates Stamp
+                  </button>
+                  <button
+                    type="button"
+                    class="cz-segment-btn"
+                    class:active={pageNumFormat === "custom"}
+                    onclick={() => (pageNumFormat = "custom")}
+                  >
+                    Custom Pattern
+                  </button>
+                </div>
+              </div>
+
+              <!-- Bates Stamping Specific Settings -->
+              {#if pageNumFormat === "bates"}
+                <div class="cz-settings-grid">
+                  <div class="cz-settings-row">
+                    <label for="bates-prefix">Bates Prefix</label>
+                    <input
+                      id="bates-prefix"
+                      type="text"
+                      class="cz-input"
+                      placeholder="e.g. BATES- or CASE-01-"
+                      bind:value={batesPrefix}
+                    />
+                  </div>
+                  <div class="cz-settings-row">
+                    <label for="bates-digits">Padded Digits</label>
+                    <input
+                      id="bates-digits"
+                      type="number"
+                      min="1"
+                      max="12"
+                      class="cz-input"
+                      bind:value={batesDigits}
+                    />
+                  </div>
+                  <div class="cz-settings-row">
+                    <label for="bates-suffix">Bates Suffix (Optional)</label>
+                    <input
+                      id="bates-suffix"
+                      type="text"
+                      class="cz-input"
+                      placeholder="e.g. -CONFIDENTIAL"
+                      bind:value={batesSuffix}
+                    />
+                  </div>
+                </div>
+              {/if}
+
+              <!-- Custom Pattern Input -->
+              {#if pageNumFormat === "custom"}
+                <div class="cz-settings-row">
+                  <label for="pn-custom">Custom Pattern (tokens: <code>&#123;n&#125;</code>, <code>&#123;total&#125;</code>, <code>&#123;roman&#125;</code>, <code>&#123;ROMAN&#125;</code>)</label>
+                  <input
+                    id="pn-custom"
+                    type="text"
+                    class="cz-input"
+                    placeholder={"e.g. Doc #{n} of {total}"}
+                    bind:value={pageNumCustomPattern}
+                  />
+                </div>
+              {/if}
+
+              <!-- Anchor Position 3x2 Grid -->
+              <div class="cz-settings-row">
+                <span class="cz-label">Position on Page</span>
+                <div class="cz-pos-grid">
+                  <button
+                    type="button"
+                    class="cz-pos-btn"
+                    class:active={pageNumPosition === "top-left"}
+                    onclick={() => (pageNumPosition = "top-left")}
+                  >
+                    Top Left
+                  </button>
+                  <button
+                    type="button"
+                    class="cz-pos-btn"
+                    class:active={pageNumPosition === "top-center"}
+                    onclick={() => (pageNumPosition = "top-center")}
+                  >
+                    Top Center
+                  </button>
+                  <button
+                    type="button"
+                    class="cz-pos-btn"
+                    class:active={pageNumPosition === "top-right"}
+                    onclick={() => (pageNumPosition = "top-right")}
+                  >
+                    Top Right
+                  </button>
+                  <button
+                    type="button"
+                    class="cz-pos-btn"
+                    class:active={pageNumPosition === "bottom-left"}
+                    onclick={() => (pageNumPosition = "bottom-left")}
+                  >
+                    Bottom Left
+                  </button>
+                  <button
+                    type="button"
+                    class="cz-pos-btn"
+                    class:active={pageNumPosition === "bottom-center"}
+                    onclick={() => (pageNumPosition = "bottom-center")}
+                  >
+                    Bottom Center
+                  </button>
+                  <button
+                    type="button"
+                    class="cz-pos-btn"
+                    class:active={pageNumPosition === "bottom-right"}
+                    onclick={() => (pageNumPosition = "bottom-right")}
+                  >
+                    Bottom Right
+                  </button>
+                </div>
+              </div>
+
+              <!-- Page Range & Starting Counter -->
+              <div class="cz-settings-grid">
+                <div class="cz-settings-row">
+                  <label for="pn-start">Starting Number</label>
+                  <input
+                    id="pn-start"
+                    type="number"
+                    min="1"
+                    class="cz-input"
+                    bind:value={pageNumStart}
+                  />
+                </div>
+                <div class="cz-settings-row">
+                  <label for="pn-range">Pages to Number</label>
+                  <input
+                    id="pn-range"
+                    type="text"
+                    class="cz-input"
+                    placeholder="all, 2-, 2-10, odd, even"
+                    bind:value={pageNumRange}
+                  />
+                </div>
+              </div>
+
+              <!-- Typography & Color Settings -->
+              <div class="cz-settings-grid">
+                <div class="cz-settings-row">
+                  <label for="pn-font">Font</label>
+                  <select id="pn-font" class="cz-select" bind:value={pageNumFont}>
+                    <option value="Helvetica">Helvetica (Clean Sans-Serif)</option>
+                    <option value="TimesRoman">Times Roman (Serif)</option>
+                    <option value="Courier">Courier (Monospace)</option>
+                  </select>
+                </div>
+                <div class="cz-settings-row">
+                  <label for="pn-size">Font Size ({pageNumSize} pt)</label>
+                  <input
+                    id="pn-size"
+                    type="range"
+                    min="8"
+                    max="24"
+                    step="1"
+                    bind:value={pageNumSize}
+                  />
+                </div>
+                <div class="cz-settings-row">
+                  <label for="pn-color">Text Color</label>
+                  <input
+                    id="pn-color"
+                    type="color"
+                    class="cz-input-color"
+                    bind:value={pageNumColor}
+                  />
+                </div>
+              </div>
+
+              <div class="cz-action-footer">
+                <button
+                  type="button"
+                  class="cz-btn cz-btn-primary"
+                  disabled={isProcessing}
+                  onclick={handleExecuteTool}
+                >
+                  {isProcessing ? "Adding Numbers…" : "Add Page Numbers & Download"}
+                </button>
+              </div>
+            </div>
+          {:else if activeTool === "nup"}
+            <div class="cz-panel-section">
+              <div class="cz-section-header">
+                <h3>Multi-Page per Sheet (N-Up Layout)</h3>
+                <p>Tile 2, 4, or 9 pages onto single sheets. Ideal for handouts, pocket booklets, and saving paper while keeping crisp vector text.</p>
+              </div>
+
+              <!-- Pages per Sheet Selector -->
+              <div class="cz-settings-row">
+                <span class="cz-label">Pages per Sheet</span>
+                <div class="cz-segmented-control">
+                  <button
+                    type="button"
+                    class="cz-segment-btn"
+                    class:active={nupPagesPerSheet === 2}
+                    onclick={() => (nupPagesPerSheet = 2)}
+                  >
+                    2-Up (Side by Side)
+                  </button>
+                  <button
+                    type="button"
+                    class="cz-segment-btn"
+                    class:active={nupPagesPerSheet === 4}
+                    onclick={() => (nupPagesPerSheet = 4)}
+                  >
+                    4-Up (2×2 Grid)
+                  </button>
+                  <button
+                    type="button"
+                    class="cz-segment-btn"
+                    class:active={nupPagesPerSheet === 9}
+                    onclick={() => (nupPagesPerSheet = 9)}
+                  >
+                    9-Up (3×3 Grid)
+                  </button>
+                </div>
+              </div>
+
+              <!-- Sheet Size & Orientation -->
+              <div class="cz-settings-grid">
+                <div class="cz-settings-row">
+                  <label for="nup-sheet-size">Target Sheet Size</label>
+                  <select id="nup-sheet-size" class="cz-select" bind:value={nupSheetSize}>
+                    <option value="a4">ISO A4 (210 × 297 mm)</option>
+                    <option value="letter">US Letter (8.5 × 11 in)</option>
+                    <option value="source">Match Original Dimensions</option>
+                  </select>
+                </div>
+                <div class="cz-settings-row">
+                  <label for="nup-orient">Sheet Orientation</label>
+                  <select id="nup-orient" class="cz-select" bind:value={nupOrientation}>
+                    <option value="auto">Auto (Best Aspect Ratio Fit)</option>
+                    <option value="portrait">Force Portrait</option>
+                    <option value="landscape">Force Landscape</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Margin, Spacing & Border Option -->
+              <div class="cz-settings-grid">
+                <div class="cz-settings-row">
+                  <label for="nup-margin">Outer Margin ({nupMargin} pt)</label>
+                  <input
+                    id="nup-margin"
+                    type="range"
+                    min="10"
+                    max="60"
+                    step="2"
+                    bind:value={nupMargin}
+                  />
+                </div>
+                <div class="cz-settings-row">
+                  <label for="nup-spacing">Grid Spacing ({nupSpacing} pt)</label>
+                  <input
+                    id="nup-spacing"
+                    type="range"
+                    min="4"
+                    max="40"
+                    step="2"
+                    bind:value={nupSpacing}
+                  />
+                </div>
+                <div class="cz-settings-row cz-checkbox-row">
+                  <label class="cz-checkbox-label">
+                    <input
+                      type="checkbox"
+                      bind:checked={nupDrawBorder}
+                    />
+                    <span>Draw subtle border around each page</span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="cz-action-footer">
+                <button
+                  type="button"
+                  class="cz-btn cz-btn-primary"
+                  disabled={isProcessing}
+                  onclick={handleExecuteTool}
+                >
+                  {isProcessing ? "Assembling Layout…" : `Generate ${nupPagesPerSheet}-Up PDF & Download`}
+                </button>
+              </div>
+            </div>
+          {:else if activeTool === "metadata"}
+            <div class="cz-panel-section">
+              <div class="cz-section-header">
+                <h3>PDF Metadata Inspector & Privacy Stripper</h3>
+                <p>View, modify, or strip document metadata (Author, Title, Creation/Modification timestamps) to safeguard your privacy before sharing.</p>
+              </div>
+
+              <div class="cz-settings-grid">
+                <div class="cz-settings-row">
+                  <label for="meta-title">Document Title</label>
+                  <input
+                    id="meta-title"
+                    type="text"
+                    class="cz-input"
+                    placeholder="Document Title"
+                    bind:value={metaTitle}
+                  />
+                </div>
+                <div class="cz-settings-row">
+                  <label for="meta-author">Author / Owner</label>
+                  <input
+                    id="meta-author"
+                    type="text"
+                    class="cz-input"
+                    placeholder="Author Name"
+                    bind:value={metaAuthor}
+                  />
+                </div>
+              </div>
+
+              <div class="cz-settings-grid">
+                <div class="cz-settings-row">
+                  <label for="meta-subject">Subject</label>
+                  <input
+                    id="meta-subject"
+                    type="text"
+                    class="cz-input"
+                    placeholder="Document Subject or Description"
+                    bind:value={metaSubject}
+                  />
+                </div>
+                <div class="cz-settings-row">
+                  <label for="meta-keywords">Keywords (comma-separated)</label>
+                  <input
+                    id="meta-keywords"
+                    type="text"
+                    class="cz-input"
+                    placeholder="invoice, contract, report"
+                    bind:value={metaKeywords}
+                  />
+                </div>
+              </div>
+
+              <div class="cz-settings-grid">
+                <div class="cz-settings-row">
+                  <label for="meta-creator">Creating Software / Application</label>
+                  <input
+                    id="meta-creator"
+                    type="text"
+                    class="cz-input"
+                    placeholder="e.g. Microsoft Word, LaTeX"
+                    bind:value={metaCreator}
+                  />
+                </div>
+                <div class="cz-settings-row">
+                  <label for="meta-producer">PDF Producer / Converter</label>
+                  <input
+                    id="meta-producer"
+                    type="text"
+                    class="cz-input"
+                    placeholder="e.g. Quartz PDFContext, Distiller"
+                    bind:value={metaProducer}
+                  />
+                </div>
+              </div>
+
+              {#if metaCreationDate || metaModificationDate}
+                <div class="cz-metadata-timestamps">
+                  {#if metaCreationDate}
+                    <div class="cz-timestamp-item">
+                      <span class="cz-timestamp-label">Created:</span>
+                      <span class="cz-timestamp-val">{new Date(metaCreationDate).toLocaleString()}</span>
+                    </div>
+                  {/if}
+                  {#if metaModificationDate}
+                    <div class="cz-timestamp-item">
+                      <span class="cz-timestamp-label">Modified:</span>
+                      <span class="cz-timestamp-val">{new Date(metaModificationDate).toLocaleString()}</span>
+                    </div>
+                  {/if}
+                </div>
+              {/if}
+
+              <div class="cz-action-footer cz-action-dual">
+                <button
+                  type="button"
+                  class="cz-btn cz-btn-secondary cz-btn-danger"
+                  disabled={isProcessing}
+                  onclick={() => {
+                    metaStripAll = true;
+                    handleExecuteTool();
+                  }}
+                >
+                  {isProcessing ? "Sanitizing…" : "Strip All Metadata & Dates (Privacy Mode)"}
+                </button>
+                <button
+                  type="button"
+                  class="cz-btn cz-btn-primary"
+                  disabled={isProcessing}
+                  onclick={() => {
+                    metaStripAll = false;
+                    handleExecuteTool();
+                  }}
+                >
+                  {isProcessing ? "Saving…" : "Save Updated Metadata"}
                 </button>
               </div>
             </div>
@@ -2207,6 +2901,105 @@ import { entryError } from "../lib/engineError";
   }
   .cz-remove-card.is-removed .cz-remove-card-footer {
     color: var(--rose, #dc2626);
+  }
+  .cz-field-error-text {
+    font-size: 0.78rem;
+    color: var(--rose, #dc2626);
+    margin-top: 0.35rem;
+    font-weight: 500;
+  }
+  .cz-segmented-wrap {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 3px;
+  }
+  .cz-pos-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+  }
+  .cz-pos-btn {
+    padding: 0.55rem 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-2);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+  .cz-pos-btn:hover {
+    border-color: var(--border-hover, var(--text-3));
+    color: var(--text);
+  }
+  .cz-pos-btn.active {
+    background: var(--accent);
+    color: #ffffff;
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  .cz-input-color {
+    height: 38px;
+    padding: 2px 4px;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    width: 100%;
+    max-width: 120px;
+  }
+  .cz-checkbox-row {
+    display: flex;
+    align-items: center;
+    margin-top: 1.5rem;
+  }
+  .cz-checkbox-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-2);
+    cursor: pointer;
+    user-select: none;
+  }
+  .cz-metadata-timestamps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    padding: 0.75rem 1rem;
+    border-radius: var(--r-sm);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    font-size: 0.8rem;
+    margin-top: 0.5rem;
+  }
+  .cz-timestamp-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .cz-timestamp-label {
+    font-weight: 600;
+    color: var(--text-3);
+  }
+  .cz-timestamp-val {
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+  .cz-action-dual {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: flex-end;
+  }
+  .cz-btn-danger {
+    color: var(--rose, #dc2626) !important;
+    border-color: rgba(220, 38, 38, 0.3) !important;
+  }
+  .cz-btn-danger:hover {
+    background: rgba(220, 38, 38, 0.1) !important;
+    border-color: var(--rose, #dc2626) !important;
   }
   @media (prefers-reduced-motion: reduce) {
     .cz-remove-card, .cz-chip-btn {
