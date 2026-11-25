@@ -14,7 +14,7 @@
   import { runHandwritingOcr } from "../lib/ocrHandwriting";
   import { decodeImageBitmap } from "../lib/imageDecode";
   import { openPdfDocument } from "../lib/pdfLibs";
-  import { getSettings, resolveExecutionProfile } from "../lib/settings";
+  import { getSettings } from "../lib/settings";
   import {
     createSearchablePdfBuilder,
     describeTextLayerGap,
@@ -101,18 +101,39 @@ import { entryError } from "../lib/engineError";
     }
   }
 
+  const OCR_LANGUAGE_OPTIONS: ReadonlyArray<{ code: OcrLanguage; label: string }> = [
+    { code: "auto", label: "Auto / English" },
+    { code: "eng", label: "English" },
+    { code: "fra", label: "French" },
+    { code: "deu", label: "German" },
+    { code: "spa", label: "Spanish" },
+    { code: "ita", label: "Italian" },
+    { code: "por", label: "Portuguese" },
+    { code: "rus", label: "Russian" },
+    { code: "nld", label: "Dutch" },
+    { code: "pol", label: "Polish" },
+    { code: "swe", label: "Swedish" },
+    { code: "nor", label: "Norwegian" },
+    { code: "dan", label: "Danish" },
+    { code: "fin", label: "Finnish" },
+    { code: "tur", label: "Turkish" },
+    { code: "chi_sim", label: "Chinese (Simplified)" },
+    { code: "chi_tra", label: "Chinese (Traditional)" },
+    { code: "jpn", label: "Japanese" },
+    { code: "kor", label: "Korean" },
+    { code: "ara", label: "Arabic" },
+    { code: "hin", label: "Hindi" },
+    { code: "ben", label: "Bengali" },
+  ];
+
   function seedDefaultsFromSettings() {
     const settings = getSettings();
-    const profile = resolveExecutionProfile(settings);
-    const dpiForTier =
-      profile.mode === "efficient" ? 200 : profile.mode === "powerful" ? 300 : 250;
     const current = ocrStore.get();
     if (current.files.length === 0) {
       const configuredLang = settings.engines.ocr.lang as OcrLanguage;
       updateStore({
         engine: settings.engines.ocr.engine,
         language: TESSERACT_LANGUAGES.has(configuredLang) ? configuredLang : "eng",
-        renderDpi: dpiForTier,
       });
     }
   }
@@ -496,15 +517,9 @@ import { entryError } from "../lib/engineError";
           value={ocrState.language}
           onchange={(e) => updateStore({ language: (e.target as HTMLSelectElement).value as OcrLanguage })}
         >
-          <option value="auto">Auto / English</option>
-          <option value="fra">French</option>
-          <option value="deu">German</option>
-          <option value="spa">Spanish</option>
-          <option value="ita">Italian</option>
-          <option value="chi_sim">Chinese (Simplified)</option>
-          <option value="jpn">Japanese</option>
-          <option value="kor">Korean</option>
-          <option value="hin">Hindi</option>
+          {#each OCR_LANGUAGE_OPTIONS as opt (opt.code)}
+            <option value={opt.code}>{opt.label}</option>
+          {/each}
         </select>
       </div>
 

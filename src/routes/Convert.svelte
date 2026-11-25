@@ -427,6 +427,9 @@
   function applyStagedFile() {
     const staged = consumeStagedUniversalFile("convert");
     if (!staged?.file) return;
+    if (typeof window !== "undefined") {
+      lastSearch = window.location.search;
+    }
 
     // Invalidate and cancel prior run so a new conversion can start for the staged file
     conversionGeneration++;

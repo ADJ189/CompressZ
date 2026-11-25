@@ -15,6 +15,7 @@
   import {
     applyPdfPageNumbers,
     parseTargetPages,
+    MAX_PAGE_NUMBER_START,
     type PageNumberPosition,
     type PageNumberFormat,
   } from "../lib/pdfTools/pageNumbersPdf";
@@ -25,6 +26,7 @@
   import {
     readPdfMetadata,
     updatePdfMetadata,
+    parseMetadataKeywords,
     type PdfMetadataInfo,
   } from "../lib/pdfTools/metadataPdf";
   import { reorganizePdf, type PageSpec } from "../lib/pdfTools/organizePdf";
@@ -201,6 +203,7 @@ import { entryError } from "../lib/engineError";
   let metaCreationDate = $state<string>("");
   let metaModificationDate = $state<string>("");
   let metaStripAll = $state<boolean>(false);
+  let dirtyMetaFields = new Set<string>();
 
   // Organize tool state
   let pageSpecs = $state<PageSpec[]>([]);
@@ -446,6 +449,7 @@ import { entryError } from "../lib/engineError";
     metaCreationDate = "";
     metaModificationDate = "";
     metaStripAll = false;
+    dirtyMetaFields.clear();
 
     let pdfJs: any = null;
     try {
@@ -465,19 +469,23 @@ import { entryError } from "../lib/engineError";
         rotation: 0,
       }));
 
-      // Generate thumbnails for the first 24 pages
+      // Generate thumbnails for the first 24 pages (preview errors must not wipe opened page count)
       for (let i = 1; i <= Math.min(totalPages, 24); i++) {
         if (mySeq !== loadSeq) return;
-        const p = await pdfJs.getPage(i);
-        if (mySeq !== loadSeq) return;
-        const vp = p.getViewport({ scale: 0.25 });
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.round(vp.width);
-        canvas.height = Math.round(vp.height);
-        const ctx = canvas.getContext("2d")!;
-        await p.render({ canvasContext: ctx, viewport: vp }).promise;
-        if (mySeq !== loadSeq) return;
-        pageThumbnails[i - 1] = canvas.toDataURL("image/jpeg", 0.7);
+        try {
+          const p = await pdfJs.getPage(i);
+          if (mySeq !== loadSeq) return;
+          const vp = p.getViewport({ scale: 0.25 });
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.round(vp.width);
+          canvas.height = Math.round(vp.height);
+          const ctx = canvas.getContext("2d")!;
+          await p.render({ canvasContext: ctx, viewport: vp }).promise;
+          if (mySeq !== loadSeq) return;
+          pageThumbnails[i - 1] = canvas.toDataURL("image/jpeg", 0.7);
+        } catch (thumbErr) {
+          console.warn(`[PdfSuite] Thumbnail render error on page ${i}:`, thumbErr);
+        }
       }
 
       // Check form fields (may fail on owner-encrypted PDFs; keep preview/unlock usable)
@@ -492,16 +500,16 @@ import { entryError } from "../lib/engineError";
         console.warn("[PdfSuite] Form inspection error:", fErr);
       }
 
-      // Inspect metadata for Metadata tool
+      // Inspect metadata for Metadata tool without overwriting user edits for this file
       try {
         const meta = await readPdfMetadata(bytes);
         if (mySeq === loadSeq) {
-          metaTitle = meta.title || "";
-          metaAuthor = meta.author || "";
-          metaSubject = meta.subject || "";
-          metaKeywords = (meta.keywords || []).join(", ");
-          metaCreator = meta.creator || "";
-          metaProducer = meta.producer || "";
+          if (!dirtyMetaFields.has("title")) metaTitle = meta.title || "";
+          if (!dirtyMetaFields.has("author")) metaAuthor = meta.author || "";
+          if (!dirtyMetaFields.has("subject")) metaSubject = meta.subject || "";
+          if (!dirtyMetaFields.has("keywords")) metaKeywords = (meta.keywords || []).join(", ");
+          if (!dirtyMetaFields.has("creator")) metaCreator = meta.creator || "";
+          if (!dirtyMetaFields.has("producer")) metaProducer = meta.producer || "";
           metaCreationDate = meta.creationDate || "";
           metaModificationDate = meta.modificationDate || "";
         }
@@ -599,9 +607,7 @@ import { entryError } from "../lib/engineError";
       title: metaTitle,
       author: metaAuthor,
       subject: metaSubject,
-      keywords: metaKeywords
-        ? metaKeywords.split(/[,;\s]+/).map((k) => k.trim()).filter(Boolean)
-        : [],
+      keywords: parseMetadataKeywords(metaKeywords),
       creator: metaCreator,
       producer: metaProducer,
     };
@@ -650,6 +656,18 @@ import { entryError } from "../lib/engineError";
         return;
       }
     } else if (snapTool === "page-numbers") {
+      if (
+        typeof snapPageNumbers.startNumber !== "number" ||
+        !Number.isInteger(snapPageNumbers.startNumber) ||
+        snapPageNumbers.startNumber < 1 ||
+        snapPageNumbers.startNumber > MAX_PAGE_NUMBER_START
+      ) {
+        toast(
+          `Start number must be a whole number between 1 and ${MAX_PAGE_NUMBER_START.toLocaleString()}.`,
+          "error",
+        );
+        return;
+      }
       try {
         const targets = parseTargetPages(snapPageNumbers.pageRange, snapTotalPages);
         if (targets.length === 0) {
@@ -747,7 +765,12 @@ import { entryError } from "../lib/engineError";
             bytesBlob(out, "application/pdf"),
             `${snapBaseName}-${snapMetaStripAll ? "sanitized" : "metadata"}.pdf`,
           );
-          toast(snapMetaStripAll ? "All metadata stripped for privacy" : "PDF metadata updated successfully", "success");
+          toast(
+            snapMetaStripAll
+              ? "Document metadata, dates, and XMP streams stripped"
+              : "PDF metadata updated successfully",
+            "success",
+          );
         } else if (snapTool === "organize") {
           const out = await reorganizePdf(snapBytes!, snapOrganizeSpecs, (p) => (progressPct = p));
           downloadBlob(
@@ -887,7 +910,11 @@ import { entryError } from "../lib/engineError";
     if (sub === "split") activeTool = "split";
     else if (sub === "remove" || sub === "remove-pages" || sub === "delete-pages") activeTool = "remove";
     else if (sub === "page-numbers" || sub === "number-pages" || sub === "bates") activeTool = "page-numbers";
-    else if (sub === "nup" || sub === "multi-page" || sub === "2-up" || sub === "4-up") activeTool = "nup";
+    else if (sub === "nup" || sub === "multi-page" || sub === "2-up" || sub === "4-up") {
+      activeTool = "nup";
+      if (sub === "2-up") nupPagesPerSheet = 2;
+      else if (sub === "4-up") nupPagesPerSheet = 4;
+    }
     else if (sub === "metadata" || sub === "edit-metadata" || sub === "strip-metadata") activeTool = "metadata";
     else if (sub === "organize") activeTool = "organize";
     else if (sub === "crop") activeTool = "crop";
@@ -1050,6 +1077,7 @@ import { entryError } from "../lib/engineError";
                 metaCreationDate = "";
                 metaModificationDate = "";
                 metaStripAll = false;
+                dirtyMetaFields.clear();
               }}
             >
               Change File
@@ -1581,6 +1609,7 @@ import { entryError } from "../lib/engineError";
                     id="pn-start"
                     type="number"
                     min="1"
+                    max={MAX_PAGE_NUMBER_START}
                     class="cz-input"
                     bind:value={pageNumStart}
                   />
@@ -1748,7 +1777,7 @@ import { entryError } from "../lib/engineError";
             <div class="cz-panel-section">
               <div class="cz-section-header">
                 <h3>PDF Metadata Inspector & Privacy Stripper</h3>
-                <p>View, modify, or strip document metadata (Author, Title, Creation/Modification timestamps) to safeguard your privacy before sharing.</p>
+                <p>View, modify, or strip PDF Info fields (Author, Title, timestamps) and catalog/page XMP metadata before sharing. Metadata inside embedded images is left untouched.</p>
               </div>
 
               <div class="cz-settings-grid">
@@ -1760,6 +1789,7 @@ import { entryError } from "../lib/engineError";
                     class="cz-input"
                     placeholder="Document Title"
                     bind:value={metaTitle}
+                    oninput={() => dirtyMetaFields.add("title")}
                   />
                 </div>
                 <div class="cz-settings-row">
@@ -1770,6 +1800,7 @@ import { entryError } from "../lib/engineError";
                     class="cz-input"
                     placeholder="Author Name"
                     bind:value={metaAuthor}
+                    oninput={() => dirtyMetaFields.add("author")}
                   />
                 </div>
               </div>
@@ -1783,6 +1814,7 @@ import { entryError } from "../lib/engineError";
                     class="cz-input"
                     placeholder="Document Subject or Description"
                     bind:value={metaSubject}
+                    oninput={() => dirtyMetaFields.add("subject")}
                   />
                 </div>
                 <div class="cz-settings-row">
@@ -1793,6 +1825,7 @@ import { entryError } from "../lib/engineError";
                     class="cz-input"
                     placeholder="invoice, contract, report"
                     bind:value={metaKeywords}
+                    oninput={() => dirtyMetaFields.add("keywords")}
                   />
                 </div>
               </div>
@@ -1806,6 +1839,7 @@ import { entryError } from "../lib/engineError";
                     class="cz-input"
                     placeholder="e.g. Microsoft Word, LaTeX"
                     bind:value={metaCreator}
+                    oninput={() => dirtyMetaFields.add("creator")}
                   />
                 </div>
                 <div class="cz-settings-row">
@@ -1816,6 +1850,7 @@ import { entryError } from "../lib/engineError";
                     class="cz-input"
                     placeholder="e.g. Quartz PDFContext, Distiller"
                     bind:value={metaProducer}
+                    oninput={() => dirtyMetaFields.add("producer")}
                   />
                 </div>
               </div>
@@ -1847,7 +1882,7 @@ import { entryError } from "../lib/engineError";
                     handleExecuteTool();
                   }}
                 >
-                  {isProcessing ? "Sanitizing…" : "Strip All Metadata & Dates (Privacy Mode)"}
+                  {isProcessing ? "Sanitizing…" : "Strip Document Metadata & Dates (Privacy Mode)"}
                 </button>
                 <button
                   type="button"

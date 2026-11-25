@@ -14,6 +14,7 @@
   let isMerging = $state(false);
   let mergedBlob = $state<Blob | null>(null);
   let draggedIndex = $state<number | null>(null);
+  let sequenceRevision = 0;
 
   function applyStagedFile() {
     const staged = consumeStagedUniversalFile("compress/merge-pdf");
@@ -44,6 +45,7 @@
 
   function updateStore(patch: Partial<MergeState>) {
     if (patch.files !== undefined) {
+      sequenceRevision++;
       mergedBlob = null;
     }
     mergeStore.update((curr) => ({ ...curr, ...patch }));
@@ -122,6 +124,7 @@
     }
 
     isMerging = true;
+    const startRevision = sequenceRevision;
     try {
       const files = [...mergeState.files];
       const bytes = files.reduce((sum, f) => sum + f.size, 0);
@@ -129,10 +132,7 @@
         { kind: "pdf", label: `Merge PDF (${files.length} files)`, bytes },
         () => mergePdf(files),
       );
-      // mergePdf() resolves with { blob, pageCount, totalInputSize } — the
-      // route used to assign the whole result object to `mergedBlob`, so
-      // URL.createObjectURL() threw "Overload resolution failed" and the
-      // downloaded merged PDF never existed.
+      if (sequenceRevision !== startRevision) return;
       mergedBlob = result.blob;
       toast(`Merged ${result.pageCount} pages into one PDF`, "success");
     } catch (err) {

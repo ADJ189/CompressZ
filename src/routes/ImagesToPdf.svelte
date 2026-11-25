@@ -25,6 +25,7 @@
   let convertedBlob = $state<Blob | null>(null);
   let dismissTrigger = $state(0);
   let draggedIndex = $state<number | null>(null);
+  let inputRevision = 0;
 
   // Thumbnail cache for files
   const thumbnailUrls = new Map<File, string>();
@@ -100,6 +101,7 @@
       patch.quality !== undefined ||
       patch.maxDim !== undefined
     ) {
+      inputRevision++;
       convertedBlob = null;
     }
     imagesToPdfStore.update((curr) => ({ ...curr, ...patch }));
@@ -240,6 +242,7 @@
     }
 
     isConverting = true;
+    const startRevision = inputRevision;
     try {
       const files = [...imagesToPdfState.files];
       const pageSizePt =
@@ -261,6 +264,7 @@
         },
         () => imagesToPdf(files, options),
       );
+      if (inputRevision !== startRevision) return;
       convertedBlob = blob;
       toast("Images successfully converted to PDF", "success");
     } catch (err) {
