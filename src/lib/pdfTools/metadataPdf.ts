@@ -105,21 +105,65 @@ export async function updatePdfMetadata(
   metadata: Partial<PdfMetadataInfo> = {},
   stripAll: boolean = false,
 ): Promise<Uint8Array> {
-  const { PDFDocument } = await getPdfLib();
-  const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+  const { PDFDocument, PDFName } = await getPdfLib();
+  const pdfDoc = await PDFDocument.load(pdfBytes, {
+    ignoreEncryption: true,
+    updateMetadata: !stripAll,
+  });
   if (pdfDoc.isEncrypted) {
     throw new Error("The PDF is encrypted with a password. Please unlock or decrypt it in PDF Protect / Unlock before editing metadata.");
   }
 
   if (stripAll) {
-    // Sanitize and strip all identifying metadata
-    pdfDoc.setTitle("");
-    pdfDoc.setAuthor("");
-    pdfDoc.setSubject("");
-    pdfDoc.setKeywords([]);
-    pdfDoc.setCreator("");
-    pdfDoc.setProducer("");
-    // Note: pdf-lib doesn't have deleteCreationDate, setting epoch date or clearing info dict
+    // Strip all standard and custom Info dictionary entries, timestamps, and XMP metadata streams
+    if (PDFName) {
+      const metadataKey = PDFName.of("Metadata");
+      if (pdfDoc.catalog && typeof pdfDoc.catalog.get === "function" && typeof pdfDoc.catalog.delete === "function") {
+        const xmpRef = pdfDoc.catalog.get(metadataKey);
+        pdfDoc.catalog.delete(metadataKey);
+        if (xmpRef && typeof pdfDoc.context?.delete === "function" && typeof xmpRef.objectNumber === "number") {
+          pdfDoc.context.delete(xmpRef);
+        }
+      }
+      if (typeof pdfDoc.getPages === "function") {
+        for (const page of pdfDoc.getPages()) {
+          const node = page?.node;
+          if (node && typeof node.get === "function" && typeof node.delete === "function") {
+            const pageXmpRef = node.get(metadataKey);
+            node.delete(metadataKey);
+            if (pageXmpRef && typeof pdfDoc.context?.delete === "function" && typeof pageXmpRef.objectNumber === "number") {
+              pdfDoc.context.delete(pageXmpRef);
+            }
+          }
+        }
+      }
+    }
+
+    const trailerInfo = pdfDoc.context?.trailerInfo;
+    if (trailerInfo) {
+      const infoRef = trailerInfo.Info;
+      if (infoRef) {
+        const infoDict = typeof pdfDoc.context.lookup === "function"
+          ? pdfDoc.context.lookup(infoRef)
+          : infoRef;
+        if (infoDict && typeof infoDict.keys === "function" && typeof infoDict.delete === "function") {
+          for (const key of Array.from(infoDict.keys())) {
+            infoDict.delete(key);
+          }
+        }
+        if (typeof pdfDoc.context.delete === "function" && typeof infoRef.objectNumber === "number") {
+          pdfDoc.context.delete(infoRef);
+        }
+        delete trailerInfo.Info;
+      }
+    } else {
+      pdfDoc.setTitle("");
+      pdfDoc.setAuthor("");
+      pdfDoc.setSubject("");
+      pdfDoc.setKeywords([]);
+      pdfDoc.setCreator("");
+      pdfDoc.setProducer("");
+    }
   } else {
     if (metadata.title !== undefined) {
       pdfDoc.setTitle(sanitizeMetadataString(metadata.title));

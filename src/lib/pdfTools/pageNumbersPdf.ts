@@ -168,8 +168,95 @@ export function calculateNumberPosition(
 }
 
 /**
+ * Calculate coordinates and rotation angle for placing page number text on a
+ * possibly rotated page, mapping visual coordinates back into unrotated PDF space.
+ */
+export function calculateRotatedNumberPlacement(
+  box: { x: number; y: number; width: number; height: number },
+  rotationDeg: number,
+  textWidth: number,
+  textHeight: number,
+  position: PageNumberPosition = "bottom-center",
+  marginX: number = 36,
+  marginY: number = 36,
+): { x: number; y: number; textAngle: number } {
+  const rot = ((rotationDeg % 360) + 360) % 360;
+  const isQuarterTurn = rot === 90 || rot === 270;
+  const visW = isQuarterTurn ? box.height : box.width;
+  const visH = isQuarterTurn ? box.width : box.height;
+
+  const vis = calculateNumberPosition(
+    visW,
+    visH,
+    textWidth,
+    textHeight,
+    position,
+    marginX,
+    marginY,
+    0,
+    0,
+  );
+
+  switch (rot) {
+    case 90:
+      return {
+        x: box.x + box.width - vis.y,
+        y: box.y + vis.x,
+        textAngle: 90,
+      };
+    case 180:
+      return {
+        x: box.x + box.width - vis.x,
+        y: box.y + box.height - vis.y,
+        textAngle: 180,
+      };
+    case 270:
+      return {
+        x: box.x + vis.y,
+        y: box.y + box.height - vis.x,
+        textAngle: 270,
+      };
+    case 0:
+    default:
+      return {
+        x: box.x + vis.x,
+        y: box.y + vis.y,
+        textAngle: 0,
+      };
+  }
+}
+
+/**
+ * Normalize whitespace around range dashes without backtracking regexes.
+ */
+function normalizePageRangeDashes(input: string): string {
+  const parts = input.split(/([-–—])/);
+  let normalized = "";
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (part === "-" || part === "–" || part === "—") {
+      const prevTrimmed = normalized.trimEnd();
+      const nextPart = parts[i + 1] ?? "";
+      const nextTrimmed = nextPart.trimStart();
+      if (
+        prevTrimmed.length > 0 &&
+        /\d$/.test(prevTrimmed) &&
+        (nextTrimmed.length === 0 || /^\d/.test(nextTrimmed))
+      ) {
+        normalized = prevTrimmed + "-";
+        parts[i + 1] = nextTrimmed;
+        continue;
+      }
+    }
+    normalized += part;
+  }
+  return normalized;
+}
+
+/**
  * Parse a page number range string (1-based) into 0-based page indices.
  * Supports: "all", "2-", "2-10", "1, 3, 5", "odd", "even".
+ * Rejects unrecognized tokens or non-positive page numbers with an Error.
  */
 export function parseTargetPages(
   rangeStr: string | undefined,
@@ -188,28 +275,55 @@ export function parseTargetPages(
     return Array.from({ length: totalPages }, (_, i) => i).filter((i) => i % 2 === 1);
   }
 
+  const normalized = normalizePageRangeDashes(clean);
   const indices = new Set<number>();
-  const parts = clean.split(/[,;\s]+/);
+  const parts = normalized.split(/[,;\s\n]+/).filter(Boolean);
 
   for (const part of parts) {
-    if (!part) continue;
-    if (part.includes("-")) {
-      const [startRaw, endRaw] = part.split("-");
-      const start = Number.parseInt(startRaw, 10);
-      const end = endRaw ? Number.parseInt(endRaw, 10) : totalPages;
-      if (!Number.isNaN(start)) {
-        const lo = Math.max(1, start);
-        const hi = Number.isNaN(end) ? totalPages : Math.min(totalPages, end);
-        for (let i = lo; i <= hi; i++) {
-          indices.add(i - 1);
-        }
+    const openMatch = part.match(/^(\d+)-$/);
+    if (openMatch) {
+      const start = Number.parseInt(openMatch[1], 10);
+      if (start <= 0) {
+        throw new Error(`Page numbers must be 1 or greater (got "${part}").`);
       }
-    } else {
-      const num = Number.parseInt(part, 10);
-      if (!Number.isNaN(num) && num >= 1 && num <= totalPages) {
+      for (let i = start; i <= totalPages; i++) {
+        indices.add(i - 1);
+      }
+      continue;
+    }
+
+    const rangeMatch = part.match(/^(\d+)-(\d+)$/);
+    if (rangeMatch) {
+      const start = Number.parseInt(rangeMatch[1], 10);
+      const end = Number.parseInt(rangeMatch[2], 10);
+      if (start <= 0 || end <= 0) {
+        throw new Error(`Page numbers must be 1 or greater (got "${part}").`);
+      }
+      if (start > end) {
+        throw new Error(`Invalid page range "${part}": start page cannot exceed end page.`);
+      }
+      const hi = Math.min(totalPages, end);
+      for (let i = start; i <= hi; i++) {
+        indices.add(i - 1);
+      }
+      continue;
+    }
+
+    const singleMatch = part.match(/^(\d+)$/);
+    if (singleMatch) {
+      const num = Number.parseInt(singleMatch[1], 10);
+      if (num <= 0) {
+        throw new Error(`Page numbers must be 1 or greater (got "${part}").`);
+      }
+      if (num <= totalPages) {
         indices.add(num - 1);
       }
+      continue;
     }
+
+    throw new Error(
+      `Unrecognized page range token: "${part}". Use "all", "odd", "even", a page number, or a range like "2-5" or "2-".`,
+    );
   }
 
   return Array.from(indices).sort((a, b) => a - b);
@@ -222,17 +336,21 @@ export async function applyPdfPageNumbers(
   pdfBytes: Uint8Array,
   options: PageNumberOptions = {},
 ): Promise<Uint8Array> {
-  const { PDFDocument, StandardFonts, rgb } = await getPdfLib();
+  const { PDFDocument, StandardFonts, rgb, degrees } = await getPdfLib();
   const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
   if (pdfDoc.isEncrypted) {
     throw new Error("The PDF is encrypted with a password. Please unlock or decrypt it in PDF Protect / Unlock before adding page numbers.");
   }
   const totalPages = pdfDoc.getPageCount();
 
-  if (totalPages === 0) return pdfBytes;
+  if (totalPages === 0) {
+    throw new Error("PDF document has 0 pages.");
+  }
 
   const targetIndices = parseTargetPages(options.pageRange, totalPages);
-  if (targetIndices.length === 0) return pdfBytes;
+  if (targetIndices.length === 0) {
+    throw new Error("No valid pages matched the specified page range.");
+  }
 
   // Resolve standard font
   let fontKey = StandardFonts.Helvetica;
@@ -255,6 +373,8 @@ export async function applyPdfPageNumbers(
     const pageIndex = targetIndices[i];
     const page = pdfDoc.getPage(pageIndex);
     const box = page.getCropBox();
+    const rotationAngle =
+      typeof page.getRotation === "function" ? page.getRotation().angle : 0;
 
     // Current page counter value (relative to startCounter)
     const currentNum = startCounter + i;
@@ -272,25 +392,26 @@ export async function applyPdfPageNumbers(
     const textWidth = embeddedFont.widthOfTextAtSize(safeText, fontSize);
     const textHeight = embeddedFont.heightAtSize(fontSize);
 
-    const coords = calculateNumberPosition(
-      box.width,
-      box.height,
+    const placement = calculateRotatedNumberPlacement(
+      box,
+      rotationAngle,
       textWidth,
       textHeight,
       position,
       marginX,
       marginY,
-      box.x,
-      box.y,
     );
 
     page.drawText(safeText, {
-      x: coords.x,
-      y: coords.y,
+      x: placement.x,
+      y: placement.y,
       size: fontSize,
       font: embeddedFont,
       color: rgb(color.r, color.g, color.b),
       opacity,
+      ...(placement.textAngle !== 0 && typeof degrees === "function"
+        ? { rotate: degrees(placement.textAngle) }
+        : {}),
     });
 
     const pct = Math.round(15 + ((i + 1) / targetIndices.length) * 80);

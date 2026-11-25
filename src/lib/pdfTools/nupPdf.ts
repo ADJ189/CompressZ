@@ -147,13 +147,77 @@ export function chunkPages(totalPages: number, chunkSize: number): number[][] {
 }
 
 /**
+ * Compute fitted visual bounds and unrotated drawPage arguments for a source
+ * CropBox/embedded region and page rotation angle.
+ */
+export function planRotatedNupDraw(
+  embWidth: number,
+  embHeight: number,
+  rotationDeg: number,
+  slot: NupSlot,
+): {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotateDeg: number;
+  visualX: number;
+  visualY: number;
+  visualWidth: number;
+  visualHeight: number;
+} {
+  const angle = ((rotationDeg % 360) + 360) % 360;
+  const isQuarterTurn = angle === 90 || angle === 270;
+  const displayW = isQuarterTurn ? embHeight : embWidth;
+  const displayH = isQuarterTurn ? embWidth : embHeight;
+  const fit = calculateFittedDimensions(displayW, displayH, slot.width, slot.height);
+
+  const visualX = slot.x + fit.offsetX;
+  const visualY = slot.y + fit.offsetY;
+  const visualWidth = fit.width;
+  const visualHeight = fit.height;
+  const drawW = embWidth * fit.scale;
+  const drawH = embHeight * fit.scale;
+
+  let x = visualX;
+  let y = visualY;
+  let rotateDeg = 0;
+
+  if (angle === 90) {
+    x = visualX;
+    y = visualY + visualHeight;
+    rotateDeg = -90;
+  } else if (angle === 180) {
+    x = visualX + visualWidth;
+    y = visualY + visualHeight;
+    rotateDeg = -180;
+  } else if (angle === 270) {
+    x = visualX + visualWidth;
+    y = visualY;
+    rotateDeg = -270;
+  }
+
+  return {
+    x,
+    y,
+    width: drawW,
+    height: drawH,
+    rotateDeg,
+    visualX,
+    visualY,
+    visualWidth,
+    visualHeight,
+  };
+}
+
+/**
  * Generate a new PDF combining N input pages per sheet.
  */
 export async function createNupPdf(
   pdfBytes: Uint8Array,
   options: NupOptions = {},
 ): Promise<Uint8Array> {
-  const { PDFDocument, rgb } = await getPdfLib();
+  const { PDFDocument, rgb, degrees } = await getPdfLib();
   const sourceDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
   if (sourceDoc.isEncrypted) {
     throw new Error("The PDF is encrypted with a password. Please unlock or decrypt it in PDF Protect / Unlock before creating N-Up pages.");
@@ -167,9 +231,16 @@ export async function createNupPdf(
   const spacing = options.spacing ?? 16;
   const drawBorder = options.drawBorder ?? false;
 
-  // Sample first page for dimensions if source mode chosen
+  // Sample first page for dimensions if source mode chosen (accounting for rotation)
   const firstPage = sourceDoc.getPage(0);
   const sampleBox = firstPage.getCropBox();
+  const firstRot =
+    typeof firstPage.getRotation === "function" ? firstPage.getRotation().angle : 0;
+  const firstNorm = ((firstRot % 360) + 360) % 360;
+  const sampleW =
+    firstNorm === 90 || firstNorm === 270 ? sampleBox.height : sampleBox.width;
+  const sampleH =
+    firstNorm === 90 || firstNorm === 270 ? sampleBox.width : sampleBox.height;
 
   const grid = planNupGrid(
     nUp,
@@ -177,8 +248,8 @@ export async function createNupPdf(
     options.orientation ?? "auto",
     margin,
     spacing,
-    sampleBox.width,
-    sampleBox.height,
+    sampleW,
+    sampleH,
   );
 
   const outputDoc = await PDFDocument.create();
@@ -193,33 +264,44 @@ export async function createNupPdf(
       const slot = grid.slots[s];
       const sourcePage = sourceDoc.getPage(pageIndex);
       const sourceBox = sourcePage.getCropBox();
+      const sourceAngle =
+        typeof sourcePage.getRotation === "function" ? sourcePage.getRotation().angle : 0;
 
-      // Embed source page into output document
-      const embedded = await outputDoc.embedPage(sourcePage);
-      const fit = calculateFittedDimensions(
-        sourceBox.width,
-        sourceBox.height,
-        slot.width,
-        slot.height,
-      );
+      // Embed only the visible CropBox region into output document so clipped content stays clipped
+      const embedded = await outputDoc.embedPage(sourcePage, {
+        left: sourceBox.x,
+        bottom: sourceBox.y,
+        right: sourceBox.x + sourceBox.width,
+        top: sourceBox.y + sourceBox.height,
+      });
+      const embW =
+        typeof embedded?.width === "number" && embedded.width > 0
+          ? embedded.width
+          : sourceBox.width;
+      const embH =
+        typeof embedded?.height === "number" && embedded.height > 0
+          ? embedded.height
+          : sourceBox.height;
 
-      const drawX = slot.x + fit.offsetX;
-      const drawY = slot.y + fit.offsetY;
+      const placement = planRotatedNupDraw(embW, embH, sourceAngle, slot);
 
       sheet.drawPage(embedded, {
-        x: drawX,
-        y: drawY,
-        width: fit.width,
-        height: fit.height,
+        x: placement.x,
+        y: placement.y,
+        width: placement.width,
+        height: placement.height,
+        ...(placement.rotateDeg !== 0 && typeof degrees === "function"
+          ? { rotate: degrees(placement.rotateDeg) }
+          : {}),
       });
 
       // Optional subtle hairline border around the mini-page
       if (drawBorder) {
         sheet.drawRectangle({
-          x: drawX,
-          y: drawY,
-          width: fit.width,
-          height: fit.height,
+          x: placement.visualX,
+          y: placement.visualY,
+          width: placement.visualWidth,
+          height: placement.visualHeight,
           borderWidth: 0.5,
           borderColor: rgb(0.7, 0.7, 0.7),
           opacity: 0.8,

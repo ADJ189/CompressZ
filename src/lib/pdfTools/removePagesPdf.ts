@@ -49,8 +49,28 @@ export function parseRemovalRange(input: string, totalPages: number): number[] {
   const trimmed = input.trim();
   if (!trimmed) return [];
 
-  // Normalize whitespace around hyphens/dashes: "3 - 5" or "3 – 5" -> "3-5"
-  const normalized = trimmed.replace(/(\d+)\s*[-–—]\s*(\d+)/g, "$1-$2");
+  // Normalize whitespace around hyphens/dashes linearly (no regex backtracking)
+  const rawParts = trimmed.split(/([-–—])/);
+  let normalized = "";
+  for (let i = 0; i < rawParts.length; i++) {
+    const part = rawParts[i];
+    if (part === "-" || part === "–" || part === "—") {
+      const prevTrimmed = normalized.trimEnd();
+      const nextPart = rawParts[i + 1] ?? "";
+      const nextTrimmed = nextPart.trimStart();
+      if (
+        prevTrimmed.length > 0 &&
+        nextTrimmed.length > 0 &&
+        /\d$/.test(prevTrimmed) &&
+        /^\d/.test(nextTrimmed)
+      ) {
+        normalized = prevTrimmed + "-";
+        rawParts[i + 1] = nextTrimmed;
+        continue;
+      }
+    }
+    normalized += part;
+  }
 
   // Tokenize on commas, semicolons, newlines, and whitespace
   const tokens = normalized.split(/[,;\s\n]+/).map((s) => s.trim()).filter(Boolean);
@@ -61,8 +81,8 @@ export function parseRemovalRange(input: string, totalPages: number): number[] {
     // 1. Check for range pattern e.g. "2-5" or "5-2"
     const rangeMatch = token.match(/^(\d+)[-–—](\d+)$/);
     if (rangeMatch) {
-      const start = parseInt(rangeMatch[1], 10);
-      const end = parseInt(rangeMatch[2], 10);
+      const start = Number.parseInt(rangeMatch[1], 10);
+      const end = Number.parseInt(rangeMatch[2], 10);
       if (start <= 0 || end <= 0) {
         throw new Error(`Page numbers must be 1 or greater (got "${token}").`);
       }
@@ -80,7 +100,7 @@ export function parseRemovalRange(input: string, totalPages: number): number[] {
     // 2. Check for single page number e.g. "3"
     const singleMatch = token.match(/^(\d+)$/);
     if (singleMatch) {
-      const page = parseInt(singleMatch[1], 10);
+      const page = Number.parseInt(singleMatch[1], 10);
       if (page <= 0) {
         throw new Error(`Page numbers must be 1 or greater (got "${token}").`);
       }
@@ -204,10 +224,104 @@ export function planPageRemoval(
   };
 }
 
+interface PdfRefLike {
+  objectNumber: number;
+  generationNumber?: number;
+}
+
+interface PdfContextLike {
+  trailerInfo?: {
+    Root?: unknown;
+    Info?: unknown;
+    Encrypt?: unknown;
+    ID?: unknown;
+  };
+  lookup?: (ref: PdfRefLike) => unknown;
+  enumerateIndirectObjects?: () => Iterable<[PdfRefLike, unknown]>;
+  delete?: (ref: PdfRefLike) => void;
+}
+
+interface PdfDocLike {
+  context?: PdfContextLike;
+}
+
+function refKey(ref: PdfRefLike): string {
+  return `${ref.objectNumber}:${ref.generationNumber ?? 0}`;
+}
+
+/**
+ * Delete indirect PDF objects no longer reachable from trailer Root/Info so
+ * removed page streams and private text do not remain in the saved PDF bytes.
+ */
+function pruneUnreachablePdfObjects(
+  pdfDoc: PdfDocLike,
+  removedRefs: Set<string>,
+): void {
+  const ctx = pdfDoc?.context;
+  if (
+    !ctx ||
+    !ctx.trailerInfo ||
+    typeof ctx.enumerateIndirectObjects !== "function" ||
+    typeof ctx.lookup !== "function" ||
+    typeof ctx.delete !== "function"
+  ) {
+    return;
+  }
+
+  const visited = new Set<string>();
+  const stack: PdfRefLike[] = [];
+
+  const enqueue = (val: unknown) => {
+    if (!val || typeof val !== "object") return;
+    const obj = val as Record<string, unknown>;
+    if (typeof obj.objectNumber === "number" && typeof obj.generationNumber === "number") {
+      const ref = obj as unknown as PdfRefLike;
+      const k = refKey(ref);
+      if (removedRefs.has(k) || visited.has(k)) return;
+      visited.add(k);
+      stack.push(ref);
+      return;
+    }
+    if (typeof obj.entries === "function") {
+      for (const [, entryVal] of (obj.entries as () => Iterable<[unknown, unknown]>)()) {
+        enqueue(entryVal);
+      }
+      return;
+    }
+    if (typeof obj.asArray === "function") {
+      for (const item of (obj.asArray as () => unknown[])()) {
+        enqueue(item);
+      }
+      return;
+    }
+    if (obj.dict) {
+      enqueue(obj.dict);
+    }
+  };
+
+  enqueue(ctx.trailerInfo.Root);
+  enqueue(ctx.trailerInfo.Info);
+  if (ctx.trailerInfo.Encrypt) enqueue(ctx.trailerInfo.Encrypt);
+  if (ctx.trailerInfo.ID) enqueue(ctx.trailerInfo.ID);
+
+  while (stack.length > 0) {
+    const ref = stack.pop()!;
+    const resolved = ctx.lookup(ref);
+    enqueue(resolved);
+  }
+
+  for (const [ref] of ctx.enumerateIndirectObjects()) {
+    if (!visited.has(refKey(ref))) {
+      ctx.delete(ref);
+    }
+  }
+}
+
 /**
  * Execute page removal on a PDF document.
  * Removes pages in-place in descending index order so that page indices do not shift,
- * preserving document metadata, bookmarks, catalog properties, and form field interactiveness.
+ * preserving document metadata, bookmarks, catalog properties, and form field interactiveness,
+ * then prunes unreachable objects so deleted page content is absent from output bytes.
  */
 export async function removePagesFromPdf(
   pdfBytes: Uint8Array,
@@ -255,11 +369,18 @@ export async function removePagesFromPdf(
   options.onProgress?.(50);
 
   // In-place removal: delete pages in descending index order so subsequent target indices remain valid.
-  // This preserves document outlines (bookmarks), metadata (title/author), and interactive form fields.
+  // Record removed page refs first so we can purge unreachable streams/objects before saving.
   const descendingIndices = [...plan.toRemoveIndices].sort((a, b) => b - a);
+  const removedRefs = new Set<string>();
   for (const idx of descendingIndices) {
+    const page = typeof srcDoc.getPage === "function" ? srcDoc.getPage(idx) : null;
+    if (page?.ref && typeof page.ref.objectNumber === "number") {
+      removedRefs.add(refKey(page.ref));
+    }
     srcDoc.removePage(idx);
   }
+
+  pruneUnreachablePdfObjects(srcDoc, removedRefs);
 
   options.onProgress?.(80);
 
