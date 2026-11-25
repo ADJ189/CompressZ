@@ -100,7 +100,7 @@ import { entryError } from "../lib/engineError";
   }
 
   function togglePageRemoval(index0Based: number) {
-    if (isFileLoading || !totalPages) return;
+    if (!totalPages) return;
     removeRangeError = null;
     const next = new Set(pagesToRemoveSet);
     if (next.has(index0Based)) {
@@ -423,15 +423,18 @@ import { entryError } from "../lib/engineError";
     TOOLS.find((t) => t.id === activeTool) || TOOLS[0]
   );
 
+  interface PdfJsPageHandle {
+    getViewport: (opts: { scale: number }) => { width: number; height: number };
+    render: (opts: {
+      canvasContext: CanvasRenderingContext2D;
+      viewport: { width: number; height: number };
+    }) => { promise: Promise<void> };
+    cleanup?: () => void;
+  }
+
   interface PdfJsDocHandle {
     numPages: number;
-    getPage: (pageNumber: number) => Promise<{
-      getViewport: (opts: { scale: number }) => { width: number; height: number };
-      render: (opts: {
-        canvasContext: CanvasRenderingContext2D;
-        viewport: { width: number; height: number };
-      }) => { promise: Promise<void> };
-    }>;
+    getPage: (pageNumber: number) => Promise<PdfJsPageHandle>;
     destroy?: () => Promise<void>;
   }
 
@@ -457,11 +460,13 @@ import { entryError } from "../lib/engineError";
     mySeq: number,
   ) {
     if (mySeq !== loadSeq || pageThumbnails[pageIndex0]) return;
+    let p: PdfJsPageHandle | null = null;
+    let canvas: HTMLCanvasElement | null = null;
     try {
-      const p = await doc.getPage(pageIndex0 + 1);
+      p = await doc.getPage(pageIndex0 + 1);
       if (mySeq !== loadSeq) return;
       const vp = p.getViewport({ scale: 0.25 });
-      const canvas = document.createElement("canvas");
+      canvas = document.createElement("canvas");
       canvas.width = Math.max(1, Math.round(vp.width));
       canvas.height = Math.max(1, Math.round(vp.height));
       const ctx = canvas.getContext("2d");
@@ -471,6 +476,18 @@ import { entryError } from "../lib/engineError";
       pageThumbnails[pageIndex0] = canvas.toDataURL("image/jpeg", 0.7);
     } catch (thumbErr) {
       console.warn(`[PdfSuite] Thumbnail render error on page ${pageIndex0 + 1}:`, thumbErr);
+    } finally {
+      if (canvas) {
+        canvas.width = 0;
+        canvas.height = 0;
+      }
+      if (p && typeof p.cleanup === "function") {
+        try {
+          p.cleanup();
+        } catch {
+          // Ignored
+        }
+      }
     }
   }
 
