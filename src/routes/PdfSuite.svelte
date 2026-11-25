@@ -42,7 +42,7 @@
   import { formatBytes } from "../lib/types";
 import { entryError } from "../lib/engineError";
   import { toast } from "../toast";
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { navigate } from "../router";
   import MacIcon from "../components/MacIcon.svelte";
   import ToolCard from "../components/ToolCard.svelte";
@@ -423,9 +423,127 @@ import { entryError } from "../lib/engineError";
     TOOLS.find((t) => t.id === activeTool) || TOOLS[0]
   );
 
+  interface PdfJsDocHandle {
+    numPages: number;
+    getPage: (pageNumber: number) => Promise<{
+      getViewport: (opts: { scale: number }) => { width: number; height: number };
+      render: (opts: {
+        canvasContext: CanvasRenderingContext2D;
+        viewport: { width: number; height: number };
+      }) => { promise: Promise<void> };
+    }>;
+    destroy?: () => Promise<void>;
+  }
+
   let loadSeq = 0;
+  let thumbPdfDoc: PdfJsDocHandle | null = null;
+  let thumbQueue: number[] = [];
+  const requestedThumbPages = new Set<number>();
+  let isDrainingThumbs = false;
+
+  async function releaseThumbDoc() {
+    thumbQueue = [];
+    requestedThumbPages.clear();
+    const doc = thumbPdfDoc;
+    thumbPdfDoc = null;
+    if (doc && typeof doc.destroy === "function") {
+      await doc.destroy().catch(() => {});
+    }
+  }
+
+  async function renderThumbnailForPage(
+    doc: PdfJsDocHandle,
+    pageIndex0: number,
+    mySeq: number,
+  ) {
+    if (mySeq !== loadSeq || pageThumbnails[pageIndex0]) return;
+    try {
+      const p = await doc.getPage(pageIndex0 + 1);
+      if (mySeq !== loadSeq) return;
+      const vp = p.getViewport({ scale: 0.25 });
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(vp.width));
+      canvas.height = Math.max(1, Math.round(vp.height));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      await p.render({ canvasContext: ctx, viewport: vp }).promise;
+      if (mySeq !== loadSeq) return;
+      pageThumbnails[pageIndex0] = canvas.toDataURL("image/jpeg", 0.7);
+    } catch (thumbErr) {
+      console.warn(`[PdfSuite] Thumbnail render error on page ${pageIndex0 + 1}:`, thumbErr);
+    }
+  }
+
+  async function drainThumbnailQueue() {
+    if (isDrainingThumbs) return;
+    isDrainingThumbs = true;
+    try {
+      while (thumbQueue.length > 0) {
+        const mySeq = loadSeq;
+        if (!thumbPdfDoc && isFileLoading) break;
+        const idx = thumbQueue.shift()!;
+        if (pageThumbnails[idx] || idx < 0 || idx >= totalPages) continue;
+        if (!thumbPdfDoc && pdfBytes) {
+          const opened = (await openPdfDocument(pdfBytes)) as PdfJsDocHandle;
+          if (mySeq !== loadSeq) {
+            if (typeof opened.destroy === "function") {
+              await opened.destroy().catch(() => {});
+            }
+            break;
+          }
+          thumbPdfDoc = opened;
+        }
+        if (!thumbPdfDoc || mySeq !== loadSeq) break;
+        await renderThumbnailForPage(thumbPdfDoc, idx, mySeq);
+      }
+    } catch (err) {
+      console.warn("[PdfSuite] Lazy thumbnail queue error:", err);
+    } finally {
+      isDrainingThumbs = false;
+      if (thumbQueue.length > 0 && thumbPdfDoc) {
+        void drainThumbnailQueue();
+      }
+    }
+  }
+
+  function requestPageThumbnail(pageIndex0: number) {
+    if (pageIndex0 < 0 || pageIndex0 >= totalPages) return;
+    if (pageThumbnails[pageIndex0] || requestedThumbPages.has(pageIndex0)) return;
+    requestedThumbPages.add(pageIndex0);
+    thumbQueue.push(pageIndex0);
+    void drainThumbnailQueue();
+  }
+
+  function observeThumbVisibility(node: HTMLElement, pageIndex0: number) {
+    if (pageIndex0 < 24 || pageThumbnails[pageIndex0]) return {};
+    if (typeof IntersectionObserver === "undefined") {
+      requestPageThumbnail(pageIndex0);
+      return {};
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            requestPageThumbnail(pageIndex0);
+            observer.unobserve(node);
+            break;
+          }
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(node);
+    return {
+      destroy() {
+        observer.disconnect();
+      },
+    };
+  }
+
   async function loadFile(file: File) {
     const mySeq = ++loadSeq;
+    await releaseThumbDoc();
+    if (mySeq !== loadSeq) return;
     selectedFile = file;
     isFileLoading = true;
     totalPages = 0;
@@ -451,14 +569,14 @@ import { entryError } from "../lib/engineError";
     metaStripAll = false;
     dirtyMetaFields.clear();
 
-    let pdfJs: any = null;
+    let pdfJs: PdfJsDocHandle | null = null;
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
       if (mySeq !== loadSeq) return;
       // Preserve raw bytes immediately so repair & unlock can run even if preview/inspection fails
       pdfBytes = bytes;
 
-      pdfJs = await openPdfDocument(bytes);
+      pdfJs = (await openPdfDocument(bytes)) as PdfJsDocHandle;
       if (mySeq !== loadSeq) return;
       totalPages = pdfJs.numPages;
 
@@ -469,23 +587,12 @@ import { entryError } from "../lib/engineError";
         rotation: 0,
       }));
 
-      // Generate thumbnails for the first 24 pages (preview errors must not wipe opened page count)
-      for (let i = 1; i <= Math.min(totalPages, 24); i++) {
+      // Generate thumbnails eagerly for the first 24 pages; pages 25+ render lazily via IntersectionObserver
+      const eagerCount = Math.min(totalPages, 24);
+      for (let i = 0; i < eagerCount; i++) {
         if (mySeq !== loadSeq) return;
-        try {
-          const p = await pdfJs.getPage(i);
-          if (mySeq !== loadSeq) return;
-          const vp = p.getViewport({ scale: 0.25 });
-          const canvas = document.createElement("canvas");
-          canvas.width = Math.round(vp.width);
-          canvas.height = Math.round(vp.height);
-          const ctx = canvas.getContext("2d")!;
-          await p.render({ canvasContext: ctx, viewport: vp }).promise;
-          if (mySeq !== loadSeq) return;
-          pageThumbnails[i - 1] = canvas.toDataURL("image/jpeg", 0.7);
-        } catch (thumbErr) {
-          console.warn(`[PdfSuite] Thumbnail render error on page ${i}:`, thumbErr);
-        }
+        requestedThumbPages.add(i);
+        await renderThumbnailForPage(pdfJs, i, mySeq);
       }
 
       // Check form fields (may fail on owner-encrypted PDFs; keep preview/unlock usable)
@@ -515,6 +622,14 @@ import { entryError } from "../lib/engineError";
         }
       } catch (mErr) {
         console.warn("[PdfSuite] Metadata inspection error:", mErr);
+      }
+
+      if (mySeq === loadSeq && totalPages > 24 && pdfJs) {
+        thumbPdfDoc = pdfJs;
+        pdfJs = null;
+        if (thumbQueue.length > 0) {
+          void drainThumbnailQueue();
+        }
       }
     } catch (err) {
       if (mySeq === loadSeq) {
@@ -954,6 +1069,11 @@ import { entryError } from "../lib/engineError";
     applyStagedFile();
   });
 
+  onDestroy(() => {
+    loadSeq++;
+    void releaseThumbDoc();
+  });
+
   $effect(() => {
     // Keep mounted page reactive to route navigation & staged files
     const unsub = currentRoute.subscribe((r) => {
@@ -1061,6 +1181,7 @@ import { entryError } from "../lib/engineError";
               disabled={isProcessing}
               onclick={() => {
                 loadSeq++;
+                void releaseThumbDoc();
                 selectedFile = null;
                 pdfBytes = null;
                 totalPages = 0;
@@ -1175,6 +1296,7 @@ import { entryError } from "../lib/engineError";
                 pages={pageSpecs}
                 thumbnails={pageThumbnails}
                 onUpdate={(up) => (pageSpecs = up)}
+                onNeedThumbnail={(idx) => requestPageThumbnail(idx)}
               />
               <div class="cz-action-footer">
                 <button
@@ -1375,6 +1497,7 @@ import { entryError } from "../lib/engineError";
                     tabindex="0"
                     aria-pressed={isRemoved}
                     aria-label="Page {idx + 1}, {isRemoved ? 'marked for removal' : 'kept'}"
+                    use:observeThumbVisibility={idx}
                     onclick={() => togglePageRemoval(idx)}
                     onkeydown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
