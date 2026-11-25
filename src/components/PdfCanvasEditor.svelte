@@ -692,19 +692,21 @@
   }
 
   .cz-studio-toolbar {
-    height: 52px;
+    min-height: 52px;
     background: var(--surface);
     border-bottom: 1px solid var(--border);
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    padding: 0 1rem;
-    gap: 0.75rem;
+    padding: 0.45rem 0.75rem;
+    gap: 0.5rem 0.75rem;
     z-index: 10;
   }
 
   .cz-studio-tool-group {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 0.35rem;
   }
@@ -768,6 +770,7 @@
 
   .cz-studio-thumbnails {
     width: 120px;
+    flex-shrink: 0;
     background: var(--surface2);
     border-right: 1px solid var(--border);
     padding: 0.75rem 0.5rem;
@@ -821,16 +824,19 @@
 
   .cz-studio-canvas-wrap {
     flex: 1;
+    min-width: 0;
     overflow: auto;
     background: var(--bg2);
     display: flex;
     align-items: flex-start;
-    justify-content: center;
+    justify-content: flex-start;
     padding: 2rem;
   }
 
   .cz-canvas-layer-stack {
     position: relative;
+    flex-shrink: 0;
+    margin: 0 auto;
     box-shadow: var(--shadow-xl);
     border-radius: 4px;
     overflow: hidden;
@@ -898,5 +904,16 @@
     align-items: center;
     justify-content: center;
     z-index: 1000;
+  }
+
+  @media (max-width: 640px) {
+    .cz-studio-thumbnails {
+      width: 72px;
+      padding: 0.5rem 0.35rem;
+    }
+
+    .cz-studio-canvas-wrap {
+      padding: 0.75rem;
+    }
   }
 </style>
