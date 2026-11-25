@@ -2,13 +2,16 @@
  * pageNumbersPdf.test.ts — Unit tests for PDF page numbering and Bates stamping logic.
  */
 
-import { assertEquals } from "./assert.ts";
+import { assertEquals, assertThrows, assertRejects } from "./assert.ts";
 import {
   toRomanNumeral,
   formatPageNumber,
   calculateNumberPosition,
+  calculateRotatedNumberPlacement,
   parseTargetPages,
+  applyPdfPageNumbers,
 } from "../src/lib/pdfTools/pageNumbersPdf.ts";
+import { setPdfLibForTesting, resetPdfLibForTesting } from "../src/lib/pdfLibs.ts";
 
 Deno.test("pageNumbers: toRomanNumeral converts integers accurately", () => {
   assertEquals(toRomanNumeral(1), "I");
@@ -174,5 +177,117 @@ Deno.test("pageNumbers: parseTargetPages resolves ranges and keywords", () => {
 
   // Out of bounds clamped
   assertEquals(parseTargetPages("1-99", 3), [0, 1, 2]);
-  assertEquals(parseTargetPages("0", 3), []);
+  assertEquals(parseTargetPages("99", 3), []);
+
+  // Invalid / non-positive tokens throw visibly (both wholly invalid and mixed)
+  assertThrows(() => parseTargetPages("0", 3), "Page numbers must be 1 or greater");
+  assertThrows(() => parseTargetPages("abc", 5), "Unrecognized page range token");
+  assertThrows(() => parseTargetPages("-3", 5), "Unrecognized page range token");
+  assertThrows(() => parseTargetPages("1, abc, 3", 5), "Unrecognized page range token");
+  assertThrows(() => parseTargetPages("2-4, xyz", 5), "Unrecognized page range token");
+  assertThrows(() => parseTargetPages("5-2", 5), "start page cannot exceed end page");
+});
+
+Deno.test("pageNumbers: calculateRotatedNumberPlacement maps visual anchors and text angles for 0, 90, 180, 270", () => {
+  const box = { x: 10, y: 20, width: 600, height: 800 };
+  const textW = 50;
+  const textH = 10;
+  const mx = 30;
+  const my = 40;
+
+  // 0 degrees
+  const p0 = calculateRotatedNumberPlacement(box, 0, textW, textH, "bottom-center", mx, my);
+  assertEquals(p0, { x: 10 + (600 - 50) / 2, y: 20 + 40, textAngle: 0 });
+
+  // 90 degrees CW: visual width is 800, visual height is 600
+  const p90BottomCenter = calculateRotatedNumberPlacement(box, 90, textW, textH, "bottom-center", mx, my);
+  assertEquals(p90BottomCenter, {
+    x: 10 + 600 - 40,
+    y: 20 + (800 - 50) / 2,
+    textAngle: 90,
+  });
+  const p90TopLeft = calculateRotatedNumberPlacement(box, 90, textW, textH, "top-left", mx, my);
+  assertEquals(p90TopLeft, {
+    x: 10 + 600 - (600 - 40 - 10),
+    y: 20 + 30,
+    textAngle: 90,
+  });
+
+  // 180 degrees CW
+  const p180BottomCenter = calculateRotatedNumberPlacement(box, 180, textW, textH, "bottom-center", mx, my);
+  assertEquals(p180BottomCenter, {
+    x: 10 + 600 - (600 - 50) / 2,
+    y: 20 + 800 - 40,
+    textAngle: 180,
+  });
+  const p180TopRight = calculateRotatedNumberPlacement(box, 180, textW, textH, "top-right", mx, my);
+  assertEquals(p180TopRight, {
+    x: 10 + 600 - (600 - 30 - 50),
+    y: 20 + 800 - (800 - 40 - 10),
+    textAngle: 180,
+  });
+
+  // 270 degrees CW: visual width is 800, visual height is 600
+  const p270BottomCenter = calculateRotatedNumberPlacement(box, 270, textW, textH, "bottom-center", mx, my);
+  assertEquals(p270BottomCenter, {
+    x: 10 + 40,
+    y: 20 + 800 - (800 - 50) / 2,
+    textAngle: 270,
+  });
+  const p270BottomRight = calculateRotatedNumberPlacement(box, 270, textW, textH, "bottom-right", mx, my);
+  assertEquals(p270BottomRight, {
+    x: 10 + 40,
+    y: 20 + 800 - (800 - 30 - 50),
+    textAngle: 270,
+  });
+});
+
+Deno.test("pageNumbers: applyPdfPageNumbers rejects invalid/empty ranges and passes rotation to drawText", async () => {
+  const drawn: Array<{ text: string; x: number; y: number; rotate?: number }> = [];
+  const mockLib = {
+    StandardFonts: { Helvetica: "Helvetica", TimesRoman: "TimesRoman", Courier: "Courier" },
+    rgb: (r: number, g: number, b: number) => ({ r, g, b }),
+    degrees: (a: number) => ({ angle: a }),
+    PDFDocument: {
+      load: async () => ({
+        isEncrypted: false,
+        getPageCount: () => 2,
+        embedFont: async () => ({
+          widthOfTextAtSize: () => 40,
+          heightAtSize: () => 10,
+        }),
+        getPage: (idx: number) => ({
+          getCropBox: () => ({ x: 0, y: 0, width: 600, height: 800 }),
+          getRotation: () => ({ angle: idx === 0 ? 90 : 270 }),
+          drawText: (text: string, opts: { x: number; y: number; rotate?: { angle: number } }) => {
+            drawn.push({ text, x: opts.x, y: opts.y, rotate: opts.rotate?.angle });
+          },
+        }),
+        save: async () => new Uint8Array([1, 2, 3]),
+      }),
+    },
+  };
+
+  setPdfLibForTesting(mockLib);
+  try {
+    await assertRejects(
+      () => applyPdfPageNumbers(new Uint8Array([1]), { pageRange: "invalid" }),
+      "Unrecognized page range token",
+    );
+    await assertRejects(
+      () => applyPdfPageNumbers(new Uint8Array([1]), { pageRange: "1, bad" }),
+      "Unrecognized page range token",
+    );
+    await assertRejects(
+      () => applyPdfPageNumbers(new Uint8Array([1]), { pageRange: "99" }),
+      "No valid pages matched",
+    );
+
+    await applyPdfPageNumbers(new Uint8Array([1]), { pageRange: "all", position: "bottom-center" });
+    assertEquals(drawn.length, 2);
+    assertEquals(drawn[0].rotate, 90);
+    assertEquals(drawn[1].rotate, 270);
+  } finally {
+    resetPdfLibForTesting();
+  }
 });

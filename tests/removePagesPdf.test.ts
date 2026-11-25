@@ -144,6 +144,56 @@ interface MockDocState {
 }
 
 function createMockPdfDocument(state: MockDocState) {
+  interface MockRef {
+    objectNumber: number;
+    generationNumber: number;
+  }
+  interface MockIndirectObj {
+    entries?: () => [string, unknown][];
+    dict?: { entries: () => unknown[] };
+    text?: string;
+  }
+  const indirectObjects = new Map<string, MockIndirectObj>();
+  const refFor = (id: number): MockRef => ({ objectNumber: id, generationNumber: 0 });
+  const rootRef = refFor(1);
+  const pagesRef = refFor(2);
+  const infoRef = refFor(3);
+
+  const rebuildTree = () => {
+    indirectObjects.clear();
+    const kidRefs: MockRef[] = [];
+    let nextId = 10;
+    const pagesDict: MockIndirectObj = {
+      entries: () => [
+        ["Kids", { asArray: () => kidRefs }],
+      ],
+    };
+    const rootDict: MockIndirectObj = {
+      entries: () => [["Pages", pagesRef]],
+    };
+    const infoDict: MockIndirectObj = {
+      entries: () => [["Title", state.title]],
+    };
+    indirectObjects.set("1:0", rootDict);
+    indirectObjects.set("2:0", pagesDict);
+    indirectObjects.set("3:0", infoDict);
+
+    for (const p of state.pages) {
+      const pRef = refFor(nextId++);
+      const cRef = refFor(nextId++);
+      (p as MockPage & { ref?: MockRef }).ref = pRef;
+      kidRefs.push(pRef);
+      indirectObjects.set(`${pRef.objectNumber}:0`, {
+        entries: () => [["Contents", cRef]],
+      });
+      indirectObjects.set(`${cRef.objectNumber}:0`, {
+        dict: { entries: () => [] },
+        text: p.content,
+      });
+    }
+  };
+  rebuildTree();
+
   return {
     isEncrypted: state.isEncrypted,
     getPageCount: () => state.pages.length,
@@ -154,8 +204,33 @@ function createMockPdfDocument(state: MockDocState) {
     getPages: () => [...state.pages],
     getPage: (idx: number) => state.pages[idx],
     removePage: (idx: number) => {
+      const [removed] = state.pages.splice(idx, 1);
       state.removedIndices.push(idx);
-      state.pages.splice(idx, 1);
+      // Remove from Kids in Pages tree (just like pdf-lib removePage leaves page/contents orphaned)
+      const pagesDict = indirectObjects.get("2:0");
+      if (pagesDict?.entries && removed) {
+        const removedRef = (removed as MockPage & { ref?: MockRef }).ref;
+        if (removedRef) {
+          const kidsWrapper = pagesDict.entries()[0][1] as { asArray: () => MockRef[] };
+          const kidsEntry = kidsWrapper.asArray();
+          const kIdx = kidsEntry.findIndex(
+            (r) => r.objectNumber === removedRef.objectNumber,
+          );
+          if (kIdx >= 0) kidsEntry.splice(kIdx, 1);
+        }
+      }
+    },
+    context: {
+      trailerInfo: { Root: rootRef, Info: infoRef },
+      lookup: (ref: MockRef) => indirectObjects.get(`${ref.objectNumber}:${ref.generationNumber ?? 0}`),
+      enumerateIndirectObjects: () =>
+        Array.from(indirectObjects.entries()).map(([k, v]) => {
+          const [objNum, genNum] = k.split(":").map(Number);
+          return [refFor(objNum), v, genNum] as [MockRef, MockIndirectObj, number];
+        }),
+      delete: (ref: MockRef) => {
+        indirectObjects.delete(`${ref.objectNumber}:${ref.generationNumber ?? 0}`);
+      },
     },
     getForm: () => ({
       getFields: () => state.formFields,
@@ -167,7 +242,13 @@ function createMockPdfDocument(state: MockDocState) {
       },
     }),
     save: async () => {
-      return new TextEncoder().encode(JSON.stringify(state));
+      const serialized = {
+        ...state,
+        retainedIndirectObjects: Array.from(indirectObjects.values())
+          .map((v) => v.text)
+          .filter(Boolean),
+      };
+      return new TextEncoder().encode(JSON.stringify(serialized));
     },
   };
 }
@@ -312,6 +393,45 @@ Deno.test("removePagesPdf: removePagesFromPdf rejects encrypted PDFs with clear 
       },
       "encrypted",
     );
+  } finally {
+    resetPdfLibForTesting();
+  }
+});
+
+Deno.test("removePagesPdf: pruned indirect objects exclude removed page unique text from output bytes", async () => {
+  const uniqueSecret = "UNIQUE_CONFIDENTIAL_PAGE2_TOKEN_98765";
+  const initialDocState: MockDocState = {
+    title: "Secret Purge Test",
+    author: "QA",
+    subject: "Pruning",
+    bookmarks: [],
+    isEncrypted: false,
+    formFlattened: false,
+    formFields: [],
+    pages: [
+      { pageNum: 1, content: "Retained Page 1 Text" },
+      { pageNum: 2, content: uniqueSecret },
+      { pageNum: 3, content: "Retained Page 3 Text" },
+    ],
+    removedIndices: [],
+  };
+
+  const initialBytes = new TextEncoder().encode(JSON.stringify(initialDocState));
+  const mockLib = createMockPdfLib();
+  setPdfLibForTesting(mockLib);
+
+  try {
+    const result = await removePagesFromPdf(initialBytes, {
+      pagesToRemove: "2",
+    });
+
+    const rawOutput = new TextDecoder().decode(result.bytes);
+    assertEquals(rawOutput.includes(uniqueSecret), false);
+    assertEquals(rawOutput.includes("Retained Page 1 Text"), true);
+    assertEquals(rawOutput.includes("Retained Page 3 Text"), true);
+
+    const reopened = await mockLib.PDFDocument.load(result.bytes);
+    assertEquals(reopened.getPageCount(), 2);
   } finally {
     resetPdfLibForTesting();
   }
