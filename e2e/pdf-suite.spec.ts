@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import {
   makePdf,
+  makeMultiPagePdf,
   makeTruncatedPdf,
   upload,
   triggerDownload,
@@ -16,37 +17,14 @@ let fixtures: {
   truncated: string;
 };
 
-function makeTwoPagePdf(): Buffer {
-  const c1 = "BT /F1 24 Tf 72 720 Td (Page One) Tj ET";
-  const c2 = "BT /F1 24 Tf 72 720 Td (Page Two) Tj ET";
-  const objects = [
-    "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 7 0 R >> >> /Contents 5 0 R >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 7 0 R >> >> /Contents 6 0 R >>",
-    `<< /Length ${c1.length} >>\nstream\n${c1}\nendstream`,
-    `<< /Length ${c2.length} >>\nstream\n${c2}\nendstream`,
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-  ];
-  let out = "%PDF-1.4\n";
-  const offsets: number[] = [];
-  objects.forEach((body, i) => {
-    offsets.push(out.length);
-    out += `${i + 1} 0 obj\n${body}\nendobj\n`;
-  });
-  const startxref = out.length;
-  out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  for (const offset of offsets) {
-    out += `${String(offset).padStart(10, "0")} 00000 n \n`;
-  }
-  out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${startxref}\n%%EOF\n`;
-  return Buffer.from(out, "latin1");
-}
-
 test.beforeAll(async () => {
   fixtures = {
     pdf: createE2eFixture("pdf-suite-e2e", "suite-sample.pdf", makePdf("PDF Suite Test Document")),
-    twoPagePdf: createE2eFixture("pdf-suite-e2e", "suite-two-page.pdf", makeTwoPagePdf()),
+    twoPagePdf: createE2eFixture(
+      "pdf-suite-e2e",
+      "suite-two-page.pdf",
+      makeMultiPagePdf(["Page One", "Page Two"]),
+    ),
     truncated: createE2eFixture("pdf-suite-e2e", "corrupt-sample.pdf", makeTruncatedPdf()),
   };
 });

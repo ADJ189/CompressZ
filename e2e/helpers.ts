@@ -2,15 +2,25 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Download, Page } from "@playwright/test";
 
-/** Shared minimal PDF generator for e2e tests */
-export function makePdf(text = "CompressZ sample page"): Buffer {
-  const content = `BT /F1 24 Tf 72 720 Td (${text}) Tj ET`;
+/** Shared minimal multi-page PDF generator for e2e tests */
+export function makeMultiPagePdf(pageTexts: string[]): Buffer {
+  const count = pageTexts.length;
+  const fontObjNum = 3 + count * 2;
+  const kids = pageTexts.map((_, i) => `${3 + i} 0 R`).join(" ");
+  const pageObjs = pageTexts.map(
+    (_, i) =>
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] ` +
+      `/Resources << /Font << /F1 ${fontObjNum} 0 R >> >> /Contents ${3 + count + i} 0 R >>`,
+  );
+  const contentObjs = pageTexts.map((text) => {
+    const content = `BT /F1 24 Tf 72 720 Td (${text}) Tj ET`;
+    return `<< /Length ${content.length} >>\nstream\n${content}\nendstream`;
+  });
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] " +
-      "/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
-    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+    `<< /Type /Pages /Kids [${kids}] /Count ${count} >>`,
+    ...pageObjs,
+    ...contentObjs,
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
   ];
 
@@ -27,6 +37,11 @@ export function makePdf(text = "CompressZ sample page"): Buffer {
   }
   out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${startxref}\n%%EOF\n`;
   return Buffer.from(out, "latin1");
+}
+
+/** Shared minimal single-page PDF generator for e2e tests */
+export function makePdf(text = "CompressZ sample page"): Buffer {
+  return makeMultiPagePdf([text]);
 }
 
 /** Truncated PDF fixture missing xref and trailer */
