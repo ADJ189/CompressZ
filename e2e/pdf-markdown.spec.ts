@@ -20,12 +20,14 @@ test.beforeAll(async () => {
 });
 
 test.describe("PDF to Markdown extractor", () => {
-  let getErrors: () => string[];
+  let getErrors: (() => string[]) | undefined;
   test.beforeEach(({ page }) => {
     getErrors = createPageErrorCollector(page);
   });
   test.afterEach(() => {
-    expect(getErrors(), "uncaught exception in the page").toEqual([]);
+    if (getErrors) {
+      expect(getErrors(), "uncaught exception in the page").toEqual([]);
+    }
   });
 
   test("PDF to Markdown: extracts text and downloads standalone .md", async ({ page }) => {
