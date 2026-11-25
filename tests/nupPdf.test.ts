@@ -210,3 +210,70 @@ Deno.test("nup: createNupPdf passes CropBox bounding box to embedPage and preser
     resetPdfLibForTesting();
   }
 });
+
+Deno.test("nup: planNupGrid keeps all slots inside tight sheets when margins/spacing exceed bounds", () => {
+  const tight = planNupGrid(9, "source", "portrait", 40, 20, 60, 80);
+  for (const slot of tight.slots) {
+    assertEquals(slot.x >= 0, true);
+    assertEquals(slot.y >= 0, true);
+    assertEquals(slot.x + slot.width <= tight.sheetWidth + 1e-6, true);
+    assertEquals(slot.y + slot.height <= tight.sheetHeight + 1e-6, true);
+  }
+
+  // Standard A4 4-up remains unchanged
+  const standard = planNupGrid(4, "a4", "portrait", 24, 16);
+  const expectedSlotW = (STANDARD_SHEET_SIZES.a4.width - 48 - 16) / 2;
+  assertEquals(standard.slots[0].width, expectedSlotW);
+});
+
+Deno.test("nup: createNupPdf flattens AcroForm fields before embedding and skips blank pages lacking /Contents", async () => {
+  let flattenCount = 0;
+  const embeddedIndices: number[] = [];
+
+  const mockLib = {
+    PDFName: { of: (name: string) => name },
+    rgb: (r: number, g: number, b: number) => ({ r, g, b }),
+    degrees: (a: number) => ({ angle: a }),
+    PDFDocument: {
+      load: async () => ({
+        isEncrypted: false,
+        getPageCount: () => 2,
+        getForm: () => ({
+          getFields: () => [{ name: "Signer" }],
+          flatten: () => {
+            flattenCount++;
+          },
+        }),
+        getPage: (idx: number) => ({
+          _idx: idx,
+          getCropBox: () => ({ x: 0, y: 0, width: 300, height: 400 }),
+          getRotation: () => ({ angle: 0 }),
+          node: {
+            // Page 0 has content; Page 1 is a blank page with no /Contents stream
+            Contents: () => (idx === 0 ? { size: () => 1 } : undefined),
+          },
+        }),
+      }),
+      create: async () => ({
+        addPage: () => ({
+          drawPage: () => {},
+          drawRectangle: () => {},
+        }),
+        embedPage: async (page: { _idx: number }) => {
+          embeddedIndices.push(page._idx);
+          return { width: 300, height: 400 };
+        },
+        save: async () => new Uint8Array([1, 2, 3]),
+      }),
+    },
+  };
+
+  setPdfLibForTesting(mockLib);
+  try {
+    await createNupPdf(new Uint8Array([1]), { pagesPerSheet: 2, drawBorder: true });
+    assertEquals(flattenCount, 1);
+    assertEquals(embeddedIndices, [0]);
+  } finally {
+    resetPdfLibForTesting();
+  }
+});

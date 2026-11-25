@@ -6,6 +6,7 @@ import { assertEquals } from "./assert.ts";
 import {
   sanitizeMetadataString,
   formatPdfDate,
+  parseMetadataKeywords,
   updatePdfMetadata,
   readPdfMetadata,
 } from "../src/lib/pdfTools/metadataPdf.ts";
@@ -129,6 +130,57 @@ Deno.test("metadata: stripAll deletes Info fields, dates, custom entries, and XM
     assertEquals(readBack.producer, undefined);
     assertEquals(readBack.creationDate, undefined);
     assertEquals(readBack.modificationDate, undefined);
+  } finally {
+    resetPdfLibForTesting();
+  }
+});
+
+Deno.test("metadata: parseMetadataKeywords preserves multi-word comma-separated phrases across save and read", async () => {
+  assertEquals(parseMetadataKeywords("annual report, Q4; tax filing"), [
+    "annual report",
+    "Q4",
+    "tax filing",
+  ]);
+  assertEquals(parseMetadataKeywords("   "), []);
+
+  let storedKeywords: string | undefined;
+  const mockLib = {
+    PDFName: { of: (name: string) => name },
+    PDFDocument: {
+      load: async () => ({
+        isEncrypted: false,
+        getPageCount: () => 1,
+        getPages: () => [],
+        getTitle: () => "",
+        getAuthor: () => "",
+        getSubject: () => "",
+        getKeywords: () => storedKeywords,
+        getCreator: () => "",
+        getProducer: () => "",
+        getCreationDate: () => undefined,
+        getModificationDate: () => undefined,
+        setTitle: () => {},
+        setAuthor: () => {},
+        setSubject: () => {},
+        // Replicate real pdf-lib setKeywords behavior (joins array entries with space)
+        setKeywords: (v: string[]) => {
+          storedKeywords = v.join(" ");
+        },
+        setCreator: () => {},
+        setProducer: () => {},
+        setModificationDate: () => {},
+        save: async () => new Uint8Array([1, 2, 3]),
+      }),
+    },
+  };
+
+  setPdfLibForTesting(mockLib);
+  try {
+    const saved = await updatePdfMetadata(new Uint8Array([1]), {
+      keywords: parseMetadataKeywords("annual report, Q4"),
+    });
+    const reopened = await readPdfMetadata(saved);
+    assertEquals(reopened.keywords, ["annual report", "Q4"]);
   } finally {
     resetPdfLibForTesting();
   }

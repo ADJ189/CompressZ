@@ -173,3 +173,17 @@ Deno.test("markdownPreview: preserves URLs containing asterisks and avoids swall
   const unclosedMath = renderMarkdownToHtml("<math><mi>x</mi>\n\nAfter math paragraph");
   assert(unclosedMath.includes("<p>After math paragraph</p>"), `Unclosed <math> swallowed paragraph: ${unclosedMath}`);
 });
+
+Deno.test("markdownPreview: handles many unclosed html blocks linearly without swallowing trailing markdown", () => {
+  const repeatedUnclosed = Array.from({ length: 1200 }, (_, idx) =>
+    idx % 2 === 0 ? `<table>row-${idx}` : `<math>expr-${idx}`,
+  ).join("\n");
+  const md = `${repeatedUnclosed}\n\n# Final Section\n\nTrailing content stays intact.`;
+  const start = Date.now();
+  const html = renderMarkdownToHtml(md);
+  const elapsedMs = Date.now() - start;
+
+  assert(elapsedMs < 1500, `Expected linear runtime (<1500ms), took ${elapsedMs}ms`);
+  assert(html.includes("<h1>Final Section</h1>"), "Trailing heading must render");
+  assert(html.includes("<p>Trailing content stays intact.</p>"), "Trailing paragraph must render");
+});

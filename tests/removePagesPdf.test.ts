@@ -89,16 +89,16 @@ Deno.test("removePagesPdf: getEvenPageIndices and getOddPageIndices calculate co
   assertEquals(getOddPageIndices(1), [0]);
 });
 
-Deno.test("removePagesPdf: planPageRemoval handles 1-based indexing without collapsing [0, 1]", () => {
-  // Bug fix verification: [0, 1] with zeroBased=false must NOT collapse 0 and 1 to 0.
-  // 0 is invalid in 1-based, page 1 maps to index 0.
+Deno.test("removePagesPdf: planPageRemoval treats Set inputs as 0-based and preserves 1-based default for arrays", () => {
+  // Arrays default to 1-based: 0 is invalid, page 1 maps to index 0.
   const planArray = planPageRemoval(5, [0, 1], false);
   assertEquals(planArray.toRemoveIndices, [0]);
   assertEquals(planArray.remainingIndices, [1, 2, 3, 4]);
 
+  // Set<number> always represents 0-based indices regardless of zeroBased flag
   const planSet = planPageRemoval(5, new Set([0, 1]), false);
-  assertEquals(planSet.toRemoveIndices, [0]);
-  assertEquals(planSet.remainingIndices, [1, 2, 3, 4]);
+  assertEquals(planSet.toRemoveIndices, [0, 1]);
+  assertEquals(planSet.remainingIndices, [2, 3, 4]);
 
   // Valid 1-based pages [1, 3]
   const plan1Based = planPageRemoval(5, [1, 3], false);
@@ -131,6 +131,17 @@ interface MockPage {
   content: string;
 }
 
+interface MockFormWidgetState {
+  pageNum: number; // 1-based page number matching MockPage.pageNum
+}
+
+interface MockFormFieldState {
+  name: string;
+  value: string;
+  isEditable: boolean;
+  widgets?: MockFormWidgetState[];
+}
+
 interface MockDocState {
   title: string;
   author: string;
@@ -138,7 +149,7 @@ interface MockDocState {
   bookmarks: string[];
   isEncrypted: boolean;
   formFlattened: boolean;
-  formFields: { name: string; value: string; isEditable: boolean }[];
+  formFields: MockFormFieldState[];
   pages: MockPage[];
   removedIndices: number[];
 }
@@ -152,47 +163,151 @@ function createMockPdfDocument(state: MockDocState) {
     entries?: () => [string, unknown][];
     dict?: { entries: () => unknown[] };
     text?: string;
+    kind?: "outline" | "field" | "widget";
+    payload?: unknown;
   }
   const indirectObjects = new Map<string, MockIndirectObj>();
   const refFor = (id: number): MockRef => ({ objectNumber: id, generationNumber: 0 });
+  const keyFor = (ref: MockRef) => `${ref.objectNumber}:${ref.generationNumber ?? 0}`;
   const rootRef = refFor(1);
   const pagesRef = refFor(2);
   const infoRef = refFor(3);
+  const outlinesRef = refFor(4);
+  const acroFormRef = refFor(5);
 
   const rebuildTree = () => {
     indirectObjects.clear();
     const kidRefs: MockRef[] = [];
+    const outlineItemRefs: MockRef[] = [];
+    const fieldRefs: MockRef[] = [];
     let nextId = 10;
-    const pagesDict: MockIndirectObj = {
-      entries: () => [
-        ["Kids", { asArray: () => kidRefs }],
-      ],
-    };
-    const rootDict: MockIndirectObj = {
-      entries: () => [["Pages", pagesRef]],
-    };
-    const infoDict: MockIndirectObj = {
-      entries: () => [["Title", state.title]],
-    };
-    indirectObjects.set("1:0", rootDict);
-    indirectObjects.set("2:0", pagesDict);
-    indirectObjects.set("3:0", infoDict);
 
+    const pageRefByNum = new Map<number, MockRef>();
+    const pageAnnotsByNum = new Map<number, MockRef[]>();
     for (const p of state.pages) {
       const pRef = refFor(nextId++);
       const cRef = refFor(nextId++);
-      (p as MockPage & { ref?: MockRef }).ref = pRef;
+      const annots: MockRef[] = [];
+      (p as MockPage & { ref?: MockRef; node?: unknown }).ref = pRef;
+      pageRefByNum.set(p.pageNum, pRef);
+      pageAnnotsByNum.set(p.pageNum, annots);
+      (p as MockPage & { ref?: MockRef; node?: unknown }).node = {
+        Annots: () => ({ asArray: () => annots }),
+      };
       kidRefs.push(pRef);
-      indirectObjects.set(`${pRef.objectNumber}:0`, {
-        entries: () => [["Contents", cRef]],
+      indirectObjects.set(keyFor(pRef), {
+        entries: () => [
+          ["Contents", cRef],
+          ["Annots", { asArray: () => annots }],
+        ],
       });
-      indirectObjects.set(`${cRef.objectNumber}:0`, {
+      indirectObjects.set(keyFor(cRef), {
         dict: { entries: () => [] },
         text: p.content,
       });
     }
+
+    for (const title of state.bookmarks) {
+      const oRef = refFor(nextId++);
+      outlineItemRefs.push(oRef);
+      indirectObjects.set(keyFor(oRef), {
+        kind: "outline",
+        payload: title,
+        entries: () => [["Title", title]],
+      });
+    }
+
+    for (const f of state.formFields) {
+      const fRef = refFor(nextId++);
+      const widgetRefs: MockRef[] = [];
+      const widgetSpecs = f.widgets ?? [
+        { pageNum: state.pages[0]?.pageNum ?? 1 },
+      ];
+      for (const ws of widgetSpecs) {
+        const wRef = refFor(nextId++);
+        const pRef = pageRefByNum.get(ws.pageNum);
+        widgetRefs.push(wRef);
+        if (pRef) {
+          pageAnnotsByNum.get(ws.pageNum)?.push(wRef);
+        }
+        indirectObjects.set(keyFor(wRef), {
+          kind: "widget",
+          payload: { name: f.name, pageNum: ws.pageNum },
+          entries: () => (pRef ? [["P", pRef]] : []),
+        });
+      }
+      fieldRefs.push(fRef);
+      indirectObjects.set(keyFor(fRef), {
+        kind: "field",
+        payload: f,
+        entries: () => [["Kids", { asArray: () => widgetRefs }]],
+      });
+    }
+
+    const pagesDict: MockIndirectObj = {
+      entries: () => [["Kids", { asArray: () => kidRefs }]],
+    };
+    const rootDict: MockIndirectObj = {
+      entries: () => [
+        ["Pages", pagesRef],
+        ...(outlineItemRefs.length > 0 ? ([["Outlines", outlinesRef]] as [string, unknown][]) : []),
+        ...(fieldRefs.length > 0 ? ([["AcroForm", acroFormRef]] as [string, unknown][]) : []),
+      ],
+    };
+    const infoDict: MockIndirectObj = {
+      entries: () => [["Title", state.title]],
+    };
+    indirectObjects.set(keyFor(rootRef), rootDict);
+    indirectObjects.set(keyFor(pagesRef), pagesDict);
+    indirectObjects.set(keyFor(infoRef), infoDict);
+    if (outlineItemRefs.length > 0) {
+      indirectObjects.set(keyFor(outlinesRef), {
+        entries: () => [["Items", { asArray: () => outlineItemRefs }]],
+      });
+    }
+    if (fieldRefs.length > 0) {
+      indirectObjects.set(keyFor(acroFormRef), {
+        entries: () => [["Fields", { asArray: () => fieldRefs }]],
+      });
+    }
   };
   rebuildTree();
+
+  const buildFieldWrapper = (fRef: MockRef) => {
+    const fObj = indirectObjects.get(keyFor(fRef));
+    const fState = fObj?.payload as MockFormFieldState;
+    const kidsEntry = fObj?.entries?.().find(([k]) => k === "Kids")?.[1] as
+      | { asArray: () => MockRef[] }
+      | undefined;
+    const wRefs = kidsEntry?.asArray() ?? [];
+    return {
+      ref: fRef,
+      name: fState.name,
+      value: fState.value,
+      isEditable: fState.isEditable,
+      acroField: {
+        Kids: () => ({
+          size: () => wRefs.length,
+          get: (i: number) => wRefs[i],
+          remove: (i: number) => {
+            wRefs.splice(i, 1);
+          },
+        }),
+        getWidgets: () =>
+          wRefs.map((wRef) => {
+            const wObj = indirectObjects.get(keyFor(wRef));
+            const pRef = wObj?.entries?.().find(([k]) => k === "P")?.[1] as MockRef | undefined;
+            return {
+              ref: wRef,
+              P: () => pRef,
+            };
+          }),
+        removeWidget: (i: number) => {
+          wRefs.splice(i, 1);
+        },
+      },
+    };
+  };
 
   return {
     isEncrypted: state.isEncrypted,
@@ -200,50 +315,95 @@ function createMockPdfDocument(state: MockDocState) {
     getTitle: () => state.title,
     getAuthor: () => state.author,
     getSubject: () => state.subject,
-    getBookmarks: () => [...state.bookmarks],
+    getBookmarks: () =>
+      Array.from(indirectObjects.values())
+        .filter((v) => v.kind === "outline")
+        .map((v) => v.payload as string),
     getPages: () => [...state.pages],
     getPage: (idx: number) => state.pages[idx],
     removePage: (idx: number) => {
       const [removed] = state.pages.splice(idx, 1);
       state.removedIndices.push(idx);
-      // Remove from Kids in Pages tree (just like pdf-lib removePage leaves page/contents orphaned)
       const pagesDict = indirectObjects.get("2:0");
       if (pagesDict?.entries && removed) {
         const removedRef = (removed as MockPage & { ref?: MockRef }).ref;
         if (removedRef) {
           const kidsWrapper = pagesDict.entries()[0][1] as { asArray: () => MockRef[] };
           const kidsEntry = kidsWrapper.asArray();
-          const kIdx = kidsEntry.findIndex(
-            (r) => r.objectNumber === removedRef.objectNumber,
-          );
+          const kIdx = kidsEntry.findIndex((r) => r.objectNumber === removedRef.objectNumber);
           if (kIdx >= 0) kidsEntry.splice(kIdx, 1);
         }
       }
     },
     context: {
       trailerInfo: { Root: rootRef, Info: infoRef },
-      lookup: (ref: MockRef) => indirectObjects.get(`${ref.objectNumber}:${ref.generationNumber ?? 0}`),
+      lookup: (ref: MockRef) => indirectObjects.get(keyFor(ref)),
       enumerateIndirectObjects: () =>
         Array.from(indirectObjects.entries()).map(([k, v]) => {
           const [objNum, genNum] = k.split(":").map(Number);
           return [refFor(objNum), v, genNum] as [MockRef, MockIndirectObj, number];
         }),
       delete: (ref: MockRef) => {
-        indirectObjects.delete(`${ref.objectNumber}:${ref.generationNumber ?? 0}`);
+        indirectObjects.delete(keyFor(ref));
       },
     },
-    getForm: () => ({
-      getFields: () => state.formFields,
-      flatten: () => {
-        state.formFlattened = true;
-        for (const f of state.formFields) {
-          f.isEditable = false;
-        }
-      },
-    }),
+    getForm: () => {
+      const af = indirectObjects.get(keyFor(acroFormRef));
+      const fArr =
+        (af?.entries?.().find(([k]) => k === "Fields")?.[1] as { asArray: () => MockRef[] } | undefined)?.asArray() ??
+        [];
+      return {
+        getFields: () =>
+          fArr
+            .filter((r) => indirectObjects.has(keyFor(r)))
+            .map((r) => buildFieldWrapper(r)),
+        removeField: (field: { ref?: MockRef }) => {
+          if (!field?.ref) return;
+          const idx = fArr.findIndex((r) => r.objectNumber === field.ref!.objectNumber);
+          if (idx >= 0) fArr.splice(idx, 1);
+          indirectObjects.delete(keyFor(field.ref));
+        },
+        flatten: () => {
+          state.formFlattened = true;
+          for (const fRef of fArr) {
+            const obj = indirectObjects.get(keyFor(fRef));
+            if (obj?.kind === "field") {
+              (obj.payload as MockFormFieldState).isEditable = false;
+            }
+          }
+        },
+      };
+    },
     save: async () => {
+      const survivingOutlines = Array.from(indirectObjects.values())
+        .filter((v) => v.kind === "outline")
+        .map((v) => v.payload as string);
+      const af = indirectObjects.get(keyFor(acroFormRef));
+      const fArr =
+        (af?.entries?.().find(([k]) => k === "Fields")?.[1] as { asArray: () => MockRef[] } | undefined)?.asArray() ??
+        [];
+      const survivingFields: MockFormFieldState[] = [];
+      for (const r of fArr) {
+        const fObj = indirectObjects.get(keyFor(r));
+        if (fObj?.kind === "field") {
+          const fState = fObj.payload as MockFormFieldState;
+          const kidsEntry = fObj.entries?.().find(([k]) => k === "Kids")?.[1] as
+            | { asArray: () => MockRef[] }
+            | undefined;
+          const wRefs = kidsEntry?.asArray() ?? [];
+          const survivingWidgets = wRefs
+            .filter((wr) => indirectObjects.has(keyFor(wr)))
+            .map((wr) => {
+              const wPayload = indirectObjects.get(keyFor(wr))?.payload as MockFormWidgetState;
+              return wPayload;
+            });
+          survivingFields.push({ ...fState, widgets: survivingWidgets });
+        }
+      }
       const serialized = {
         ...state,
+        bookmarks: survivingOutlines,
+        formFields: survivingFields,
         retainedIndirectObjects: Array.from(indirectObjects.values())
           .map((v) => v.text)
           .filter(Boolean),
@@ -255,6 +415,7 @@ function createMockPdfDocument(state: MockDocState) {
 
 function createMockPdfLib() {
   return {
+    PDFName: { of: (name: string) => name },
     PDFDocument: {
       load: async (bytes: Uint8Array, _options?: unknown) => {
         const text = new TextDecoder().decode(bytes);
@@ -432,6 +593,61 @@ Deno.test("removePagesPdf: pruned indirect objects exclude removed page unique t
 
     const reopened = await mockLib.PDFDocument.load(result.bytes);
     assertEquals(reopened.getPageCount(), 2);
+  } finally {
+    resetPdfLibForTesting();
+  }
+});
+
+Deno.test("removePagesPdf: removes widgets on deleted pages, prunes dead fields, and preserves retained widgets and outlines", async () => {
+  const initialDocState: MockDocState = {
+    title: "Form & Outline Graph Test",
+    author: "QA",
+    subject: "Widgets",
+    bookmarks: ["Intro", "Details"],
+    isEncrypted: false,
+    formFlattened: false,
+    formFields: [
+      // Lives ONLY on deleted Page 2 -> widget & field must both be removed
+      {
+        name: "DeletedOnlyField",
+        value: "gone",
+        isEditable: true,
+        widgets: [{ pageNum: 2 }],
+      },
+      // Spans Page 2 (deleted) and Page 1 (retained) -> Page 2 widget removed, field & Page 1 widget preserved
+      {
+        name: "SharedField",
+        value: "keep-me",
+        isEditable: true,
+        widgets: [{ pageNum: 2 }, { pageNum: 1 }],
+      },
+    ],
+    pages: [
+      { pageNum: 1, content: "Page 1" },
+      { pageNum: 2, content: "Page 2" },
+    ],
+    removedIndices: [],
+  };
+
+  const initialBytes = new TextEncoder().encode(JSON.stringify(initialDocState));
+  const mockLib = createMockPdfLib();
+  setPdfLibForTesting(mockLib);
+
+  try {
+    const result = await removePagesFromPdf(initialBytes, {
+      pagesToRemove: "2",
+    });
+
+    const reopened = await mockLib.PDFDocument.load(result.bytes);
+    assertEquals(reopened.getPageCount(), 1);
+    assertEquals(reopened.getBookmarks(), ["Intro", "Details"]);
+
+    const fields = reopened.getForm().getFields();
+    assertEquals(fields.length, 1);
+    assertEquals(fields[0].name, "SharedField");
+    assertEquals(fields[0].value, "keep-me");
+    assertEquals(fields[0].isEditable, true);
+    assertEquals(fields[0].acroField.getWidgets().length, 1);
   } finally {
     resetPdfLibForTesting();
   }

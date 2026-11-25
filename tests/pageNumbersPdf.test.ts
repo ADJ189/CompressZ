@@ -10,10 +10,12 @@ import {
   calculateRotatedNumberPlacement,
   parseTargetPages,
   applyPdfPageNumbers,
+  MAX_PAGE_NUMBER_START,
+  MAX_ROMAN_NUMERAL,
 } from "../src/lib/pdfTools/pageNumbersPdf.ts";
 import { setPdfLibForTesting, resetPdfLibForTesting } from "../src/lib/pdfLibs.ts";
 
-Deno.test("pageNumbers: toRomanNumeral converts integers accurately", () => {
+Deno.test("pageNumbers: toRomanNumeral converts integers accurately and bounds out-of-range values", () => {
   assertEquals(toRomanNumeral(1), "I");
   assertEquals(toRomanNumeral(3), "III");
   assertEquals(toRomanNumeral(4), "IV");
@@ -22,8 +24,11 @@ Deno.test("pageNumbers: toRomanNumeral converts integers accurately", () => {
   assertEquals(toRomanNumeral(42), "XLII");
   assertEquals(toRomanNumeral(99), "XCIX");
   assertEquals(toRomanNumeral(2026), "MMXXVI");
+  assertEquals(toRomanNumeral(MAX_ROMAN_NUMERAL), "MMMCMXCIX");
+  assertEquals(toRomanNumeral(MAX_ROMAN_NUMERAL + 1), String(MAX_ROMAN_NUMERAL + 1));
   assertEquals(toRomanNumeral(0), "0");
   assertEquals(toRomanNumeral(-5), "-5");
+  assertEquals(toRomanNumeral(10_000_000), "10000000");
 });
 
 Deno.test("pageNumbers: formatPageNumber generates standard formats", () => {
@@ -287,6 +292,25 @@ Deno.test("pageNumbers: applyPdfPageNumbers rejects invalid/empty ranges and pas
     assertEquals(drawn.length, 2);
     assertEquals(drawn[0].rotate, 90);
     assertEquals(drawn[1].rotate, 270);
+
+    // Enforces startNumber bounds before processing pages
+    await assertRejects(
+      () => applyPdfPageNumbers(new Uint8Array([1]), { startNumber: 0 }),
+      "Start number must be a whole number",
+    );
+    await assertRejects(
+      () => applyPdfPageNumbers(new Uint8Array([1]), { startNumber: MAX_PAGE_NUMBER_START + 1 }),
+      "Start number must be a whole number",
+    );
+
+    // Custom pattern without Roman tokens works at high startNumber cleanly
+    drawn.length = 0;
+    await applyPdfPageNumbers(new Uint8Array([1]), {
+      format: "custom",
+      customPattern: "Doc #{n}",
+      startNumber: 5000,
+    });
+    assertEquals(drawn[0].text, "Doc #5000");
   } finally {
     resetPdfLibForTesting();
   }

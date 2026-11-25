@@ -127,3 +127,19 @@ Deno.test("ocrEngines: overlapping runPrintedOcr jobs serialize worker switching
     globalObj.window = origWindow;
   }
 });
+
+Deno.test("Ocr.svelte: language select includes every supported Tesseract language and ignores resource-tier DPI overrides", async () => {
+  const ocrSvelte = await Deno.readTextFile(
+    new URL("../src/routes/Ocr.svelte", import.meta.url),
+  );
+  for (const lang of TESSERACT_LANGUAGES) {
+    assert(
+      ocrSvelte.includes(`code: "${lang}"`),
+      `Ocr.svelte language selector missing supported language "${lang}"`,
+    );
+  }
+  assert(
+    !ocrSvelte.includes("dpiForTier") && !ocrSvelte.includes("profile.mode"),
+    "Ocr.svelte must keep default renderDpi independent of resource profile.mode",
+  );
+});
