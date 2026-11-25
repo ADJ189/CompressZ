@@ -62,6 +62,69 @@ export function calculateFittedDimensions(
   return { width, height, scale, offsetX, offsetY };
 }
 
+function fitAxisLayout(
+  sheetDim: number,
+  count: number,
+  margin: number,
+  spacing: number,
+): { effMargin: number; effSpacing: number; slotDim: number } {
+  const safeMargin = Math.max(0, margin);
+  const safeSpacing = Math.max(0, spacing);
+  const targetMinTotal = Math.min(sheetDim, count * 10);
+  const overhead = 2 * safeMargin + (count - 1) * safeSpacing;
+  const available = sheetDim - overhead;
+  if (available >= targetMinTotal) {
+    return {
+      effMargin: safeMargin,
+      effSpacing: safeSpacing,
+      slotDim: available / count,
+    };
+  }
+  const maxOverhead = Math.max(0, sheetDim - targetMinTotal);
+  const scale = overhead > 0 ? maxOverhead / overhead : 0;
+  const effMargin = safeMargin * scale;
+  const effSpacing = safeSpacing * scale;
+  const fittedAvailable = Math.max(0, sheetDim - 2 * effMargin - (count - 1) * effSpacing);
+  return {
+    effMargin,
+    effSpacing,
+    slotDim: fittedAvailable / count,
+  };
+}
+
+interface PdfContentsLike {
+  size?: () => number;
+  asArray?: () => unknown[];
+}
+
+interface PdfPageWithNodeLike {
+  node?: {
+    Contents?: () => PdfContentsLike | undefined;
+    get?: (key: unknown) => PdfContentsLike | undefined;
+  };
+}
+
+interface PdfNameFactoryLike {
+  of?: (name: string) => unknown;
+}
+
+function pageHasContents(sourcePage: PdfPageWithNodeLike, PDFName?: PdfNameFactoryLike): boolean {
+  const node = sourcePage?.node;
+  if (!node) return true;
+  let contents: PdfContentsLike | undefined;
+  if (typeof node.Contents === "function") {
+    contents = node.Contents();
+  } else if (typeof node.get === "function" && PDFName?.of) {
+    contents = node.get(PDFName.of("Contents"));
+  } else {
+    return true;
+  }
+  if (!contents) return false;
+  if (typeof contents.size === "function" && contents.size() === 0) return false;
+  if (typeof contents.asArray === "function" && contents.asArray().length === 0) return false;
+  return true;
+}
+
 /**
  * Determine grid layout configuration (rows, cols, sheet dimensions, and slot coordinates).
  */
@@ -111,20 +174,21 @@ export function planNupGrid(
 
   const sheetWidth = isLandscape ? Math.max(baseWidth, baseHeight) : Math.min(baseWidth, baseHeight);
   const sheetHeight = isLandscape ? Math.min(baseWidth, baseHeight) : Math.max(baseWidth, baseHeight);
+  if (sheetWidth <= 0 || sheetHeight <= 0) {
+    throw new Error("Sheet dimensions must be positive for N-Up layout.");
+  }
 
-  const availableW = sheetWidth - 2 * margin - (cols - 1) * spacing;
-  const availableH = sheetHeight - 2 * margin - (rows - 1) * spacing;
-  const slotWidth = Math.max(10, availableW / cols);
-  const slotHeight = Math.max(10, availableH / rows);
+  const xLayout = fitAxisLayout(sheetWidth, cols, margin, spacing);
+  const yLayout = fitAxisLayout(sheetHeight, rows, margin, spacing);
 
   const slots: NupSlot[] = [];
   // PDF origin (0,0) is bottom-left, so rows go from top (row 0) to bottom
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      const x = margin + c * (slotWidth + spacing);
+      const x = xLayout.effMargin + c * (xLayout.slotDim + xLayout.effSpacing);
       // Top-to-bottom reading order: top row has largest Y
-      const y = sheetHeight - margin - (r + 1) * slotHeight - r * spacing;
-      slots.push({ x, y, width: slotWidth, height: slotHeight });
+      const y = sheetHeight - yLayout.effMargin - (r + 1) * yLayout.slotDim - r * yLayout.effSpacing;
+      slots.push({ x, y, width: xLayout.slotDim, height: yLayout.slotDim });
     }
   }
 
@@ -217,7 +281,7 @@ export async function createNupPdf(
   pdfBytes: Uint8Array,
   options: NupOptions = {},
 ): Promise<Uint8Array> {
-  const { PDFDocument, rgb, degrees } = await getPdfLib();
+  const { PDFDocument, PDFName, rgb, degrees } = await getPdfLib();
   const sourceDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
   if (sourceDoc.isEncrypted) {
     throw new Error("The PDF is encrypted with a password. Please unlock or decrypt it in PDF Protect / Unlock before creating N-Up pages.");
@@ -225,6 +289,17 @@ export async function createNupPdf(
   const totalPages = sourceDoc.getPageCount();
 
   if (totalPages === 0) return pdfBytes;
+
+  // Flatten filled AcroForm widget appearances into page content streams before embedding
+  try {
+    const form = typeof sourceDoc.getForm === "function" ? sourceDoc.getForm() : null;
+    const fields = form && typeof form.getFields === "function" ? form.getFields() : [];
+    if (form && fields.length > 0 && typeof form.flatten === "function") {
+      form.flatten();
+    }
+  } catch {
+    // Document has no AcroForm or form flattening is unavailable; preserve existing page streams
+  }
 
   const nUp = options.pagesPerSheet ?? 2;
   const margin = options.margin ?? 24;
@@ -267,41 +342,50 @@ export async function createNupPdf(
       const sourceAngle =
         typeof sourcePage.getRotation === "function" ? sourcePage.getRotation().angle : 0;
 
-      // Embed only the visible CropBox region into output document so clipped content stays clipped
-      const embedded = await outputDoc.embedPage(sourcePage, {
-        left: sourceBox.x,
-        bottom: sourceBox.y,
-        right: sourceBox.x + sourceBox.width,
-        top: sourceBox.y + sourceBox.height,
-      });
-      const embW =
-        typeof embedded?.width === "number" && embedded.width > 0
-          ? embedded.width
-          : sourceBox.width;
-      const embH =
-        typeof embedded?.height === "number" && embedded.height > 0
-          ? embedded.height
-          : sourceBox.height;
+      let borderPlacement = planRotatedNupDraw(
+        sourceBox.width,
+        sourceBox.height,
+        sourceAngle,
+        slot,
+      );
 
-      const placement = planRotatedNupDraw(embW, embH, sourceAngle, slot);
+      if (pageHasContents(sourcePage, PDFName)) {
+        // Embed only the visible CropBox region into output document so clipped content stays clipped
+        const embedded = await outputDoc.embedPage(sourcePage, {
+          left: sourceBox.x,
+          bottom: sourceBox.y,
+          right: sourceBox.x + sourceBox.width,
+          top: sourceBox.y + sourceBox.height,
+        });
+        const embW =
+          typeof embedded?.width === "number" && embedded.width > 0
+            ? embedded.width
+            : sourceBox.width;
+        const embH =
+          typeof embedded?.height === "number" && embedded.height > 0
+            ? embedded.height
+            : sourceBox.height;
 
-      sheet.drawPage(embedded, {
-        x: placement.x,
-        y: placement.y,
-        width: placement.width,
-        height: placement.height,
-        ...(placement.rotateDeg !== 0 && typeof degrees === "function"
-          ? { rotate: degrees(placement.rotateDeg) }
-          : {}),
-      });
+        borderPlacement = planRotatedNupDraw(embW, embH, sourceAngle, slot);
 
-      // Optional subtle hairline border around the mini-page
+        sheet.drawPage(embedded, {
+          x: borderPlacement.x,
+          y: borderPlacement.y,
+          width: borderPlacement.width,
+          height: borderPlacement.height,
+          ...(borderPlacement.rotateDeg !== 0 && typeof degrees === "function"
+            ? { rotate: degrees(borderPlacement.rotateDeg) }
+            : {}),
+        });
+      }
+
+      // Optional subtle hairline border around the mini-page (preserved for blank slots too)
       if (drawBorder) {
         sheet.drawRectangle({
-          x: placement.visualX,
-          y: placement.visualY,
-          width: placement.visualWidth,
-          height: placement.visualHeight,
+          x: borderPlacement.visualX,
+          y: borderPlacement.visualY,
+          width: borderPlacement.visualWidth,
+          height: borderPlacement.visualHeight,
           borderWidth: 0.5,
           borderColor: rgb(0.7, 0.7, 0.7),
           opacity: 0.8,

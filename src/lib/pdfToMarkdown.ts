@@ -650,8 +650,17 @@ export async function convertPdfToMarkdown(
       );
 
       const page = await pdfDoc.getPage(pageNum);
-      const baseViewport = page.getViewport({ scale: 1 });
       const viewport = page.getViewport({ scale: dpi / 72 });
+      const viewBox: number[] | null =
+        Array.isArray(page.view) && page.view.length >= 4 ? page.view : null;
+      const baseViewport = viewBox ? null : page.getViewport({ scale: 1 });
+      const originX = viewBox ? Math.min(viewBox[0], viewBox[2]) : 0;
+      const mediaWidth = viewBox
+        ? Math.abs(viewBox[2] - viewBox[0])
+        : baseViewport.width;
+      const mediaHeight = viewBox
+        ? Math.abs(viewBox[3] - viewBox[1])
+        : baseViewport.height;
       let pageCanvas: HTMLCanvasElement | null = null;
       try {
         const textContent = await page.getTextContent();
@@ -665,7 +674,7 @@ export async function convertPdfToMarkdown(
           const fontSize = Math.hypot(tx[0], tx[1]);
           rawItems.push({
             str,
-            x: tx[4],
+            x: tx[4] - originX,
             y: tx[5],
             w: item.width ?? 0,
             h: item.height ?? fontSize,
@@ -693,8 +702,8 @@ export async function convertPdfToMarkdown(
         }
 
         if (isNative) {
-          // Native text extraction uses PDF-point coordinates matching scale 1 viewport
-          pageBlocks = reconstructReadingOrder(rawItems, baseViewport.width, baseViewport.height);
+          // Native text extraction uses unrotated MediaBox dimensions matching tx coordinates
+          pageBlocks = reconstructReadingOrder(rawItems, mediaWidth, mediaHeight);
           for (const b of pageBlocks) {
             b.pageNumber = pageNum;
           }

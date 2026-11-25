@@ -294,6 +294,50 @@ function renderInline(text: string): string {
   return result;
 }
 
+function scanClosedHtmlBlock(
+  lines: string[],
+  startNextIdx: number,
+  openLine: string,
+  closeTagLower: string,
+  noClosingAhead: boolean,
+): { closed: boolean; blockLines: string[]; nextIdx: number; reachedEofWithoutClose: boolean } {
+  const openLower = openLine.toLowerCase();
+  if (openLower.includes(closeTagLower)) {
+    return {
+      closed: true,
+      blockLines: [openLine],
+      nextIdx: startNextIdx,
+      reachedEofWithoutClose: false,
+    };
+  }
+  if (noClosingAhead) {
+    return {
+      closed: false,
+      blockLines: [openLine],
+      nextIdx: startNextIdx,
+      reachedEofWithoutClose: true,
+    };
+  }
+  let j = startNextIdx;
+  while (j < lines.length) {
+    if (lines[j].toLowerCase().includes(closeTagLower)) {
+      return {
+        closed: true,
+        blockLines: [openLine, ...lines.slice(startNextIdx, j + 1)],
+        nextIdx: j + 1,
+        reachedEofWithoutClose: false,
+      };
+    }
+    j++;
+  }
+  return {
+    closed: false,
+    blockLines: [openLine],
+    nextIdx: startNextIdx,
+    reachedEofWithoutClose: true,
+  };
+}
+
 export function renderMarkdownToHtml(markdown: string): string {
   if (!markdown) return "";
 
@@ -311,6 +355,8 @@ export function renderMarkdownToHtml(markdown: string): string {
   let tableRows: string[][] = [];
 
   let inList: "ul" | "ol" | null = null;
+  let noMoreTableClose = false;
+  let noMoreMathClose = false;
 
   function closeList() {
     if (inList) {
@@ -450,33 +496,17 @@ export function renderMarkdownToHtml(markdown: string): string {
     if (trimmed.toLowerCase().startsWith("<table")) {
       closeList();
       flushTable();
-      const tableLines: string[] = [line];
-      let closed = trimmed.toLowerCase().includes("</table>");
-      if (!closed) {
-        let j = i;
-        while (j < lines.length) {
-          tableLines.push(lines[j]);
-          if (lines[j].toLowerCase().includes("</table>")) {
-            closed = true;
-            break;
-          }
-          j++;
-        }
-        if (closed) {
-          i = j + 1;
-        } else {
-          tableLines.length = 1;
-        }
-      }
-      if (closed) {
-        const rawTable = tableLines.join("\n").trim();
-        const renderedTable = renderSupportedHtmlTable(rawTable);
+      const scan = scanClosedHtmlBlock(lines, i, line, "</table>", noMoreTableClose);
+      i = scan.nextIdx;
+      if (scan.reachedEofWithoutClose) noMoreTableClose = true;
+      if (scan.closed) {
+        const renderedTable = renderSupportedHtmlTable(scan.blockLines.join("\n").trim());
         if (renderedTable) {
           out.push(renderedTable);
           continue;
         }
       }
-      for (const tLine of tableLines) {
+      for (const tLine of scan.blockLines) {
         if (tLine.trim()) out.push(`<p>${renderInline(tLine.trim())}</p>`);
       }
       continue;
@@ -486,33 +516,17 @@ export function renderMarkdownToHtml(markdown: string): string {
     if (trimmed.toLowerCase().startsWith("<math")) {
       closeList();
       flushTable();
-      const mathLines: string[] = [line];
-      let closed = trimmed.toLowerCase().includes("</math>");
-      if (!closed) {
-        let j = i;
-        while (j < lines.length) {
-          mathLines.push(lines[j]);
-          if (lines[j].toLowerCase().includes("</math>")) {
-            closed = true;
-            break;
-          }
-          j++;
-        }
-        if (closed) {
-          i = j + 1;
-        } else {
-          mathLines.length = 1;
-        }
-      }
-      if (closed) {
-        const rawMath = mathLines.join("\n").trim();
-        const renderedMath = renderSupportedHtmlMath(rawMath);
+      const scan = scanClosedHtmlBlock(lines, i, line, "</math>", noMoreMathClose);
+      i = scan.nextIdx;
+      if (scan.reachedEofWithoutClose) noMoreMathClose = true;
+      if (scan.closed) {
+        const renderedMath = renderSupportedHtmlMath(scan.blockLines.join("\n").trim());
         if (renderedMath) {
           out.push(renderedMath);
           continue;
         }
       }
-      for (const mLine of mathLines) {
+      for (const mLine of scan.blockLines) {
         if (mLine.trim()) out.push(`<p>${renderInline(mLine.trim())}</p>`);
       }
       continue;
