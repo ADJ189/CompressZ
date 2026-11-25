@@ -3,6 +3,7 @@ import {
   makePdf,
   makeMultiPagePdf,
   makeTruncatedPdf,
+  extractPdfStreamText,
   upload,
   triggerDownload,
   createE2eFixture,
@@ -13,6 +14,7 @@ const CDN_TIMEOUT = 120_000;
 
 let fixtures: {
   pdf: string;
+  pdfWithAuthor: string;
   twoPagePdf: string;
   truncated: string;
 };
@@ -20,6 +22,11 @@ let fixtures: {
 test.beforeAll(async () => {
   fixtures = {
     pdf: createE2eFixture("pdf-suite-e2e", "suite-sample.pdf", makePdf("PDF Suite Test Document")),
+    pdfWithAuthor: createE2eFixture(
+      "pdf-suite-e2e",
+      "suite-authored.pdf",
+      makeMultiPagePdf(["PDF Metadata Test"], "ConfidentialAuthorXYZ"),
+    ),
     twoPagePdf: createE2eFixture(
       "pdf-suite-e2e",
       "suite-two-page.pdf",
@@ -99,28 +106,36 @@ test.describe("PDF Suite workstation", () => {
     );
     expect(bytes.subarray(0, 4).toString("latin1")).toBe("%PDF");
     expect(download.suggestedFilename()).toMatch(/-numbered\.pdf$/);
+    const pdfText = extractPdfStreamText(bytes);
+    expect(pdfText).toContain("Page 1 of 1");
   });
 
   test("PDF Suite: nup generates multi-page sheet and downloads", async ({ page }) => {
     const { download, bytes } = await executeSuiteWorkbench(
       page,
       "/pdf/nup",
-      fixtures.pdf,
+      fixtures.twoPagePdf,
       "Generate 2-Up PDF & Download",
     );
     expect(bytes.subarray(0, 4).toString("latin1")).toBe("%PDF");
     expect(download.suggestedFilename()).toMatch(/-2up\.pdf$/);
+    const pdfText = extractPdfStreamText(bytes);
+    expect(pdfText).toMatch(/\/Count\s+1\b/);
+    expect(pdfText).toContain("Page One");
+    expect(pdfText).toContain("Page Two");
   });
 
   test("PDF Suite: metadata strips and downloads sanitized document", async ({ page }) => {
     const { download, bytes } = await executeSuiteWorkbench(
       page,
       "/pdf/metadata",
-      fixtures.pdf,
-      "Strip All Metadata & Dates (Privacy Mode)",
+      fixtures.pdfWithAuthor,
+      "Strip Document Metadata & Dates (Privacy Mode)",
     );
     expect(bytes.subarray(0, 4).toString("latin1")).toBe("%PDF");
     expect(download.suggestedFilename()).toMatch(/-sanitized\.pdf$/);
+    expect(bytes.toString("latin1")).not.toContain("ConfidentialAuthorXYZ");
+    expect(extractPdfStreamText(bytes)).not.toContain("ConfidentialAuthorXYZ");
   });
 
   test("PDF Studio: pending text annotation clears on page change and file replacement", async ({ page }) => {
@@ -133,18 +148,27 @@ test.describe("PDF Suite workstation", () => {
     await page.getByRole("button", { name: /Text/i }).click();
     const overlay = page.locator(".cz-overlay-ann-canvas");
     await expect(overlay).toBeVisible({ timeout: CDN_TIMEOUT });
+    await expect(overlay).toHaveAttribute("data-rendered-page", "1", { timeout: CDN_TIMEOUT });
     await overlay.click({ position: { x: 80, y: 80 } });
     const popover = page.locator(".cz-inline-text-popover");
     await expect(popover).toBeVisible();
 
     // Switching thumbnails clears the pending popover instead of committing to page 2
+    const page1Thumb = page.locator(".cz-studio-thumb-card").nth(0);
     const page2Thumb = page.locator(".cz-studio-thumb-card").nth(1);
     await expect(page2Thumb).toBeVisible({ timeout: CDN_TIMEOUT });
     await page2Thumb.click();
+    await expect(overlay).toHaveAttribute("data-rendered-page", "2", { timeout: CDN_TIMEOUT });
     await expect(popover).toHaveCount(0);
     await expect(page.locator(".cz-floating-text-ann")).toHaveCount(0);
 
-    // Reopen popover on page 2, then replace the document
+    // Returning to Page 1 confirms no pending/floating text annotation was added there either
+    await page1Thumb.click();
+    await expect(overlay).toHaveAttribute("data-rendered-page", "1", { timeout: CDN_TIMEOUT });
+    await expect(popover).toHaveCount(0);
+    await expect(page.locator(".cz-floating-text-ann")).toHaveCount(0);
+
+    // Reopen popover on page 1, then replace the document
     await overlay.click({ position: { x: 80, y: 80 } });
     await expect(popover).toBeVisible();
     await page.getByRole("button", { name: "Change File" }).click();

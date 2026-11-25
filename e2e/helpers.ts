@@ -1,9 +1,10 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { inflateSync, inflateRawSync } from "node:zlib";
 import type { Download, Page } from "@playwright/test";
 
 /** Shared minimal multi-page PDF generator for e2e tests */
-export function makeMultiPagePdf(pageTexts: string[]): Buffer {
+export function makeMultiPagePdf(pageTexts: string[], author?: string): Buffer {
   const count = pageTexts.length;
   const fontObjNum = 3 + count * 2;
   const kids = pageTexts.map((_, i) => `${3 + i} 0 R`).join(" ");
@@ -23,6 +24,12 @@ export function makeMultiPagePdf(pageTexts: string[]): Buffer {
     ...contentObjs,
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
   ];
+  let infoRefEntry = "";
+  if (author) {
+    const infoObjNum = objects.length + 1;
+    objects.push(`<< /Author (${author}) >>`);
+    infoRefEntry = ` /Info ${infoObjNum} 0 R`;
+  }
 
   let out = "%PDF-1.4\n";
   const offsets: number[] = [];
@@ -35,8 +42,57 @@ export function makeMultiPagePdf(pageTexts: string[]): Buffer {
   for (const offset of offsets) {
     out += `${String(offset).padStart(10, "0")} 00000 n \n`;
   }
-  out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${startxref}\n%%EOF\n`;
+  out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R${infoRefEntry} >>\nstartxref\n${startxref}\n%%EOF\n`;
   return Buffer.from(out, "latin1");
+}
+
+/** Extract uncompressed and Flate-decoded stream text from a PDF Buffer for e2e inspection */
+export function extractPdfStreamText(bytes: Buffer): string {
+  const raw = bytes.toString("latin1");
+  const chunks: string[] = [raw];
+  const streamToken = Buffer.from("stream", "latin1");
+  const endStreamToken = Buffer.from("endstream", "latin1");
+  let pos = 0;
+  while (pos < bytes.length) {
+    const sIdx = bytes.indexOf(streamToken, pos);
+    if (sIdx < 0) break;
+    let dataStart = sIdx + streamToken.length;
+    if (bytes[dataStart] === 0x0d && bytes[dataStart + 1] === 0x0a) dataStart += 2;
+    else if (bytes[dataStart] === 0x0a || bytes[dataStart] === 0x0d) dataStart += 1;
+    const eIdx = bytes.indexOf(endStreamToken, dataStart);
+    if (eIdx < 0) break;
+    const slice = bytes.subarray(dataStart, eIdx).subarray(0, eIdx - dataStart);
+    const trimmed =
+      slice.length > 0 && (slice[slice.length - 1] === 0x0a || slice[slice.length - 1] === 0x0d)
+        ? slice.subarray(0, slice.length - 1)
+        : slice;
+    try {
+      chunks.push(inflateSync(trimmed).toString("latin1"));
+    } catch {
+      try {
+        chunks.push(inflateRawSync(trimmed).toString("latin1"));
+      } catch {
+        // Not deflate-compressed (e.g. raw ASCII or font stream)
+      }
+    }
+    pos = eIdx + endStreamToken.length;
+  }
+  const decodedHex: string[] = [];
+  for (const chunk of chunks) {
+    chunk.replace(/<([0-9a-fA-F]{4,})>/g, (_m, hex: string) => {
+      if (hex.length % 2 !== 0) return "";
+      const rawBuf = Buffer.from(hex, "hex");
+      if (hex.toUpperCase().startsWith("FEFF") && rawBuf.length >= 4) {
+        const swapped = Buffer.from(rawBuf.subarray(2));
+        swapped.swap16();
+        decodedHex.push(swapped.toString("utf16le"));
+      } else {
+        decodedHex.push(rawBuf.toString("latin1"));
+      }
+      return "";
+    });
+  }
+  return [...chunks, ...decodedHex].join("\n");
 }
 
 /** Shared minimal single-page PDF generator for e2e tests */
