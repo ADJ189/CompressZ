@@ -304,8 +304,7 @@ match. Several were previously wrong; don't regress them.
   - Math/Greek symbol mode always runs on Tesseract (`<language>+equ`, defaulting to `eng+equ`), regardless
     of the selected engine.
   - OCR page seeds engine/language from Settings → Compression → OCR defaults
-    and render DPI from the resolved resource mode: Memory Saver 200, Balanced
-    250, Maximum 300.
+    and keeps its default render DPI (200) independent of resource mode.
   - OCR renders and embeds one page at a time (`openPdfDocument()` + a
     per-page canvas, then `addPage()`), releasing each page blob and canvas
     after recognition. Don't go back to rendering every page up front.
@@ -448,9 +447,8 @@ match. Several were previously wrong; don't regress them.
   and Latin/RTL/Indic → Tesseract. Do not add an AI-dependent suggestion
   without gating it on `settings.recommendations.allowAi`.
 - Dismissals persist in `cz-recommendations-v1` as `scope:rule:action` keys.
-- UI: recommendation banners in the Svelte routes (`Images.svelte`, `Pdf.svelte`,
-  `Ocr.svelte`, `ImagesToPdf.svelte`, `MergePdf.svelte`) render one primary
-  suggestion at a time; never a modal or repeated toast.
+- UI: recommendation banners in the Svelte routes (`Images.svelte`, `ImagesToPdf.svelte`)
+  render one primary suggestion at a time; never a modal or repeated toast.
 - Applying a suggestion is reversible: each page snapshots the previous
   state and passes an Undo action to `toast()`. Destructive Settings actions
   (`Reset all settings`, `Clear local data`) use a two-step confirm button,
