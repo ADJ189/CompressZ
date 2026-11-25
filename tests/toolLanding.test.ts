@@ -171,3 +171,18 @@ Deno.test("tool landing: bare OCR route restores printed profile and PDF output 
     "Ocr.svelte must reset profile to printed and restore outputKind to pdf on bare route"
   );
 });
+
+Deno.test("tool landing: PdfCanvasEditor avoids unreachable negative left overflow on narrow viewports", async () => {
+  const editor = await Deno.readTextFile(
+    new URL("../src/components/PdfCanvasEditor.svelte", import.meta.url)
+  );
+
+  assert(
+    !editor.includes("justify-content: center;\n    padding: 2rem;"),
+    "PdfCanvasEditor .cz-studio-canvas-wrap must not use unsafe justify-content: center that clips left side on mobile"
+  );
+  assert(
+    editor.includes("justify-content: flex-start;") && editor.includes("margin: 0 auto;"),
+    "PdfCanvasEditor must center via auto margin inside a flex-start scroll container"
+  );
+});
