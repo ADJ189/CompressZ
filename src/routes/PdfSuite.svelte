@@ -14,6 +14,7 @@
   } from "../lib/pdfTools/removePagesPdf";
   import {
     applyPdfPageNumbers,
+    parseTargetPages,
     type PageNumberPosition,
     type PageNumberFormat,
   } from "../lib/pdfTools/pageNumbersPdf";
@@ -428,7 +429,7 @@ import { entryError } from "../lib/engineError";
     pdfBytes = null;
     removeRangeError = null;
 
-    // Reset per-file state immediately
+    // Reset per-file state immediately (including metadata so stale fields never survive inspection failures)
     redactionList = [];
     formValues = {};
     formFields = [];
@@ -436,15 +437,25 @@ import { entryError } from "../lib/engineError";
     pageSpecs = [];
     removePagesInput = "";
     pagesToRemoveSet = new Set();
+    metaTitle = "";
+    metaAuthor = "";
+    metaSubject = "";
+    metaKeywords = "";
+    metaCreator = "";
+    metaProducer = "";
+    metaCreationDate = "";
+    metaModificationDate = "";
+    metaStripAll = false;
 
     let pdfJs: any = null;
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
       if (mySeq !== loadSeq) return;
+      // Preserve raw bytes immediately so repair & unlock can run even if preview/inspection fails
+      pdfBytes = bytes;
 
       pdfJs = await openPdfDocument(bytes);
       if (mySeq !== loadSeq) return;
-      pdfBytes = bytes;
       totalPages = pdfJs.numPages;
 
       // Initialize page specs for organize tool
@@ -469,12 +480,16 @@ import { entryError } from "../lib/engineError";
         pageThumbnails[i - 1] = canvas.toDataURL("image/jpeg", 0.7);
       }
 
-      // Check form fields
-      const formInfo = await inspectPdfForm(bytes);
-      if (mySeq !== loadSeq) return;
-      formFields = formInfo.fields;
-      for (const f of formInfo.fields) {
-        formValues[f.name] = f.value;
+      // Check form fields (may fail on owner-encrypted PDFs; keep preview/unlock usable)
+      try {
+        const formInfo = await inspectPdfForm(bytes);
+        if (mySeq !== loadSeq) return;
+        formFields = formInfo.fields;
+        for (const f of formInfo.fields) {
+          formValues[f.name] = f.value;
+        }
+      } catch (fErr) {
+        console.warn("[PdfSuite] Form inspection error:", fErr);
       }
 
       // Inspect metadata for Metadata tool
@@ -495,9 +510,8 @@ import { entryError } from "../lib/engineError";
       }
     } catch (err) {
       if (mySeq === loadSeq) {
-        console.warn("[PdfSuite] Inspection error (file might need repair):", err);
+        console.warn("[PdfSuite] Inspection error (file might need repair or unlock):", err);
         totalPages = 0;
-        pdfBytes = null;
       }
     } finally {
       if (mySeq === loadSeq) {
@@ -528,266 +542,332 @@ import { entryError } from "../lib/engineError";
   }
 
   async function handleExecuteTool() {
-    if ((!pdfBytes || isFileLoading || totalPages === 0) && activeTool !== "repair") return;
+    if (isProcessing || isFileLoading) return;
+    const canRunWithoutPages =
+      activeTool === "repair" ||
+      (activeTool === "security" && securityMode === "unlock");
+    if ((!pdfBytes && activeTool !== "repair") || (totalPages === 0 && !canRunWithoutPages)) {
+      return;
+    }
+
+    // Snapshot tool, file, bytes, and all active options before scheduling
+    const snapTool = activeTool;
+    const snapBytes = pdfBytes;
+    const snapFile = selectedFile;
+    const snapFileName = snapFile?.name || "document.pdf";
+    const snapBaseName = snapFileName.replace(/\.pdf$/i, "");
+    const snapFileType = snapFile?.type || "";
+    const snapTotalPages = totalPages;
+
+    const snapSplit = {
+      mode: splitMode,
+      ranges: splitRanges,
+      chunkSize: splitChunkSize,
+      baseFilename: snapFile?.name || "document",
+    };
+    const snapRemove = {
+      rangeError: removeRangeError,
+      pagesToRemove: new Set(pagesToRemoveSet),
+    };
+    const snapPageNumbers = {
+      format: pageNumFormat,
+      customPattern: pageNumCustomPattern,
+      position: pageNumPosition,
+      startNumber: pageNumStart,
+      pageRange: pageNumRange,
+      fontFamily: pageNumFont,
+      fontSize: pageNumSize,
+      colorHex: pageNumColor,
+      opacity: pageNumOpacity,
+      marginX: pageNumMarginX,
+      marginY: pageNumMarginY,
+      batesPrefix,
+      batesDigits,
+      batesSuffix,
+    };
+    const snapNup = {
+      pagesPerSheet: nupPagesPerSheet,
+      sheetSize: nupSheetSize,
+      orientation: nupOrientation,
+      margin: nupMargin,
+      spacing: nupSpacing,
+      drawBorder: nupDrawBorder,
+    };
+    const snapMetaStripAll = metaStripAll;
+    metaStripAll = false;
+    const snapMeta = {
+      title: metaTitle,
+      author: metaAuthor,
+      subject: metaSubject,
+      keywords: metaKeywords
+        ? metaKeywords.split(/[,;\s]+/).map((k) => k.trim()).filter(Boolean)
+        : [],
+      creator: metaCreator,
+      producer: metaProducer,
+    };
+    const snapOrganizeSpecs = pageSpecs.map((s) => ({ ...s }));
+    const snapWatermark = {
+      text: watermarkText,
+      opacity: watermarkOpacity,
+      rotationDeg: watermarkRotation,
+      tiled: watermarkTiled,
+      colorHex: watermarkColor,
+    };
+    const snapCrop = {
+      mode: "margins" as const,
+      margins: {
+        top: cropMarginTop,
+        bottom: cropMarginBottom,
+        left: cropMarginLeft,
+        right: cropMarginRight,
+      },
+    };
+    const snapFormUpdates = Object.entries(formValues).map(([name, value]) => ({ name, value }));
+    const snapFlattenForm = flattenForm;
+    const snapSecurity = {
+      mode: securityMode,
+      userPassword,
+      ownerPassword,
+      standard: encryptionStandard,
+      allowPrinting,
+      allowCopying,
+    };
+    const snapRedactRegions = redactionList.map((r) => ({ ...r }));
+    const snapRenderDpi = renderDpi;
+
+    // Pre-validate selections before queueing
+    if (snapTool === "remove") {
+      if (snapRemove.rangeError) {
+        toast(snapRemove.rangeError, "error");
+        return;
+      }
+      if (snapRemove.pagesToRemove.size === 0) {
+        toast("Please select at least 1 page to remove.", "error");
+        return;
+      }
+      if (snapRemove.pagesToRemove.size >= snapTotalPages) {
+        toast(`Cannot remove all ${snapTotalPages} pages. At least 1 page must remain.`, "error");
+        return;
+      }
+    } else if (snapTool === "page-numbers") {
+      try {
+        const targets = parseTargetPages(snapPageNumbers.pageRange, snapTotalPages);
+        if (targets.length === 0) {
+          toast("No valid pages matched the specified page range.", "error");
+          return;
+        }
+      } catch (err: any) {
+        toast(err?.message || "Invalid page range for numbering.", "error");
+        return;
+      }
+    } else if (snapTool === "watermark") {
+      if (!snapFileName.toLowerCase().endsWith(".pdf") && snapFileType !== "application/pdf") {
+        toast("Watermarking is only supported for PDF documents.", "error");
+        return;
+      }
+    } else if (snapTool === "redact") {
+      if (snapRedactRegions.length === 0) {
+        toast("Please add at least one redaction region before exporting.", "error");
+        return;
+      }
+    }
+
     isProcessing = true;
     progressPct = 10;
 
     try {
-      const jobBytes = pdfBytes?.byteLength ?? selectedFile?.size ?? 0;
-      const jobLabel = `${currentToolMeta?.name ?? activeTool}: ${selectedFile?.name ?? "document"}`;
+      const jobBytes = snapBytes?.byteLength ?? snapFile?.size ?? 0;
+      const toolLabel = TOOLS.find((t) => t.id === snapTool)?.name ?? snapTool;
+      const jobLabel = `${toolLabel}: ${snapFile?.name ?? "document"}`;
       await runScheduled({ kind: "pdf", label: jobLabel, bytes: jobBytes }, async () => {
-        if (activeTool === "split") {
-        const result = await splitPdf(
-          pdfBytes!,
-          {
-            mode: splitMode,
-            ranges: splitRanges,
-            chunkSize: splitChunkSize,
-            baseFilename: selectedFile?.name || "document",
-          },
-          (p) => (progressPct = p),
-        );
+        if (snapTool === "split") {
+          const result = await splitPdf(
+            snapBytes!,
+            snapSplit,
+            (p) => (progressPct = p),
+          );
 
-        if (result.zipBlob) {
-          downloadBlob(result.zipBlob, `${selectedFile?.name.replace(/\.pdf$/i, "")}-split.zip`);
-          toast(`Split into ${result.files.length} PDFs (packaged in ZIP)`, "success");
-        } else if (result.files.length === 1) {
-          downloadBlob(
-            bytesBlob(result.files[0].bytes, "application/pdf"),
-            result.files[0].name,
-          );
-          toast("PDF split completed", "success");
-        }
-      } else if (activeTool === "remove") {
-        if (removeRangeError) {
-          toast(removeRangeError, "error");
-          return;
-        }
-        if (pagesToRemoveSet.size === 0) {
-          toast("Please select at least 1 page to remove.", "error");
-          return;
-        }
-        if (pagesToRemoveSet.size >= totalPages) {
-          toast(`Cannot remove all ${totalPages} pages. At least 1 page must remain.`, "error");
-          return;
-        }
-        const result = await removePagesFromPdf(
-          pdfBytes!,
-          {
-            pagesToRemove: pagesToRemoveSet,
-            zeroBased: true,
-            onProgress: (p: number) => (progressPct = p),
-          },
-        );
-        downloadBlob(
-          bytesBlob(result.bytes, "application/pdf"),
-          `${selectedFile?.name.replace(/\.pdf$/i, "")}-pages-removed.pdf`,
-        );
-        toast(`Removed ${result.removedCount} page${result.removedCount === 1 ? "" : "s"} successfully`, "success");
-      } else if (activeTool === "page-numbers") {
-        const out = await applyPdfPageNumbers(
-          pdfBytes!,
-          {
-            format: pageNumFormat,
-            customPattern: pageNumCustomPattern,
-            position: pageNumPosition,
-            startNumber: pageNumStart,
-            pageRange: pageNumRange,
-            fontFamily: pageNumFont,
-            fontSize: pageNumSize,
-            colorHex: pageNumColor,
-            opacity: pageNumOpacity,
-            marginX: pageNumMarginX,
-            marginY: pageNumMarginY,
-            batesPrefix,
-            batesDigits,
-            batesSuffix,
-            onProgress: (p: number) => (progressPct = p),
-          },
-        );
-        downloadBlob(
-          bytesBlob(out, "application/pdf"),
-          `${selectedFile?.name.replace(/\.pdf$/i, "")}-numbered.pdf`,
-        );
-        toast("Page numbers applied successfully", "success");
-      } else if (activeTool === "nup") {
-        const out = await createNupPdf(
-          pdfBytes!,
-          {
-            pagesPerSheet: nupPagesPerSheet,
-            sheetSize: nupSheetSize,
-            orientation: nupOrientation,
-            margin: nupMargin,
-            spacing: nupSpacing,
-            drawBorder: nupDrawBorder,
-            onProgress: (p: number) => (progressPct = p),
-          },
-        );
-        downloadBlob(
-          bytesBlob(out, "application/pdf"),
-          `${selectedFile?.name.replace(/\.pdf$/i, "")}-${nupPagesPerSheet}up.pdf`,
-        );
-        toast(`Generated ${nupPagesPerSheet}-Up multi-page PDF`, "success");
-      } else if (activeTool === "metadata") {
-        const out = await updatePdfMetadata(
-          pdfBytes!,
-          {
-            title: metaTitle,
-            author: metaAuthor,
-            subject: metaSubject,
-            keywords: metaKeywords ? metaKeywords.split(/[,;\s]+/).map((k) => k.trim()).filter(Boolean) : [],
-            creator: metaCreator,
-            producer: metaProducer,
-          },
-          metaStripAll,
-        );
-        downloadBlob(
-          bytesBlob(out, "application/pdf"),
-          `${selectedFile?.name.replace(/\.pdf$/i, "")}-${metaStripAll ? "sanitized" : "metadata"}.pdf`,
-        );
-        toast(metaStripAll ? "All metadata stripped for privacy" : "PDF metadata updated successfully", "success");
-        metaStripAll = false;
-      } else if (activeTool === "organize") {
-        const out = await reorganizePdf(pdfBytes!, pageSpecs, (p) => (progressPct = p));
-        downloadBlob(
-          bytesBlob(out, "application/pdf"),
-          `${selectedFile?.name.replace(/\.pdf$/i, "")}-organized.pdf`,
-        );
-        toast("Pages reorganized successfully", "success");
-      } else if (activeTool === "watermark") {
-        if (!selectedFile?.name.toLowerCase().endsWith(".pdf") && selectedFile?.type !== "application/pdf") {
-          toast("Watermarking is only supported for PDF documents.", "error");
-          return;
-        }
-        const out = await applyPdfWatermark(
-          pdfBytes!,
-          {
-            type: "text",
-            text: watermarkText,
-            opacity: watermarkOpacity,
-            rotationDeg: watermarkRotation,
-            tiled: watermarkTiled,
-            colorHex: watermarkColor,
-          },
-          (p) => (progressPct = p),
-        );
-        downloadBlob(
-          bytesBlob(out, "application/pdf"),
-          `${selectedFile?.name.replace(/\.pdf$/i, "")}-watermarked.pdf`,
-        );
-        toast("Watermark applied successfully", "success");
-      } else if (activeTool === "crop") {
-        const out = await applyPdfCrop(
-          pdfBytes!,
-          {
-            mode: "margins",
-            margins: {
-              top: cropMarginTop,
-              bottom: cropMarginBottom,
-              left: cropMarginLeft,
-              right: cropMarginRight,
-            },
-          },
-          (p) => (progressPct = p),
-        );
-        downloadBlob(
-          bytesBlob(out, "application/pdf"),
-          `${selectedFile?.name.replace(/\.pdf$/i, "")}-cropped.pdf`,
-        );
-        toast("PDF cropped successfully", "success");
-      } else if (activeTool === "forms") {
-        const updates = Object.entries(formValues).map(([name, value]) => ({ name, value }));
-        const { bytes: out, failed } = await fillPdfForm(
-          pdfBytes!,
-          updates,
-          flattenForm,
-          (p) => (progressPct = p),
-        );
-        downloadBlob(
-          bytesBlob(out, "application/pdf"),
-          `${selectedFile?.name.replace(/\.pdf$/i, "")}-filled.pdf`,
-        );
-        if (failed.length > 0) {
-          const names = failed.map((f) => `"${f.name}"`).join(", ");
-          toast(
-            `Form saved, but ${failed.length} field${failed.length === 1 ? "" : "s"} could not be filled: ${names}. ${failed[0].message}`,
-            "warn",
-          );
-        } else {
-          toast("Form filled and saved successfully", "success");
-        }
-      } else if (activeTool === "security") {
-        if (securityMode === "protect") {
-          const out = await protectPdf(pdfBytes!, {
-            userPassword,
-            ownerPassword,
-            standard: encryptionStandard,
-            allowPrinting,
-            allowCopying,
-            onProgress: (p) => (progressPct = p),
-          });
-          downloadBlob(
-            bytesBlob(out, "application/pdf"),
-            `${selectedFile?.name.replace(/\.pdf$/i, "")}-protected.pdf`,
-          );
-          const cipherLabel =
-            encryptionStandard === "aes-128"
-              ? "AES-128"
-              : encryptionStandard === "aes-256-r5"
-                ? "AES-256-CBC"
-                : "AES-256";
-          toast(`PDF encrypted with ${cipherLabel} password`, "success");
-        } else {
-          const out = await unlockPdf(pdfBytes!, {
-            password: userPassword,
-            onProgress: (p) => (progressPct = p),
-          });
-          downloadBlob(
-            bytesBlob(out, "application/pdf"),
-            `${selectedFile?.name.replace(/\.pdf$/i, "")}-unlocked.pdf`,
-          );
-          toast("PDF decrypted successfully", "success");
-        }
-      } else if (activeTool === "repair") {
-        const bytes = pdfBytes || new Uint8Array(await selectedFile!.arrayBuffer());
-        const isVideo =
-          selectedFile?.type.startsWith("video/") ||
-          /\.(mp4|mov|m4v)$/i.test(selectedFile?.name || "");
-        if (isVideo) {
-          const rep = inspectAndRepairMp4Moov(bytes);
-          if (!rep.ok) {
-            toast(rep.reason, rep.alreadyValid ? "info" : "error");
-            return;
+          if (result.zipBlob) {
+            downloadBlob(result.zipBlob, `${snapBaseName}-split.zip`);
+            toast(`Split into ${result.files.length} PDFs (packaged in ZIP)`, "success");
+          } else if (result.files.length === 1) {
+            downloadBlob(
+              bytesBlob(result.files[0].bytes, "application/pdf"),
+              result.files[0].name,
+            );
+            toast("PDF split completed", "success");
           }
-          downloadBlob(
-            bytesBlob(rep.repairedBytes, selectedFile?.type || "video/mp4"),
-            `repaired-${selectedFile?.name || "video.mp4"}`,
+        } else if (snapTool === "remove") {
+          const result = await removePagesFromPdf(
+            snapBytes!,
+            {
+              pagesToRemove: snapRemove.pagesToRemove,
+              zeroBased: true,
+              onProgress: (p: number) => (progressPct = p),
+            },
           );
-          toast(rep.message, "success");
-        } else {
-          const rep = await repairCorruptPdf(bytes, (p) => (progressPct = p));
           downloadBlob(
-            bytesBlob(rep.repairedBytes, "application/pdf"),
-            `repaired-${selectedFile?.name || "document.pdf"}`,
+            bytesBlob(result.bytes, "application/pdf"),
+            `${snapBaseName}-pages-removed.pdf`,
           );
-          toast(rep.message, "success");
+          toast(`Removed ${result.removedCount} page${result.removedCount === 1 ? "" : "s"} successfully`, "success");
+        } else if (snapTool === "page-numbers") {
+          const out = await applyPdfPageNumbers(
+            snapBytes!,
+            {
+              ...snapPageNumbers,
+              onProgress: (p: number) => (progressPct = p),
+            },
+          );
+          downloadBlob(
+            bytesBlob(out, "application/pdf"),
+            `${snapBaseName}-numbered.pdf`,
+          );
+          toast("Page numbers applied successfully", "success");
+        } else if (snapTool === "nup") {
+          const out = await createNupPdf(
+            snapBytes!,
+            {
+              ...snapNup,
+              onProgress: (p: number) => (progressPct = p),
+            },
+          );
+          downloadBlob(
+            bytesBlob(out, "application/pdf"),
+            `${snapBaseName}-${snapNup.pagesPerSheet}up.pdf`,
+          );
+          toast(`Generated ${snapNup.pagesPerSheet}-Up multi-page PDF`, "success");
+        } else if (snapTool === "metadata") {
+          const out = await updatePdfMetadata(
+            snapBytes!,
+            snapMeta,
+            snapMetaStripAll,
+          );
+          downloadBlob(
+            bytesBlob(out, "application/pdf"),
+            `${snapBaseName}-${snapMetaStripAll ? "sanitized" : "metadata"}.pdf`,
+          );
+          toast(snapMetaStripAll ? "All metadata stripped for privacy" : "PDF metadata updated successfully", "success");
+        } else if (snapTool === "organize") {
+          const out = await reorganizePdf(snapBytes!, snapOrganizeSpecs, (p) => (progressPct = p));
+          downloadBlob(
+            bytesBlob(out, "application/pdf"),
+            `${snapBaseName}-organized.pdf`,
+          );
+          toast("Pages reorganized successfully", "success");
+        } else if (snapTool === "watermark") {
+          const out = await applyPdfWatermark(
+            snapBytes!,
+            {
+              type: "text",
+              ...snapWatermark,
+            },
+            (p) => (progressPct = p),
+          );
+          downloadBlob(
+            bytesBlob(out, "application/pdf"),
+            `${snapBaseName}-watermarked.pdf`,
+          );
+          toast("Watermark applied successfully", "success");
+        } else if (snapTool === "crop") {
+          const out = await applyPdfCrop(
+            snapBytes!,
+            snapCrop,
+            (p) => (progressPct = p),
+          );
+          downloadBlob(
+            bytesBlob(out, "application/pdf"),
+            `${snapBaseName}-cropped.pdf`,
+          );
+          toast("PDF cropped successfully", "success");
+        } else if (snapTool === "forms") {
+          const { bytes: out, failed } = await fillPdfForm(
+            snapBytes!,
+            snapFormUpdates,
+            snapFlattenForm,
+            (p) => (progressPct = p),
+          );
+          downloadBlob(
+            bytesBlob(out, "application/pdf"),
+            `${snapBaseName}-filled.pdf`,
+          );
+          if (failed.length > 0) {
+            const names = failed.map((f) => `"${f.name}"`).join(", ");
+            toast(
+              `Form saved, but ${failed.length} field${failed.length === 1 ? "" : "s"} could not be filled: ${names}. ${failed[0].message}`,
+              "warn",
+            );
+          } else {
+            toast("Form filled and saved successfully", "success");
+          }
+        } else if (snapTool === "security") {
+          if (snapSecurity.mode === "protect") {
+            const out = await protectPdf(snapBytes!, {
+              userPassword: snapSecurity.userPassword,
+              ownerPassword: snapSecurity.ownerPassword,
+              standard: snapSecurity.standard,
+              allowPrinting: snapSecurity.allowPrinting,
+              allowCopying: snapSecurity.allowCopying,
+              onProgress: (p) => (progressPct = p),
+            });
+            downloadBlob(
+              bytesBlob(out, "application/pdf"),
+              `${snapBaseName}-protected.pdf`,
+            );
+            const cipherLabel =
+              snapSecurity.standard === "aes-128"
+                ? "AES-128"
+                : snapSecurity.standard === "aes-256-r5"
+                  ? "AES-256-CBC"
+                  : "AES-256";
+            toast(`PDF encrypted with ${cipherLabel} password`, "success");
+          } else {
+            const out = await unlockPdf(snapBytes!, {
+              password: snapSecurity.userPassword,
+              onProgress: (p) => (progressPct = p),
+            });
+            downloadBlob(
+              bytesBlob(out, "application/pdf"),
+              `${snapBaseName}-unlocked.pdf`,
+            );
+            toast("PDF decrypted successfully", "success");
+          }
+        } else if (snapTool === "repair") {
+          const bytes = snapBytes || new Uint8Array(await snapFile!.arrayBuffer());
+          const isVideo =
+            snapFileType.startsWith("video/") ||
+            /\.(mp4|mov|m4v)$/i.test(snapFileName);
+          if (isVideo) {
+            const rep = inspectAndRepairMp4Moov(bytes);
+            if (!rep.ok) {
+              toast(rep.reason, rep.alreadyValid ? "info" : "error");
+              return;
+            }
+            downloadBlob(
+              bytesBlob(rep.repairedBytes, snapFileType || "video/mp4"),
+              `repaired-${snapFileName || "video.mp4"}`,
+            );
+            toast(rep.message, "success");
+          } else {
+            const rep = await repairCorruptPdf(bytes, (p) => (progressPct = p));
+            downloadBlob(
+              bytesBlob(rep.repairedBytes, "application/pdf"),
+              `repaired-${snapFileName || "document.pdf"}`,
+            );
+            toast(rep.message, "success");
+          }
+        } else if (snapTool === "redact") {
+          const out = await applyTrueRedaction(snapBytes!, {
+            regions: snapRedactRegions,
+            renderDpi: snapRenderDpi,
+            onProgress: (p) => (progressPct = p),
+          });
+          downloadBlob(
+            bytesBlob(out, "application/pdf"),
+            `${snapBaseName}-redacted.pdf`,
+          );
+          toast("True redaction applied and sanitized", "success");
         }
-      } else if (activeTool === "redact") {
-        if (redactionList.length === 0) {
-          toast("Please add at least one redaction region before exporting.", "error");
-          return;
-        }
-        const out = await applyTrueRedaction(pdfBytes!, {
-          regions: redactionList,
-          renderDpi,
-          onProgress: (p) => (progressPct = p),
-        });
-        downloadBlob(
-          bytesBlob(out, "application/pdf"),
-          `${selectedFile?.name.replace(/\.pdf$/i, "")}-redacted.pdf`,
-        );
-        toast("True redaction applied and sanitized", "success");
-      }
       });
     } catch (err) {
       console.error("[PdfSuite] error:", err);
@@ -951,6 +1031,7 @@ import { entryError } from "../lib/engineError";
             <button
               type="button"
               class="cz-btn cz-btn-ghost cz-btn-sm"
+              disabled={isProcessing}
               onclick={() => {
                 loadSeq++;
                 selectedFile = null;
@@ -960,6 +1041,15 @@ import { entryError } from "../lib/engineError";
                 pagesToRemoveSet = new Set();
                 removePagesInput = "";
                 removeRangeError = null;
+                metaTitle = "";
+                metaAuthor = "";
+                metaSubject = "";
+                metaKeywords = "";
+                metaCreator = "";
+                metaProducer = "";
+                metaCreationDate = "";
+                metaModificationDate = "";
+                metaStripAll = false;
               }}
             >
               Change File
@@ -1543,7 +1633,7 @@ import { entryError } from "../lib/engineError";
                 <button
                   type="button"
                   class="cz-btn cz-btn-primary"
-                  disabled={isProcessing}
+                  disabled={isProcessing || isFileLoading || totalPages === 0}
                   onclick={handleExecuteTool}
                 >
                   {isProcessing ? "Adding Numbers…" : "Add Page Numbers & Download"}
@@ -1647,7 +1737,7 @@ import { entryError } from "../lib/engineError";
                 <button
                   type="button"
                   class="cz-btn cz-btn-primary"
-                  disabled={isProcessing}
+                  disabled={isProcessing || isFileLoading || totalPages === 0}
                   onclick={handleExecuteTool}
                 >
                   {isProcessing ? "Assembling Layout…" : `Generate ${nupPagesPerSheet}-Up PDF & Download`}
@@ -1751,7 +1841,7 @@ import { entryError } from "../lib/engineError";
                 <button
                   type="button"
                   class="cz-btn cz-btn-secondary cz-btn-danger"
-                  disabled={isProcessing}
+                  disabled={isProcessing || isFileLoading || totalPages === 0}
                   onclick={() => {
                     metaStripAll = true;
                     handleExecuteTool();
@@ -1762,7 +1852,7 @@ import { entryError } from "../lib/engineError";
                 <button
                   type="button"
                   class="cz-btn cz-btn-primary"
-                  disabled={isProcessing}
+                  disabled={isProcessing || isFileLoading || totalPages === 0}
                   onclick={() => {
                     metaStripAll = false;
                     handleExecuteTool();
@@ -1837,7 +1927,7 @@ import { entryError } from "../lib/engineError";
                 <button
                   type="button"
                   class="cz-btn cz-btn-primary"
-                  disabled={isProcessing}
+                  disabled={isProcessing || isFileLoading || totalPages === 0}
                   onclick={handleExecuteTool}
                 >
                   {isProcessing ? "Applying…" : "Apply Watermark"}
@@ -1874,7 +1964,7 @@ import { entryError } from "../lib/engineError";
                 <button
                   type="button"
                   class="cz-btn cz-btn-primary"
-                  disabled={isProcessing}
+                  disabled={isProcessing || isFileLoading || totalPages === 0}
                   onclick={handleExecuteTool}
                 >
                   {isProcessing ? "Cropping…" : "Apply Permanent Crop"}
@@ -1950,7 +2040,7 @@ import { entryError } from "../lib/engineError";
                 <button
                   type="button"
                   class="cz-btn cz-btn-primary"
-                  disabled={isProcessing || formFields.length === 0}
+                  disabled={isProcessing || isFileLoading || totalPages === 0 || formFields.length === 0}
                   onclick={handleExecuteTool}
                 >
                   {isProcessing ? "Saving…" : "Save Form"}
@@ -2020,7 +2110,7 @@ import { entryError } from "../lib/engineError";
                 <button
                   type="button"
                   class="cz-btn cz-btn-primary"
-                  disabled={isProcessing || !userPassword}
+                  disabled={isProcessing || isFileLoading || !userPassword || (securityMode === "protect" && totalPages === 0)}
                   onclick={handleExecuteTool}
                 >
                   {isProcessing ? "Processing…" : securityMode === "protect" ? "Encrypt Document" : "Decrypt & Unlock"}
@@ -2046,7 +2136,7 @@ import { entryError } from "../lib/engineError";
                 <button
                   type="button"
                   class="cz-btn cz-btn-primary"
-                  disabled={isProcessing}
+                  disabled={isProcessing || isFileLoading}
                   onclick={handleExecuteTool}
                 >
                   {isProcessing ? "Repairing…" : "Execute Deep Repair"}
@@ -2169,7 +2259,7 @@ import { entryError } from "../lib/engineError";
                 <button
                   type="button"
                   class="cz-btn cz-btn-primary"
-                  disabled={isProcessing || redactionList.length === 0}
+                  disabled={isProcessing || isFileLoading || totalPages === 0 || redactionList.length === 0}
                   onclick={handleExecuteTool}
                 >
                   {isProcessing ? "Burning in Redactions…" : "Apply True Redaction & Export"}
