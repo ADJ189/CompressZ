@@ -60,6 +60,15 @@ type ActionTuple = [
   hub: FileAction["hub"],
 ];
 
+type TargetTuple = [
+  id: string,
+  name: string,
+  format: string,
+  route: string,
+  hub: FileAction["hub"],
+  badge?: string,
+];
+
 function buildActions(defs: ActionTuple[]): FileAction[] {
   return defs.map(([id, name, icon, desc, route, hub]) => ({
     id,
@@ -71,69 +80,53 @@ function buildActions(defs: ActionTuple[]): FileAction[] {
   }));
 }
 
+function buildGroup(category: string, targets: TargetTuple[]): ConversionGroup {
+  return {
+    category,
+    targets: targets.map(([id, name, format, route, hub, badge]) =>
+      badge !== undefined ? { id, name, format, route, hub, badge } : { id, name, format, route, hub }
+    ),
+  };
+}
+
+function matchesMagic(bytes: Uint8Array, offset: number, sig: number[]): boolean {
+  if (bytes.length < offset + sig.length) return false;
+  for (let i = 0; i < sig.length; i++) {
+    if (bytes[offset + i] !== sig[i]) return false;
+  }
+  return true;
+}
+
+const MAGIC_PREFIX_SIGNATURES: [sig: number[], category: DetectedCategory][] = [
+  [[0x25, 0x50, 0x44, 0x46], "pdf"], // %PDF-
+  [[0x89, 0x50, 0x4e, 0x47], "image"], // PNG
+  [[0xff, 0xd8, 0xff], "image"], // JPEG
+  [[0x47, 0x49, 0x46, 0x38], "image"], // GIF87a / GIF89a
+  [[0x49, 0x44, 0x33], "audio"], // MP3 ID3
+  [[0x66, 0x4c, 0x61, 0x43], "audio"], // FLAC
+  [[0x4f, 0x67, 0x67, 0x53], "audio"], // OggS
+  [[0x1a, 0x45, 0xdf, 0xa3], "video"], // Matroska / WebM EBML
+  [[0x50, 0x4b, 0x03, 0x04], "docx"], // ZIP-based Office container
+];
+
 /**
  * Inspect magic bytes from a header buffer to identify file signatures.
  */
 export function identifyHeader(bytes: Uint8Array): DetectedCategory {
   if (!bytes || bytes.length < 4) return "unknown";
 
-  // PDF: %PDF- (0x25, 0x50, 0x44, 0x46)
-  if (
-    bytes[0] === 0x25 &&
-    bytes[1] === 0x50 &&
-    bytes[2] === 0x44 &&
-    bytes[3] === 0x46
-  ) {
-    return "pdf";
+  for (const [sig, category] of MAGIC_PREFIX_SIGNATURES) {
+    if (matchesMagic(bytes, 0, sig)) return category;
   }
 
-  // PNG: \x89PNG\r\n\x1a\n
-  if (
-    bytes[0] === 0x89 &&
-    bytes[1] === 0x50 &&
-    bytes[2] === 0x4e &&
-    bytes[3] === 0x47
-  ) {
-    return "image";
-  }
-
-  // JPEG: \xFF\xD8\xFF
-  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
-    return "image";
-  }
-
-  // GIF: GIF87a or GIF89a
-  if (
-    bytes[0] === 0x47 &&
-    bytes[1] === 0x49 &&
-    bytes[2] === 0x46 &&
-    bytes[3] === 0x38
-  ) {
-    return "image";
-  }
-
-  // WebP or WAV: starts with RIFF
-  if (
-    bytes[0] === 0x52 &&
-    bytes[1] === 0x49 &&
-    bytes[2] === 0x46 &&
-    bytes[3] === 0x46 &&
-    bytes.length >= 12
-  ) {
-    const tag = String.fromCharCode(
-      bytes[8],
-      bytes[9],
-      bytes[10],
-      bytes[11],
-    );
+  // WebP or WAV: RIFF + sub-brand at bytes 8..11
+  if (matchesMagic(bytes, 0, [0x52, 0x49, 0x46, 0x46]) && bytes.length >= 12) {
+    const tag = String.fromCharCode(bytes[8], bytes[9], bytes[10], bytes[11]);
     if (tag === "WEBP") return "image";
     if (tag === "WAVE") return "audio";
   }
 
-  // MP3: ID3 or MPEG sync (exclude UTF-16LE BOM and enforce valid MPEG bits)
-  if (bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) {
-    return "audio";
-  }
+  // MP3 MPEG sync (exclude UTF-16LE BOM and enforce valid MPEG bits)
   if (
     bytes[0] === 0xff &&
     (bytes[1] & 0xe0) === 0xe0 &&
@@ -146,64 +139,13 @@ export function identifyHeader(bytes: Uint8Array): DetectedCategory {
     return "audio";
   }
 
-  // FLAC: fLaC
-  if (
-    bytes[0] === 0x66 &&
-    bytes[1] === 0x4c &&
-    bytes[2] === 0x61 &&
-    bytes[3] === 0x43
-  ) {
-    return "audio";
-  }
-
-  // OggS
-  if (
-    bytes[0] === 0x4f &&
-    bytes[1] === 0x67 &&
-    bytes[2] === 0x67 &&
-    bytes[3] === 0x53
-  ) {
-    return "audio";
-  }
-
   // MP4 / MOV / AVIF: ftyp box at offset 4..7
-  if (
-    bytes.length >= 8 &&
-    bytes[4] === 0x66 &&
-    bytes[5] === 0x74 &&
-    bytes[6] === 0x79 &&
-    bytes[7] === 0x70
-  ) {
+  if (matchesMagic(bytes, 4, [0x66, 0x74, 0x79, 0x70])) {
     if (bytes.length >= 12) {
-      const brand = String.fromCharCode(
-        bytes[8],
-        bytes[9],
-        bytes[10],
-        bytes[11],
-      );
+      const brand = String.fromCharCode(bytes[8], bytes[9], bytes[10], bytes[11]);
       if (brand.startsWith("avif") || brand.startsWith("avis")) return "image";
     }
     return "video";
-  }
-
-  // Matroska / WebM: EBML ID 0x1A 0x45 0xDF 0xA3
-  if (
-    bytes[0] === 0x1a &&
-    bytes[1] === 0x45 &&
-    bytes[2] === 0xdf &&
-    bytes[3] === 0xa3
-  ) {
-    return "video";
-  }
-
-  // ZIP-based packages: PK\x03\x04 (Office DOCX, PPTX, XLSX)
-  if (
-    bytes[0] === 0x50 &&
-    bytes[1] === 0x4b &&
-    bytes[2] === 0x03 &&
-    bytes[3] === 0x04
-  ) {
-    return "docx";
   }
 
   return "unknown";
@@ -249,13 +191,10 @@ const OFFICE_CONFIGS: Record<
       ["docx-to-txt", "Extract Text", "📝", "Extract raw document text without formatting", "convert?from=docx&to=txt", "convert"],
     ],
     conversionGroups: [
-      {
-        category: "Convert Document",
-        targets: [
-          { id: "docx-to-pdf", name: "PDF Document", format: "PDF", route: "convert?from=docx&to=pdf", hub: "convert", badge: "Recommended" },
-          { id: "docx-to-txt", name: "Plain Text", format: "TXT", route: "convert?from=docx&to=txt", hub: "convert" },
-        ],
-      },
+      buildGroup("Convert Document", [
+        ["docx-to-pdf", "PDF Document", "PDF", "convert?from=docx&to=pdf", "convert", "Recommended"],
+        ["docx-to-txt", "Plain Text", "TXT", "convert?from=docx&to=txt", "convert"],
+      ]),
     ],
   },
   pptx: {
@@ -266,13 +205,10 @@ const OFFICE_CONFIGS: Record<
       ["pptx-to-txt", "Extract Slide Text", "📝", "Extract text content from every slide in order", "convert?from=pptx&to=txt", "convert"],
     ],
     conversionGroups: [
-      {
-        category: "Convert Presentation",
-        targets: [
-          { id: "pptx-to-pdf", name: "PDF Slides", format: "PDF", route: "convert?from=pptx&to=pdf", hub: "convert", badge: "Recommended" },
-          { id: "pptx-to-txt", name: "Slide Text", format: "TXT", route: "convert?from=pptx&to=txt", hub: "convert" },
-        ],
-      },
+      buildGroup("Convert Presentation", [
+        ["pptx-to-pdf", "PDF Slides", "PDF", "convert?from=pptx&to=pdf", "convert", "Recommended"],
+        ["pptx-to-txt", "Slide Text", "TXT", "convert?from=pptx&to=txt", "convert"],
+      ]),
     ],
   },
   xlsx: {
@@ -283,13 +219,10 @@ const OFFICE_CONFIGS: Record<
       ["xlsx-to-csv", "Convert to CSV", "📑", "Export active sheet to comma-separated values", "convert?from=xlsx&to=csv", "convert"],
     ],
     conversionGroups: [
-      {
-        category: "Convert Spreadsheet",
-        targets: [
-          { id: "xlsx-to-pdf", name: "PDF Document", format: "PDF", route: "convert?from=xlsx&to=pdf", hub: "convert" },
-          { id: "xlsx-to-csv", name: "Comma-Separated Values", format: "CSV", route: "convert?from=xlsx&to=csv", hub: "convert", badge: "Standard" },
-        ],
-      },
+      buildGroup("Convert Spreadsheet", [
+        ["xlsx-to-pdf", "PDF Document", "PDF", "convert?from=xlsx&to=pdf", "convert"],
+        ["xlsx-to-csv", "Comma-Separated Values", "CSV", "convert?from=xlsx&to=csv", "convert", "Standard"],
+      ]),
     ],
   },
 };
@@ -312,131 +245,99 @@ const AUDIO_ACTIONS: ActionTuple[] = [
   ["convert-audio", "Convert Audio Format", "🔁", "Transcode between MP3, AAC, OGG, Opus, FLAC, and WAV", "convert?cat=audio", "convert"],
 ];
 
+const HTML_ACTIONS: ActionTuple[] = [
+  ["convert-html-pdf", "Convert HTML to PDF", "📄", "Render HTML document to PDF pages", "convert?cat=html", "convert"],
+];
+
 const GENERIC_ACTIONS: ActionTuple[] = [
   ["repair-general", "Attempt File Repair", "🩹", "Scan for salvageable streams and reconstructed headers", "pdf/repair", "pdf"],
   ["convert-general", "Convert Format", "🔁", "Convert media or document container", "convert", "convert"],
 ];
 
 const PDF_CONVERSION_GROUPS: ConversionGroup[] = [
-  {
-    category: "Convert to Document & Office",
-    targets: [
-      { id: "pdf-to-word", name: "Word Document", format: "DOCX", route: "convert?from=pdf&to=docx", hub: "convert", badge: "Editable" },
-      { id: "pdf-to-excel", name: "Excel Spreadsheet", format: "XLSX", route: "convert?from=pdf&to=xlsx", hub: "convert", badge: "Tables" },
-      { id: "pdf-to-ppt", name: "PowerPoint Slides", format: "PPTX", route: "convert?from=pdf&to=pptx", hub: "convert" },
-      { id: "pdf-markdown", name: "Structured Markdown", format: "MD", route: "convert/pdf-markdown", hub: "ai", badge: "Tables & Math" },
-    ],
-  },
-  {
-    category: "Convert to Images",
-    targets: [
-      { id: "pdf-to-images-png", name: "Lossless PNG Pages", format: "PNG", route: "convert?cat=pdf2img&to=png", hub: "convert" },
-      { id: "pdf-to-images-jpeg", name: "Compact JPEG Pages", format: "JPEG", route: "convert?cat=pdf2img&to=jpeg", hub: "convert" },
-    ],
-  },
-  {
-    category: "Essential PDF Workstation",
-    targets: [
-      { id: "compress-pdf", name: "Compress PDF", format: "PDF", route: "compress/pdf", hub: "compress", badge: "Structural" },
-      { id: "edit-sign", name: "Edit & Sign", format: "PDF", route: "pdf/edit", hub: "pdf" },
-      { id: "ocr-pdf", name: "Searchable OCR", format: "PDF", route: "compress/ocr", hub: "ai", badge: "Tesseract 5" },
-      { id: "split-pdf", name: "Split Pages", format: "PDF", route: "pdf/split", hub: "pdf" },
-      { id: "remove-pages", name: "Remove Pages", format: "PDF", route: "pdf/remove-pages", hub: "pdf" },
-      { id: "page-numbers", name: "Page Numbers", format: "PDF", route: "pdf/page-numbers", hub: "pdf" },
-      { id: "nup-pdf", name: "Multi-Page (N-Up)", format: "PDF", route: "pdf/nup", hub: "pdf" },
-      { id: "metadata-pdf", name: "PDF Metadata", format: "PDF", route: "pdf/metadata", hub: "pdf" },
-      { id: "organize-pdf", name: "Organize & Rotate", format: "PDF", route: "pdf/organize", hub: "pdf" },
-      { id: "fill-forms", name: "Fill Forms", format: "PDF", route: "pdf/forms", hub: "pdf" },
-      { id: "protect-pdf", name: "Protect (AES-256)", format: "PDF", route: "pdf/protect", hub: "pdf" },
-      { id: "repair-pdf", name: "Repair Corrupt PDF", format: "PDF", route: "pdf/repair", hub: "pdf" },
-    ],
-  },
+  buildGroup("Convert to Document & Office", [
+    ["pdf-to-word", "Word Document", "DOCX", "convert?from=pdf&to=docx", "convert", "Editable"],
+    ["pdf-to-excel", "Excel Spreadsheet", "XLSX", "convert?from=pdf&to=xlsx", "convert", "Tables"],
+    ["pdf-to-ppt", "PowerPoint Slides", "PPTX", "convert?from=pdf&to=pptx", "convert"],
+    ["pdf-markdown", "Structured Markdown", "MD", "convert/pdf-markdown", "ai", "Tables & Math"],
+  ]),
+  buildGroup("Convert to Images", [
+    ["pdf-to-images-png", "Lossless PNG Pages", "PNG", "convert?cat=pdf2img&to=png", "convert"],
+    ["pdf-to-images-jpeg", "Compact JPEG Pages", "JPEG", "convert?cat=pdf2img&to=jpeg", "convert"],
+  ]),
+  buildGroup("Essential PDF Workstation", [
+    ["compress-pdf", "Compress PDF", "PDF", "compress/pdf", "compress", "Structural"],
+    ["edit-sign", "Edit & Sign", "PDF", "pdf/edit", "pdf"],
+    ["ocr-pdf", "Searchable OCR", "PDF", "compress/ocr", "ai", "Tesseract 5"],
+    ["split-pdf", "Split Pages", "PDF", "pdf/split", "pdf"],
+    ["remove-pages", "Remove Pages", "PDF", "pdf/remove-pages", "pdf"],
+    ["page-numbers", "Page Numbers", "PDF", "pdf/page-numbers", "pdf"],
+    ["nup-pdf", "Multi-Page (N-Up)", "PDF", "pdf/nup", "pdf"],
+    ["metadata-pdf", "PDF Metadata", "PDF", "pdf/metadata", "pdf"],
+    ["organize-pdf", "Organize & Rotate", "PDF", "pdf/organize", "pdf"],
+    ["fill-forms", "Fill Forms", "PDF", "pdf/forms", "pdf"],
+    ["protect-pdf", "Protect (AES-256)", "PDF", "pdf/protect", "pdf"],
+    ["repair-pdf", "Repair Corrupt PDF", "PDF", "pdf/repair", "pdf"],
+  ]),
 ];
 
 const VIDEO_CONVERSION_GROUPS: ConversionGroup[] = [
-  {
-    category: "Convert Video Format",
-    targets: [
-      { id: "video-to-mp4", name: "MP4 Video", format: "MP4", route: "convert?cat=video&to=mp4", hub: "convert", badge: "WebCodecs" },
-      { id: "video-to-webm", name: "WebM Video", format: "WebM", route: "convert?cat=video&to=webm", hub: "convert" },
-      { id: "video-to-mkv", name: "Matroska Video", format: "MKV", route: "convert?cat=video&to=mkv", hub: "convert" },
-    ],
-  },
-  {
-    category: "Animation & Audio Extraction",
-    targets: [
-      { id: "video-to-gif", name: "Animated GIF", format: "GIF", route: "compress/gif", hub: "compress", badge: "Two-Pass" },
-      { id: "video-to-mp3", name: "Extract MP3", format: "MP3", route: "convert?cat=audio&to=mp3", hub: "convert" },
-      { id: "video-to-aac", name: "Extract AAC", format: "AAC", route: "convert?cat=audio&to=aac", hub: "convert" },
-      { id: "video-to-opus", name: "Extract Opus", format: "Opus", route: "convert?cat=audio&to=opus", hub: "convert" },
-      { id: "video-to-wav", name: "Extract WAV", format: "WAV", route: "convert?cat=audio&to=wav", hub: "convert" },
-    ],
-  },
-  {
-    category: "Video Utilities",
-    targets: [
-      { id: "compress-video", name: "Compress Video", format: "Video", route: "compress/video", hub: "compress", badge: "Fast Path" },
-    ],
-  },
+  buildGroup("Convert Video Format", [
+    ["video-to-mp4", "MP4 Video", "MP4", "convert?cat=video&to=mp4", "convert", "WebCodecs"],
+    ["video-to-webm", "WebM Video", "WebM", "convert?cat=video&to=webm", "convert"],
+    ["video-to-mkv", "Matroska Video", "MKV", "convert?cat=video&to=mkv", "convert"],
+  ]),
+  buildGroup("Animation & Audio Extraction", [
+    ["video-to-gif", "Animated GIF", "GIF", "compress/gif", "compress", "Two-Pass"],
+    ["video-to-mp3", "Extract MP3", "MP3", "convert?cat=audio&to=mp3", "convert"],
+    ["video-to-aac", "Extract AAC", "AAC", "convert?cat=audio&to=aac", "convert"],
+    ["video-to-opus", "Extract Opus", "Opus", "convert?cat=audio&to=opus", "convert"],
+    ["video-to-wav", "Extract WAV", "WAV", "convert?cat=audio&to=wav", "convert"],
+  ]),
+  buildGroup("Video Utilities", [
+    ["compress-video", "Compress Video", "Video", "compress/video", "compress", "Fast Path"],
+  ]),
 ];
 
 const AUDIO_CONVERSION_GROUPS: ConversionGroup[] = [
-  {
-    category: "Convert Audio Format",
-    targets: [
-      { id: "audio-to-mp3", name: "MP3 Audio", format: "MP3", route: "convert?cat=audio&to=mp3", hub: "convert", badge: "Universal" },
-      { id: "audio-to-aac", name: "AAC Audio", format: "AAC", route: "convert?cat=audio&to=aac", hub: "convert" },
-      { id: "audio-to-opus", name: "Opus Voice/Music", format: "Opus", route: "convert?cat=audio&to=opus", hub: "convert", badge: "High Efficiency" },
-      { id: "audio-to-flac", name: "FLAC Audio", format: "FLAC", route: "convert?cat=audio&to=flac", hub: "convert", badge: "Lossless" },
-      { id: "audio-to-wav", name: "WAV Audio", format: "WAV", route: "convert?cat=audio&to=wav", hub: "convert" },
-      { id: "audio-to-ogg", name: "Ogg Vorbis", format: "OGG", route: "convert?cat=audio&to=ogg", hub: "convert" },
-    ],
-  },
-  {
-    category: "Audio Processing",
-    targets: [
-      { id: "compress-audio", name: "Compress Audio", format: "Audio", route: "compress/audio", hub: "compress", badge: "Bitrate & Normalization" },
-    ],
-  },
+  buildGroup("Convert Audio Format", [
+    ["audio-to-mp3", "MP3 Audio", "MP3", "convert?cat=audio&to=mp3", "convert", "Universal"],
+    ["audio-to-aac", "AAC Audio", "AAC", "convert?cat=audio&to=aac", "convert"],
+    ["audio-to-opus", "Opus Voice/Music", "Opus", "convert?cat=audio&to=opus", "convert", "High Efficiency"],
+    ["audio-to-flac", "FLAC Audio", "FLAC", "convert?cat=audio&to=flac", "convert", "Lossless"],
+    ["audio-to-wav", "WAV Audio", "WAV", "convert?cat=audio&to=wav", "convert"],
+    ["audio-to-ogg", "Ogg Vorbis", "OGG", "convert?cat=audio&to=ogg", "convert"],
+  ]),
+  buildGroup("Audio Processing", [
+    ["compress-audio", "Compress Audio", "Audio", "compress/audio", "compress", "Bitrate & Normalization"],
+  ]),
 ];
 
 const IMAGE_CONVERSION_GROUPS: ConversionGroup[] = [
-  {
-    category: "Convert Image Format",
-    targets: [
-      { id: "image-to-webp", name: "WebP Image", format: "WebP", route: "convert?cat=image&to=webp", hub: "convert", badge: "Recommended" },
-      { id: "image-to-avif", name: "AVIF Image", format: "AVIF", route: "convert?cat=image&to=avif", hub: "convert", badge: "Next-Gen" },
-      { id: "image-to-png", name: "PNG Image", format: "PNG", route: "convert?cat=image&to=png", hub: "convert", badge: "Lossless" },
-      { id: "image-to-jpeg", name: "JPEG Image", format: "JPEG", route: "convert?cat=image&to=jpeg", hub: "convert" },
-    ],
-  },
-  {
-    category: "Document & Text Utilities",
-    targets: [
-      { id: "images-to-pdf", name: "Compile to PDF", format: "PDF", route: "compress/images-to-pdf", hub: "compress", badge: "Multi-Page" },
-      { id: "ocr-image", name: "Extract Text (OCR)", format: "TXT", route: "compress/ocr", hub: "ai", badge: "Neural OCR" },
-      { id: "compress-image", name: "Compress Image", format: "Image", route: "compress/images", hub: "compress", badge: "SSIM Guard" },
-    ],
-  },
+  buildGroup("Convert Image Format", [
+    ["image-to-webp", "WebP Image", "WebP", "convert?cat=image&to=webp", "convert", "Recommended"],
+    ["image-to-avif", "AVIF Image", "AVIF", "convert?cat=image&to=avif", "convert", "Next-Gen"],
+    ["image-to-png", "PNG Image", "PNG", "convert?cat=image&to=png", "convert", "Lossless"],
+    ["image-to-jpeg", "JPEG Image", "JPEG", "convert?cat=image&to=jpeg", "convert"],
+  ]),
+  buildGroup("Document & Text Utilities", [
+    ["images-to-pdf", "Compile to PDF", "PDF", "compress/images-to-pdf", "compress", "Multi-Page"],
+    ["ocr-image", "Extract Text (OCR)", "TXT", "compress/ocr", "ai", "Neural OCR"],
+    ["compress-image", "Compress Image", "Image", "compress/images", "compress", "SSIM Guard"],
+  ]),
 ];
 
 const HTML_CONVERSION_GROUPS: ConversionGroup[] = [
-  {
-    category: "Convert Web Document",
-    targets: [
-      { id: "convert-html-pdf", name: "PDF Document", format: "PDF", route: "convert?cat=html&to=pdf", hub: "convert", badge: "PDF Export" },
-    ],
-  },
+  buildGroup("Convert Web Document", [
+    ["convert-html-pdf", "PDF Document", "PDF", "convert?cat=html&to=pdf", "convert", "PDF Export"],
+  ]),
 ];
 
 const GENERIC_CONVERSION_GROUPS: ConversionGroup[] = [
-  {
-    category: "General Utilities",
-    targets: [
-      { id: "convert-general", name: "Convert Format", format: "Convert", route: "convert", hub: "convert" },
-      { id: "repair-general", name: "Attempt File Repair", format: "Repair", route: "pdf/repair", hub: "pdf" },
-    ],
-  },
+  buildGroup("General Utilities", [
+    ["convert-general", "Convert Format", "Convert", "convert", "convert"],
+    ["repair-general", "Attempt File Repair", "Repair", "pdf/repair", "pdf"],
+  ]),
 ];
 
 interface MediaConfig {
@@ -475,6 +376,22 @@ const MEDIA_CONFIGS: MediaConfig[] = [
   },
 ];
 
+function buildDetection(
+  category: DetectedCategory,
+  label: string,
+  mime: string,
+  actionDefs: ActionTuple[],
+  conversionGroups: ConversionGroup[],
+): DetectionResult {
+  return {
+    category,
+    label,
+    mime,
+    actions: buildActions(actionDefs),
+    conversionGroups,
+  };
+}
+
 /**
  * Universal detector: takes a File and optional pre-read header bytes,
  * returns identified category and all context-specific actions.
@@ -487,77 +404,42 @@ export function detectFileTypeAndActions(
   const ext = name.split(".").pop() ?? "";
   const headerCategory = headerBytes ? identifyHeader(headerBytes) : "unknown";
 
-  // Check PDF
-  if (
-    headerCategory === "pdf" ||
-    file.type === "application/pdf" ||
-    name.endsWith(".pdf")
-  ) {
-    return {
-      category: "pdf",
-      label: "PDF Document",
-      mime: "application/pdf",
-      actions: buildActions(PDF_ACTION_DEFS),
-      conversionGroups: PDF_CONVERSION_GROUPS,
-    };
+  if (headerCategory === "pdf" || file.type === "application/pdf" || name.endsWith(".pdf")) {
+    return buildDetection("pdf", "PDF Document", "application/pdf", PDF_ACTION_DEFS, PDF_CONVERSION_GROUPS);
   }
 
-  // Check HTML
-  if (
-    ext === "html" ||
-    ext === "htm" ||
-    file.type === "text/html" ||
-    name.endsWith(".html") ||
-    name.endsWith(".htm")
-  ) {
-    return {
-      category: "html",
-      label: "HTML Document",
-      mime: "text/html",
-      actions: buildActions([
-        ["convert-html-pdf", "Convert HTML to PDF", "📄", "Render HTML document to PDF pages", "convert?cat=html", "convert"],
-      ]),
-      conversionGroups: HTML_CONVERSION_GROUPS,
-    };
+  if (ext === "html" || ext === "htm" || file.type === "text/html" || name.endsWith(".html") || name.endsWith(".htm")) {
+    return buildDetection("html", "HTML Document", "text/html", HTML_ACTIONS, HTML_CONVERSION_GROUPS);
   }
 
-  // Check Office formats
   if (ext === "docx" || ext === "pptx" || ext === "xlsx") {
     const cfg = OFFICE_CONFIGS[ext];
-    return {
-      category: ext,
-      label: cfg.label,
-      mime: cfg.mime,
-      actions: buildActions(cfg.actions),
-      conversionGroups: cfg.conversionGroups,
-    };
+    return buildDetection(ext, cfg.label, cfg.mime, cfg.actions, cfg.conversionGroups);
   }
 
-  // Check Media formats (image, video, audio)
   for (const cfg of MEDIA_CONFIGS) {
     if (
       headerCategory === cfg.category ||
       file.type.startsWith(`${cfg.category}/`) ||
       cfg.extensions.includes(ext)
     ) {
-      return {
-        category: cfg.category,
-        label: cfg.label,
-        mime: file.type || cfg.defaultMime,
-        actions: buildActions(cfg.actions),
-        conversionGroups: cfg.conversionGroups,
-      };
+      return buildDetection(
+        cfg.category,
+        cfg.label,
+        file.type || cfg.defaultMime,
+        cfg.actions,
+        cfg.conversionGroups,
+      );
     }
   }
 
-  // Default unknown file: offer repair & general convert
-  return {
-    category: "unknown",
-    label: "Generic File",
-    mime: file.type || "application/octet-stream",
-    actions: buildActions(GENERIC_ACTIONS),
-    conversionGroups: GENERIC_CONVERSION_GROUPS,
-  };
+  return buildDetection(
+    "unknown",
+    "Generic File",
+    file.type || "application/octet-stream",
+    GENERIC_ACTIONS,
+    GENERIC_CONVERSION_GROUPS,
+  );
 }
 
 /**
