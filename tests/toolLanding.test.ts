@@ -186,3 +186,28 @@ Deno.test("tool landing: PdfCanvasEditor avoids unreachable negative left overfl
     "PdfCanvasEditor must center via auto margin inside a flex-start scroll container"
   );
 });
+
+Deno.test("tool landing: PdfSuite lazy-loads page 25+ thumbnails and Images keeps #img-dim visible", async () => {
+  const pdfSuite = await Deno.readTextFile(
+    new URL("../src/routes/PdfSuite.svelte", import.meta.url)
+  );
+  const imagesSvelte = await Deno.readTextFile(
+    new URL("../src/routes/Images.svelte", import.meta.url)
+  );
+
+  assert(
+    pdfSuite.includes("use:observeThumbVisibility") &&
+      pdfSuite.includes("IntersectionObserver") &&
+      pdfSuite.includes("requestPageThumbnail"),
+    "PdfSuite must lazily render thumbnails for pages 25+ as cards become visible"
+  );
+  assert(
+    pdfSuite.includes("onDestroy") && pdfSuite.includes("releaseThumbDoc"),
+    "PdfSuite must release cached PDF.js thumbnail document on cleanup"
+  );
+  assert(
+    imagesSvelte.includes('id="img-dim"') &&
+      !/\.cz-select-pill\s*\{[^}]*display:\s*none/s.test(imagesSvelte),
+    "Images.svelte must not hide #img-dim with a .cz-select-pill display: none rule"
+  );
+});
