@@ -180,7 +180,7 @@ async function main() {
           }`
         );
       }
-      process.exit(1);
+      process.exitCode = 1;
     } else {
       console.log(
         `\n✅ All ${results.length} configurations passed with 0 horizontal overflow!`
