@@ -356,8 +356,9 @@ export function renderMarkdownToHtml(markdown: string): string {
     tableRows = [];
   }
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i++];
     const trimmed = line.trim();
 
     // Code block toggle ```
@@ -452,7 +453,7 @@ export function renderMarkdownToHtml(markdown: string): string {
       const tableLines: string[] = [line];
       let closed = trimmed.toLowerCase().includes("</table>");
       if (!closed) {
-        let j = i + 1;
+        let j = i;
         while (j < lines.length) {
           tableLines.push(lines[j]);
           if (lines[j].toLowerCase().includes("</table>")) {
@@ -462,7 +463,7 @@ export function renderMarkdownToHtml(markdown: string): string {
           j++;
         }
         if (closed) {
-          i = j;
+          i = j + 1;
         } else {
           tableLines.length = 1;
         }
@@ -488,7 +489,7 @@ export function renderMarkdownToHtml(markdown: string): string {
       const mathLines: string[] = [line];
       let closed = trimmed.toLowerCase().includes("</math>");
       if (!closed) {
-        let j = i + 1;
+        let j = i;
         while (j < lines.length) {
           mathLines.push(lines[j]);
           if (lines[j].toLowerCase().includes("</math>")) {
@@ -498,7 +499,7 @@ export function renderMarkdownToHtml(markdown: string): string {
           j++;
         }
         if (closed) {
-          i = j;
+          i = j + 1;
         } else {
           mathLines.length = 1;
         }

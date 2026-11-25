@@ -12,7 +12,7 @@ import {
   setProgressHandler,
 } from "./ffmpeg";
 import { get2D } from "./gpu";
-import { getVideoMeta, planVideoSize } from "./videoMeta";
+import { buildFfmpegScaleFilter, getVideoMeta, planVideoSize } from "./videoMeta";
 import { videoViaWebCodecs } from "./webcodecsVideo";
 
 export async function compressVideo(
@@ -77,6 +77,7 @@ async function videoViaFFmpeg(
 ): Promise<CompressResult> {
   // FIX 1: get actual duration BEFORE bitrate calc so we never divide by 60
   const meta = await getVideoMeta(file);
+  const planned = planVideoSize(meta.width, meta.height, opts.maxWidth);
   onProgress?.(2);
 
   const ff = (await getFFmpeg()) as any;
@@ -189,8 +190,8 @@ async function videoViaFFmpeg(
       preset === "slow" ? "1" : preset === "fast" ? "3" : preset === "ultrafast" ? "4" : "2",
     );
 
-  if (opts.maxWidth)
-    vArgs.push("-vf", `scale='min(${opts.maxWidth},iw)':-2:flags=lanczos`);
+  const scaleFilter = buildFfmpegScaleFilter(planned);
+  if (scaleFilter) vArgs.push("-vf", scaleFilter);
   if (opts.fps && opts.fps > 0) vArgs.push("-r", String(opts.fps));
 
   if (codec === "h265" && tenBit)
@@ -290,18 +291,14 @@ async function videoViaFFmpeg(
   const blob = new Blob([data], { type: mime });
   onProgress?.(100);
 
-  const planned = planVideoSize(meta.width, meta.height, opts.maxWidth);
-  const outWidth = opts.maxWidth ? planned.width : meta.width;
-  const outHeight = opts.maxWidth ? planned.height : meta.height;
-
   return {
     blob,
     originalSize: file.size,
     compressedSize: blob.size,
     compressionRatio: file.size / blob.size,
     format: `${mime} · FFmpeg.wasm${ffHasMT() ? " MT" : ""}${tenBit ? " · 10-bit" : ""}${opts.videoProxy ? " · Proxy" : ""}${twoPass ? " · 2-pass" : ""}${audioTrackMode === "all" ? " · multi-audio" : ""}${subtitleMode === "all" ? " · subs" : ""}`,
-    width: outWidth,
-    height: outHeight,
+    width: planned.width,
+    height: planned.height,
     duration: meta.duration,
   };
 }

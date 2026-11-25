@@ -121,7 +121,7 @@ export function generateWorksheetXml(grid: string[][]): string {
       const isNumericLiteral =
         /^[+-]?(?:(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(trimmed) &&
         !/^[+-]?0\d/.test(normalized);
-      const numVal = isNumericLiteral ? Number(normalized) : NaN;
+      const numVal = isNumericLiteral ? Number(normalized) : Number.NaN;
 
       if (Number.isFinite(numVal)) {
         rowXml += `<c r="${cellRef}"><v>${numVal}</v></c>`;
