@@ -180,6 +180,9 @@ export function planPageRemoval(
     throw new Error("Document must have at least 1 page.");
   }
 
+  // Set<number> collections represent internal 0-based page indices regardless of zeroBased
+  const effectiveZeroBased = pagesToRemove instanceof Set ? true : zeroBased;
+
   const toRemoveIndices: number[] =
     typeof pagesToRemove === "string"
       ? parseRemovalRange(pagesToRemove, totalPages)
@@ -191,7 +194,7 @@ export function planPageRemoval(
         )
           .map((idx) => {
             if (typeof idx !== "number" || !Number.isFinite(idx)) return -1;
-            if (zeroBased) {
+            if (effectiveZeroBased) {
               return idx >= 0 && idx < totalPages ? Math.floor(idx) : -1;
             }
             // 1-based indexing: page 1 is index 0. Values < 1 are invalid in a 1-based scheme.
@@ -317,11 +320,161 @@ function pruneUnreachablePdfObjects(
   }
 }
 
+interface PdfNameFactoryLike {
+  of?: (name: string) => unknown;
+}
+
+interface PdfArrayLike {
+  size?: () => number;
+  get?: (index: number) => unknown;
+  remove?: (index: number) => void;
+  asArray?: () => unknown[];
+}
+
+interface PdfWidgetLike {
+  ref?: PdfRefLike;
+  P?: () => PdfRefLike | undefined;
+}
+
+interface PdfFieldLike {
+  ref?: PdfRefLike;
+  acroField?: {
+    Kids?: () => PdfArrayLike | undefined;
+    getWidgets?: () => PdfWidgetLike[];
+    removeWidget?: (index: number) => void;
+  };
+}
+
+interface PdfFormLike {
+  getFields?: () => PdfFieldLike[];
+  removeField?: (field: PdfFieldLike) => void;
+  flatten?: () => void;
+}
+
+interface PdfPageWithAnnotsLike {
+  ref?: PdfRefLike;
+  node?: {
+    Annots?: () => unknown;
+    get?: (key: unknown) => unknown;
+  };
+}
+
+interface PdfSourceDocLike extends PdfDocLike {
+  getForm?: () => PdfFormLike;
+}
+
+function collectPageAnnotRefs(
+  srcDoc: PdfSourceDocLike,
+  page: PdfPageWithAnnotsLike | null | undefined,
+  PDFName: PdfNameFactoryLike | undefined,
+  targetSet: Set<string>,
+): void {
+  const node = page?.node;
+  if (!node) return;
+  let rawAnnots: unknown;
+  if (typeof node.Annots === "function") {
+    rawAnnots = node.Annots();
+  } else if (typeof node.get === "function" && PDFName?.of) {
+    rawAnnots = node.get(PDFName.of("Annots"));
+  }
+  if (!rawAnnots) return;
+  const rawRef = rawAnnots as Partial<PdfRefLike>;
+  const resolvedAnnots =
+    typeof rawRef.objectNumber === "number" && typeof srcDoc?.context?.lookup === "function"
+      ? srcDoc.context.lookup(rawRef as PdfRefLike)
+      : rawAnnots;
+  const annotsArray = resolvedAnnots as PdfArrayLike | unknown[];
+  const items: unknown[] = Array.isArray(annotsArray)
+    ? annotsArray
+    : typeof annotsArray?.asArray === "function"
+      ? annotsArray.asArray()
+      : [];
+  for (const item of items) {
+    if (
+      item &&
+      typeof item === "object" &&
+      typeof (item as PdfRefLike).objectNumber === "number"
+    ) {
+      targetSet.add(refKey(item as PdfRefLike));
+    }
+  }
+}
+
+/**
+ * Remove AcroForm widget annotations belonging to deleted pages before object pruning.
+ * Fields retain editability if at least one widget lives on a retained page; fields
+ * whose widgets all lived on deleted pages are removed from the AcroForm.
+ */
+function removeDeletedPageFormWidgets(
+  srcDoc: PdfSourceDocLike,
+  removedPageRefs: Set<string>,
+  removedAnnotRefs: Set<string>,
+  removedRefs: Set<string>,
+): void {
+  let form: PdfFormLike | null;
+  try {
+    form = typeof srcDoc.getForm === "function" ? srcDoc.getForm() : null;
+  } catch {
+    return;
+  }
+  if (!form || typeof form.getFields !== "function") return;
+
+  const fields = [...(form.getFields() ?? [])];
+  for (const field of fields) {
+    const acroField = field?.acroField;
+    if (!acroField || typeof acroField.getWidgets !== "function") continue;
+    const widgets = acroField.getWidgets();
+    if (!Array.isArray(widgets) || widgets.length === 0) continue;
+
+    const kidsArr = typeof acroField.Kids === "function" ? acroField.Kids() : undefined;
+    let retainedCount = 0;
+
+    for (let wi = widgets.length - 1; wi >= 0; wi--) {
+      const widget = widgets[wi];
+      const kidsCount = typeof kidsArr?.size === "function" ? kidsArr.size() : 0;
+      const kidRef =
+        kidsArr && typeof kidsArr.get === "function" && wi < kidsCount
+          ? (kidsArr.get(wi) as PdfRefLike | undefined)
+          : undefined;
+      const wRef = widget?.ref ?? kidRef;
+      const pRef = typeof widget?.P === "function" ? widget.P() : undefined;
+
+      const onDeletedPage =
+        (pRef && typeof pRef.objectNumber === "number" && removedPageRefs.has(refKey(pRef))) ||
+        (wRef && typeof wRef.objectNumber === "number" && removedAnnotRefs.has(refKey(wRef))) ||
+        (!wRef && field?.ref && typeof field.ref.objectNumber === "number" && removedAnnotRefs.has(refKey(field.ref)));
+
+      if (onDeletedPage) {
+        if (typeof acroField.removeWidget === "function") {
+          acroField.removeWidget(wi);
+        } else if (kidsArr && typeof kidsArr.remove === "function") {
+          kidsArr.remove(wi);
+        }
+        if (wRef && typeof wRef.objectNumber === "number") {
+          removedRefs.add(refKey(wRef));
+        }
+      } else {
+        retainedCount++;
+      }
+    }
+
+    if (retainedCount === 0) {
+      if (typeof form.removeField === "function") {
+        form.removeField(field);
+      }
+      if (field?.ref && typeof field.ref.objectNumber === "number") {
+        removedRefs.add(refKey(field.ref));
+      }
+    }
+  }
+}
+
 /**
  * Execute page removal on a PDF document.
  * Removes pages in-place in descending index order so that page indices do not shift,
  * preserving document metadata, bookmarks, catalog properties, and form field interactiveness,
- * then prunes unreachable objects so deleted page content is absent from output bytes.
+ * then removes deleted-page form widgets and prunes unreachable objects so deleted page
+ * content is absent from output bytes.
  */
 export async function removePagesFromPdf(
   pdfBytes: Uint8Array,
@@ -329,7 +482,7 @@ export async function removePagesFromPdf(
 ): Promise<RemovePagesResult> {
   options.onProgress?.(10);
 
-  const { PDFDocument } = await getPdfLib();
+  const { PDFDocument, PDFName } = await getPdfLib();
 
   let srcDoc: any;
   try {
@@ -369,15 +522,24 @@ export async function removePagesFromPdf(
   options.onProgress?.(50);
 
   // In-place removal: delete pages in descending index order so subsequent target indices remain valid.
-  // Record removed page refs first so we can purge unreachable streams/objects before saving.
+  // Record removed page and annotation refs first so deleted-page widgets and streams are purged cleanly.
   const descendingIndices = [...plan.toRemoveIndices].sort((a, b) => b - a);
+  const removedPageRefs = new Set<string>();
+  const removedAnnotRefs = new Set<string>();
   const removedRefs = new Set<string>();
   for (const idx of descendingIndices) {
     const page = typeof srcDoc.getPage === "function" ? srcDoc.getPage(idx) : null;
     if (page?.ref && typeof page.ref.objectNumber === "number") {
-      removedRefs.add(refKey(page.ref));
+      const key = refKey(page.ref);
+      removedPageRefs.add(key);
+      removedRefs.add(key);
     }
+    collectPageAnnotRefs(srcDoc, page, PDFName, removedAnnotRefs);
     srcDoc.removePage(idx);
+  }
+
+  if (!options.flattenForms) {
+    removeDeletedPageFormWidgets(srcDoc, removedPageRefs, removedAnnotRefs, removedRefs);
   }
 
   pruneUnreachablePdfObjects(srcDoc, removedRefs);

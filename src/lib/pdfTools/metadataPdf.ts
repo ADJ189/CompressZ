@@ -54,6 +54,18 @@ export function formatPdfDate(date?: Date): string | undefined {
 }
 
 /**
+ * Parse comma/semicolon-separated metadata keyword input while preserving
+ * internal whitespace inside multi-word phrases (e.g. "annual report, Q4").
+ */
+export function parseMetadataKeywords(input?: string): string[] {
+  if (!input) return [];
+  return input
+    .split(/[,;]+/)
+    .map((k) => sanitizeMetadataString(k))
+    .filter(Boolean);
+}
+
+/**
  * Read all metadata from a PDF document.
  */
 export async function readPdfMetadata(pdfBytes: Uint8Array): Promise<PdfMetadataInfo> {
@@ -78,10 +90,10 @@ export async function readPdfMetadata(pdfBytes: Uint8Array): Promise<PdfMetadata
 
   let keywords: string[] | undefined = undefined;
   if (keywordsStr) {
-    keywords = keywordsStr
-      .split(/[,;\s]+/)
-      .map((k: string) => k.trim())
-      .filter(Boolean);
+    const parsed = parseMetadataKeywords(keywordsStr);
+    if (parsed.length > 0) {
+      keywords = parsed;
+    }
   }
 
   return {
@@ -178,7 +190,8 @@ export async function updatePdfMetadata(
       const kwList = Array.isArray(metadata.keywords)
         ? metadata.keywords.map(sanitizeMetadataString).filter(Boolean)
         : [];
-      pdfDoc.setKeywords(kwList);
+      // Preserve comma separation so pdf-lib's internal space join keeps multi-word phrases distinct
+      pdfDoc.setKeywords(kwList.length > 0 ? [kwList.join(", ")] : []);
     }
     if (metadata.creator !== undefined) {
       pdfDoc.setCreator(sanitizeMetadataString(metadata.creator));

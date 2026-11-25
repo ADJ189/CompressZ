@@ -45,11 +45,17 @@ export interface PageNumberOptions {
   onProgress?: (pct: number) => void;
 }
 
+export const MAX_PAGE_NUMBER_START = 999_999;
+export const MAX_ROMAN_NUMERAL = 3999;
+
 /**
- * Convert a positive integer to Roman numerals.
+ * Convert a positive integer within the standard Roman numeral range (1–3999)
+ * to Roman numerals, falling back cleanly to base-10 string outside range.
  */
 export function toRomanNumeral(num: number): string {
-  if (num <= 0 || !Number.isInteger(num)) return String(num);
+  if (num <= 0 || num > MAX_ROMAN_NUMERAL || !Number.isInteger(num)) {
+    return String(num);
+  }
   const romanMap: [number, string][] = [
     [1000, "M"],
     [900, "CM"],
@@ -109,11 +115,16 @@ export function formatPageNumber(
     }
     case "custom": {
       const pattern = customPattern || "Page {n} of {total}";
-      return pattern
+      let out = pattern
         .replace(/\{n\}/g, String(n))
-        .replace(/\{total\}/g, String(total))
-        .replace(/\{roman\}/g, toRomanNumeral(n).toLowerCase())
-        .replace(/\{ROMAN\}/g, toRomanNumeral(n));
+        .replace(/\{total\}/g, String(total));
+      if (out.includes("{roman}") || out.includes("{ROMAN}")) {
+        const roman = toRomanNumeral(n);
+        out = out
+          .replace(/\{roman\}/g, roman.toLowerCase())
+          .replace(/\{ROMAN\}/g, roman);
+      }
+      return out;
     }
     default:
       return `Page ${n} of ${total}`;
@@ -336,6 +347,18 @@ export async function applyPdfPageNumbers(
   pdfBytes: Uint8Array,
   options: PageNumberOptions = {},
 ): Promise<Uint8Array> {
+  const startCounter = options.startNumber ?? 1;
+  if (
+    typeof startCounter !== "number" ||
+    !Number.isInteger(startCounter) ||
+    startCounter < 1 ||
+    startCounter > MAX_PAGE_NUMBER_START
+  ) {
+    throw new Error(
+      `Start number must be a whole number between 1 and ${MAX_PAGE_NUMBER_START}.`,
+    );
+  }
+
   const { PDFDocument, StandardFonts, rgb, degrees } = await getPdfLib();
   const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
   if (pdfDoc.isEncrypted) {
@@ -367,7 +390,6 @@ export async function applyPdfPageNumbers(
   const position = options.position || "bottom-center";
   const marginX = options.marginX ?? 36;
   const marginY = options.marginY ?? 36;
-  const startCounter = options.startNumber ?? 1;
 
   for (let i = 0; i < targetIndices.length; i++) {
     const pageIndex = targetIndices[i];
