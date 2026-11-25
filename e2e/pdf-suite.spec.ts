@@ -16,6 +16,7 @@ let fixtures: {
   pdf: string;
   pdfWithAuthor: string;
   twoPagePdf: string;
+  threePagePdf: string;
   manyPagePdf: string;
   truncated: string;
 };
@@ -33,6 +34,11 @@ test.beforeAll(async () => {
       "pdf-suite-e2e",
       "suite-two-page.pdf",
       makeMultiPagePdf(["Page One", "Page Two"]),
+    ),
+    threePagePdf: createE2eFixture(
+      "pdf-suite-e2e",
+      "suite-three-page.pdf",
+      makeMultiPagePdf(["Keep Alpha Page 1", "Delete Secret Page 2", "Keep Omega Page 3"]),
     ),
     manyPagePdf: createE2eFixture(
       "pdf-suite-e2e",
@@ -198,5 +204,27 @@ test.describe("PDF Suite workstation", () => {
     const page28Card = page.locator(".cz-remove-card").nth(27);
     await page28Card.scrollIntoViewIfNeeded();
     await expect(page28Card.locator("img.cz-remove-thumb-img")).toBeVisible({ timeout: CDN_TIMEOUT });
+  });
+
+  test("PDF Remove Pages: removes selected page and preserves remaining pages in order", async ({ page }) => {
+    test.setTimeout(CDN_TIMEOUT);
+    await page.goto("/pdf/remove-pages");
+    await upload(page, fixtures.threePagePdf);
+    await expect(page.locator(".cz-suite-file-bar")).toBeVisible({ timeout: CDN_TIMEOUT });
+    await expect(page.getByText("3 pages")).toBeVisible({ timeout: CDN_TIMEOUT });
+
+    await page.locator(".cz-remove-card").nth(1).click();
+    const action = page.getByRole("button", { name: "Remove 1 Page & Download PDF" });
+    await expect(action).toBeEnabled({ timeout: CDN_TIMEOUT });
+
+    const { download, bytes } = await triggerDownload(page, () => action.click());
+    expect(bytes.subarray(0, 4).toString("latin1")).toBe("%PDF");
+    expect(download.suggestedFilename()).toMatch(/-pages-removed\.pdf$/);
+
+    const pdfText = extractPdfStreamText(bytes);
+    expect(pdfText).toMatch(/\/Count\s+2\b/);
+    expect(pdfText).toContain("Keep Alpha Page 1");
+    expect(pdfText).toContain("Keep Omega Page 3");
+    expect(pdfText).not.toContain("Delete Secret Page 2");
   });
 });
