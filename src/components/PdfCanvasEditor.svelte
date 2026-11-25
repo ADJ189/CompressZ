@@ -48,7 +48,7 @@
   let pageThumbnails = $state<Record<number, string>>({});
   let isDrawing = false;
   let currentStrokePoints: { x: number; y: number }[] = [];
-  let pendingTextAnnotation = $state<{ x: number; y: number; value: string } | null>(null);
+  let pendingTextAnnotation = $state<{ x: number; y: number; value: string; page: number } | null>(null);
 
   // Color & styling options
   let activeColor = $state<string>("#ef4444"); // Red for text
@@ -148,7 +148,7 @@
     const y = (e.clientY - rect.top) / (zoomLevel * 1.5);
 
     if (activeTool === "text") {
-      pendingTextAnnotation = { x, y, value: "Note" };
+      pendingTextAnnotation = { x, y, value: "Note", page: currentPage };
     } else if (activeTool === "ink" || activeTool === "highlighter") {
       isDrawing = true;
       try {
@@ -233,30 +233,42 @@
 
   function commitPendingText() {
     if (!pendingTextAnnotation) return;
+    const targetPage = pendingTextAnnotation.page;
     const trimmed = pendingTextAnnotation.value.trim();
     if (trimmed) {
-      addAnnotation({
-        id: `ann-${Date.now()}`,
-        type: "text",
-        x: pendingTextAnnotation.x,
-        y: pendingTextAnnotation.y,
-        width: 120,
-        height: 30,
-        text: trimmed,
-        color: activeColor,
-        fontSize: 16,
-      });
+      addAnnotation(
+        {
+          id: `ann-${Date.now()}`,
+          type: "text",
+          x: pendingTextAnnotation.x,
+          y: pendingTextAnnotation.y,
+          width: 120,
+          height: 30,
+          text: trimmed,
+          color: activeColor,
+          fontSize: 16,
+        },
+        targetPage,
+      );
     }
     pendingTextAnnotation = null;
   }
 
-  function addAnnotation(ann: Annotation) {
+  function addAnnotation(ann: Annotation, pageNum: number = currentPage) {
     const next = { ...annotations };
-    const list = next[currentPage] ? [...next[currentPage]] : [];
+    const list = next[pageNum] ? [...next[pageNum]] : [];
     list.push(ann);
-    next[currentPage] = list;
+    next[pageNum] = list;
     annotations = next;
-    redrawOverlay();
+    if (pageNum === currentPage) {
+      redrawOverlay();
+    }
+  }
+
+  function goToPage(pageNum: number) {
+    if (pageNum === currentPage) return;
+    pendingTextAnnotation = null;
+    currentPage = pageNum;
   }
 
   function handleSignatureSaved(dataUrl: string) {
@@ -394,6 +406,9 @@
     }
     annotations = {};
     pageThumbnails = {};
+    pendingTextAnnotation = null;
+    isDrawing = false;
+    currentStrokePoints = [];
     currentPage = 1;
 
     try {
@@ -547,7 +562,7 @@
         <button
           type="button"
           class="cz-studio-thumb-card {currentPage === pageNum ? 'is-active' : ''}"
-          onclick={() => (currentPage = pageNum)}
+          onclick={() => goToPage(pageNum)}
         >
           {#if pageThumbnails[pageNum]}
             <img src={pageThumbnails[pageNum]} alt="Thumb {pageNum}" class="cz-thumb-img" />
