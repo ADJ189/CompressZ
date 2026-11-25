@@ -56,6 +56,29 @@
 
   let currentRenderTask: any = null;
   let renderSeq = 0;
+  let renderedPage = $state<number>(0);
+  let isRenderingPage = $state<boolean>(false);
+  let canvasWidthPx = $state<number>(0);
+  let canvasHeightPx = $state<number>(0);
+
+  function getClampedPopoverPos(pending: { x: number; y: number }): { left: number; top: number } {
+    const rawLeft = pending.x * zoomLevel * 1.5;
+    const rawTop = pending.y * zoomLevel * 1.5;
+    if (canvasWidthPx <= 0 || canvasHeightPx <= 0) {
+      return { left: Math.max(8, rawLeft), top: Math.max(8, rawTop) };
+    }
+    const popW = 280;
+    const popH = 44;
+    const pad = 8;
+    const maxLeft = Math.max(pad, canvasWidthPx - popW - pad);
+    const maxTop = Math.max(pad, canvasHeightPx - popH - pad);
+    const left = rawLeft > maxLeft ? rawLeft - popW : rawLeft;
+    const top = rawTop > maxTop ? rawTop - popH : rawTop;
+    return {
+      left: Math.max(pad, Math.min(maxLeft, left)),
+      top: Math.max(pad, Math.min(maxTop, top)),
+    };
+  }
 
   async function renderPage(pageNum: number) {
     if (!pdfDocInstance || !canvasEl || !overlayCanvasEl) return;
@@ -66,15 +89,20 @@
       currentRenderTask = null;
     }
     const mySeq = ++renderSeq;
+    isRenderingPage = true;
     try {
       const page = await pdfDocInstance.getPage(pageNum);
       if (mySeq !== renderSeq) return;
       const viewport = page.getViewport({ scale: zoomLevel * 1.5 });
 
-      canvasEl.width = Math.round(viewport.width);
-      canvasEl.height = Math.round(viewport.height);
-      overlayCanvasEl.width = Math.round(viewport.width);
-      overlayCanvasEl.height = Math.round(viewport.height);
+      const w = Math.round(viewport.width);
+      const h = Math.round(viewport.height);
+      canvasEl.width = w;
+      canvasEl.height = h;
+      overlayCanvasEl.width = w;
+      overlayCanvasEl.height = h;
+      canvasWidthPx = w;
+      canvasHeightPx = h;
 
       const ctx = canvasEl.getContext("2d")!;
       const task = page.render({ canvasContext: ctx, viewport });
@@ -82,6 +110,7 @@
       await task.promise;
 
       if (mySeq === renderSeq) {
+        renderedPage = pageNum;
         redrawOverlay();
       }
     } catch (err: any) {
@@ -89,6 +118,7 @@
       console.error("PDF page render error:", err);
     } finally {
       if (mySeq === renderSeq) {
+        isRenderingPage = false;
         currentRenderTask = null;
       }
     }
@@ -143,12 +173,13 @@
 
   function handleOverlayPointerDown(e: PointerEvent) {
     if (activeTool === "select") return;
+    if (isRenderingPage || renderedPage !== currentPage) return;
     const rect = overlayCanvasEl.getBoundingClientRect();
     const x = (e.clientX - rect.left) / (zoomLevel * 1.5);
     const y = (e.clientY - rect.top) / (zoomLevel * 1.5);
 
     if (activeTool === "text") {
-      pendingTextAnnotation = { x, y, value: "Note", page: currentPage };
+      pendingTextAnnotation = { x, y, value: "Note", page: renderedPage };
     } else if (activeTool === "ink" || activeTool === "highlighter") {
       isDrawing = true;
       try {
@@ -407,6 +438,8 @@
     annotations = {};
     pageThumbnails = {};
     pendingTextAnnotation = null;
+    renderedPage = 0;
+    isRenderingPage = false;
     isDrawing = false;
     currentStrokePoints = [];
     currentPage = 1;
@@ -581,6 +614,7 @@
         <canvas
           bind:this={overlayCanvasEl}
           class="cz-overlay-ann-canvas {activeTool !== 'select' ? 'is-interactive' : ''}"
+          data-rendered-page={renderedPage}
           style="touch-action: none;"
           onpointerdown={handleOverlayPointerDown}
           onpointermove={handleOverlayPointerMove}
@@ -608,9 +642,10 @@
         {/each}
 
         {#if pendingTextAnnotation}
+          {@const popPos = getClampedPopoverPos(pendingTextAnnotation)}
           <div
             class="cz-inline-text-popover"
-            style="left: {pendingTextAnnotation.x * zoomLevel * 1.5}px; top: {pendingTextAnnotation.y * zoomLevel * 1.5}px;"
+            style="left: {popPos.left}px; top: {popPos.top}px;"
           >
             <input
               type="text"

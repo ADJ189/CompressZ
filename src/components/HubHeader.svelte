@@ -43,8 +43,6 @@
     }
     if (nextIdx >= 0) {
       e.preventDefault();
-      const targetTool = tools[nextIdx];
-      onSelectTool?.(targetTool.id);
       const btns = tablistEl?.querySelectorAll<HTMLButtonElement>('[role="tab"]');
       btns?.[nextIdx]?.focus();
     }

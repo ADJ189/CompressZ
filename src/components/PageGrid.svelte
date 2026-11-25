@@ -1,3 +1,7 @@
+<script module lang="ts">
+  let copyCounter = 0;
+</script>
+
 <script lang="ts">
   import type { PageSpec } from "../lib/pdfTools/organizePdf";
 
@@ -11,7 +15,6 @@
 
   let draggedIndex = $state<number | null>(null);
   let dragOverIndex = $state<number | null>(null);
-  let copyCounter = 0;
 
   function handleRotate(index: number) {
     const updated = pages.map((p, i) => {
