@@ -16,10 +16,12 @@ let fixtures: {
   pdf: string;
   pdfWithAuthor: string;
   twoPagePdf: string;
+  manyPagePdf: string;
   truncated: string;
 };
 
 test.beforeAll(async () => {
+  const pages28 = Array.from({ length: 28 }, (_, i) => `Page ${i + 1} Content`);
   fixtures = {
     pdf: createE2eFixture("pdf-suite-e2e", "suite-sample.pdf", makePdf("PDF Suite Test Document")),
     pdfWithAuthor: createE2eFixture(
@@ -31,6 +33,11 @@ test.beforeAll(async () => {
       "pdf-suite-e2e",
       "suite-two-page.pdf",
       makeMultiPagePdf(["Page One", "Page Two"]),
+    ),
+    manyPagePdf: createE2eFixture(
+      "pdf-suite-e2e",
+      "suite-28-pages.pdf",
+      makeMultiPagePdf(pages28),
     ),
     truncated: createE2eFixture("pdf-suite-e2e", "corrupt-sample.pdf", makeTruncatedPdf()),
   };
@@ -179,5 +186,17 @@ test.describe("PDF Suite workstation", () => {
     await expect(page.locator(".cz-suite-file-bar")).toBeVisible({ timeout: CDN_TIMEOUT });
     await expect(page.locator(".cz-inline-text-popover")).toHaveCount(0);
     await expect(page.locator(".cz-floating-text-ann")).toHaveCount(0);
+  });
+
+  test("PDF Remove Pages: lazily renders thumbnail previews for pages 25+ when scrolled into view", async ({ page }) => {
+    test.setTimeout(CDN_TIMEOUT);
+    await page.goto("/pdf/remove-pages");
+    await upload(page, fixtures.manyPagePdf);
+    await expect(page.locator(".cz-suite-file-bar")).toBeVisible({ timeout: CDN_TIMEOUT });
+    await expect(page.locator(".cz-remove-card")).toHaveCount(28, { timeout: CDN_TIMEOUT });
+
+    const page28Card = page.locator(".cz-remove-card").nth(27);
+    await page28Card.scrollIntoViewIfNeeded();
+    await expect(page28Card.locator("img.cz-remove-thumb-img")).toBeVisible({ timeout: CDN_TIMEOUT });
   });
 });
