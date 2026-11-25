@@ -758,7 +758,7 @@
             <div class="cz-settings-row">
               <div>
                 <div class="cz-settings-label">Default Image Quality ({settings.engines.images.quality}%)</div>
-                <div class="cz-settings-desc">Baseline encoding quality; SSIM guard protects ≥ 0.90</div>
+                <div class="cz-settings-desc">Baseline encoding quality; best-effort SSIM guard targets 0.90 and warns if lower</div>
               </div>
               <div style="display: flex; align-items: center; gap: 0.75rem;">
                 <input
