@@ -79,8 +79,9 @@ export function extractPdfStreamText(bytes: Buffer): string {
   }
   const decodedHex: string[] = [];
   for (const chunk of chunks) {
-    chunk.replace(/<([0-9a-fA-F]{4,})>/g, (_m, hex: string) => {
-      if (hex.length % 2 !== 0) return "";
+    for (const match of chunk.matchAll(/<([0-9a-fA-F]{4,})>/g)) {
+      const hex = match[1]!;
+      if (hex.length % 2 !== 0) continue;
       const rawBuf = Buffer.from(hex, "hex");
       if (hex.toUpperCase().startsWith("FEFF") && rawBuf.length >= 4) {
         const swapped = Buffer.from(rawBuf.subarray(2));
@@ -89,8 +90,7 @@ export function extractPdfStreamText(bytes: Buffer): string {
       } else {
         decodedHex.push(rawBuf.toString("latin1"));
       }
-      return "";
-    });
+    }
   }
   return [...chunks, ...decodedHex].join("\n");
 }
