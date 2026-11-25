@@ -301,7 +301,7 @@ match. Several were previously wrong; don't regress them.
     PP-OCRv3 detection/classification/recognition pipeline via Paddle.js/WebGL,
     *not* PaddleOCR-VL 1.5 (a ~0.9B vision-language model the app never loads).
     Never label it as a VLM or as layout/table-aware.
-  - Math/Greek symbol mode always runs on Tesseract (`grc` + `equ`), regardless
+  - Math/Greek symbol mode always runs on Tesseract (`<language>+equ`, defaulting to `eng+equ`), regardless
     of the selected engine.
   - OCR page seeds engine/language from Settings → Compression → OCR defaults
     and render DPI from the resolved resource mode: Memory Saver 200, Balanced
