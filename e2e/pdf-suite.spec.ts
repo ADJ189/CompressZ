@@ -194,16 +194,92 @@ test.describe("PDF Suite workstation", () => {
     await expect(page.locator(".cz-floating-text-ann")).toHaveCount(0);
   });
 
-  test("PDF Remove Pages: lazily renders thumbnail previews for pages 25+ when scrolled into view", async ({ page }) => {
+  test("PDF Remove Pages: lazily renders thumbnail previews for pages 25+ when scrolled into view and cleans up on file change and navigation", async ({ page }) => {
     test.setTimeout(CDN_TIMEOUT);
     await page.goto("/pdf/remove-pages");
     await upload(page, fixtures.manyPagePdf);
     await expect(page.locator(".cz-suite-file-bar")).toBeVisible({ timeout: CDN_TIMEOUT });
     await expect(page.locator(".cz-remove-card")).toHaveCount(28, { timeout: CDN_TIMEOUT });
 
+    // Page 28 starts as a placeholder until scrolled into view
     const page28Card = page.locator(".cz-remove-card").nth(27);
+    await expect(page28Card.locator(".cz-remove-placeholder")).toBeVisible();
+    await expect(page28Card.locator("img.cz-remove-thumb-img")).toHaveCount(0);
+
     await page28Card.scrollIntoViewIfNeeded();
     await expect(page28Card.locator("img.cz-remove-thumb-img")).toBeVisible({ timeout: CDN_TIMEOUT });
+
+    // Observable cleanup on Change File: cards and thumbnails reset cleanly and a new smaller PDF renders without stale state
+    await page.getByRole("button", { name: "Change File" }).click();
+    await expect(page.locator(".cz-remove-card")).toHaveCount(0);
+    await upload(page, fixtures.twoPagePdf);
+    await expect(page.locator(".cz-suite-file-bar")).toBeVisible({ timeout: CDN_TIMEOUT });
+    await expect(page.locator(".cz-remove-card")).toHaveCount(2, { timeout: CDN_TIMEOUT });
+
+    // Observable cleanup on route unmount: navigating away and returning leaves zero lingering renders or errors
+    await page.locator('#tabbar a[data-nav=""]').click();
+    await expect(page.locator("#page-view .cz-workbench")).toBeVisible();
+    await page.goBack();
+    await expect(page.locator(".cz-pdf-suite-page")).toBeVisible();
+  });
+
+  test("PDF Studio: editor edges remain reachable on narrow viewports and inline text popover stays within narrow canvas", async ({ page }) => {
+    test.setTimeout(CDN_TIMEOUT);
+    await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto("/pdf/studio");
+    await upload(page, fixtures.twoPagePdf);
+    await expect(page.locator(".cz-suite-file-bar")).toBeVisible({ timeout: CDN_TIMEOUT });
+
+    const wrap = page.locator(".cz-studio-canvas-wrap");
+    const stack = page.locator(".cz-canvas-layer-stack");
+    const overlay = page.locator(".cz-overlay-ann-canvas");
+    await expect(overlay).toHaveAttribute("data-rendered-page", "1", { timeout: CDN_TIMEOUT });
+
+    // Left edge of canvas is reachable at scrollLeft === 0 (never clipped off-screen to the left)
+    const leftEdgeOk = await wrap.evaluate((el) => {
+      el.scrollLeft = 0;
+      const wRect = el.getBoundingClientRect();
+      const sRect = el.querySelector(".cz-canvas-layer-stack")!.getBoundingClientRect();
+      return sRect.left >= wRect.left - 1;
+    });
+    expect(leftEdgeOk).toBe(true);
+
+    // Right edge of canvas is reachable when scrolled to the right end
+    const rightEdgeOk = await wrap.evaluate((el) => {
+      el.scrollLeft = el.scrollWidth;
+      const wRect = el.getBoundingClientRect();
+      const sRect = el.querySelector(".cz-canvas-layer-stack")!.getBoundingClientRect();
+      return sRect.right <= wRect.right + 1;
+    });
+    expect(rightEdgeOk).toBe(true);
+
+    // Inline text popover stays fully inside canvas bounds even when zoomed out to a narrow canvas
+    await page.locator(".cz-studio-zoom-group button").first().click();
+    await page.locator(".cz-studio-zoom-group button").first().click();
+    await page.locator(".cz-studio-zoom-group button").first().click();
+    await expect(overlay).toHaveAttribute("data-rendered-page", "1", { timeout: CDN_TIMEOUT });
+
+    await page.getByRole("button", { name: /Text/i }).click();
+    const stackBox = (await stack.boundingBox())!;
+    await overlay.click({ position: { x: Math.max(10, stackBox.width - 12), y: 40 } });
+
+    const popover = page.locator(".cz-inline-text-popover");
+    await expect(popover).toBeVisible();
+    const popInput = popover.locator(".cz-inline-text-input");
+    const addBtn = popover.getByRole("button", { name: "Add" });
+    const cancelBtn = popover.getByRole("button", { name: "Cancel" });
+    await expect(popInput).toBeVisible();
+    await expect(addBtn).toBeVisible();
+    await expect(cancelBtn).toBeVisible();
+
+    const updatedStackBox = (await stack.boundingBox())!;
+    for (const loc of [popover, popInput, addBtn, cancelBtn]) {
+      const box = (await loc.boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(updatedStackBox.x - 1);
+      expect(box.x + box.width).toBeLessThanOrEqual(updatedStackBox.x + updatedStackBox.width + 1);
+      expect(box.y).toBeGreaterThanOrEqual(updatedStackBox.y - 1);
+      expect(box.y + box.height).toBeLessThanOrEqual(updatedStackBox.y + updatedStackBox.height + 1);
+    }
   });
 
   test("PDF Remove Pages: removes selected page and preserves remaining pages in order", async ({ page }) => {
