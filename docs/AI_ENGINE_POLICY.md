@@ -20,7 +20,7 @@ CompressZ uses open-source, standards-based browser machine learning runtimes:
 | Framework | Primary Task | Supported Backends | Fallback Backend |
 | :--- | :--- | :--- | :--- |
 | **Transformers.js** (`@huggingface/transformers`) | English handwriting recognition, document understanding | WebGPU (`navigator.gpu`) | WebAssembly SIMD (`cpu`) |
-| **ONNX Runtime Web** (`onnxruntime-web`) | OCR text detection & CJK recognition (PaddleOCR), background removal | WebGPU / WebGL2 | WASM Multi-threaded SIMD |
+| **PaddleOCR (`@paddle-js-models/ocr`)** | Optional PP-OCRv3 printed text detection & CJK recognition | WebGL | Browser WebGL / WASM |
 
 ### 2.1 Backend Selection Policy
 - **Preferred Backend (WebGPU)**: When `navigator.gpu` is available and compatible, CompressZ dispatches compute shaders to the local GPU hardware via WebGPU. This provides high throughput without locking the main thread.

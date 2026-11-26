@@ -713,6 +713,10 @@ async function structuralCompress(
     updateMetadata: false,
   });
 
+  if (pdfDoc.isEncrypted) {
+    throw new Error("Encrypted PDF requires canvas fallback");
+  }
+
   const pages = pdfDoc.getPages();
   const total = pages.length;
 
@@ -911,7 +915,7 @@ async function structuralCompress(
 
       let imgBlob: Blob;
       try {
-        imgBlob = await decodeXObjectToBlob(xObj, origW, origH);
+        imgBlob = await decodeXObjectToBlob(xObj, origW, origH, PDFName);
       } catch {
         continue;
       }
@@ -992,6 +996,7 @@ async function decodeXObjectToBlob(
   xObj: any,
   w: number,
   h: number,
+  PDFName: any,
 ): Promise<Blob> {
   const rawBytes: Uint8Array =
     xObj.contents ?? xObj.getContents?.() ?? new Uint8Array(0);
@@ -1024,7 +1029,7 @@ async function decodeXObjectToBlob(
 
   // Raw RGB/Gray pixel data — reconstruct via ImageData
   const cs =
-    xObj.dict.lookup?.({ encodedName: "/ColorSpace" } as any)?.encodedName ??
+    xObj.dict.lookup?.(PDFName.of("ColorSpace"))?.encodedName ??
     "/DeviceRGB";
   const channels = cs.includes("Gray") ? 1 : 3;
   if (rawBytes.length < w * h * channels)
@@ -1091,70 +1096,72 @@ async function canvasRender(
   const total = srcDoc.numPages;
   const hasOSC = typeof OffscreenCanvas !== "undefined";
 
-  for (let i = 1; i <= total; i++) {
-    const page = await srcDoc.getPage(i);
-    // PDF.js viewport dimensions scale 1:1 with `scale`, and at scale=1
-    // they equal the page's PDF points (1 unit = 1/72in for the default
-    // UserUnit). Using the *scaled* viewport as the new page's physical
-    // size — as this used to — made increasing render quality (renderScale)
-    // silently blow up the physical page dimensions. Points (page size)
-    // and pixels (render/image resolution) have to be tracked separately.
-    const pointsVp = page.getViewport({ scale: 1 });
-    const pageW = pointsVp.width;
-    const pageH = pointsVp.height;
+  try {
+    for (let i = 1; i <= total; i++) {
+      const page = await srcDoc.getPage(i);
+      try {
+        const pointsVp = page.getViewport({ scale: 1 });
+        const pageW = pointsVp.width;
+        const pageH = pointsVp.height;
 
-    const vp = page.getViewport({ scale: renderScale });
-    const w = Math.floor(vp.width);
-    const h = Math.floor(vp.height);
+        const vp = page.getViewport({ scale: renderScale });
+        const w = Math.floor(vp.width);
+        const h = Math.floor(vp.height);
 
-    let jpegBytes: Uint8Array;
+        let jpegBytes: Uint8Array;
 
-    if (hasOSC) {
-      const osc = new OffscreenCanvas(w, h);
-      const ctx = get2D(osc, "pdf", { alpha: false, colorSpace: "srgb" });
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, w, h);
-      await page.render({ canvasContext: ctx, viewport: vp, intent: "print" })
-        .promise;
+        if (hasOSC) {
+          const osc = new OffscreenCanvas(w, h);
+          const ctx = get2D(osc, "pdf", { alpha: false, colorSpace: "srgb" });
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, w, h);
+          await page.render({ canvasContext: ctx, viewport: vp, intent: "print" })
+            .promise;
 
-      const q =
-        targetSizeKB > 0
-          ? await oscBinarySearch(osc, (targetSizeKB * 1024) / total)
-          : jpegQuality;
-      const outBlob = await osc.convertToBlob({
-        type: "image/jpeg",
-        quality: q,
-      });
-      jpegBytes = new Uint8Array(await outBlob.arrayBuffer());
-    } else {
-      const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = get2D(canvas, "pdf", { alpha: false });
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, w, h);
-      await page.render({ canvasContext: ctx, viewport: vp, intent: "print" })
-        .promise;
+          const q =
+            targetSizeKB > 0
+              ? await oscBinarySearch(osc, (targetSizeKB * 1024) / total)
+              : jpegQuality;
+          const outBlob = await osc.convertToBlob({
+            type: "image/jpeg",
+            quality: q,
+          });
+          jpegBytes = new Uint8Array(await outBlob.arrayBuffer());
+        } else {
+          const canvas = document.createElement("canvas");
+          canvas.width = w;
+          canvas.height = h;
+          try {
+            const ctx = get2D(canvas, "pdf", { alpha: false });
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, w, h);
+            await page.render({ canvasContext: ctx, viewport: vp, intent: "print" })
+              .promise;
 
-      const q =
-        targetSizeKB > 0
-          ? await canvasBinarySearch(canvas, (targetSizeKB * 1024) / total)
-          : jpegQuality;
-      const d = canvas.toDataURL("image/jpeg", q);
-      jpegBytes = base64ToBytes(d.replace(/^data:image\/jpeg;base64,/, ""));
-      canvas.width = 0;
-      canvas.height = 0;
+            const q =
+              targetSizeKB > 0
+                ? await canvasBinarySearch(canvas, (targetSizeKB * 1024) / total)
+                : jpegQuality;
+            const d = canvas.toDataURL("image/jpeg", q);
+            jpegBytes = base64ToBytes(d.replace(/^data:image\/jpeg;base64,/, ""));
+          } finally {
+            canvas.width = 0;
+            canvas.height = 0;
+          }
+        }
+
+        const img = await (newPdf as any).embedJpg(jpegBytes);
+        const newPage = (newPdf as any).addPage([pageW, pageH]);
+        newPage.drawImage(img, { x: 0, y: 0, width: pageW, height: pageH });
+      } finally {
+        page.cleanup?.();
+      }
+
+      onProgress?.(18 + Math.floor((i / total) * 76));
     }
-
-    const img = await (newPdf as any).embedJpg(jpegBytes);
-    const newPage = (newPdf as any).addPage([pageW, pageH]);
-    newPage.drawImage(img, { x: 0, y: 0, width: pageW, height: pageH });
-    page.cleanup();
-
-    onProgress?.(18 + Math.floor((i / total) * 76));
+  } finally {
+    await srcDoc.destroy().catch(() => {});
   }
-
-  await srcDoc.destroy();
   onProgress?.(96);
 
   if (stripMeta) stripMetadata(newPdf);

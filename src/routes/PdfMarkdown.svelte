@@ -163,13 +163,22 @@
     }
   }
 
-  const activePageAsset = $derived.by(() => {
-    if (!bundleResult || !bundleResult.assets.length) return null;
+  let activePageAsset = $state<string | null>(null);
+  $effect(() => {
+    if (!bundleResult || !bundleResult.assets.length) {
+      activePageAsset = null;
+      return;
+    }
     const pageNumStr = String(activePageIndex + 1).padStart(4, "0");
     const match = bundleResult.assets.find((a) => a.path.includes(`page-${pageNumStr}`));
-    if (!match) return null;
+    if (!match) {
+      activePageAsset = null;
+      return;
+    }
     const blob = new Blob([match.bytes as any], { type: "image/png" });
-    return URL.createObjectURL(blob);
+    const url = URL.createObjectURL(blob);
+    activePageAsset = url;
+    return () => URL.revokeObjectURL(url);
   });
 </script>
 

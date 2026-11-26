@@ -5,13 +5,16 @@
   import { ocrStore, type OcrState, consumeStagedUniversalFile, currentRoute } from "../store";
   import {
     runPrintedOcr,
+    TESSERACT_LANGUAGES,
     type OcrLanguage,
     type OcrEngine,
     type OcrProfile,
     type OcrWordBox,
   } from "../lib/ocrEngines";
   import { runHandwritingOcr } from "../lib/ocrHandwriting";
+  import { decodeImageBitmap } from "../lib/imageDecode";
   import { openPdfDocument } from "../lib/pdfLibs";
+  import { getSettings } from "../lib/settings";
   import {
     createSearchablePdfBuilder,
     describeTextLayerGap,
@@ -37,15 +40,16 @@ import { entryError } from "../lib/engineError";
   }
 
   function patchEntry(id: string, patch: Partial<FileEntry>) {
-    updateStore({
-      files: ocrState.files.map((f) => (f.id === id ? { ...f, ...patch } : f)),
-    });
+    ocrStore.update((curr) => ({
+      ...curr,
+      files: curr.files.map((f) => (f.id === id ? { ...f, ...patch } : f)),
+    }));
   }
 
   function isImageFile(file: File): boolean {
     return (
       file.type.startsWith("image/") ||
-      /\.(png|jpe?g|webp|bmp|gif|tiff?)$/i.test(file.name)
+      /\.(png|jpe?g|webp|avif|heic|heif|bmp|gif|tiff?)$/i.test(file.name)
     );
   }
 
@@ -97,7 +101,45 @@ import { entryError } from "../lib/engineError";
     }
   }
 
+  const OCR_LANGUAGE_OPTIONS: ReadonlyArray<{ code: OcrLanguage; label: string }> = [
+    { code: "auto", label: "Auto / English" },
+    { code: "eng", label: "English" },
+    { code: "fra", label: "French" },
+    { code: "deu", label: "German" },
+    { code: "spa", label: "Spanish" },
+    { code: "ita", label: "Italian" },
+    { code: "por", label: "Portuguese" },
+    { code: "rus", label: "Russian" },
+    { code: "nld", label: "Dutch" },
+    { code: "pol", label: "Polish" },
+    { code: "swe", label: "Swedish" },
+    { code: "nor", label: "Norwegian" },
+    { code: "dan", label: "Danish" },
+    { code: "fin", label: "Finnish" },
+    { code: "tur", label: "Turkish" },
+    { code: "chi_sim", label: "Chinese (Simplified)" },
+    { code: "chi_tra", label: "Chinese (Traditional)" },
+    { code: "jpn", label: "Japanese" },
+    { code: "kor", label: "Korean" },
+    { code: "ara", label: "Arabic" },
+    { code: "hin", label: "Hindi" },
+    { code: "ben", label: "Bengali" },
+  ];
+
+  function seedDefaultsFromSettings() {
+    const settings = getSettings();
+    const current = ocrStore.get();
+    if (current.files.length === 0) {
+      const configuredLang = settings.engines.ocr.lang as OcrLanguage;
+      updateStore({
+        engine: settings.engines.ocr.engine,
+        language: TESSERACT_LANGUAGES.has(configuredLang) ? configuredLang : "eng",
+      });
+    }
+  }
+
   onMount(() => {
+    seedDefaultsFromSettings();
     applyQueryParams();
     applyStagedFile();
 
@@ -127,7 +169,7 @@ import { entryError } from "../lib/engineError";
 
   /** Draw an image file at its natural size (never upscaled). */
   async function rasteriseImage(file: File): Promise<HTMLCanvasElement> {
-    const bitmap = await createImageBitmap(file);
+    const bitmap = await decodeImageBitmap(file);
     const canvas = document.createElement("canvas");
     canvas.width = bitmap.width;
     canvas.height = bitmap.height;
@@ -198,29 +240,29 @@ import { entryError } from "../lib/engineError";
 
             if (image) {
               const canvas = await rasteriseImage(entry.file);
-              const { text, words } = await runRecognition(canvas, 1, 1);
-              textPages.push(`--- Page 1 ---\n${text}`);
-              if (builder) {
-                // PNG keeps a screenshot/photograph crisp; it is already on disk,
-                // so recompressing to JPEG would only add artefacts.
-                const widthPx = canvas.width;
-                const heightPx = canvas.height;
-                const blob = await toBlob(canvas, "image/png");
-                canvas.width = 0;
-                canvas.height = 0;
-                const imageBytes = new Uint8Array(await blob.arrayBuffer());
-                const stats = await builder.addPage({
-                  imageBytes,
-                  imageType: "image/png",
-                  widthPx,
-                  heightPx,
-                  dpi: 96,
-                  words,
-                });
-                skipped += stats.skippedWords;
-                for (const cp of stats.unsupportedCodePoints) unsupported.add(cp);
-                patchEntry(entry.id, { progress: 99 });
-              } else {
+              try {
+                const { text, words } = await runRecognition(canvas, 1, 1);
+                textPages.push(`--- Page 1 ---\n${text}`);
+                if (builder) {
+                  // PNG keeps a screenshot/photograph crisp; it is already on disk,
+                  // so recompressing to JPEG would only add artefacts.
+                  const widthPx = canvas.width;
+                  const heightPx = canvas.height;
+                  const blob = await toBlob(canvas, "image/png");
+                  const imageBytes = new Uint8Array(await blob.arrayBuffer());
+                  const stats = await builder.addPage({
+                    imageBytes,
+                    imageType: "image/png",
+                    widthPx,
+                    heightPx,
+                    dpi: 96,
+                    words,
+                  });
+                  skipped += stats.skippedWords;
+                  for (const cp of stats.unsupportedCodePoints) unsupported.add(cp);
+                  patchEntry(entry.id, { progress: 99 });
+                }
+              } finally {
                 canvas.width = 0;
                 canvas.height = 0;
               }
@@ -237,46 +279,45 @@ import { entryError } from "../lib/engineError";
                 const canvas = document.createElement("canvas");
                 canvas.width = Math.max(1, Math.round(viewport.width));
                 canvas.height = Math.max(1, Math.round(viewport.height));
-                const ctx = canvas.getContext("2d", { alpha: false });
-                if (ctx) {
-                  ctx.fillStyle = "#fff";
-                  ctx.fillRect(0, 0, canvas.width, canvas.height);
-                  await page.render({ canvasContext: ctx, viewport }).promise;
-                }
+                try {
+                  const ctx = canvas.getContext("2d", { alpha: false });
+                  if (ctx) {
+                    ctx.fillStyle = "#fff";
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    await page.render({ canvasContext: ctx, viewport }).promise;
+                  }
 
-                const { text, words } = await runRecognition(
-                  canvas,
-                  pageNum,
-                  numPages,
-                );
-                textPages.push(`--- Page ${pageNum} ---\n${text}`);
+                  const { text, words } = await runRecognition(
+                    canvas,
+                    pageNum,
+                    numPages,
+                  );
+                  textPages.push(`--- Page ${pageNum} ---\n${text}`);
 
-                if (builder) {
-                  const widthPx = canvas.width;
-                  const heightPx = canvas.height;
-                  const blob = await toBlob(canvas, "image/jpeg", 0.92);
+                  if (builder) {
+                    const widthPx = canvas.width;
+                    const heightPx = canvas.height;
+                    const blob = await toBlob(canvas, "image/jpeg", 0.92);
+                    const imageBytes = new Uint8Array(await blob.arrayBuffer());
+                    const stats = await builder.addPage({
+                      imageBytes,
+                      imageType: "image/jpeg",
+                      widthPx,
+                      heightPx,
+                      dpi: ocrState.renderDpi,
+                      words,
+                    });
+                    skipped += stats.skippedWords;
+                    for (const cp of stats.unsupportedCodePoints) unsupported.add(cp);
+                    patchEntry(entry.id, {
+                      progress: 90 + Math.round((pageNum / numPages) * 9),
+                    });
+                  }
+                } finally {
                   canvas.width = 0;
                   canvas.height = 0;
-                  const imageBytes = new Uint8Array(await blob.arrayBuffer());
-                  const stats = await builder.addPage({
-                    imageBytes,
-                    imageType: "image/jpeg",
-                    widthPx,
-                    heightPx,
-                    dpi: ocrState.renderDpi,
-                    words,
-                  });
-                  skipped += stats.skippedWords;
-                  for (const cp of stats.unsupportedCodePoints) unsupported.add(cp);
-                  patchEntry(entry.id, {
-                    progress: 90 + Math.round((pageNum / numPages) * 9),
-                  });
-                } else {
-                  canvas.width = 0;
-                  canvas.height = 0;
+                  page.cleanup?.();
                 }
-
-                page.cleanup();
               }
             }
 
@@ -347,9 +388,9 @@ import { entryError } from "../lib/engineError";
   async function handleProcessAll() {
     isBusy = true;
     try {
-      const idleEntries = ocrState.files.filter(
-        (f) => f.status === "idle" || f.status === "error",
-      );
+      const idleEntries = ocrStore
+        .get()
+        .files.filter((f) => f.status === "idle" || f.status === "error");
       // Sequential by design: one OCR worker and one page raster in memory.
       for (const entry of idleEntries) {
         await processOcrSingle(entry);
@@ -476,15 +517,9 @@ import { entryError } from "../lib/engineError";
           value={ocrState.language}
           onchange={(e) => updateStore({ language: (e.target as HTMLSelectElement).value as OcrLanguage })}
         >
-          <option value="auto">Auto / English</option>
-          <option value="fra">French</option>
-          <option value="deu">German</option>
-          <option value="spa">Spanish</option>
-          <option value="ita">Italian</option>
-          <option value="chi_sim">Chinese (Simplified)</option>
-          <option value="jpn">Japanese</option>
-          <option value="kor">Korean</option>
-          <option value="hin">Hindi</option>
+          {#each OCR_LANGUAGE_OPTIONS as opt (opt.code)}
+            <option value={opt.code}>{opt.label}</option>
+          {/each}
         </select>
       </div>
 

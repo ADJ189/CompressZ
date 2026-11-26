@@ -38,47 +38,52 @@ export async function pdfToImages(
         : "image/png";
   const base = file.name.replace(/\.pdf$/i, "");
 
-  for (let i = 1; i <= total; i++) {
-    const page = await doc.getPage(i);
-    const vp = page.getViewport({ scale });
-    const w = Math.floor(vp.width),
-      h = Math.floor(vp.height);
+  try {
+    for (let i = 1; i <= total; i++) {
+      const page = await doc.getPage(i);
+      const vp = page.getViewport({ scale });
+      const w = Math.floor(vp.width),
+        h = Math.floor(vp.height);
 
-    const c = document.createElement("canvas");
-    c.width = w;
-    c.height = h;
-    const ctx = get2D(c, "pdf", { alpha: format === "png" });
-    if (format !== "png") {
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(0, 0, w, h);
+      const c = document.createElement("canvas");
+      c.width = w;
+      c.height = h;
+      try {
+        const ctx = get2D(c, "pdf", { alpha: format === "png" });
+        if (format !== "png") {
+          ctx.fillStyle = "#fff";
+          ctx.fillRect(0, 0, w, h);
+        }
+        await page.render({ canvasContext: ctx, viewport: vp, intent: "print" })
+          .promise;
+
+        const blob = await new Promise<Blob>((res, rej) =>
+          c.toBlob(
+            (b) => (b ? res(b) : rej(new Error("toBlob returned null"))),
+            mime,
+            format === "jpeg" ? 0.92 : undefined,
+          ),
+        );
+        const extensions = new Map([
+          ["image/png", "png"], ["image/jpeg", "jpg"], ["image/webp", "webp"],
+        ]);
+        const ext = extensions.get(blob.type);
+        if (!ext) throw new Error(`Unsupported PDF image blob type: ${blob.type || "unknown"}`);
+        pages.push({
+          mime: blob.type,
+          name: `${base}_page${String(i).padStart(2, "0")}.${ext}`,
+          data: new Uint8Array(await blob.arrayBuffer()),
+        });
+      } finally {
+        c.width = 0;
+        c.height = 0;
+        page.cleanup?.();
+      }
+      onProgress?.(Math.round((i / total) * 95));
     }
-    await page.render({ canvasContext: ctx, viewport: vp, intent: "print" })
-      .promise;
-
-    const blob = await new Promise<Blob>((res, rej) =>
-      c.toBlob(
-        (b) => (b ? res(b) : rej(new Error("toBlob returned null"))),
-        mime,
-        format === "jpeg" ? 0.92 : undefined,
-      ),
-    );
-    const extensions = new Map([
-      ["image/png", "png"], ["image/jpeg", "jpg"], ["image/webp", "webp"],
-    ]);
-    const ext = extensions.get(blob.type);
-    if (!ext) throw new Error(`Unsupported PDF image blob type: ${blob.type || "unknown"}`);
-    pages.push({
-      mime: blob.type,
-      name: `${base}_page${String(i).padStart(2, "0")}.${ext}`,
-      data: new Uint8Array(await blob.arrayBuffer()),
-    });
-
-    c.width = 0;
-    c.height = 0;
-    page.cleanup();
-    onProgress?.(Math.round((i / total) * 95));
+  } finally {
+    await doc.destroy().catch(() => {});
   }
-  await doc.destroy();
   onProgress?.(100);
 
   if (pages.length === 1) {

@@ -1,0 +1,402 @@
+/**
+ * nupPdf.ts — Client-side Multi-Page per Sheet (N-Up / 2-Up / 4-Up) layout generator.
+ *
+ * Combines multiple pages into grids on single sheets (handouts, booklet prep, eco-printing)
+ * while preserving high-resolution vector text, lines, and embedded objects without rasterization.
+ */
+
+import { getPdfLib } from "../pdfLibs";
+
+export type NupPagesPerSheet = 2 | 4 | 9;
+
+export interface NupOptions {
+  pagesPerSheet?: NupPagesPerSheet; // 2, 4, or 9
+  sheetSize?: "a4" | "letter" | "source"; // default "a4"
+  orientation?: "portrait" | "landscape" | "auto"; // default "auto"
+  margin?: number; // Outer page margin in points (default: 24)
+  spacing?: number; // Gap between slots in points (default: 16)
+  drawBorder?: boolean; // Draw subtle hairline border around each mini-page (default: false)
+  onProgress?: (pct: number) => void;
+}
+
+export interface NupSlot {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface NupGridSpec {
+  sheetWidth: number;
+  sheetHeight: number;
+  rows: number;
+  cols: number;
+  slots: NupSlot[];
+}
+
+/**
+ * Standard page point dimensions (72 points per inch).
+ */
+export const STANDARD_SHEET_SIZES = {
+  a4: { width: 595.28, height: 841.89 },
+  letter: { width: 612.0, height: 792.0 },
+};
+
+/**
+ * Calculate fitted dimensions preserving aspect ratio within a target bounding box.
+ */
+export function calculateFittedDimensions(
+  sourceW: number,
+  sourceH: number,
+  targetW: number,
+  targetH: number,
+): { width: number; height: number; scale: number; offsetX: number; offsetY: number } {
+  if (sourceW <= 0 || sourceH <= 0 || targetW <= 0 || targetH <= 0) {
+    return { width: 0, height: 0, scale: 0, offsetX: 0, offsetY: 0 };
+  }
+  const scale = Math.min(targetW / sourceW, targetH / sourceH);
+  const width = sourceW * scale;
+  const height = sourceH * scale;
+  const offsetX = (targetW - width) / 2;
+  const offsetY = (targetH - height) / 2;
+  return { width, height, scale, offsetX, offsetY };
+}
+
+function fitAxisLayout(
+  sheetDim: number,
+  count: number,
+  margin: number,
+  spacing: number,
+): { effMargin: number; effSpacing: number; slotDim: number } {
+  const safeMargin = Math.max(0, margin);
+  const safeSpacing = Math.max(0, spacing);
+  const targetMinTotal = Math.min(sheetDim, count * 10);
+  const overhead = 2 * safeMargin + (count - 1) * safeSpacing;
+  const available = sheetDim - overhead;
+  if (available >= targetMinTotal) {
+    return {
+      effMargin: safeMargin,
+      effSpacing: safeSpacing,
+      slotDim: available / count,
+    };
+  }
+  const maxOverhead = Math.max(0, sheetDim - targetMinTotal);
+  const scale = overhead > 0 ? maxOverhead / overhead : 0;
+  const effMargin = safeMargin * scale;
+  const effSpacing = safeSpacing * scale;
+  const fittedAvailable = Math.max(0, sheetDim - 2 * effMargin - (count - 1) * effSpacing);
+  return {
+    effMargin,
+    effSpacing,
+    slotDim: fittedAvailable / count,
+  };
+}
+
+interface PdfContentsLike {
+  size?: () => number;
+  asArray?: () => unknown[];
+}
+
+interface PdfPageWithNodeLike {
+  node?: {
+    Contents?: () => PdfContentsLike | undefined;
+    get?: (key: unknown) => PdfContentsLike | undefined;
+  };
+}
+
+interface PdfNameFactoryLike {
+  of?: (name: string) => unknown;
+}
+
+function pageHasContents(sourcePage: PdfPageWithNodeLike, PDFName?: PdfNameFactoryLike): boolean {
+  const node = sourcePage?.node;
+  if (!node) return true;
+  let contents: PdfContentsLike | undefined;
+  if (typeof node.Contents === "function") {
+    contents = node.Contents();
+  } else if (typeof node.get === "function" && PDFName?.of) {
+    contents = node.get(PDFName.of("Contents"));
+  } else {
+    return true;
+  }
+  if (!contents) return false;
+  if (typeof contents.size === "function" && contents.size() === 0) return false;
+  if (typeof contents.asArray === "function" && contents.asArray().length === 0) return false;
+  return true;
+}
+
+/**
+ * Determine grid layout configuration (rows, cols, sheet dimensions, and slot coordinates).
+ */
+export function planNupGrid(
+  pagesPerSheet: NupPagesPerSheet = 2,
+  sheetSize: "a4" | "letter" | "source" = "a4",
+  orientation: "portrait" | "landscape" | "auto" = "auto",
+  margin: number = 24,
+  spacing: number = 16,
+  sourceSampleW?: number,
+  sourceSampleH?: number,
+): NupGridSpec {
+  let baseWidth = STANDARD_SHEET_SIZES.a4.width;
+  let baseHeight = STANDARD_SHEET_SIZES.a4.height;
+
+  if (sheetSize === "letter") {
+    baseWidth = STANDARD_SHEET_SIZES.letter.width;
+    baseHeight = STANDARD_SHEET_SIZES.letter.height;
+  } else if (sheetSize === "source" && sourceSampleW && sourceSampleH) {
+    baseWidth = sourceSampleW;
+    baseHeight = sourceSampleH;
+  }
+
+  let rows = 1;
+  let cols = 2;
+  let isLandscape = false;
+
+  if (pagesPerSheet === 2) {
+    // 2-Up is best presented in landscape (2 columns side-by-side)
+    rows = 1;
+    cols = 2;
+    isLandscape = orientation === "auto" ? true : orientation === "landscape";
+  } else if (pagesPerSheet === 4) {
+    // 4-Up: 2x2 grid (portrait or landscape based on preference)
+    rows = 2;
+    cols = 2;
+    isLandscape = orientation === "landscape";
+  } else if (pagesPerSheet === 9) {
+    // 9-Up: 3x3 grid
+    rows = 3;
+    cols = 3;
+    isLandscape = orientation === "landscape";
+  }
+
+  if (orientation === "portrait") isLandscape = false;
+  if (orientation === "landscape") isLandscape = true;
+
+  const sheetWidth = isLandscape ? Math.max(baseWidth, baseHeight) : Math.min(baseWidth, baseHeight);
+  const sheetHeight = isLandscape ? Math.min(baseWidth, baseHeight) : Math.max(baseWidth, baseHeight);
+  if (sheetWidth <= 0 || sheetHeight <= 0) {
+    throw new Error("Sheet dimensions must be positive for N-Up layout.");
+  }
+
+  const xLayout = fitAxisLayout(sheetWidth, cols, margin, spacing);
+  const yLayout = fitAxisLayout(sheetHeight, rows, margin, spacing);
+
+  const slots: NupSlot[] = [];
+  // PDF origin (0,0) is bottom-left, so rows go from top (row 0) to bottom
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = xLayout.effMargin + c * (xLayout.slotDim + xLayout.effSpacing);
+      // Top-to-bottom reading order: top row has largest Y
+      const y = sheetHeight - yLayout.effMargin - (r + 1) * yLayout.slotDim - r * yLayout.effSpacing;
+      slots.push({ x, y, width: xLayout.slotDim, height: yLayout.slotDim });
+    }
+  }
+
+  return { sheetWidth, sheetHeight, rows, cols, slots };
+}
+
+/**
+ * Split page count into chunks for each output sheet.
+ */
+export function chunkPages(totalPages: number, chunkSize: number): number[][] {
+  const chunks: number[][] = [];
+  for (let i = 0; i < totalPages; i += chunkSize) {
+    const chunk: number[] = [];
+    for (let j = i; j < Math.min(i + chunkSize, totalPages); j++) {
+      chunk.push(j);
+    }
+    chunks.push(chunk);
+  }
+  return chunks;
+}
+
+/**
+ * Compute fitted visual bounds and unrotated drawPage arguments for a source
+ * CropBox/embedded region and page rotation angle.
+ */
+export function planRotatedNupDraw(
+  embWidth: number,
+  embHeight: number,
+  rotationDeg: number,
+  slot: NupSlot,
+): {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotateDeg: number;
+  visualX: number;
+  visualY: number;
+  visualWidth: number;
+  visualHeight: number;
+} {
+  const angle = ((rotationDeg % 360) + 360) % 360;
+  const isQuarterTurn = angle === 90 || angle === 270;
+  const displayW = isQuarterTurn ? embHeight : embWidth;
+  const displayH = isQuarterTurn ? embWidth : embHeight;
+  const fit = calculateFittedDimensions(displayW, displayH, slot.width, slot.height);
+
+  const visualX = slot.x + fit.offsetX;
+  const visualY = slot.y + fit.offsetY;
+  const visualWidth = fit.width;
+  const visualHeight = fit.height;
+  const drawW = embWidth * fit.scale;
+  const drawH = embHeight * fit.scale;
+
+  let x = visualX;
+  let y = visualY;
+  let rotateDeg = 0;
+
+  if (angle === 90) {
+    x = visualX;
+    y = visualY + visualHeight;
+    rotateDeg = -90;
+  } else if (angle === 180) {
+    x = visualX + visualWidth;
+    y = visualY + visualHeight;
+    rotateDeg = -180;
+  } else if (angle === 270) {
+    x = visualX + visualWidth;
+    y = visualY;
+    rotateDeg = -270;
+  }
+
+  return {
+    x,
+    y,
+    width: drawW,
+    height: drawH,
+    rotateDeg,
+    visualX,
+    visualY,
+    visualWidth,
+    visualHeight,
+  };
+}
+
+/**
+ * Generate a new PDF combining N input pages per sheet.
+ */
+export async function createNupPdf(
+  pdfBytes: Uint8Array,
+  options: NupOptions = {},
+): Promise<Uint8Array> {
+  const { PDFDocument, PDFName, rgb, degrees } = await getPdfLib();
+  const sourceDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+  if (sourceDoc.isEncrypted) {
+    throw new Error("The PDF is encrypted with a password. Please unlock or decrypt it in PDF Protect / Unlock before creating N-Up pages.");
+  }
+  const totalPages = sourceDoc.getPageCount();
+
+  if (totalPages === 0) return pdfBytes;
+
+  // Flatten filled AcroForm widget appearances into page content streams before embedding
+  try {
+    const form = typeof sourceDoc.getForm === "function" ? sourceDoc.getForm() : null;
+    const fields = form && typeof form.getFields === "function" ? form.getFields() : [];
+    if (form && fields.length > 0 && typeof form.flatten === "function") {
+      form.flatten();
+    }
+  } catch {
+    // Document has no AcroForm or form flattening is unavailable; preserve existing page streams
+  }
+
+  const nUp = options.pagesPerSheet ?? 2;
+  const margin = options.margin ?? 24;
+  const spacing = options.spacing ?? 16;
+  const drawBorder = options.drawBorder ?? false;
+
+  // Sample first page for dimensions if source mode chosen (accounting for rotation)
+  const firstPage = sourceDoc.getPage(0);
+  const sampleBox = firstPage.getCropBox();
+  const firstRot =
+    typeof firstPage.getRotation === "function" ? firstPage.getRotation().angle : 0;
+  const firstNorm = ((firstRot % 360) + 360) % 360;
+  const sampleW =
+    firstNorm === 90 || firstNorm === 270 ? sampleBox.height : sampleBox.width;
+  const sampleH =
+    firstNorm === 90 || firstNorm === 270 ? sampleBox.width : sampleBox.height;
+
+  const grid = planNupGrid(
+    nUp,
+    options.sheetSize ?? "a4",
+    options.orientation ?? "auto",
+    margin,
+    spacing,
+    sampleW,
+    sampleH,
+  );
+
+  const outputDoc = await PDFDocument.create();
+  const chunks = chunkPages(totalPages, nUp);
+
+  for (let c = 0; c < chunks.length; c++) {
+    const pageIndices = chunks[c];
+    const sheet = outputDoc.addPage([grid.sheetWidth, grid.sheetHeight]);
+
+    for (let s = 0; s < pageIndices.length; s++) {
+      const pageIndex = pageIndices[s];
+      const slot = grid.slots[s];
+      const sourcePage = sourceDoc.getPage(pageIndex);
+      const sourceBox = sourcePage.getCropBox();
+      const sourceAngle =
+        typeof sourcePage.getRotation === "function" ? sourcePage.getRotation().angle : 0;
+
+      let borderPlacement = planRotatedNupDraw(
+        sourceBox.width,
+        sourceBox.height,
+        sourceAngle,
+        slot,
+      );
+
+      if (pageHasContents(sourcePage, PDFName)) {
+        // Embed only the visible CropBox region into output document so clipped content stays clipped
+        const embedded = await outputDoc.embedPage(sourcePage, {
+          left: sourceBox.x,
+          bottom: sourceBox.y,
+          right: sourceBox.x + sourceBox.width,
+          top: sourceBox.y + sourceBox.height,
+        });
+        const embW =
+          typeof embedded?.width === "number" && embedded.width > 0
+            ? embedded.width
+            : sourceBox.width;
+        const embH =
+          typeof embedded?.height === "number" && embedded.height > 0
+            ? embedded.height
+            : sourceBox.height;
+
+        borderPlacement = planRotatedNupDraw(embW, embH, sourceAngle, slot);
+
+        sheet.drawPage(embedded, {
+          x: borderPlacement.x,
+          y: borderPlacement.y,
+          width: borderPlacement.width,
+          height: borderPlacement.height,
+          ...(borderPlacement.rotateDeg !== 0 && typeof degrees === "function"
+            ? { rotate: degrees(borderPlacement.rotateDeg) }
+            : {}),
+        });
+      }
+
+      // Optional subtle hairline border around the mini-page (preserved for blank slots too)
+      if (drawBorder) {
+        sheet.drawRectangle({
+          x: borderPlacement.visualX,
+          y: borderPlacement.visualY,
+          width: borderPlacement.visualWidth,
+          height: borderPlacement.visualHeight,
+          borderWidth: 0.5,
+          borderColor: rgb(0.7, 0.7, 0.7),
+          opacity: 0.8,
+        });
+      }
+    }
+
+    const pct = Math.round(15 + ((c + 1) / chunks.length) * 80);
+    options.onProgress?.(pct);
+  }
+
+  options.onProgress?.(100);
+  return await outputDoc.save();
+}

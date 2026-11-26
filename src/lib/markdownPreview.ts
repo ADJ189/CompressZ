@@ -253,37 +253,35 @@ function renderInline(text: string): string {
     return stash(`<code class="cz-math-inline">${math}</code>`);
   });
 
+  const applyEmphasis = (s: string) =>
+    s
+      .replace(/\*\*([^*\n]+?)\*\*/g, (_match, bold) => `<strong>${bold}</strong>`)
+      .replace(/(?<!\*)\*([^*\n]+?)\*(?!\*)/g, (_match, italic) => `<em>${italic}</em>`);
+
   // Inline code `...`
   result = result.replace(/`([^`\n]+?)`/g, (_match, code) => {
     return stash(`<code>${code}</code>`);
   });
 
-  // Images ![alt](src) (handled before links)
+  // Images ![alt](src) (handled before links and emphasis so URLs/alts are never altered)
   result = result.replace(/!\[([^[\n\]]*)\]\(([^)\n]+)\)/g, (_match, alt, src) => {
     const safe = safeImgSrc(src);
     // `alt` was already HTML-escaped when `result` was built, so escaping it
     // again would render `&amp;` as `&amp;amp;` in the visible alt text.
-    if (!safe) return `<!-- [image: ${alt}] -->`;
+    if (!safe) return stash(`<!-- [image: ${alt}] -->`);
     return stash(
       `<img src="${safe}" alt="${alt}" class="cz-rendered-img" />`,
     );
   });
 
-  // Bold **...**
-  result = result.replace(/\*\*([^*\n]+?)\*\*/g, (_match, bold) => {
-    return `<strong>${bold}</strong>`;
-  });
-
-  // Italic *...*
-  result = result.replace(/(?<!\*)\*([^*\n]+?)\*(?!\*)/g, (_match, italic) => {
-    return `<em>${italic}</em>`;
-  });
-
-  // Links [text](url) — disallowing nested brackets and newlines prevents superlinear backtracking
+  // Links [text](url) — stash before emphasis so URLs with `*` are untouched
   result = result.replace(/\[([^[\n\]]+)\]\(([^)\n]+)\)/g, (_match, label, href) => {
     const safeHrefValue = safeHref(href) ?? "#";
-    return stash(`<a href="${safeHrefValue}" target="_blank" rel="noopener noreferrer">${label}</a>`);
+    return stash(`<a href="${safeHrefValue}" target="_blank" rel="noopener noreferrer">${applyEmphasis(label)}</a>`);
   });
+
+  // Bold **...** and Italic *...* outside already-stashed tokens/URLs
+  result = applyEmphasis(result);
 
   // Restore stashed tokens (loop handles tokens nested inside labels, e.g. [<code>](url))
   while (/\u0000(\d+)\u0000/.test(result)) {
@@ -294,6 +292,50 @@ function renderInline(text: string): string {
   }
 
   return result;
+}
+
+function scanClosedHtmlBlock(
+  lines: string[],
+  startNextIdx: number,
+  openLine: string,
+  closeTagLower: string,
+  noClosingAhead: boolean,
+): { closed: boolean; blockLines: string[]; nextIdx: number; reachedEofWithoutClose: boolean } {
+  const openLower = openLine.toLowerCase();
+  if (openLower.includes(closeTagLower)) {
+    return {
+      closed: true,
+      blockLines: [openLine],
+      nextIdx: startNextIdx,
+      reachedEofWithoutClose: false,
+    };
+  }
+  if (noClosingAhead) {
+    return {
+      closed: false,
+      blockLines: [openLine],
+      nextIdx: startNextIdx,
+      reachedEofWithoutClose: true,
+    };
+  }
+  let j = startNextIdx;
+  while (j < lines.length) {
+    if (lines[j].toLowerCase().includes(closeTagLower)) {
+      return {
+        closed: true,
+        blockLines: [openLine, ...lines.slice(startNextIdx, j + 1)],
+        nextIdx: j + 1,
+        reachedEofWithoutClose: false,
+      };
+    }
+    j++;
+  }
+  return {
+    closed: false,
+    blockLines: [openLine],
+    nextIdx: startNextIdx,
+    reachedEofWithoutClose: true,
+  };
 }
 
 export function renderMarkdownToHtml(markdown: string): string {
@@ -313,6 +355,8 @@ export function renderMarkdownToHtml(markdown: string): string {
   let tableRows: string[][] = [];
 
   let inList: "ul" | "ol" | null = null;
+  let noMoreTableClose = false;
+  let noMoreMathClose = false;
 
   function closeList() {
     if (inList) {
@@ -358,8 +402,9 @@ export function renderMarkdownToHtml(markdown: string): string {
     tableRows = [];
   }
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i++];
     const trimmed = line.trim();
 
     // Code block toggle ```
@@ -451,21 +496,17 @@ export function renderMarkdownToHtml(markdown: string): string {
     if (trimmed.toLowerCase().startsWith("<table")) {
       closeList();
       flushTable();
-      const tableLines: string[] = [line];
-      if (!trimmed.toLowerCase().includes("</table>")) {
-        while (i + 1 < lines.length) {
-          i++;
-          tableLines.push(lines[i]);
-          if (lines[i].toLowerCase().includes("</table>")) break;
+      const scan = scanClosedHtmlBlock(lines, i, line, "</table>", noMoreTableClose);
+      i = scan.nextIdx;
+      if (scan.reachedEofWithoutClose) noMoreTableClose = true;
+      if (scan.closed) {
+        const renderedTable = renderSupportedHtmlTable(scan.blockLines.join("\n").trim());
+        if (renderedTable) {
+          out.push(renderedTable);
+          continue;
         }
       }
-      const rawTable = tableLines.join("\n").trim();
-      const renderedTable = renderSupportedHtmlTable(rawTable);
-      if (renderedTable) {
-        out.push(renderedTable);
-        continue;
-      }
-      for (const tLine of tableLines) {
+      for (const tLine of scan.blockLines) {
         if (tLine.trim()) out.push(`<p>${renderInline(tLine.trim())}</p>`);
       }
       continue;
@@ -475,21 +516,17 @@ export function renderMarkdownToHtml(markdown: string): string {
     if (trimmed.toLowerCase().startsWith("<math")) {
       closeList();
       flushTable();
-      const mathLines: string[] = [line];
-      if (!trimmed.toLowerCase().includes("</math>")) {
-        while (i + 1 < lines.length) {
-          i++;
-          mathLines.push(lines[i]);
-          if (lines[i].toLowerCase().includes("</math>")) break;
+      const scan = scanClosedHtmlBlock(lines, i, line, "</math>", noMoreMathClose);
+      i = scan.nextIdx;
+      if (scan.reachedEofWithoutClose) noMoreMathClose = true;
+      if (scan.closed) {
+        const renderedMath = renderSupportedHtmlMath(scan.blockLines.join("\n").trim());
+        if (renderedMath) {
+          out.push(renderedMath);
+          continue;
         }
       }
-      const rawMath = mathLines.join("\n").trim();
-      const renderedMath = renderSupportedHtmlMath(rawMath);
-      if (renderedMath) {
-        out.push(renderedMath);
-        continue;
-      }
-      for (const mLine of mathLines) {
+      for (const mLine of scan.blockLines) {
         if (mLine.trim()) out.push(`<p>${renderInline(mLine.trim())}</p>`);
       }
       continue;

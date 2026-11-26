@@ -1,5 +1,5 @@
 import { assert, assertEquals, assertRejects } from "./assert.ts";
-import { planVideoSize, getVideoMeta } from "../src/lib/videoMeta.ts";
+import { planVideoSize, buildFfmpegScaleFilter, getVideoMeta } from "../src/lib/videoMeta.ts";
 import { videoViaMediaRecorder } from "../src/lib/compressVideo.ts";
 
 interface MockVideoEnv {
@@ -82,6 +82,21 @@ Deno.test("videoMeta: planVideoSize never exceeds odd maxWidth cap", () => {
   assertEquals(result.width % 2, 0);
   assertEquals(result.height % 2, 0);
   assertEquals(result.width, 1000);
+});
+
+Deno.test("videoMeta: buildFfmpegScaleFilter matches planned even dimensions for odd-width inputs below and above cap", () => {
+  const belowCap = planVideoSize(641, 361, 1001);
+  assertEquals(belowCap.width, 640);
+  assertEquals(belowCap.height, 360);
+  assertEquals(buildFfmpegScaleFilter(belowCap), "scale=640:360:flags=lanczos");
+
+  const aboveCap = planVideoSize(1921, 1081, 1001);
+  assertEquals(aboveCap.width, 1000);
+  assertEquals(aboveCap.height, 562);
+  assertEquals(buildFfmpegScaleFilter(aboveCap), "scale=1000:562:flags=lanczos");
+
+  const noResize = planVideoSize(640, 360, 1280);
+  assertEquals(buildFfmpegScaleFilter(noResize), undefined);
 });
 
 Deno.test("videoMeta: getVideoMeta rejects on timeout with clear error and cleans up", async () => {

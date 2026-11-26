@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import FileDropzone from "../components/FileDropzone.svelte";
   import MacIcon from "../components/MacIcon.svelte";
-  import { mergeStore, type MergeState, consumeStagedUniversalFile, currentRoute } from "../store";
+  import { mergeStore, type MergeState, consumeStagedUniversalFile, stagedUniversalFile, currentRoute } from "../store";
   import { mergePdf } from "../lib/mergePdf";
   import { runScheduled } from "../lib/resourceManager";
   import { formatBytes } from "../lib/types";
@@ -14,6 +14,7 @@
   let isMerging = $state(false);
   let mergedBlob = $state<Blob | null>(null);
   let draggedIndex = $state<number | null>(null);
+  let sequenceRevision = 0;
 
   function applyStagedFile() {
     const staged = consumeStagedUniversalFile("compress/merge-pdf");
@@ -26,13 +27,27 @@
     applyStagedFile();
   });
 
+  function matchesRoutePrefix(route?: string | null): boolean {
+    if (!route) return false;
+    const norm = route.replace(/^\/+/, "").split("?")[0];
+    return norm === "compress/merge-pdf" || norm.startsWith("compress/merge-pdf/");
+  }
+
   $effect(() => {
-    const unsub = currentRoute.subscribe((r) => {
-      if (r === "compress/merge-pdf") {
+    const unsubRoute = currentRoute.subscribe((r) => {
+      if (matchesRoutePrefix(r)) {
         applyStagedFile();
       }
     });
-    return unsub;
+    const unsubStaged = stagedUniversalFile.subscribe((item) => {
+      if (item && matchesRoutePrefix(item.targetRoute ?? currentRoute.get())) {
+        applyStagedFile();
+      }
+    });
+    return () => {
+      unsubRoute();
+      unsubStaged();
+    };
   });
 
   $effect(() => {
@@ -43,6 +58,10 @@
   });
 
   function updateStore(patch: Partial<MergeState>) {
+    if (patch.files !== undefined) {
+      sequenceRevision++;
+      mergedBlob = null;
+    }
     mergeStore.update((curr) => ({ ...curr, ...patch }));
   }
 
@@ -119,6 +138,7 @@
     }
 
     isMerging = true;
+    const startRevision = sequenceRevision;
     try {
       const files = [...mergeState.files];
       const bytes = files.reduce((sum, f) => sum + f.size, 0);
@@ -126,10 +146,7 @@
         { kind: "pdf", label: `Merge PDF (${files.length} files)`, bytes },
         () => mergePdf(files),
       );
-      // mergePdf() resolves with { blob, pageCount, totalInputSize } — the
-      // route used to assign the whole result object to `mergedBlob`, so
-      // URL.createObjectURL() threw "Overload resolution failed" and the
-      // downloaded merged PDF never existed.
+      if (sequenceRevision !== startRevision) return;
       mergedBlob = result.blob;
       toast(`Merged ${result.pageCount} pages into one PDF`, "success");
     } catch (err) {
