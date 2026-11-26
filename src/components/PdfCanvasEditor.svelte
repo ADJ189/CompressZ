@@ -61,15 +61,21 @@
   let canvasWidthPx = $state<number>(0);
   let canvasHeightPx = $state<number>(0);
 
-  function getClampedPopoverPos(pending: { x: number; y: number }): { left: number; top: number } {
+  function getClampedPopoverPos(pending: { x: number; y: number }): {
+    left: number;
+    top: number;
+    maxWidth: number | null;
+  } {
     const rawLeft = pending.x * zoomLevel * 1.5;
     const rawTop = pending.y * zoomLevel * 1.5;
-    if (canvasWidthPx <= 0 || canvasHeightPx <= 0) {
-      return { left: Math.max(8, rawLeft), top: Math.max(8, rawTop) };
-    }
-    const popW = 280;
-    const popH = 44;
     const pad = 8;
+    const idealW = 280;
+    if (canvasWidthPx <= 0 || canvasHeightPx <= 0) {
+      return { left: Math.max(pad, rawLeft), top: Math.max(pad, rawTop), maxWidth: null };
+    }
+    const maxWidth = Math.max(80, canvasWidthPx - pad * 2);
+    const popW = Math.min(idealW, maxWidth);
+    const popH = maxWidth < idealW ? 82 : 44;
     const maxLeft = Math.max(pad, canvasWidthPx - popW - pad);
     const maxTop = Math.max(pad, canvasHeightPx - popH - pad);
     const left = rawLeft > maxLeft ? rawLeft - popW : rawLeft;
@@ -77,6 +83,7 @@
     return {
       left: Math.max(pad, Math.min(maxLeft, left)),
       top: Math.max(pad, Math.min(maxTop, top)),
+      maxWidth,
     };
   }
 
@@ -645,7 +652,7 @@
           {@const popPos = getClampedPopoverPos(pendingTextAnnotation)}
           <div
             class="cz-inline-text-popover"
-            style="left: {popPos.left}px; top: {popPos.top}px;"
+            style="left: {popPos.left}px; top: {popPos.top}px;{popPos.maxWidth !== null ? ` max-width: ${popPos.maxWidth}px;` : ''}"
           >
             <input
               type="text"
@@ -870,9 +877,11 @@
     position: absolute;
     z-index: 20;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 0.35rem;
     padding: 0.35rem;
+    box-sizing: border-box;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--r-sm);
@@ -881,6 +890,10 @@
 
   .cz-inline-text-input {
     width: 150px;
+    max-width: 100%;
+    min-width: 0;
+    flex: 0 1 150px;
+    box-sizing: border-box;
     padding: 0.25rem 0.45rem;
     border: 1px solid var(--border);
     border-radius: var(--r-xs);
