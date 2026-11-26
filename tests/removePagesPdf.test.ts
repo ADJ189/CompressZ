@@ -648,6 +648,14 @@ Deno.test("removePagesPdf: removes widgets on deleted pages, prunes dead fields,
     assertEquals(fields[0].value, "keep-me");
     assertEquals(fields[0].isEditable, true);
     assertEquals(fields[0].acroField.getWidgets().length, 1);
+
+    const serialized = JSON.parse(new TextDecoder().decode(result.bytes)) as MockDocState;
+    assertEquals(serialized.formFields.length, 1);
+    assertEquals(serialized.formFields[0].name, "SharedField");
+    assertEquals(
+      serialized.formFields[0].widgets?.map((w) => w.pageNum),
+      [1],
+    );
   } finally {
     resetPdfLibForTesting();
   }

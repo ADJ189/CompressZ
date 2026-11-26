@@ -185,3 +185,135 @@ Deno.test("metadata: parseMetadataKeywords preserves multi-word comma-separated 
     resetPdfLibForTesting();
   }
 });
+
+Deno.test("metadata: stripAll deletes PieceInfo, LastModified, SpiderInfo, and nested private refs from catalog and pages", async () => {
+  const deletedRefs: number[] = [];
+  const catalogEntries = new Map<string, unknown>();
+  const pageEntries = new Map<string, unknown>();
+
+  const catalogXmpRef = { objectNumber: 101, generationNumber: 0 };
+  const catalogPieceRef = { objectNumber: 102, generationNumber: 0 };
+  const catalogPrivateRef = { objectNumber: 103, generationNumber: 0 };
+  const catalogSpiderRef = { objectNumber: 104, generationNumber: 0 };
+  const pageXmpRef = { objectNumber: 201, generationNumber: 0 };
+  const pageAppRef = { objectNumber: 202, generationNumber: 0 };
+  const pagePrivateRef = { objectNumber: 203, generationNumber: 0 };
+
+  catalogEntries.set("Metadata", catalogXmpRef);
+  catalogEntries.set("PieceInfo", catalogPieceRef);
+  catalogEntries.set("LastModified", "D:20260101000000Z");
+  catalogEntries.set("SpiderInfo", catalogSpiderRef);
+
+  pageEntries.set("Metadata", pageXmpRef);
+  // Inline PieceInfo dictionary pointing to indirect app/private objects (Illustrator/InDesign pattern)
+  pageEntries.set("PieceInfo", {
+    entries: () => [["Illustrator", pageAppRef]],
+  });
+  pageEntries.set("LastModified", "D:20260202123000Z");
+
+  const indirectObjects = new Map<number, unknown>([
+    [102, { entries: () => [["InDesign", { entries: () => [["Private", catalogPrivateRef]] }]] }],
+    [202, { entries: () => [["Private", pagePrivateRef]] }],
+  ]);
+
+  const mockLib = {
+    PDFName: { of: (name: string) => name },
+    PDFDocument: {
+      load: async () => ({
+        isEncrypted: false,
+        getPageCount: () => 1,
+        getPages: () => [
+          {
+            node: {
+              get: (k: string) => pageEntries.get(k),
+              delete: (k: string) => pageEntries.delete(k),
+            },
+          },
+        ],
+        catalog: {
+          get: (k: string) => catalogEntries.get(k),
+          delete: (k: string) => catalogEntries.delete(k),
+        },
+        context: {
+          trailerInfo: {},
+          lookup: (ref: { objectNumber?: number }) =>
+            typeof ref?.objectNumber === "number" ? indirectObjects.get(ref.objectNumber) : undefined,
+          delete: (ref: { objectNumber?: number }) => {
+            if (typeof ref?.objectNumber === "number") {
+              deletedRefs.push(ref.objectNumber);
+            }
+          },
+        },
+        save: async () => new Uint8Array([1, 2, 3]),
+      }),
+    },
+  };
+
+  setPdfLibForTesting(mockLib);
+  try {
+    await updatePdfMetadata(new Uint8Array([1]), {}, true);
+    assertEquals(catalogEntries.has("Metadata"), false);
+    assertEquals(catalogEntries.has("PieceInfo"), false);
+    assertEquals(catalogEntries.has("LastModified"), false);
+    assertEquals(catalogEntries.has("SpiderInfo"), false);
+    assertEquals(pageEntries.has("Metadata"), false);
+    assertEquals(pageEntries.has("PieceInfo"), false);
+    assertEquals(pageEntries.has("LastModified"), false);
+
+    assertEquals(deletedRefs.includes(101), true);
+    assertEquals(deletedRefs.includes(102), true);
+    assertEquals(deletedRefs.includes(103), true);
+    assertEquals(deletedRefs.includes(104), true);
+    assertEquals(deletedRefs.includes(201), true);
+    assertEquals(deletedRefs.includes(202), true);
+    assertEquals(deletedRefs.includes(203), true);
+  } finally {
+    resetPdfLibForTesting();
+  }
+});
+
+Deno.test("metadata: updatePdfMetadata loads with updateMetadata: false when editing and preserves untouched fields", async () => {
+  let seenUpdateMetadata: boolean | undefined;
+  let title = "Old Title";
+  let producer = "Existing Producer";
+  let modDateUpdated = false;
+
+  const mockLib = {
+    PDFName: { of: (name: string) => name },
+    PDFDocument: {
+      load: async (_bytes: Uint8Array, opts?: { updateMetadata?: boolean }) => {
+        seenUpdateMetadata = opts?.updateMetadata;
+        return {
+          isEncrypted: false,
+          getPageCount: () => 1,
+          getPages: () => [],
+          setTitle: (v: string) => {
+            title = v;
+          },
+          setAuthor: () => {},
+          setSubject: () => {},
+          setKeywords: () => {},
+          setCreator: () => {},
+          setProducer: (v: string) => {
+            producer = v;
+          },
+          setModificationDate: () => {
+            modDateUpdated = true;
+          },
+          save: async () => new Uint8Array([1, 2, 3]),
+        };
+      },
+    },
+  };
+
+  setPdfLibForTesting(mockLib);
+  try {
+    await updatePdfMetadata(new Uint8Array([1]), { title: "New Title" }, false);
+    assertEquals(seenUpdateMetadata, false);
+    assertEquals(title, "New Title");
+    assertEquals(producer, "Existing Producer");
+    assertEquals(modDateUpdated, true);
+  } finally {
+    resetPdfLibForTesting();
+  }
+});

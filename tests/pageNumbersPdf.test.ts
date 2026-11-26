@@ -12,6 +12,7 @@ import {
   applyPdfPageNumbers,
   MAX_PAGE_NUMBER_START,
   MAX_ROMAN_NUMERAL,
+  MAX_BATES_DIGITS,
 } from "../src/lib/pdfTools/pageNumbersPdf.ts";
 import { setPdfLibForTesting, resetPdfLibForTesting } from "../src/lib/pdfLibs.ts";
 
@@ -311,6 +312,27 @@ Deno.test("pageNumbers: applyPdfPageNumbers rejects invalid/empty ranges and pas
       startNumber: 5000,
     });
     assertEquals(drawn[0].text, "Doc #5000");
+
+    // Enforces MAX_BATES_DIGITS bounds when format is "bates"
+    for (const badDigits of [0, -2, 1.5, Number.NaN, MAX_BATES_DIGITS + 1]) {
+      await assertRejects(
+        () => applyPdfPageNumbers(new Uint8Array([1]), { format: "bates", batesDigits: badDigits }),
+        "Bates digits must be a whole number",
+      );
+    }
+
+    // Valid Bates digits (default 6, boundary 1, and MAX_BATES_DIGITS) succeed
+    drawn.length = 0;
+    await applyPdfPageNumbers(new Uint8Array([1]), { format: "bates", batesPrefix: "B-" });
+    assertEquals(drawn[0].text, "B-000001");
+
+    drawn.length = 0;
+    await applyPdfPageNumbers(new Uint8Array([1]), {
+      format: "bates",
+      batesPrefix: "B-",
+      batesDigits: MAX_BATES_DIGITS,
+    });
+    assertEquals(drawn[0].text, `B-${"0".repeat(MAX_BATES_DIGITS - 1)}1`);
   } finally {
     resetPdfLibForTesting();
   }
