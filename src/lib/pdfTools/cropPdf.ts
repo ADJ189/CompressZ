@@ -85,6 +85,9 @@ export async function applyPdfCrop(
 
   const { PDFDocument } = await getPdfLib();
   const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+  if (pdfDoc.isEncrypted) {
+    throw new Error("The PDF is encrypted with a password. Please unlock or decrypt it in PDF Protect / Unlock before cropping.");
+  }
   const totalPages = pdfDoc.getPageCount();
 
   if (totalPages === 0) {

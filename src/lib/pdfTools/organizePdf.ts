@@ -60,6 +60,9 @@ export async function reorganizePdf(
 
   const { PDFDocument, degrees } = await getPdfLib();
   const srcDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+  if (srcDoc.isEncrypted) {
+    throw new Error("The PDF is encrypted with a password. Please unlock or decrypt it in PDF Protect / Unlock before organizing pages.");
+  }
 
   // Flatten interactive form fields if present to permanently preserve appearance
   try {

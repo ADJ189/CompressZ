@@ -25,8 +25,8 @@
       CompressZ is a fork of <a href="https://github.com/ADJ189/CompressF" target="_blank" rel="noopener">CompressF</a>,
       ADJ's browser-native compression tool. CompressF is maintained as a format-focused sister site,
       while CompressZ provides a comprehensive local workbench: Svelte 5 reactive interface, high-fidelity
-      PDF to Markdown extraction, dual-mode OCR (printed and English handwriting), WebCodecs hardware
-      acceleration, and the Adaptive Resource Guard.
+      PDF to Markdown extraction, dual-mode OCR (printed and English handwriting), WebCodecs + Mediabunny
+      video fast path, and the Adaptive Resource Guard.
     </p>
   </section>
 
@@ -47,7 +47,7 @@
       </div>
       <div class="cz-tech-card">
         <h3>🎞️ Mediabunny + WebCodecs</h3>
-        <p>Browser hardware-accelerated encoding for MP4 and WebM containers with automatic fallback.</p>
+        <p>Browser-native encoding for MP4 and WebM containers (browser picks HW/SW) with FFmpeg.wasm fallback.</p>
       </div>
       <div class="cz-tech-card">
         <h3>🔤 Tesseract.js 5</h3>

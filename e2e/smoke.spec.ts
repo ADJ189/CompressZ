@@ -18,6 +18,11 @@ const ROUTES: { path: string; ready: string }[] = [
   { path: "/compress/gif", ready: "#page-view .tool-wrap" },
   { path: "/compress/ocr", ready: "#page-view .tool-wrap" },
   { path: "/convert", ready: "#page-view .tool-wrap" },
+  { path: "/pdf/split", ready: "#page-view .cz-pdf-suite-page" },
+  { path: "/pdf/remove-pages", ready: "#page-view .cz-pdf-suite-page" },
+  { path: "/pdf/page-numbers", ready: "#page-view .cz-pdf-suite-page" },
+  { path: "/pdf/nup", ready: "#page-view .cz-pdf-suite-page" },
+  { path: "/pdf/metadata", ready: "#page-view .cz-pdf-suite-page" },
   { path: "/about", ready: "#page-view .page-enter" },
   { path: "/docs", ready: "#page-view .page-enter" },
   { path: "/privacy", ready: "#page-view .page-enter" },
@@ -758,5 +763,60 @@ test("Images → PDF page-size suggestion applies Auto and can be undone", async
   await expect(
     page.locator("#itp-sizes .pdf-preset", { hasText: "A4" }),
   ).toHaveAttribute("aria-checked", "true");
+});
+
+test("Images #img-dim dimension ceiling control remains visible and interactive on desktop and mobile", async ({
+  page,
+}) => {
+  for (const viewport of [
+    { width: 1280, height: 900 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/compress/images");
+    const dimSelect = page.locator("#img-dim");
+    await expect(dimSelect).toBeVisible();
+    await expect(dimSelect).toBeEnabled();
+    await expect(dimSelect).toHaveValue("0");
+    await dimSelect.selectOption("1920");
+    await expect(dimSelect).toHaveValue("1920");
+    const box = await dimSelect.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.width).toBeGreaterThan(40);
+    expect(box!.height).toBeGreaterThan(15);
+  }
+});
+
+test("Universal file staging updates ImagesToPdf and MergePdf even when already on that route", async ({
+  page,
+}) => {
+  const problems = await watch(page);
+
+  await page.goto("/compress/images-to-pdf");
+  await expect(page.locator("#page-view .tool-wrap")).toBeVisible();
+  await page.evaluate(() => {
+    const file = new File([new Uint8Array([1, 2, 3])], "staged-pic.png", { type: "image/png" });
+    window.dispatchEvent(
+      new CustomEvent("compressz:stage-universal-file", {
+        detail: { file, targetRoute: "compress/images-to-pdf" },
+      }),
+    );
+  });
+  await expect(page.locator("#itp-list .file-card .fc-name")).toContainText(["staged-pic.png"]);
+
+  await page.goto("/compress/merge-pdf");
+  await expect(page.locator("#page-view .tool-wrap")).toBeVisible();
+  await page.evaluate(() => {
+    const file = new File([new Uint8Array([37, 80, 68, 70])], "staged-doc.pdf", {
+      type: "application/pdf",
+    });
+    window.dispatchEvent(
+      new CustomEvent("compressz:stage-universal-file", {
+        detail: { file, targetRoute: "compress/merge-pdf" },
+      }),
+    );
+  });
+  await expect(page.locator(".cz-merge-grid .file-card .fc-name")).toContainText(["staged-doc.pdf"]);
+  expect(problems).toEqual([]);
 });
 

@@ -16,6 +16,8 @@
 
 import type { OcrLineResult, OcrPageResult } from "./ocrEngines";
 
+declare const __ORT_VERSION__: string;
+
 export const TROCR_MODEL_ID = "Xenova/trocr-small-handwritten";
 export const TROCR_ESTIMATED_DOWNLOAD_MB = 145;
 
@@ -65,7 +67,14 @@ export async function loadHandwritingPipeline(
     onProgress?.(0.05, "Initializing handwriting model runtime...");
 
     // Dynamically import @huggingface/transformers to keep initial chunk lean
-    const { pipeline } = await import("@huggingface/transformers");
+    const { pipeline, env } = await import("@huggingface/transformers");
+    env.allowLocalModels = false;
+    env.useBrowserCache = true;
+    if (env.backends.onnx?.wasm) {
+      const ortVer =
+        typeof __ORT_VERSION__ !== "undefined" ? __ORT_VERSION__ : "1.21.0";
+      env.backends.onnx.wasm.wasmPaths = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ortVer}/dist/`;
+    }
 
     // Probe WebGPU availability
     let device: "webgpu" | "wasm" = "wasm";
@@ -74,7 +83,10 @@ export async function loadHandwritingPipeline(
         const adapter = await (navigator as any).gpu?.requestAdapter();
         if (adapter) {
           const dev = await adapter.requestDevice();
-          if (dev) device = "webgpu";
+          if (dev) {
+            device = "webgpu";
+            dev.destroy?.();
+          }
         }
       } catch {
         device = "wasm";
@@ -159,9 +171,10 @@ export function detectTextLines(
         const lineH = y - startY;
         // Ignore lines that are too short (noise)
         if (lineH >= 12) {
+          const top = Math.max(0, startY - 3);
           lines.push({
-            y: Math.max(0, startY - 3),
-            h: Math.min(height - startY, lineH + 6),
+            y: top,
+            h: Math.min(height - top, lineH + 6),
           });
         }
       }

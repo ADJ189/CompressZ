@@ -137,11 +137,25 @@ export function isLanguageSupported(
 // Global cached Tesseract worker promise (singleton per active language)
 let activeTessWorker: any = null;
 let activeTessLang: string | null = null;
+let activeTessPromise: Promise<unknown> | null = null;
+let activeTessProgress: ((progress: number, status: string) => void) | undefined;
+let activeTessUses = 0;
+let tessJobChain: Promise<void> = Promise.resolve();
 
-export async function getTesseractWorker(
+function enqueueTessJob<T>(fn: () => Promise<T>): Promise<T> {
+  const next = tessJobChain.then(fn, fn);
+  tessJobChain = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  return next;
+}
+
+async function getTesseractWorkerInternal(
   lang: string,
   onProgress?: (progress: number, status: string) => void,
 ): Promise<any> {
+  activeTessProgress = onProgress;
   const Tesseract = await loadTesseract();
   const targetLang = lang === "auto" ? "eng" : lang;
 
@@ -149,44 +163,86 @@ export async function getTesseractWorker(
     return activeTessWorker;
   }
 
-  if (activeTessWorker) {
-    try {
-      await activeTessWorker.terminate();
-    } catch {
-      // Ignored
-    }
-    activeTessWorker = null;
+  if (activeTessPromise && activeTessLang === targetLang) {
+    return activeTessPromise;
   }
 
-  const worker = await Tesseract.createWorker(targetLang, 1, {
-    workerPath: TESS_WKR,
-    corePath: TESS_CORE,
-    langPath: TESS_LANGS,
-    logger: (m: any) => {
-      if (m.status === "recognizing text" && typeof m.progress === "number") {
-        onProgress?.(m.progress, "Recognising printed text...");
-      } else if (typeof m.status === "string") {
-        onProgress?.(0, m.status);
-      }
-    },
-  });
+  const prevPromise = activeTessPromise;
+  const initPromise = (async () => {
+    if (prevPromise) {
+      await prevPromise.catch(() => {});
+    }
 
-  activeTessWorker = worker;
-  activeTessLang = targetLang;
-  return worker;
+    if (activeTessWorker && activeTessLang === targetLang) {
+      return activeTessWorker;
+    }
+
+    if (activeTessWorker) {
+      try {
+        await activeTessWorker.terminate();
+      } catch {
+        // Ignored
+      }
+      activeTessWorker = null;
+      activeTessLang = null;
+    }
+
+    activeTessLang = targetLang;
+    const worker = await Tesseract.createWorker(targetLang, 1, {
+      workerPath: TESS_WKR,
+      corePath: TESS_CORE,
+      langPath: TESS_LANGS,
+      logger: (m: any) => {
+        if (m.status === "recognizing text" && typeof m.progress === "number") {
+          activeTessProgress?.(m.progress, "Recognising printed text...");
+        } else if (typeof m.status === "string") {
+          activeTessProgress?.(0, m.status);
+        }
+      },
+    });
+
+    activeTessWorker = worker;
+    return worker;
+  })();
+
+  activeTessPromise = initPromise;
+  try {
+    return await initPromise;
+  } catch (err) {
+    if (activeTessPromise === initPromise) {
+      activeTessLang = null;
+    }
+    throw err;
+  } finally {
+    if (activeTessPromise === initPromise) {
+      activeTessPromise = null;
+    }
+  }
 }
 
-/** Release active Tesseract worker and memory. */
+export async function getTesseractWorker(
+  lang: string,
+  onProgress?: (progress: number, status: string) => void,
+): Promise<any> {
+  return enqueueTessJob(() => getTesseractWorkerInternal(lang, onProgress));
+}
+
+/** Release active Tesseract worker and memory once any in-flight recognition finishes. */
 export async function terminateOcrWorkers(): Promise<void> {
-  if (activeTessWorker) {
-    try {
-      await activeTessWorker.terminate();
-    } catch {
-      // Ignored
+  return enqueueTessJob(async () => {
+    if (activeTessPromise) {
+      await activeTessPromise.catch(() => {});
     }
-    activeTessWorker = null;
-    activeTessLang = null;
-  }
+    if (activeTessWorker && activeTessUses === 0) {
+      try {
+        await activeTessWorker.terminate();
+      } catch {
+        // Ignored
+      }
+      activeTessWorker = null;
+      activeTessLang = null;
+    }
+  });
 }
 
 let tessLoadPromise: Promise<any> | null = null;
@@ -199,8 +255,23 @@ export function loadTesseract(): Promise<any> {
   tessLoadPromise = new Promise((resolve, reject) => {
     const s = document.createElement("script");
     s.src = TESS_UMD;
-    s.onload = () => resolve((window as any).Tesseract);
+    const timer = setTimeout(() => {
+      tessLoadPromise = null;
+      s.remove();
+      reject(new EngineError("Timed out loading Tesseract.js runtime from CDN", "tesseract"));
+    }, 30_000);
+    s.onload = () => {
+      clearTimeout(timer);
+      const lib = (window as any).Tesseract;
+      if (!lib) {
+        tessLoadPromise = null;
+        reject(new EngineError("Tesseract.js global unavailable after script load", "tesseract"));
+        return;
+      }
+      resolve(lib);
+    };
     s.onerror = () => {
+      clearTimeout(timer);
       tessLoadPromise = null;
       reject(new EngineError("Failed to load Tesseract.js runtime from CDN", "tesseract"));
     };
@@ -221,21 +292,31 @@ export async function runPrintedOcr(
   } = {},
 ): Promise<OcrPageResult> {
   const startTime = performance.now();
-  const lang = options.symbolMode
-    ? "eng+equ"
-    : options.language ?? "eng";
+  const baseLang =
+    !options.language || options.language === "auto"
+      ? "eng"
+      : options.language;
+  const lang = options.symbolMode ? `${baseLang}+equ` : (options.language ?? "eng");
 
-  let result: any;
-  try {
-    const worker = await getTesseractWorker(lang, options.onProgress);
-    result = await worker.recognize(imageSource);
-  } catch (err) {
-    if (err instanceof EngineError) throw err;
-    throw new EngineError(
-      `Tesseract failed to recognise text: ${toErrorMessage(err, "engine error")}`,
-      "tesseract",
-    );
-  }
+  const result = await enqueueTessJob(async () => {
+    activeTessUses++;
+    try {
+      const worker = await getTesseractWorkerInternal(lang, options.onProgress);
+      activeTessProgress = options.onProgress;
+      return await worker.recognize(imageSource);
+    } catch (err) {
+      if (err instanceof EngineError) throw err;
+      throw new EngineError(
+        `Tesseract failed to recognise text: ${toErrorMessage(err, "engine error")}`,
+        "tesseract",
+      );
+    } finally {
+      activeTessUses = Math.max(0, activeTessUses - 1);
+      if (activeTessProgress === options.onProgress) {
+        activeTessProgress = undefined;
+      }
+    }
+  });
 
   const lines: OcrLineResult[] = [];
   const warnings: string[] = [];

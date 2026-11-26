@@ -38,7 +38,9 @@
   );
 
   const doneCount = $derived(files.filter((f) => f.status === "done").length);
-  const pendingCount = $derived(files.filter((f) => f.status === "idle").length);
+  const pendingCount = $derived(
+    files.filter((f) => f.status === "idle" || f.status === "error").length,
+  );
 </script>
 
 <div class="cz-queue">

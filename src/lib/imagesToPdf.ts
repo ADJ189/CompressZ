@@ -28,18 +28,21 @@ export async function imagesToPdf(
   onProgress?: (pct: number) => void,
 ): Promise<Blob> {
   if (!files.length) throw new Error("Add at least one image");
-  // Translate "auto" to an omitted page size and fixed-size selections to { w, h } in PDF points
+  // Resolve page size into a local binding so caller options are never mutated.
+  let resolvedPageSize: { w: number; h: number } | undefined;
   if (typeof options.pageSize === "string") {
     if (options.pageSize === "auto") {
-      options.pageSize = undefined;
+      resolvedPageSize = undefined;
     } else if (options.pageSize === "a4") {
-      options.pageSize = { w: 595.28, h: 841.89 };
+      resolvedPageSize = { w: 595.28, h: 841.89 };
     } else if (options.pageSize === "letter") {
-      options.pageSize = { w: 612, h: 792 };
+      resolvedPageSize = { w: 612, h: 792 };
     }
+  } else {
+    resolvedPageSize = options.pageSize;
   }
-  if (options.pageSize !== undefined) {
-    const { w, h } = options.pageSize;
+  if (resolvedPageSize !== undefined) {
+    const { w, h } = resolvedPageSize;
     if (
       typeof w !== "number" ||
       typeof h !== "number" ||
@@ -49,7 +52,7 @@ export async function imagesToPdf(
       h <= 0
     ) {
       throw new Error(
-        `imagesToPdf: pageSize must be { w, h } in PDF points, got ${JSON.stringify(options.pageSize)}`,
+        `imagesToPdf: pageSize must be { w, h } in PDF points, got ${JSON.stringify(resolvedPageSize)}`,
       );
     }
   }
@@ -108,8 +111,8 @@ export async function imagesToPdf(
 
     const img = await pdfDoc.embedJpg(new Uint8Array(jpegBytes));
 
-    if (options.pageSize) {
-      const { w: pw, h: ph } = options.pageSize;
+    if (resolvedPageSize) {
+      const { w: pw, h: ph } = resolvedPageSize;
       const page = pdfDoc.addPage([pw, ph]);
       const scale = Math.min(pw / img.width, ph / img.height);
       const dw = img.width * scale,

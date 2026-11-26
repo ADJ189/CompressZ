@@ -62,6 +62,18 @@ export function planVideoSize(
   };
 }
 
+/**
+ * Build the FFmpeg `-vf` scale filter matching a planned even output size.
+ * Returns undefined when no scaling or even-rounding is needed.
+ */
+export function buildFfmpegScaleFilter(
+  planned: PlannedVideoSize,
+): string | undefined {
+  return planned.resized
+    ? `scale=${planned.width}:${planned.height}:flags=lanczos`
+    : undefined;
+}
+
 /** Resolve display dimensions + duration from a video element with timeout guards. */
 export function getVideoMeta(file: File, timeoutMs: number = 10_000): Promise<VideoMeta> {
   return new Promise((resolve, reject) => {
