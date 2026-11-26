@@ -26,6 +26,27 @@
     activeToolId = "",
     onSelectTool,
   }: Props = $props();
+
+  let tablistEl: HTMLElement | undefined = $state();
+
+  function handleTabKeydown(e: KeyboardEvent, idx: number) {
+    if (!tools.length) return;
+    let nextIdx = -1;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+      nextIdx = (idx + 1) % tools.length;
+    } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+      nextIdx = (idx - 1 + tools.length) % tools.length;
+    } else if (e.key === "Home") {
+      nextIdx = 0;
+    } else if (e.key === "End") {
+      nextIdx = tools.length - 1;
+    }
+    if (nextIdx >= 0) {
+      e.preventDefault();
+      const btns = tablistEl?.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+      btns?.[nextIdx]?.focus();
+    }
+  }
 </script>
 
 <div class="cz-hub-banner">
@@ -48,8 +69,8 @@
       </div>
     </div>
 
-    <div class="cz-hub-tools-row" role="tablist" aria-label="{title} tools">
-      {#each tools as tool}
+    <div class="cz-hub-tools-row" role="tablist" aria-label="{title} tools" bind:this={tablistEl}>
+      {#each tools as tool, idx}
         <button
           type="button"
           class="cz-hub-tool-chip {activeToolId === tool.id ? 'is-active' : ''}"
@@ -57,6 +78,7 @@
           aria-selected={activeToolId === tool.id}
           tabindex={activeToolId === tool.id ? 0 : -1}
           onclick={() => onSelectTool?.(tool.id)}
+          onkeydown={(e) => handleTabKeydown(e, idx)}
         >
           <span class="cz-hub-tool-icon" aria-hidden="true">
             {#if /^[a-z0-9_-]+$/.test(tool.icon)}

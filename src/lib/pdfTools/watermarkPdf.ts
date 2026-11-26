@@ -129,6 +129,9 @@ export async function applyPdfWatermark(
 
   const { PDFDocument, rgb, degrees, StandardFonts } = await getPdfLib();
   const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+  if (pdfDoc.isEncrypted) {
+    throw new Error("The PDF is encrypted with a password. Please unlock or decrypt it in PDF Protect / Unlock before adding a watermark.");
+  }
   const totalPages = pdfDoc.getPageCount();
 
   if (totalPages === 0) {

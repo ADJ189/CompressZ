@@ -12,7 +12,7 @@ import {
   setProgressHandler,
 } from "./ffmpeg";
 import { get2D } from "./gpu";
-import { getVideoMeta, planVideoSize } from "./videoMeta";
+import { buildFfmpegScaleFilter, getVideoMeta, planVideoSize } from "./videoMeta";
 import { videoViaWebCodecs } from "./webcodecsVideo";
 
 export async function compressVideo(
@@ -77,6 +77,7 @@ async function videoViaFFmpeg(
 ): Promise<CompressResult> {
   // FIX 1: get actual duration BEFORE bitrate calc so we never divide by 60
   const meta = await getVideoMeta(file);
+  const planned = planVideoSize(meta.width, meta.height, opts.maxWidth);
   onProgress?.(2);
 
   const ff = (await getFFmpeg()) as any;
@@ -186,11 +187,11 @@ async function videoViaFFmpeg(
   else if (codec === "vp9")
     vArgs.push(
       "-speed",
-      preset === "slow" ? "1" : preset === "fast" ? "3" : "2",
+      preset === "slow" ? "1" : preset === "fast" ? "3" : preset === "ultrafast" ? "4" : "2",
     );
 
-  if (opts.maxWidth)
-    vArgs.push("-vf", `scale='min(${opts.maxWidth},iw)':-2:flags=lanczos`);
+  const scaleFilter = buildFfmpegScaleFilter(planned);
+  if (scaleFilter) vArgs.push("-vf", scaleFilter);
   if (opts.fps && opts.fps > 0) vArgs.push("-r", String(opts.fps));
 
   if (codec === "h265" && tenBit)
@@ -296,8 +297,8 @@ async function videoViaFFmpeg(
     compressedSize: blob.size,
     compressionRatio: file.size / blob.size,
     format: `${mime} · FFmpeg.wasm${ffHasMT() ? " MT" : ""}${tenBit ? " · 10-bit" : ""}${opts.videoProxy ? " · Proxy" : ""}${twoPass ? " · 2-pass" : ""}${audioTrackMode === "all" ? " · multi-audio" : ""}${subtitleMode === "all" ? " · subs" : ""}`,
-    width: meta.width,
-    height: meta.height,
+    width: planned.width,
+    height: planned.height,
     duration: meta.duration,
   };
 }
@@ -441,6 +442,13 @@ async function videoViaMediaRecorder(
     };
     rec.start(250);
 
+    let mediaEnded = false;
+    let onPlaybackEnd: (() => void) | null = null;
+    vid.onended = () => {
+      mediaEnded = true;
+      onPlaybackEnd?.();
+    };
+
     try {
       await vid.play();
     } catch (err) {
@@ -519,8 +527,12 @@ async function videoViaMediaRecorder(
         raf(onFrame);
       }
 
-      vid.onended = finish;
-      playbackTimer = setTimeout(finish, (duration + 5) * 1000);
+      onPlaybackEnd = finish;
+      if (mediaEnded) {
+        finish();
+      } else {
+        playbackTimer = setTimeout(finish, (duration + 5) * 1000);
+      }
     });
 
     if (recorderError) {

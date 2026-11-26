@@ -38,8 +38,12 @@
     if (hasWebCodecs) ready.push("WebCodecs");
     if (hasGl2) ready.push("WebGL2");
 
-    if (hasGpuEnabled && ready.length > 0) {
-      return `Hardware Accelerated · ${ready.join(" & ")} Ready (${profile.maxConcurrentImages} Workers)`;
+    if (hasGl2 && profile.gpu.images) {
+      const accelBits = ["WebGL2 Resize", ...(hasWebCodecs ? ["WebCodecs"] : [])];
+      return `${accelBits.join(" & ")} Ready (${profile.maxConcurrentImages} Workers)`;
+    }
+    if (hasWebCodecs) {
+      return `WebCodecs & WASM SIMD Ready (${profile.maxConcurrentImages} Workers)`;
     }
     return `WASM SIMD Multi-Threaded Profile (${profile.maxConcurrentImages} Workers)`;
   });
@@ -125,6 +129,7 @@
       "pdf-to-ppt": "ppt",
       "pdf-to-images": "image",
       "split-pdf": "split",
+      "remove-pages": "remove-pages",
       "organize-pdf": "organize",
       "watermark-pdf": "watermark",
       "crop-pdf": "crop",

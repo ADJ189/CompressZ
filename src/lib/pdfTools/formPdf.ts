@@ -48,6 +48,9 @@ export interface FormFillResult {
 export async function inspectPdfForm(pdfBytes: Uint8Array): Promise<FormInspectionResult> {
   const { PDFDocument, PDFTextField, PDFCheckBox, PDFDropdown, PDFRadioGroup } = await getPdfLib();
   const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+  if (pdfDoc.isEncrypted) {
+    throw new Error("The PDF is encrypted with a password. Please unlock or decrypt it in PDF Protect / Unlock before inspecting form fields.");
+  }
   const pageCount = pdfDoc.getPageCount();
 
   let form: any;
@@ -136,6 +139,9 @@ export async function fillPdfForm(
 
   const { PDFDocument, PDFTextField, PDFCheckBox, PDFDropdown, PDFRadioGroup } = await getPdfLib();
   const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+  if (pdfDoc.isEncrypted) {
+    throw new Error("The PDF is encrypted with a password. Please unlock or decrypt it in PDF Protect / Unlock before filling form fields.");
+  }
 
   let form: any;
   try {

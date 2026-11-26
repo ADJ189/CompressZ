@@ -9,7 +9,7 @@ This document specifies the technical architecture, operational boundaries, and 
 | Engine | Primary Duties | Technologies / Libraries | Isolation Mode | Maximum Memory Cap |
 | :--- | :--- | :--- | :--- | :--- |
 | **Image Engine** | Compression, format conversion (WebP, AVIF, JPEG, PNG, SVG) | Canvas 2D, OffscreenCanvas, WebAssembly codecs | Dedicated Web Worker / Main thread | Resource Guard concurrency & admission |
-| **Video Engine** | Transcoding, bitrate budgeting, downscaling | WebCodecs API (hardware), Mediabunny, FFmpeg WASM | Dedicated Web Worker | 1.5 GiB per task |
+| **Video Engine** | Transcoding, bitrate budgeting, downscaling | WebCodecs API (browser HW/SW), Mediabunny, FFmpeg WASM | Dedicated Web Worker | 1.5 GiB per task |
 | **Audio Engine** | Transcoding (MP3, WAV, OGG, AAC), sample rate conversion | Web Audio API (`AudioContext`), LAME WASM | Dedicated Web Worker | 256 MiB per task |
 | **PDF Suite & Studio** | Splitting, merging, watermarking, redaction, AcroForms, repair | QPDF WASM, pdf-lib, PDF.js | Web Worker / Virtual FS | 1.0 GiB per task |
 | **Office Conversion** | Two-way conversions (PDF ↔ Word, Excel, PPTX) | Native OOXML streaming, LibreOffice WASM | Web Worker / Isolated WASM | 1.0 GiB per task |
@@ -21,12 +21,12 @@ This document specifies the technical architecture, operational boundaries, and 
 ## 2. Detailed Per-Engine Policy
 
 ### 2.1 Image Processing Engine
-- **Quality Guard**: Evaluates lossy image compressions using SSIM (Structural Similarity Index Measure). If SSIM falls below 0.92, the engine automatically retries once at a higher quality floor to prevent optical degradation.
+- **Quality Guard**: Evaluates lossy image compressions using SSIM (Structural Similarity Index Measure). If SSIM falls below `0.90`, the engine automatically retries once at a higher quality floor unless a byte target is active or requested quality is `<0.70`.
 - **SVG Sanitization**: SVG optimization strips XML declarations, metadata namespaces (Inkscape/Sodipodi), inline event handlers (`onload`, `onclick`), `<script>` elements, and `javascript:` URIs to prevent Cross-Site Scripting (XSS). Decimal precision is trimmed without polynomial backtracking.
 - **HEIC/HEIF Decoding**: Handled via browser `createImageBitmap` when supported or dedicated converter; avoids leaking raw user filenames in thrown errors.
 
 ### 2.2 Video Processing Engine
-- **Fast Path (WebCodecs)**: When hardware encoding is supported, CompressZ uses the `VideoEncoder` and `AudioEncoder` APIs through `Mediabunny`. This achieves near-instantaneous encoding with zero memory copies.
+- **Fast Path (WebCodecs)**: When capability-gated checks (`canEncodeVideo` / `canEncodeAudio`) accept the exact output configuration and preset is `fast`, CompressZ uses the browser `VideoEncoder` and `AudioEncoder` APIs through `Mediabunny`. The browser selects hardware or software encoding per codec/device.
 - **Fallback Path (FFmpeg WASM)**: Used when custom bitrates, legacy containers, or non-hardware codecs are requested. Runs inside an isolated Web Worker with shared memory (`SharedArrayBuffer`) protected by COOP/COEP headers.
 - **Bitrate Budgeting**: In target-size mode, video bitrates are calculated dynamically by reserving audio bitrate and container overhead from the target byte allocation, never budgeting below a safe visual floor.
 

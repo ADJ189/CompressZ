@@ -15,6 +15,16 @@ import {
   protectPdf,
   type ProtectPdfOptions,
 } from "../src/lib/pdfTools/securityPdf.ts";
+import { setPdfLibForTesting, resetPdfLibForTesting } from "../src/lib/pdfLibs.ts";
+import { applyPdfCrop } from "../src/lib/pdfTools/cropPdf.ts";
+import { inspectPdfForm, fillPdfForm } from "../src/lib/pdfTools/formPdf.ts";
+import { readPdfMetadata, updatePdfMetadata } from "../src/lib/pdfTools/metadataPdf.ts";
+import { createNupPdf } from "../src/lib/pdfTools/nupPdf.ts";
+import { reorganizePdf } from "../src/lib/pdfTools/organizePdf.ts";
+import { applyPdfPageNumbers } from "../src/lib/pdfTools/pageNumbersPdf.ts";
+import { applyTrueRedaction } from "../src/lib/pdfTools/redactPdf.ts";
+import { splitPdf } from "../src/lib/pdfTools/splitPdf.ts";
+import { applyPdfWatermark } from "../src/lib/pdfTools/watermarkPdf.ts";
 import {
   salvagePdfObjects,
   buildSyntheticXrefTrailer,
@@ -396,4 +406,52 @@ Deno.test("securityPdf: protectPdf rejects nonempty QPDF output when exit status
   }
 
   assertEquals(threw, true);
+});
+
+Deno.test("pdfTools: all document manipulation engines reject encrypted PDFs cleanly", async () => {
+  const sampleBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+  class DummyField {}
+  setPdfLibForTesting({
+    PDFDocument: {
+      load: async () => ({
+        isEncrypted: true,
+        getPageCount: () => 1,
+      }),
+    },
+    PDFTextField: DummyField,
+    PDFCheckBox: DummyField,
+    PDFDropdown: DummyField,
+    PDFRadioGroup: DummyField,
+    StandardFonts: { Helvetica: "Helvetica", TimesRoman: "TimesRoman", Courier: "Courier" },
+    rgb: () => ({}),
+    degrees: () => ({}),
+  });
+
+  const assertions: Array<[string, () => Promise<unknown>]> = [
+    ["applyPdfCrop", () => applyPdfCrop(sampleBytes, { mode: "margins", margins: { top: 10, bottom: 10, left: 10, right: 10 } })],
+    ["inspectPdfForm", () => inspectPdfForm(sampleBytes)],
+    ["fillPdfForm", () => fillPdfForm(sampleBytes, [])],
+    ["readPdfMetadata", () => readPdfMetadata(sampleBytes)],
+    ["updatePdfMetadata", () => updatePdfMetadata(sampleBytes, {}, true)],
+    ["createNupPdf", () => createNupPdf(sampleBytes, { pagesPerSheet: 2 })],
+    ["reorganizePdf", () => reorganizePdf(sampleBytes, [{ id: "p0", originalIndex: 0, rotation: 0, deleted: false, isBlank: false, duplicateCount: 1 }])],
+    ["applyPdfPageNumbers", () => applyPdfPageNumbers(sampleBytes, {})],
+    ["applyTrueRedaction", () => applyTrueRedaction(sampleBytes, { regions: [{ pageIndex: 0, x: 0, y: 0, width: 10, height: 10 }] })],
+    ["splitPdf", () => splitPdf(sampleBytes, { mode: "burst" })],
+    ["applyPdfWatermark", () => applyPdfWatermark(sampleBytes, { type: "text", text: "CONFIDENTIAL" })],
+  ];
+
+  try {
+    for (const [name, fn] of assertions) {
+      let rejectedEncrypted = false;
+      try {
+        await fn();
+      } catch (err: unknown) {
+        rejectedEncrypted = err instanceof Error && /encrypted/i.test(err.message);
+      }
+      assertEquals(rejectedEncrypted, true, `${name} must reject encrypted PDFs`);
+    }
+  } finally {
+    resetPdfLibForTesting();
+  }
 });

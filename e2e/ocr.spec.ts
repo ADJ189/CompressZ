@@ -10,12 +10,14 @@ test.beforeAll(async () => {
 });
 
 test.describe("OCR workbench", () => {
-  let getErrors: () => string[];
+  let getErrors: (() => string[]) | undefined;
   test.beforeEach(({ page }) => {
     getErrors = createPageErrorCollector(page);
   });
   test.afterEach(() => {
-    expect(getErrors(), "uncaught exception in the page").toEqual([]);
+    if (getErrors) {
+      expect(getErrors(), "uncaught exception in the page").toEqual([]);
+    }
   });
 
   test("OCR: image input stages with Recognise action and output mode selector", async ({ page }) => {
