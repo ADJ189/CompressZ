@@ -47,6 +47,7 @@ export interface PageNumberOptions {
 
 export const MAX_PAGE_NUMBER_START = 999_999;
 export const MAX_ROMAN_NUMERAL = 3999;
+export const MAX_BATES_DIGITS = 12;
 
 /**
  * Convert a positive integer within the standard Roman numeral range (1–3999)
@@ -357,6 +358,20 @@ export async function applyPdfPageNumbers(
     throw new Error(
       `Start number must be a whole number between 1 and ${MAX_PAGE_NUMBER_START}.`,
     );
+  }
+
+  if (options.format === "bates") {
+    const digits = options.batesDigits ?? 6;
+    if (
+      typeof digits !== "number" ||
+      !Number.isInteger(digits) ||
+      digits < 1 ||
+      digits > MAX_BATES_DIGITS
+    ) {
+      throw new Error(
+        `Bates digits must be a whole number between 1 and ${MAX_BATES_DIGITS}.`,
+      );
+    }
   }
 
   const { PDFDocument, StandardFonts, rgb, degrees } = await getPdfLib();

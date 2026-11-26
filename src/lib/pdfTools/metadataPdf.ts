@@ -109,6 +109,45 @@ export async function readPdfMetadata(pdfBytes: Uint8Array): Promise<PdfMetadata
   };
 }
 
+const PRIVATE_PDF_DICT_KEYS = ["Metadata", "PieceInfo", "LastModified", "SpiderInfo"] as const;
+
+function collectAndDeleteRefs(
+  context: any,
+  value: unknown,
+  visited: Set<string>,
+  depth: number,
+): void {
+  if (!value || depth > 8 || typeof context?.delete !== "function") return;
+  const maybeRef = value as { objectNumber?: unknown; generationNumber?: unknown };
+  if (typeof maybeRef.objectNumber === "number") {
+    const gen = typeof maybeRef.generationNumber === "number" ? maybeRef.generationNumber : 0;
+    const refKey = `${maybeRef.objectNumber}:${gen}`;
+    if (visited.has(refKey)) return;
+    visited.add(refKey);
+    const resolved = typeof context.lookup === "function" ? context.lookup(value) : undefined;
+    if (resolved && resolved !== value) {
+      collectAndDeleteRefs(context, resolved, visited, depth + 1);
+    }
+    context.delete(value);
+    return;
+  }
+  const dictLike = value as { entries?: () => Iterable<[unknown, unknown]> };
+  if (typeof dictLike.entries === "function") {
+    for (const [k, v] of dictLike.entries()) {
+      const keyText = String(k ?? "");
+      if (keyText === "/Parent" || keyText === "Parent") continue;
+      collectAndDeleteRefs(context, v, visited, depth + 1);
+    }
+    return;
+  }
+  const arrayLike = value as { asArray?: () => unknown[] };
+  if (typeof arrayLike.asArray === "function") {
+    for (const item of arrayLike.asArray()) {
+      collectAndDeleteRefs(context, item, visited, depth + 1);
+    }
+  }
+}
+
 /**
  * Update PDF metadata fields or strip all metadata for privacy.
  */
@@ -120,33 +159,38 @@ export async function updatePdfMetadata(
   const { PDFDocument, PDFName } = await getPdfLib();
   const pdfDoc = await PDFDocument.load(pdfBytes, {
     ignoreEncryption: true,
-    updateMetadata: !stripAll,
+    updateMetadata: false,
   });
   if (pdfDoc.isEncrypted) {
     throw new Error("The PDF is encrypted with a password. Please unlock or decrypt it in PDF Protect / Unlock before editing metadata.");
   }
 
   if (stripAll) {
-    // Strip all standard and custom Info dictionary entries, timestamps, and XMP metadata streams
+    // Strip Info entries, timestamps, XMP Metadata streams, and private app data (PieceInfo, LastModified, SpiderInfo)
     if (PDFName) {
-      const metadataKey = PDFName.of("Metadata");
-      if (pdfDoc.catalog && typeof pdfDoc.catalog.get === "function" && typeof pdfDoc.catalog.delete === "function") {
-        const xmpRef = pdfDoc.catalog.get(metadataKey);
-        pdfDoc.catalog.delete(metadataKey);
-        if (xmpRef && typeof pdfDoc.context?.delete === "function" && typeof xmpRef.objectNumber === "number") {
-          pdfDoc.context.delete(xmpRef);
+      const visitedRefs = new Set<string>();
+      const stripPrivateDictKeys = (dict: any) => {
+        if (!dict || typeof dict.get !== "function" || typeof dict.delete !== "function") return;
+        for (const keyName of PRIVATE_PDF_DICT_KEYS) {
+          const key = PDFName.of(keyName);
+          const entry = dict.get(key);
+          dict.delete(key);
+          if (!entry) continue;
+          if (keyName === "PieceInfo" || keyName === "SpiderInfo") {
+            collectAndDeleteRefs(pdfDoc.context, entry, visitedRefs, 0);
+          } else if (
+            typeof pdfDoc.context?.delete === "function" &&
+            typeof entry.objectNumber === "number"
+          ) {
+            pdfDoc.context.delete(entry);
+          }
         }
-      }
+      };
+
+      stripPrivateDictKeys(pdfDoc.catalog);
       if (typeof pdfDoc.getPages === "function") {
         for (const page of pdfDoc.getPages()) {
-          const node = page?.node;
-          if (node && typeof node.get === "function" && typeof node.delete === "function") {
-            const pageXmpRef = node.get(metadataKey);
-            node.delete(metadataKey);
-            if (pageXmpRef && typeof pdfDoc.context?.delete === "function" && typeof pageXmpRef.objectNumber === "number") {
-              pdfDoc.context.delete(pageXmpRef);
-            }
-          }
+          stripPrivateDictKeys(page?.node);
         }
       }
     }
