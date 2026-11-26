@@ -820,3 +820,93 @@ test("Universal file staging updates ImagesToPdf and MergePdf even when already 
   expect(problems).toEqual([]);
 });
 
+test.describe("mobile UI layout, Tools menus, and Settings across phone viewports", () => {
+  test("mobile dock appears only on mobile and opens Tools and Settings", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/");
+    await expect(page.locator(".cz-mobile-dock")).toBeHidden();
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.locator(".cz-mobile-dock")).toBeVisible();
+
+    await page.locator('.cz-mobile-dock button[aria-label="All tools"]').click();
+    await expect(page.locator("#tools-dialog-title")).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    await page.locator('.cz-mobile-dock button[aria-label="Settings"]').click();
+    await expect(page.locator("#settings-dialog")).toBeVisible();
+    await page.keyboard.press("Escape");
+  });
+
+  for (const width of [320, 390]) {
+    test(`Tools mega menu, Tools dialog, Settings sections, and tools fit within ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 844 });
+      await page.goto("/");
+
+      // Tools MegaMenu must stay inside viewport (never shifted -50% offscreen)
+      await page.locator(".cz-tab-dropdown").click();
+      const megaTray = page.locator(".cz-mega-tray");
+      await expect(megaTray).toBeVisible();
+      await page.waitForTimeout(300);
+      const megaBox = await megaTray.boundingBox();
+      expect(megaBox).not.toBeNull();
+      expect(megaBox!.x).toBeGreaterThanOrEqual(-1);
+      expect(megaBox!.x + megaBox!.width).toBeLessThanOrEqual(width + 1);
+      await page.keyboard.press("Escape");
+
+      // Tools Dialog must stay inside viewport
+      await page.locator("#tools-btn").click();
+      const toolsTitle = page.locator("#tools-dialog-title");
+      await expect(toolsTitle).toBeVisible();
+      const toolsBox = await page.locator('[aria-labelledby="tools-dialog-title"]').boundingBox();
+      expect(toolsBox).not.toBeNull();
+      expect(toolsBox!.x).toBeGreaterThanOrEqual(-1);
+      expect(toolsBox!.x + toolsBox!.width).toBeLessThanOrEqual(width + 1);
+      await page.keyboard.press("Escape");
+
+      // Every Settings section must fit without horizontal overflow
+      await page.locator("#settings-btn").click();
+      await expect(page.locator("#settings-dialog")).toBeVisible();
+      const sections = [
+        "General",
+        "Appearance",
+        "Performance",
+        "AI engine",
+        "Suggestions",
+        "Compression",
+        "Privacy & data",
+        "Diagnostics",
+        "Support & Issues",
+      ];
+      for (const label of sections) {
+        await page.locator("#settings-nav").getByRole("button", { name: label, exact: true }).click();
+        const overflow = await page.locator("#settings-panel").evaluate((el) => {
+          const panelOverflow = el.scrollWidth - el.clientWidth;
+          const trackOverflow = Array.from(el.querySelectorAll<HTMLElement>(".cz-segmented-track"))
+            .map((t) => t.scrollWidth - t.clientWidth);
+          return { panelOverflow, maxTrackOverflow: Math.max(0, ...trackOverflow) };
+        });
+        expect(overflow.panelOverflow).toBeLessThanOrEqual(1);
+        expect(overflow.maxTrackOverflow).toBeLessThanOrEqual(1);
+      }
+      await page.keyboard.press("Escape");
+
+      // Key tool routes must not overflow horizontally on mobile
+      for (const route of ["/compress/pdf", "/compress/video", "/convert", "/pdf"]) {
+        await page.goto(route);
+        await expect(page.locator("#page-view > *").first()).toBeVisible();
+        const pageOverflow = await page.evaluate(() => {
+          const view = document.querySelector<HTMLElement>("#page-view");
+          return Math.max(
+            document.documentElement.scrollWidth - document.documentElement.clientWidth,
+            view ? view.scrollWidth - view.clientWidth : 0,
+          );
+        });
+        expect(pageOverflow).toBeLessThanOrEqual(1);
+      }
+    });
+  }
+});
+
