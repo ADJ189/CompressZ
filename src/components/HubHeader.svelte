@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount, tick } from "svelte";
   import UniversalUpload from "./UniversalUpload.svelte";
   import MacIcon from "./MacIcon.svelte";
 
@@ -28,6 +29,49 @@
   }: Props = $props();
 
   let tablistEl: HTMLElement | undefined = $state();
+  let hasScrolledInitial = false;
+
+  async function scrollActiveChipIntoView(instant = false) {
+    await tick();
+    const list = tablistEl;
+    if (!list || list.scrollWidth <= list.clientWidth) return;
+
+    const activeChip = list.querySelector<HTMLElement>(".cz-hub-tool-chip.is-active");
+    if (!activeChip) return;
+
+    const listRect = list.getBoundingClientRect();
+    const chipRect = activeChip.getBoundingClientRect();
+    const chipLeftInScroll = chipRect.left - listRect.left + list.scrollLeft;
+    const maxScroll = Math.max(0, list.scrollWidth - list.clientWidth);
+    const targetScroll = Math.min(
+      maxScroll,
+      Math.max(0, chipLeftInScroll - (list.clientWidth - chipRect.width) / 2),
+    );
+
+    const prefersReducedMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const behavior: ScrollBehavior = instant || prefersReducedMotion ? "auto" : "smooth";
+    list.scrollTo({ left: targetScroll, behavior });
+  }
+
+  onMount(() => {
+    void scrollActiveChipIntoView(true);
+    const onResize = () => {
+      void scrollActiveChipIntoView(true);
+    };
+    window.addEventListener("resize", onResize, { passive: true });
+    return () => window.removeEventListener("resize", onResize);
+  });
+
+  $effect(() => {
+    const _tool = activeToolId;
+    const _list = tablistEl;
+    if (!_list) return;
+    const instant = !hasScrolledInitial;
+    hasScrolledInitial = true;
+    void scrollActiveChipIntoView(instant);
+  });
 
   function handleTabKeydown(e: KeyboardEvent, idx: number) {
     if (!tools.length) return;
