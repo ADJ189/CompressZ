@@ -1390,19 +1390,35 @@ input[type="range"].slider::-webkit-slider-thumb:hover {
   .tab-item { padding: 0 .55rem; }
   .tab-more-btn span:last-of-type { display: none; }
 
-  .home-wrap  { padding: 1.75rem 1.25rem 4rem; }
-  .tool-wrap  { padding: 1.75rem 1.25rem 4rem; }
-  .home-title { font-size: 2.2rem; line-height: 1.2; }
-  .home-tools-grid { grid-template-columns: 1fr; }
+  .home-wrap  { padding: 1.25rem 0.9rem 2.5rem; }
+  .tool-wrap  { padding: 1.25rem 0.9rem 2.5rem; }
+  .home-hero  { padding: 1.25rem 0 1.35rem; }
+  .home-eyebrow { font-size: .68rem; margin-bottom: 1rem; max-width: 100%; flex-wrap: wrap; }
+  .home-title { font-size: 2rem; line-height: 1.15; margin-bottom: .85rem; }
+  .home-sub   { font-size: .94rem; line-height: 1.6; margin-bottom: 1.35rem; }
+  .home-actions { gap: .55rem; margin-bottom: 1.5rem; }
+  .home-actions > * { flex: 1 1 auto; justify-content: center; min-height: 44px; }
+  .trust-row  { gap: .65rem 1rem; margin-bottom: 1.75rem; }
+  .home-tools-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .55rem; background: transparent; box-shadow: none; border-radius: 0; margin-bottom: 2rem; }
+  .htc { padding: .85rem .75rem; border: 1px solid var(--border); border-radius: var(--r); }
+  .htc-head { margin-bottom: .5rem; }
+  .htc-tags { gap: .25rem; }
+  .htc-tag { font-size: .62rem; padding: .14rem .4rem; }
+  .priv-highlight { padding: 1.5rem 1.15rem; border-radius: var(--r-xl); margin-bottom: 1.75rem; }
+  .ph-title { font-size: 1.18rem; }
+  .ph-sub { font-size: .82rem; }
+  .content-page { padding: 1.5rem 1rem 3rem; }
   .pdf-presets     { grid-template-columns: 1fr; }
   .ocr-engines     { grid-template-columns: 1fr; }
-  .how-row         { grid-template-columns: 1fr; }
   .s-row           { flex-direction: column; }
   .s-field         { grid-template-columns: 1fr; }
   .em-pros-cons    { grid-template-columns: 1fr; }
   .em-grid         { grid-template-columns: 80px 1fr 1fr; }
   .ocr-layout      { grid-template-columns: 1fr; }
   .ocr-layout .ocr-side { position: static; }
+  .device-info-row { flex-direction: column; align-items: flex-start; gap: 0.4rem; }
+  .device-info-val { text-align: left; }
+  #toast { bottom: calc(68px + env(safe-area-inset-bottom, 0px)); left: 0.75rem; right: 0.75rem; align-items: stretch; }
 }
 
 /* ════════════════════════════════════════════════════════════
