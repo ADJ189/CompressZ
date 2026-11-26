@@ -156,19 +156,35 @@
     .cz-header {
       padding: 0 0.75rem;
     }
-    .cz-hdr-upload {
+    .cz-hdr-upload :global(.cz-universal-label),
+    .cz-hdr-upload :global(.cz-universal-hint) {
       display: none;
+    }
+    .cz-hdr-upload :global(.cz-universal-upload-btn) {
+      width: 38px;
+      height: 38px;
+      min-height: 38px;
+      padding: 0;
+      justify-content: center;
+      border-radius: var(--r-sm);
+    }
+    .cz-hdr-btn {
+      width: 38px;
+      height: 38px;
     }
     .cz-hdr-github {
       display: none;
     }
   }
-  @media (max-width: 340px) {
+  @media (max-width: 350px) {
     .cz-header {
       padding: 0 0.5rem;
     }
     .cz-logo-text {
-      font-size: 1rem;
+      font-size: 0.96rem;
+    }
+    .cz-header-actions {
+      gap: 0.25rem;
     }
   }
 </style>

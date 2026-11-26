@@ -312,20 +312,25 @@
     .cz-tabbar-center {
       justify-content: flex-start;
       padding: 0 0.25rem;
-      mask-image: linear-gradient(to right, transparent 0, black 16px, black calc(100% - 16px), transparent 100%);
-      -webkit-mask-image: linear-gradient(to right, transparent 0, black 16px, black calc(100% - 16px), transparent 100%);
+      mask-image: linear-gradient(to right, transparent 0, black 12px, black calc(100% - 20px), transparent 100%);
+      -webkit-mask-image: linear-gradient(to right, transparent 0, black 12px, black calc(100% - 20px), transparent 100%);
     }
     .cz-tabbar-scroll {
       justify-content: flex-start;
       width: 100%;
       scroll-snap-type: x proximity;
-      padding: 0 0.75rem;
+      padding: 0 0.65rem;
+      gap: 0.3rem;
     }
     .cz-tab {
-      padding: 0.3rem 0.65rem;
+      min-height: 36px;
+      padding: 0.32rem 0.68rem;
       gap: 0.35rem;
       font-size: 0.8rem;
       scroll-snap-align: center;
+    }
+    .cz-tab-badge {
+      display: none;
     }
   }
 </style>
