@@ -487,7 +487,7 @@
   }
   .cz-palette-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr));
     gap: 0.75rem;
   }
   .cz-palette-card {
@@ -559,5 +559,40 @@
     font-size: 0.74rem;
     color: var(--text-3);
     font-weight: 500;
+  }
+  @media (max-width: 640px) {
+    .cz-palette-dialog {
+      top: auto;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      transform: none;
+      width: 100%;
+      max-width: 100%;
+      max-height: 92dvh;
+      border-radius: 20px 20px 0 0;
+      border-bottom: none;
+    }
+    .cz-palette-header {
+      padding: 0.85rem 1rem;
+    }
+    .cz-palette-filename {
+      max-width: 64vw;
+      font-size: 0.94rem;
+    }
+    .cz-palette-body {
+      padding: 1rem;
+    }
+    .cz-palette-accel {
+      flex-wrap: wrap;
+    }
+    .cz-accel-text {
+      white-space: normal;
+      line-height: 1.3;
+    }
+    .cz-palette-footer {
+      padding: 0.7rem 1rem calc(0.8rem + env(safe-area-inset-bottom, 0px));
+      text-align: center;
+    }
   }
 </style>

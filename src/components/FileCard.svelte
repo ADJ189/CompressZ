@@ -266,4 +266,20 @@
     from { opacity: 0.3; }
     to { opacity: 1; }
   }
+  @media (max-width: 640px) {
+    .file-card {
+      flex-wrap: wrap;
+      gap: 0.65rem;
+      padding: 0.75rem 0.85rem;
+    }
+    .file-card :global(.cz-inset-row-left) {
+      flex: 1 1 100%;
+      min-width: 0;
+    }
+    .file-card :global(.cz-inset-row-right) {
+      width: 100%;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+  }
 </style>

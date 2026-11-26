@@ -462,18 +462,65 @@
     font-size: 0.95rem;
   }
 
-  @media (max-width: 640px) {
+  @media (max-width: 680px) {
+    .cz-mega-backdrop {
+      z-index: 1049;
+    }
     .cz-mega-tray {
       top: 0;
       left: 0;
+      right: 0;
+      bottom: 0;
       transform: none;
-      width: 100vw;
+      width: 100%;
+      max-width: 100%;
       height: 100vh;
-      max-height: 100vh;
+      height: 100dvh;
+      max-height: 100dvh;
       border-radius: 0;
+      border: none;
+      z-index: 1050;
+      animation: czTraySlideMobile 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    .cz-mega-header {
+      padding: 0.75rem 0.9rem;
+      gap: 0.5rem;
+    }
+    .cz-mega-search-wrap {
+      padding: 0.45rem 0.75rem;
+      min-width: 0;
+    }
+    .cz-mega-search {
+      font-size: 16px;
+      min-width: 0;
+    }
+    .cz-mega-close {
+      width: 40px;
+      height: 40px;
+      flex-shrink: 0;
+    }
+    .cz-mega-scroll {
+      padding: 0.9rem 0.9rem calc(1.5rem + env(safe-area-inset-bottom, 0px));
+      gap: 1.15rem;
     }
     .cz-mega-cards-grid {
       grid-template-columns: 1fr;
+      gap: 0.55rem;
+    }
+    .cz-tool-box {
+      min-height: 48px;
+      padding: 0.75rem 0.85rem;
+    }
+  }
+
+  @keyframes czTraySlideMobile {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
     }
   }
 </style>

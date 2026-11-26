@@ -113,14 +113,6 @@
     min-width: 0;
     max-width: 100%;
   }
-  @media (max-width: 768px) {
-    .cz-hub-banner {
-      flex-direction: column;
-      align-items: stretch;
-      padding: 1rem;
-      gap: 1rem;
-    }
-  }
   .cz-hub-main {
     flex: 1;
     min-width: 0;
@@ -202,8 +194,51 @@
     flex-shrink: 0;
   }
   @media (max-width: 768px) {
+    .cz-hub-banner {
+      flex-direction: column;
+      align-items: stretch;
+      padding: 0.9rem;
+      gap: 0.85rem;
+      border-radius: var(--r-lg);
+      margin-bottom: 1rem;
+    }
+    .cz-hub-heading {
+      gap: 0.65rem;
+      margin-bottom: 0.65rem;
+    }
+    .cz-hub-icon {
+      width: 38px;
+      height: 38px;
+    }
+    .cz-hub-title {
+      font-size: 1.1rem;
+    }
+    .cz-hub-desc {
+      font-size: 0.78rem;
+      line-height: 1.35;
+    }
+    .cz-hub-tools-row {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      padding-bottom: 0.2rem;
+      gap: 0.4rem;
+    }
+    .cz-hub-tools-row::-webkit-scrollbar {
+      display: none;
+    }
+    .cz-hub-tool-chip {
+      min-height: 36px;
+      padding: 0.35rem 0.7rem;
+    }
     .cz-hub-action-box {
-      align-items: flex-start;
+      align-items: stretch;
+      width: 100%;
+    }
+    .cz-hub-action-box :global(.cz-universal-upload-btn) {
+      width: 100%;
+      justify-content: center;
     }
   }
 </style>
