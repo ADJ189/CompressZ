@@ -2261,7 +2261,7 @@
   }
   .cz-drawer-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
     gap: 1.25rem;
     align-items: center;
   }
@@ -2385,23 +2385,78 @@
   @media (max-width: 960px) {
     .cz-apple-workbench {
       grid-template-columns: minmax(0, 1fr);
-      padding: 1.25rem 1rem 3.5rem;
+      padding: 1rem 0.85rem 2.5rem;
     }
   }
 
   @media (max-width: 768px) {
+    .cz-convert-landing {
+      gap: 1.25rem;
+    }
+    .cz-convert-landing-title {
+      font-size: 1.4rem;
+    }
+    .cz-cat-segmented {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      width: 100%;
+    }
+    .cz-cat-segmented::-webkit-scrollbar {
+      display: none;
+    }
+    .cz-cat-segmented .cz-segmented-item {
+      flex: 0 0 auto;
+      min-height: 36px;
+    }
+    .cz-convert-active-box {
+      padding: 0.85rem;
+      border-radius: var(--r-lg, 18px);
+    }
     .cz-convert-active-header {
       flex-direction: column;
       align-items: stretch;
       gap: 0.75rem;
+      padding: 0.75rem;
+    }
+    .cz-suite-target-desc {
+      white-space: normal;
+      line-height: 1.35;
     }
     .cz-options-pill-bar {
       width: 100%;
       box-sizing: border-box;
-      padding: 0.5rem 0.75rem;
+      padding: 0.55rem 0.7rem;
     }
     .cz-opt-group {
       width: 100%;
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .cz-options-pill-bar .cz-segmented-track {
+      width: 100%;
+      display: flex;
+      flex-wrap: wrap;
+      border-radius: var(--r-sm);
+    }
+    .cz-options-pill-bar .cz-segmented-item {
+      flex: 1 1 110px;
+      min-height: 36px;
+      justify-content: center;
+      text-align: center;
+      white-space: normal;
+      line-height: 1.2;
+    }
+    .cz-advanced-drawer-toggle {
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      padding: 0.7rem 0.85rem;
+    }
+    .cz-drawer-summary {
+      order: 3;
+      flex-basis: 100%;
+      font-size: 0.72rem;
     }
   }
 </style>

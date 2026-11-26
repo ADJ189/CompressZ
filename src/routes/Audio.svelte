@@ -288,4 +288,44 @@ import { entryError } from "../lib/engineError";
     color: var(--text-2);
     cursor: pointer;
   }
+  .cz-select {
+    padding: 0.42rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: var(--surface2);
+    color: var(--text);
+    font-size: 0.84rem;
+    max-width: 100%;
+  }
+  @media (max-width: 640px) {
+    .cz-tool-view {
+      padding: 1rem 0.85rem 2.5rem;
+      gap: 1.1rem;
+    }
+    .cz-tool-title {
+      font-size: 1.45rem;
+    }
+    .cz-tool-desc {
+      font-size: 0.86rem;
+    }
+    .cz-tool-settings-bar {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.85rem;
+      padding: 0.85rem;
+    }
+    .cz-setting-item {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.35rem;
+      width: 100%;
+    }
+    .cz-select {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      min-height: 40px;
+      font-size: 16px;
+    }
+  }
 </style>

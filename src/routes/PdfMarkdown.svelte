@@ -633,7 +633,7 @@
   }
   .cz-mode-selector-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
     gap: 0.85rem;
   }
   .cz-mode-card {
@@ -684,7 +684,7 @@
 
   .cz-options-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
     gap: 1.25rem;
   }
   .cz-option-field {
@@ -1017,6 +1017,34 @@
       flex-direction: row;
       max-height: auto;
       overflow-x: auto;
+    }
+  }
+  @media (max-width: 640px) {
+    .cz-tool-view {
+      padding: 1rem 0.85rem 2.5rem;
+      gap: 1.1rem;
+    }
+    .cz-tool-title {
+      font-size: 1.45rem;
+    }
+    .cz-tool-desc {
+      font-size: 0.86rem;
+    }
+    .cz-config-card {
+      padding: 0.95rem;
+      gap: 1.1rem;
+    }
+    .cz-file-selected-row {
+      flex-wrap: wrap;
+      gap: 0.65rem;
+    }
+    .cz-select {
+      font-size: 16px;
+      width: 100%;
+    }
+    .cz-action-footer :global(.cz-btn) {
+      width: 100%;
+      min-height: 44px;
     }
   }
 </style>

@@ -2681,7 +2681,7 @@ import { entryError } from "../lib/engineError";
 
   .cz-crop-inputs-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
     gap: 1rem;
     margin-bottom: 1.5rem;
   }
@@ -2895,7 +2895,7 @@ import { entryError } from "../lib/engineError";
   }
   .cz-drawer-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
     gap: 1rem;
     align-items: end;
   }
@@ -3286,6 +3286,71 @@ import { entryError } from "../lib/engineError";
     .cz-remove-card, .cz-chip-btn {
       transition: none !important;
       transform: none !important;
+    }
+  }
+
+  @media (max-width: 680px) {
+    .cz-pdf-suite-page {
+      padding: 0.9rem 0.75rem 2.5rem;
+      gap: 1rem;
+    }
+    .cz-suite-landing {
+      gap: 1.25rem;
+    }
+    .cz-suite-landing-title {
+      font-size: 1.4rem;
+    }
+    .cz-suite-active-dropzone-box {
+      padding: 0.85rem;
+      border-radius: var(--r-lg, 18px);
+    }
+    .cz-suite-target-banner {
+      flex-wrap: wrap;
+      padding: 0.75rem;
+      gap: 0.6rem;
+    }
+    .cz-suite-target-desc {
+      white-space: normal;
+      line-height: 1.35;
+    }
+    .cz-suite-file-bar {
+      flex-wrap: wrap;
+      gap: 0.65rem;
+      padding: 0.75rem 0.9rem;
+    }
+    .cz-file-meta-pill {
+      flex-wrap: wrap;
+    }
+    .cz-tool-workspace-panel {
+      padding: 0.95rem;
+    }
+    .cz-pos-grid {
+      gap: 0.35rem;
+    }
+    .cz-pos-btn {
+      padding: 0.5rem 0.35rem;
+      font-size: 0.74rem;
+    }
+    .cz-permissions-box {
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+    .cz-advanced-drawer-toggle {
+      flex-wrap: wrap;
+      gap: 0.35rem;
+    }
+    .cz-drawer-summary {
+      order: 3;
+      flex-basis: 100%;
+    }
+    .cz-action-footer,
+    .cz-action-dual {
+      justify-content: stretch;
+    }
+    .cz-action-footer :global(.cz-btn),
+    .cz-action-dual :global(.cz-btn) {
+      width: 100%;
+      min-height: 42px;
     }
   }
 </style>

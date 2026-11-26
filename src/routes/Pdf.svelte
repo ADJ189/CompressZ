@@ -326,10 +326,20 @@ import { entryError } from "../lib/engineError";
   }
 
   @media (max-width: 640px) {
+    .cz-tool-view {
+      padding: 1rem 0.85rem 2.5rem;
+      gap: 1.1rem;
+    }
+    .cz-tool-title {
+      font-size: 1.45rem;
+    }
+    .cz-tool-desc {
+      font-size: 0.86rem;
+    }
     .cz-tool-settings-bar {
       flex-direction: column;
       align-items: stretch;
-      gap: 1rem;
+      gap: 0.9rem;
       padding: 0.85rem;
     }
     .cz-setting-item {
@@ -341,13 +351,18 @@ import { entryError } from "../lib/engineError";
     .cz-segmented-track {
       width: 100%;
       display: flex;
+      flex-wrap: wrap;
+      border-radius: var(--r-sm);
     }
     .cz-segmented-item {
-      flex: 1;
+      flex: 1 1 84px;
+      min-height: 36px;
       justify-content: center;
       text-align: center;
-      padding: 0.35rem 0.4rem;
-      font-size: 0.72rem;
+      white-space: normal;
+      line-height: 1.2;
+      padding: 0.35rem 0.45rem;
+      font-size: 0.74rem;
     }
   }
 </style>
