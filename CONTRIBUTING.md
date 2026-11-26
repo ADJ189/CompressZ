@@ -15,9 +15,11 @@ set up, the project's conventions, and how to submit changes.
   configuration is supported, and must always fall back to FFmpeg.wasm. If a
   feature seems to need a backend, it's probably out of scope — open an
   issue to discuss first.
-- **No telemetry, analytics, or third-party trackers.** See
-  [PRIVACY.md](PRIVACY.md) for the commitments this project has already
-  made to users; don't add anything that would break them.
+- **Privacy-first diagnostics only; no analytics or tracking cookies.** See
+  [PRIVACY.md](PRIVACY.md) and [docs/TELEMETRY_POLICY.md](docs/TELEMETRY_POLICY.md)
+  for the strict boundaries: optional anonymous crash diagnostics (Sentry, opt-out in Settings)
+  scrub filenames, file paths, and PII before sending, and no files or behavioral analytics
+  are ever transmitted.
 - **License compatibility.** CompressZ is Apache 2.0. Any dependency you add
   (npm package, CDN-loaded library, font, icon set) must use a license
   compatible with that — Apache 2.0, MIT, BSD, and OFL are all fine; GPL and
@@ -46,10 +48,10 @@ Other useful scripts:
 ```bash
 npm run build      # production build → dist/ (+ oversized-asset strip)
 npm run preview    # serve the production build locally
-npm run typecheck  # tsc --noEmit
+npm run typecheck  # tsc --noEmit + svelte-check
 npm run lint       # ESLint
 npm test           # unit & compliance test suite (node scripts/test.mjs)
-deno test --allow-read # optional local offline Deno runner
+deno test --allow-read --allow-env # optional local offline Deno runner
 npm run test:e2e   # Playwright matrix (Chromium + WebKit + Firefox)
 npm run test:webcodecs # opt-in real MP4 encode (esm.sh + WebCodecs)
 npm run bench      # opt-in benchmark → bench-results/ (not CI)
@@ -63,8 +65,8 @@ Playwright browsers once:
 
 The matrix covers `chromium-desktop`, `chromium-mobile`, `webkit-desktop`,
 `webkit-mobile`, and `firefox-desktop`. Playwright's WebKit is not real Safari
-or iOS; changes that affect Safari behaviour need the manual
-[real-device checklist](docs/SAFARI_DEVICE_CHECKLIST.md).
+or iOS; changes affecting Safari/iOS behavior require real-hardware validation
+(see [LIMITATIONS.md](LIMITATIONS.md)).
 
 npm is the only supported runner. CI and Cloudflare Pages use these scripts.
 
@@ -102,10 +104,10 @@ src/
     settings.ts, resourceManager.ts, recommendations.ts,
     recents.ts, workbench.ts, theme.ts, platform.ts, aiEngine.ts,
     gpu.ts, webgl.ts, batch.ts, imageDecode.ts, thumb.ts, pdfLibs.ts
-test/                # Deno test suite (verified 100% passing)
+tests/               # Deno / Node offline test suite (38 suites)
   assert.ts, hallmark.test.ts, ocr.test.ts, pdfToMarkdown.test.ts,
   qualityGuard.test.ts, recommendations.test.ts, resourceManager.test.ts,
-  settings.test.ts, zip.test.ts
+  settings.test.ts, zip.test.ts, ...
 e2e/                 # Playwright tests + pure rule/estimator tests
 ```
 
@@ -190,7 +192,7 @@ and `svelte`. React and `animejs` have been completely removed.
 
 1. `npm run typecheck` passes (0 errors).
 2. `npm run lint` passes (0 errors; warnings tolerated).
-3. `npm test` passes all unit and floor compliance tests (29/29).
+3. `npm test` passes all unit and floor compliance tests (all 38 suites).
 4. `npm run build` succeeds with no errors, and the build log shows
    the oversized onnxruntime WASM asset being stripped.
 5. `npm run test:e2e` passes for all five projects (`chromium-desktop`,

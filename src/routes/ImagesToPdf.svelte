@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import FileDropzone from "../components/FileDropzone.svelte";
-  import { imagesToPdfStore, type ImagesToPdfState, consumeStagedUniversalFile, currentRoute } from "../store";
+  import { imagesToPdfStore, type ImagesToPdfState, consumeStagedUniversalFile, stagedUniversalFile, currentRoute } from "../store";
   import { imagesToPdf } from "../lib/imagesToPdf";
   import { imagesToPdfOptions } from "../lib/options";
   import { runScheduled } from "../lib/resourceManager";
@@ -25,6 +25,7 @@
   let convertedBlob = $state<Blob | null>(null);
   let dismissTrigger = $state(0);
   let draggedIndex = $state<number | null>(null);
+  let inputRevision = 0;
 
   // Thumbnail cache for files
   const thumbnailUrls = new Map<File, string>();
@@ -94,6 +95,15 @@
   }
 
   function updateStore(patch: Partial<ImagesToPdfState>) {
+    if (
+      patch.files !== undefined ||
+      patch.pageSize !== undefined ||
+      patch.quality !== undefined ||
+      patch.maxDim !== undefined
+    ) {
+      inputRevision++;
+      convertedBlob = null;
+    }
     imagesToPdfStore.update((curr) => ({ ...curr, ...patch }));
   }
 
@@ -113,13 +123,27 @@
     applyStagedFile();
   });
 
+  function matchesRoutePrefix(route?: string | null): boolean {
+    if (!route) return false;
+    const norm = route.replace(/^\/+/, "").split("?")[0];
+    return norm === "compress/images-to-pdf" || norm.startsWith("compress/images-to-pdf/");
+  }
+
   $effect(() => {
-    const unsub = currentRoute.subscribe((r) => {
-      if (r === "compress/images-to-pdf") {
+    const unsubRoute = currentRoute.subscribe((r) => {
+      if (matchesRoutePrefix(r)) {
         applyStagedFile();
       }
     });
-    return unsub;
+    const unsubStaged = stagedUniversalFile.subscribe((item) => {
+      if (item && matchesRoutePrefix(item.targetRoute ?? currentRoute.get())) {
+        applyStagedFile();
+      }
+    });
+    return () => {
+      unsubRoute();
+      unsubStaged();
+    };
   });
 
   function handleRemove(index: number) {
@@ -232,6 +256,7 @@
     }
 
     isConverting = true;
+    const startRevision = inputRevision;
     try {
       const files = [...imagesToPdfState.files];
       const pageSizePt =
@@ -253,6 +278,7 @@
         },
         () => imagesToPdf(files, options),
       );
+      if (inputRevision !== startRevision) return;
       convertedBlob = blob;
       toast("Images successfully converted to PDF", "success");
     } catch (err) {

@@ -190,7 +190,13 @@ export function mountWorkbench(root: HTMLElement): void {
     el.type = 'button';
     el.className = `cz-wb-chip is-${kind}`;
     el.dataset.nav = route;
-    el.innerHTML = `<span class="cz-wb-chip__icon" aria-hidden="true">${tool.icon}</span><span>${tool.name}</span>`;
+    const iconSpan = document.createElement('span');
+    iconSpan.className = 'cz-wb-chip__icon';
+    iconSpan.setAttribute('aria-hidden', 'true');
+    iconSpan.textContent = tool.icon;
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = tool.name;
+    el.append(iconSpan, nameSpan);
     return el;
   }
 

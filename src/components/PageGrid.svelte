@@ -1,3 +1,7 @@
+<script module lang="ts">
+  let copyCounter = 0;
+</script>
+
 <script lang="ts">
   import type { PageSpec } from "../lib/pdfTools/organizePdf";
 
@@ -5,9 +9,36 @@
     pages: PageSpec[];
     thumbnails?: Record<number, string>; // page index -> image data URL
     onUpdate: (updated: PageSpec[]) => void;
+    onNeedThumbnail?: (pageIndex: number) => void;
   }
 
-  let { pages, thumbnails = {}, onUpdate }: Props = $props();
+  let { pages, thumbnails = {}, onUpdate, onNeedThumbnail }: Props = $props();
+
+  function observeCardVisibility(node: HTMLElement, pageIndex: number) {
+    if (!onNeedThumbnail) return {};
+    if (typeof IntersectionObserver === "undefined") {
+      onNeedThumbnail(pageIndex);
+      return {};
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            onNeedThumbnail(pageIndex);
+            observer.unobserve(node);
+            break;
+          }
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(node);
+    return {
+      destroy() {
+        observer.disconnect();
+      },
+    };
+  }
 
   let draggedIndex = $state<number | null>(null);
   let dragOverIndex = $state<number | null>(null);
@@ -36,7 +67,7 @@
     const target = pages[index];
     const newPage: PageSpec = {
       ...target,
-      id: `${target.id}-copy-${Date.now()}`,
+      id: `${target.id}-copy-${++copyCounter}`,
       duplicateCount: 1,
     };
     const next = [...pages];
@@ -94,6 +125,7 @@
       class="cz-page-card {page.deleted ? 'is-deleted' : ''} {isOver ? 'is-dragover' : ''} {isDragging ? 'is-dragging' : ''}"
       role="listitem"
       draggable="true"
+      use:observeCardVisibility={page.originalIndex}
       ondragstart={(e) => handleDragStart(idx, e)}
       ondragover={(e) => handleDragOver(idx, e)}
       ondrop={(e) => handleDrop(idx, e)}

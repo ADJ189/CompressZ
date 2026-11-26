@@ -93,8 +93,8 @@
       icon: "🎬",
       iconName: "video",
       name: "Compress Video",
-      desc: "WebCodecs hardware acceleration with FFmpeg.wasm multi-threaded fallback for edit proxies.",
-      tags: ["WebCodecs", "Hardware"],
+      desc: "WebCodecs + Mediabunny fast path with FFmpeg.wasm fallback for filters & edit proxies.",
+      tags: ["WebCodecs", "FFmpeg"],
       keywords: "video mp4 webm h264 h265 av1 vp9 webcodecs mediabunny ffmpeg hardware",
     },
     {

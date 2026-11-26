@@ -387,3 +387,18 @@ Deno.test("conversions: XML escaping strips invalid XML 1.0 control characters f
   assertEquals(slideXml.includes("\u0005"), false);
   assertEquals(slideXml.includes("\u0007"), false);
 });
+
+Deno.test("conversions: pdfToExcel numeric detection handles decimals, thousands, commas, Infinity, and leading zeros", () => {
+  const xml = generateWorksheetXml([
+    [",", "Infinity", "-Infinity", "1e999", "0", "0.5", "-0.25", "1,234.56", "00123"],
+  ]);
+  assertEquals(xml.includes('<c r="A1" t="inlineStr"><is><t xml:space="preserve">,</t></is></c>'), true);
+  assertEquals(xml.includes('<c r="B1" t="inlineStr"><is><t xml:space="preserve">Infinity</t></is></c>'), true);
+  assertEquals(xml.includes('<c r="C1" t="inlineStr"><is><t xml:space="preserve">-Infinity</t></is></c>'), true);
+  assertEquals(xml.includes('<c r="D1" t="inlineStr"><is><t xml:space="preserve">1e999</t></is></c>'), true);
+  assertEquals(xml.includes('<c r="E1"><v>0</v></c>'), true);
+  assertEquals(xml.includes('<c r="F1"><v>0.5</v></c>'), true);
+  assertEquals(xml.includes('<c r="G1"><v>-0.25</v></c>'), true);
+  assertEquals(xml.includes('<c r="H1"><v>1234.56</v></c>'), true);
+  assertEquals(xml.includes('<c r="I1" t="inlineStr"><is><t xml:space="preserve">00123</t></is></c>'), true);
+});
