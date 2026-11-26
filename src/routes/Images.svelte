@@ -372,7 +372,7 @@ import { entryError } from "../lib/engineError";
           id="img-dim"
           class="cz-select-pill"
           aria-label="Max dimension ceiling"
-          value={imageState.maxDim}
+          value={String(imageState.maxDim)}
           onchange={(e) => updateStore({ maxDim: Number((e.target as HTMLSelectElement).value) })}
         >
           <option value="0">Uncapped</option>

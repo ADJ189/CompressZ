@@ -16,6 +16,7 @@
     applyPdfPageNumbers,
     parseTargetPages,
     MAX_PAGE_NUMBER_START,
+    MAX_BATES_DIGITS,
     type PageNumberPosition,
     type PageNumberFormat,
   } from "../lib/pdfTools/pageNumbersPdf";
@@ -799,6 +800,21 @@ import { entryError } from "../lib/engineError";
           "error",
         );
         return;
+      }
+      if (snapPageNumbers.format === "bates") {
+        const digits = snapPageNumbers.batesDigits ?? 6;
+        if (
+          typeof digits !== "number" ||
+          !Number.isInteger(digits) ||
+          digits < 1 ||
+          digits > MAX_BATES_DIGITS
+        ) {
+          toast(
+            `Bates digits must be a whole number between 1 and ${MAX_BATES_DIGITS}.`,
+            "error",
+          );
+          return;
+        }
       }
       try {
         const targets = parseTargetPages(snapPageNumbers.pageRange, snapTotalPages);
@@ -1654,7 +1670,7 @@ import { entryError } from "../lib/engineError";
                       id="bates-digits"
                       type="number"
                       min="1"
-                      max="12"
+                      max={MAX_BATES_DIGITS}
                       class="cz-input"
                       bind:value={batesDigits}
                     />

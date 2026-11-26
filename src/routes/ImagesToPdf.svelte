@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import FileDropzone from "../components/FileDropzone.svelte";
-  import { imagesToPdfStore, type ImagesToPdfState, consumeStagedUniversalFile, currentRoute } from "../store";
+  import { imagesToPdfStore, type ImagesToPdfState, consumeStagedUniversalFile, stagedUniversalFile, currentRoute } from "../store";
   import { imagesToPdf } from "../lib/imagesToPdf";
   import { imagesToPdfOptions } from "../lib/options";
   import { runScheduled } from "../lib/resourceManager";
@@ -123,13 +123,27 @@
     applyStagedFile();
   });
 
+  function matchesRoutePrefix(route?: string | null): boolean {
+    if (!route) return false;
+    const norm = route.replace(/^\/+/, "").split("?")[0];
+    return norm === "compress/images-to-pdf" || norm.startsWith("compress/images-to-pdf/");
+  }
+
   $effect(() => {
-    const unsub = currentRoute.subscribe((r) => {
-      if (r === "compress/images-to-pdf") {
+    const unsubRoute = currentRoute.subscribe((r) => {
+      if (matchesRoutePrefix(r)) {
         applyStagedFile();
       }
     });
-    return unsub;
+    const unsubStaged = stagedUniversalFile.subscribe((item) => {
+      if (item && matchesRoutePrefix(item.targetRoute ?? currentRoute.get())) {
+        applyStagedFile();
+      }
+    });
+    return () => {
+      unsubRoute();
+      unsubStaged();
+    };
   });
 
   function handleRemove(index: number) {

@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import FileDropzone from "../components/FileDropzone.svelte";
   import MacIcon from "../components/MacIcon.svelte";
-  import { mergeStore, type MergeState, consumeStagedUniversalFile, currentRoute } from "../store";
+  import { mergeStore, type MergeState, consumeStagedUniversalFile, stagedUniversalFile, currentRoute } from "../store";
   import { mergePdf } from "../lib/mergePdf";
   import { runScheduled } from "../lib/resourceManager";
   import { formatBytes } from "../lib/types";
@@ -27,13 +27,27 @@
     applyStagedFile();
   });
 
+  function matchesRoutePrefix(route?: string | null): boolean {
+    if (!route) return false;
+    const norm = route.replace(/^\/+/, "").split("?")[0];
+    return norm === "compress/merge-pdf" || norm.startsWith("compress/merge-pdf/");
+  }
+
   $effect(() => {
-    const unsub = currentRoute.subscribe((r) => {
-      if (r === "compress/merge-pdf") {
+    const unsubRoute = currentRoute.subscribe((r) => {
+      if (matchesRoutePrefix(r)) {
         applyStagedFile();
       }
     });
-    return unsub;
+    const unsubStaged = stagedUniversalFile.subscribe((item) => {
+      if (item && matchesRoutePrefix(item.targetRoute ?? currentRoute.get())) {
+        applyStagedFile();
+      }
+    });
+    return () => {
+      unsubRoute();
+      unsubStaged();
+    };
   });
 
   $effect(() => {
