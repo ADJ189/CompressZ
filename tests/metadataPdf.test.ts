@@ -317,3 +317,109 @@ Deno.test("metadata: updatePdfMetadata loads with updateMetadata: false when edi
     resetPdfLibForTesting();
   }
 });
+
+Deno.test("metadata: stripAll preserves objects reached via PieceInfo/SpiderInfo if still used by retained pages", async () => {
+  const deletedRefs: number[] = [];
+  const sharedFontRef = { objectNumber: 301, generationNumber: 0 };
+  const sharedImageRef = { objectNumber: 302, generationNumber: 0 };
+  const exclusivePrivateRef = { objectNumber: 303, generationNumber: 0 };
+  const pagePieceAppRef = { objectNumber: 304, generationNumber: 0 };
+  const catalogSpiderRef = { objectNumber: 305, generationNumber: 0 };
+  const pageRef = { objectNumber: 310, generationNumber: 0 };
+  const catalogRef = { objectNumber: 311, generationNumber: 0 };
+
+  const pageMap = new Map<string, unknown>([
+    [
+      "Resources",
+      {
+        entries: () => [
+          ["Font", { entries: () => [["F1", sharedFontRef]] }],
+          ["XObject", { entries: () => [["Im1", sharedImageRef]] }],
+        ],
+      },
+    ],
+    ["PieceInfo", { entries: () => [["Illustrator", pagePieceAppRef]] }],
+  ]);
+
+  const catalogMap = new Map<string, unknown>([
+    ["Pages", { entries: () => [["Kids", { asArray: () => [pageRef] }]] }],
+    ["SpiderInfo", catalogSpiderRef],
+  ]);
+
+  const indirectObjects = new Map<number, unknown>([
+    [catalogRef.objectNumber, { entries: () => Array.from(catalogMap.entries()) }],
+    [pageRef.objectNumber, { entries: () => Array.from(pageMap.entries()) }],
+    [sharedFontRef.objectNumber, { entries: () => [["BaseFont", "Helvetica"]] }],
+    [sharedImageRef.objectNumber, { dict: { entries: () => [["Subtype", "Image"]] } }],
+    [exclusivePrivateRef.objectNumber, { entries: () => [["AppVersion", "27.0"]] }],
+    [
+      pagePieceAppRef.objectNumber,
+      {
+        entries: () => [
+          ["Private", exclusivePrivateRef],
+          ["SharedFont", sharedFontRef],
+        ],
+      },
+    ],
+    [
+      catalogSpiderRef.objectNumber,
+      {
+        entries: () => [["SharedThumb", sharedImageRef]],
+      },
+    ],
+  ]);
+
+  const mockLib = {
+    PDFName: { of: (name: string) => name },
+    PDFDocument: {
+      load: async () => ({
+        isEncrypted: false,
+        getPageCount: () => 1,
+        getPages: () => [
+          {
+            ref: pageRef,
+            node: {
+              get: (k: string) => pageMap.get(k),
+              delete: (k: string) => pageMap.delete(k),
+              entries: () => Array.from(pageMap.entries()),
+            },
+          },
+        ],
+        catalog: {
+          get: (k: string) => catalogMap.get(k),
+          delete: (k: string) => catalogMap.delete(k),
+          entries: () => Array.from(catalogMap.entries()),
+        },
+        context: {
+          trailerInfo: { Root: catalogRef },
+          lookup: (ref: { objectNumber?: number }) =>
+            typeof ref?.objectNumber === "number" ? indirectObjects.get(ref.objectNumber) : undefined,
+          delete: (ref: { objectNumber?: number }) => {
+            if (typeof ref?.objectNumber === "number") {
+              deletedRefs.push(ref.objectNumber);
+            }
+          },
+        },
+        save: async () => new Uint8Array([1, 2, 3]),
+      }),
+    },
+  };
+
+  setPdfLibForTesting(mockLib);
+  try {
+    await updatePdfMetadata(new Uint8Array([1]), {}, true);
+    assertEquals(pageMap.has("PieceInfo"), false);
+    assertEquals(catalogMap.has("SpiderInfo"), false);
+
+    // Exclusive private objects are deleted
+    assertEquals(deletedRefs.includes(exclusivePrivateRef.objectNumber), true);
+    assertEquals(deletedRefs.includes(pagePieceAppRef.objectNumber), true);
+    assertEquals(deletedRefs.includes(catalogSpiderRef.objectNumber), true);
+
+    // Shared page font & image objects remain intact
+    assertEquals(deletedRefs.includes(sharedFontRef.objectNumber), false);
+    assertEquals(deletedRefs.includes(sharedImageRef.objectNumber), false);
+  } finally {
+    resetPdfLibForTesting();
+  }
+});
