@@ -908,5 +908,35 @@ test.describe("mobile UI layout, Tools menus, and Settings across phone viewport
       }
     });
   }
+
+  test("hub tool strip scrolls active offscreen chip into view on mobile routes", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/pdf/protect");
+
+    const activeProtectChip = page.locator('.cz-hub-tool-chip.is-active', {
+      hasText: "Password Protect",
+    });
+    await expect(activeProtectChip).toBeVisible();
+    await expect(activeProtectChip).toHaveAttribute("aria-selected", "true");
+
+    await expect
+      .poll(async () => {
+        const box = await activeProtectChip.boundingBox();
+        return box ? box.x >= 0 && box.x + box.width <= 390 : false;
+      })
+      .toBe(true);
+
+    // Selecting another tool updates active state and keeps it within the viewport
+    const repairChip = page.locator(".cz-hub-tool-chip", { hasText: "Repair File" });
+    await repairChip.click();
+    await expect(repairChip).toHaveClass(/is-active/);
+    await expect(repairChip).toHaveAttribute("aria-selected", "true");
+    await expect
+      .poll(async () => {
+        const box = await repairChip.boundingBox();
+        return box ? box.x >= 0 && box.x + box.width <= 390 : false;
+      })
+      .toBe(true);
+  });
 });
 
