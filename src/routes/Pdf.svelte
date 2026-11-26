@@ -8,6 +8,7 @@
   import { runScheduled } from "../lib/resourceManager";
 import { entryError } from "../lib/engineError";
   import { uid, type FileEntry, type PdfLevel, outputFilename } from "../lib/types";
+  import { downloadBatch } from "../lib/batchDownload";
   import { toast } from "../toast";
 
   let pdfState = $state<PdfState>(pdfStore.get());
@@ -59,37 +60,41 @@ import { entryError } from "../lib/engineError";
   async function compressSingle(entry: FileEntry) {
     if (entry.status === "compressing") return;
 
-    updateStore({
-      files: pdfState.files.map((f) =>
+    pdfStore.update((curr) => ({
+      ...curr,
+      files: curr.files.map((f) =>
         f.id === entry.id ? { ...f, status: "compressing", error: undefined } : f,
       ),
-    });
+    }));
 
     try {
-      const options = pdfOptions(pdfState);
+      const options = pdfOptions(pdfStore.get());
       const res = await runScheduled(
         { kind: "pdf", label: entry.name, bytes: entry.file.size },
         () => compressPdf(entry.file, options),
       );
 
-      updateStore({
-        files: pdfState.files.map((f) =>
+      pdfStore.update((curr) => ({
+        ...curr,
+        files: curr.files.map((f) =>
           f.id === entry.id
             ? {
                 ...f,
                 status: "done",
                 compressedBlob: res.blob,
                 compressedSize: res.blob.size,
+                result: res,
               }
             : f,
         ),
-      });
+      }));
       toast(`Compressed ${entry.name}`, "success");
     } catch (err) {
       console.error("[pdfCompress] error:", err);
       const failure = entryError(err, "PDF compression failed");
-      updateStore({
-        files: pdfState.files.map((f) =>
+      pdfStore.update((curr) => ({
+        ...curr,
+        files: curr.files.map((f) =>
           f.id === entry.id
             ? {
                 ...f,
@@ -99,7 +104,7 @@ import { entryError } from "../lib/engineError";
               }
             : f,
         ),
-      });
+      }));
       toast(`${entry.name}: ${failure.error}`, "error", undefined, {
         log: failure.errorLog,
       });
@@ -108,11 +113,16 @@ import { entryError } from "../lib/engineError";
 
   async function handleCompressAll() {
     isBusy = true;
-    const idleEntries = pdfState.files.filter((f) => f.status === "idle" || f.status === "error");
-    for (const entry of idleEntries) {
-      await compressSingle(entry);
+    try {
+      const idleEntries = pdfStore
+        .get()
+        .files.filter((f) => f.status === "idle" || f.status === "error");
+      for (const entry of idleEntries) {
+        await compressSingle(entry);
+      }
+    } finally {
+      isBusy = false;
     }
-    isBusy = false;
   }
 
   function handleDownloadSingle(entry: FileEntry) {
@@ -128,11 +138,16 @@ import { entryError } from "../lib/engineError";
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   }
 
-  function handleDownloadAll() {
-    const doneEntries = pdfState.files.filter((f) => f.status === "done");
-    for (const entry of doneEntries) {
-      handleDownloadSingle(entry);
-    }
+  async function handleDownloadAll() {
+    const doneEntries = pdfState.files.filter((f) => f.status === "done" && f.compressedBlob);
+    const items = doneEntries.map((entry) => ({
+      name: outputFilename(entry.name, entry.compressedBlob!, {
+        suffix: "-compressed",
+        fallbackExt: "pdf",
+      }),
+      blob: entry.compressedBlob!,
+    }));
+    await downloadBatch(items, "pdf-compressed.zip");
   }
 
   function handleRemove(id: string) {
@@ -308,5 +323,31 @@ import { entryError } from "../lib/engineError";
     color: var(--accent);
     font-weight: 600;
     box-shadow: var(--shadow-xs);
+  }
+
+  @media (max-width: 640px) {
+    .cz-tool-settings-bar {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 1rem;
+      padding: 0.85rem;
+    }
+    .cz-setting-item {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.4rem;
+      width: 100%;
+    }
+    .cz-segmented-track {
+      width: 100%;
+      display: flex;
+    }
+    .cz-segmented-item {
+      flex: 1;
+      justify-content: center;
+      text-align: center;
+      padding: 0.35rem 0.4rem;
+      font-size: 0.72rem;
+    }
   }
 </style>

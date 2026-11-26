@@ -22,7 +22,9 @@ import { makePdf } from "./helpers";
  * mammoth, FFmpeg.wasm) are marked and get a longer timeout.
  */
 
-const CDN_TIMEOUT = 240_000;
+const CDN_TIMEOUT = 60_000;
+/** FFmpeg.wasm initialization deadline alone is 120s; allow 180s for CDN fetch + init + conversion */
+const FFMPEG_TIMEOUT = 180_000;
 
 // ── Fixture generation ─────────────────────────────────────────
 
@@ -258,11 +260,11 @@ async function upload(page: Page, ...paths: string[]) {
 }
 
 /** Wait for every queued card to reach `done`, surfacing the engine's error. */
-async function waitForCards(page: Page, count: number) {
+async function waitForCards(page: Page, count: number, timeout = 120_000) {
   const cards = page.locator("#file-list .file-card");
   await expect(cards).toHaveCount(count);
 
-  const deadline = Date.now() + 120_000;
+  const deadline = Date.now() + timeout;
   for (;;) {
     const errors = page.locator("#file-list .cz-card-error-msg");
     if ((await errors.count()) > 0) {
@@ -315,8 +317,9 @@ async function runConvertPipeline(
   targetFormat: string | RegExp,
   fixtureFile: string,
   exactBtn = false,
+  timeout = (cat === "Audio" || cat === "Video") ? FFMPEG_TIMEOUT : CDN_TIMEOUT,
 ): Promise<{ download: Download; bytes: Buffer }> {
-  test.setTimeout(CDN_TIMEOUT);
+  test.setTimeout(timeout);
   await page.goto("/convert");
   await category(page, cat).click();
   await page.getByRole("button", { name: targetFormat, exact: exactBtn }).click();
@@ -325,7 +328,7 @@ async function runConvertPipeline(
 
   const [download] = await Promise.all([
     page.waitForEvent("download"),
-    convertDownload(page).click({ timeout: CDN_TIMEOUT }),
+    convertDownload(page).click({ timeout }),
   ]);
   const bytes = await readDownload(download);
   return { download, bytes };
@@ -345,9 +348,10 @@ async function clickConvertDownload(
 async function runCompression(
   page: Page,
   count = 1,
+  timeout = 120_000,
 ): Promise<{ name: string; bytes: Buffer }> {
   await page.getByRole("button", { name: "Compress all" }).click();
-  await waitForCards(page, count);
+  await waitForCards(page, count, timeout);
   return clickDownload(page);
 }
 
@@ -532,11 +536,11 @@ test.describe("conversion matrix", () => {
   });
 
   test("GIF: re-optimise keeps a GIF", async ({ page }) => {
-    test.setTimeout(CDN_TIMEOUT);
+    test.setTimeout(FFMPEG_TIMEOUT);
     await page.goto("/compress/gif");
     await upload(page, fixtures.gif);
     await page.getByRole("button", { name: "Compress all" }).click();
-    await waitForCards(page, 1);
+    await waitForCards(page, 1, FFMPEG_TIMEOUT);
 
     const { name, bytes } = await clickDownload(page);
     expect(name).toMatch(/-compressed\.gif$/);
@@ -544,24 +548,24 @@ test.describe("conversion matrix", () => {
   });
 
   test("GIF → WebM toggle produces a WebM file", async ({ page }) => {
-    test.setTimeout(CDN_TIMEOUT);
+    test.setTimeout(FFMPEG_TIMEOUT);
     await page.goto("/compress/gif");
     const webmBtn = page.getByRole("button", { name: /Convert to WebM/i });
     await expect(webmBtn).toHaveAttribute("aria-pressed", "false");
     await webmBtn.click();
     await expect(webmBtn).toHaveAttribute("aria-pressed", "true");
     await upload(page, fixtures.gif);
-    const { name, bytes } = await runCompression(page);
+    const { name, bytes } = await runCompression(page, 1, FFMPEG_TIMEOUT);
     expect(name).toMatch(/-compressed\.webm$/);
     expect(bytes.subarray(0, 4).toString("hex")).toBe("1a45dfa3"); // EBML
   });
 
   test("Audio: WAV → MP3", async ({ page }) => {
-    test.setTimeout(CDN_TIMEOUT);
+    test.setTimeout(FFMPEG_TIMEOUT);
     await page.goto("/compress/audio");
     await upload(page, fixtures.wav);
     await page.getByRole("button", { name: "Compress all" }).click();
-    await waitForCards(page, 1);
+    await waitForCards(page, 1, FFMPEG_TIMEOUT);
 
     const { name, bytes } = await clickDownload(page);
     expect(name).toMatch(/-compressed\.mp3$/);
@@ -572,12 +576,12 @@ test.describe("conversion matrix", () => {
   });
 
   test("Video: WebM → MP4", async ({ page }) => {
-    test.setTimeout(CDN_TIMEOUT);
+    test.setTimeout(FFMPEG_TIMEOUT);
     test.skip(!fixtures.webm, "MediaRecorder produced no WebM clip in this browser");
     await page.goto("/compress/video");
     await upload(page, fixtures.webm!);
     await page.getByRole("button", { name: "Compress all" }).click();
-    await waitForCards(page, 1);
+    await waitForCards(page, 1, FFMPEG_TIMEOUT);
 
     const { name, bytes } = await clickDownload(page);
     expect(name).toMatch(/-compressed\.mp4$/);

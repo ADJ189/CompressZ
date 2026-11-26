@@ -13,7 +13,9 @@ PDFs, video, audio and GIFs; converts between media/office/PDF formats; runs
 OCR on scanned PDFs; and optionally classifies images locally to tag them and
 sort by predicted label. Everything runs in the browser through Canvas,
 WebAssembly, and Web platform APIs. There is no server that receives files,
-no analytics, and no cookies.
+no analytics, and no cookies. The only outbound runtime data is anonymous crash
+diagnostics (Sentry, enabled by default, opt-out in Settings) and static
+engine/model assets from CDNs — never file bytes. See `PRIVACY.md` §7.
 
 It is a fork of [CompressF](https://github.com/ADJ189/CompressF). The deployed
 site is <https://compressz.pages.dev>; the repo lives at
@@ -50,11 +52,11 @@ GitHub re-review and Cloudflare Pages deployment specification, see
 
 ### Verification checklist (run all before calling work done)
 
-1. `npm test` (or `deno test --allow-read` locally) — runs all 30 suites (153 tests) offline (quality guard, recommendations, resource manager, zip/tar security, settings, OCR engines, searchable PDF, PDF to Markdown, output fidelity, engine errors, privacy parity, package standards, tool landing, and Hallmark anti-slop rules).
+1. `npm test` (or `deno test --allow-read --allow-env` locally) — runs all 38 suites (280+ tests) offline (quality guard, recommendations, resource manager, zip/tar security, settings, OCR engines, searchable PDF, PDF to Markdown, output fidelity, engine errors, privacy parity, package standards, tool landing, and Hallmark anti-slop rules).
 2. `npm run typecheck` — must be clean. This runs `tsc --noEmit` **and**
    `svelte-check`; `tsc` alone never inspects `.svelte` files, so a clean
    `tsc` is not evidence that the UI type-checks.
-3. `npm run lint` — must be **0 errors**. The repo currently has ~100
+3. `npm run lint` — must be **0 errors**. The repo currently has ~190
    pre-existing `@typescript-eslint/no-explicit-any` warnings; do not add new
    ones, but do not treat the existing count as failure.
 4. `npm run build` — must succeed. The log should show
@@ -123,10 +125,11 @@ src/components/            reusable UI atoms (Svelte 5)
   FileCard.svelte         compact job item with status, size & action
   FileQueue.svelte        ordered list of jobs with batch actions
   ProgressStatus.svelte   real-time progress bar and status line
-  HubHeader.svelte        unified horizontal scrolling hub tool strip
+  HubHeader.svelte        unified wrapped hub tool strip with zero sideways scrolling
   MacIcon.svelte          macOS-style vector icon glyphs & squircles
   ToolCard.svelte         rectangular interactive tool card with squircle icon
   ToolGrid.svelte         responsive CSS grid container for tool discovery
+  ActionPalette.svelte    CloudConvert-style universal upload modal with device acceleration & format matrix
 src/router.ts              History API router, dispatches to store
 src/store.ts               pure TypeScript reactive store (Svelte 5 contract)
 src/toast.ts               toast notifications
@@ -298,11 +301,10 @@ match. Several were previously wrong; don't regress them.
     PP-OCRv3 detection/classification/recognition pipeline via Paddle.js/WebGL,
     *not* PaddleOCR-VL 1.5 (a ~0.9B vision-language model the app never loads).
     Never label it as a VLM or as layout/table-aware.
-  - Math/Greek symbol mode always runs on Tesseract (`grc` + `equ`), regardless
+  - Math/Greek symbol mode always runs on Tesseract (`<language>+equ`, defaulting to `eng+equ`), regardless
     of the selected engine.
   - OCR page seeds engine/language from Settings → Compression → OCR defaults
-    and render DPI from the resolved resource mode: Memory Saver 200, Balanced
-    250, Maximum 300.
+    and keeps its default render DPI (200) independent of resource mode.
   - OCR renders and embeds one page at a time (`openPdfDocument()` + a
     per-page canvas, then `addPage()`), releasing each page blob and canvas
     after recognition. Don't go back to rendering every page up front.
@@ -318,7 +320,7 @@ match. Several were previously wrong; don't regress them.
     real crash bug.
 - **English Handwriting Recognition:**
   - Dedicated mode in `src/lib/ocrHandwriting.ts`, distinct from printed OCR.
-  - Candidate model: `Xenova/trocr-small-handwritten` (~60 MB weights).
+  - Candidate model: `Xenova/trocr-small-handwritten` (~145 MB estimated download, cached on-device).
   - Explicitly scoped to English handwriting only; surfaces a clear disclaimer
     and size disclosure before download.
   - Operates on cropped, line-segmented text crops (`detectTextLines`) via
@@ -405,6 +407,17 @@ match. Several were previously wrong; don't regress them.
 - Theme preference is three-way (`light`/`dark`/`system`) in `lib/theme.ts`
   under the existing `theme` key. `data-theme` always receives the *resolved*
   value (`light`/`dark`), so `[data-theme="dark"]` rules stay valid.
+- Color scheme preference is three-way (`polished`/`origin`/`blood-moon`) in
+  `lib/theme.ts` under key `cz-color-scheme`. It controls `data-color-scheme`
+  on `document.documentElement` (`polished` = mint/emerald modern palette,
+  `origin` = classic royal blue/indigo palette, `blood-moon` = deep crimson/scarlet).
+  High-contrast toast notifications enforce APCA/WCAG contrast across all modes.
+- Universal Upload Hub (`ActionPalette.svelte` & `fileRouter.ts`):
+  Selecting or dropping any file in universal upload opens a CloudConvert-style
+  dialog displaying file metadata, resolved execution profile hints
+  (WebCodecs / WebGL2 Resize / WASM SIMD, worker count), categorized target format
+  matrices (`PDF → DOCX/XLSX/PPTX/MD`, `Video → MP4/WebM/MKV/GIF/Audio`, etc.),
+  and direct 1-click action cards. All conversions and staging remain 100% offline.
 
 ## Adaptive Resource Guard
 
@@ -434,8 +447,8 @@ match. Several were previously wrong; don't regress them.
   and Latin/RTL/Indic → Tesseract. Do not add an AI-dependent suggestion
   without gating it on `settings.recommendations.allowAi`.
 - Dismissals persist in `cz-recommendations-v1` as `scope:rule:action` keys.
-- UI: `createRecommendationNotice()` renders one primary suggestion plus a
-  collapsed "Other suggestions (N)"; never a modal or repeated toast.
+- UI: recommendation banners in the Svelte routes (`Images.svelte`, `ImagesToPdf.svelte`)
+  render one primary suggestion at a time; never a modal or repeated toast.
 - Applying a suggestion is reversible: each page snapshots the previous
   state and passes an Undo action to `toast()`. Destructive Settings actions
   (`Reset all settings`, `Clear local data`) use a two-step confirm button,
@@ -453,16 +466,25 @@ match. Several were previously wrong; don't regress them.
 
 - No backend, no uploads, no analytics, no tracking cookies. Never add a
   feature that sends file bytes to a server.
+- Anonymous crash diagnostics are the one exception to "nothing leaves the
+  device": `src/lib/telemetry.ts` sends scrubbed exception events to
+  `sentry.io` (Sentry). It is enabled by default, opt-out via Settings →
+  Privacy & data, and `sanitizeSentryEvent()` strips user IDs, IPs, headers,
+  URLs, filenames and paths. Do not add a second error-reporting path or send
+  anything richer than a scrubbed stack/message.
 - CDN hosts currently used at runtime: `cdn.jsdelivr.net` (PDF.js, pdf-lib,
   Tesseract.js, PaddleOCR, QPDF WASM, mammoth.js, html2canvas, heic2any,
   onnxruntime-web), `esm.sh` (FFmpeg.wasm, Mediabunny, heic2any),
   `tessdata.projectnaptha.com`
   (Tesseract language data), `paddlejs.bj.bcebos.com` (PaddleOCR weights),
-  `fonts.googleapis.com` (typography), and Hugging Face for model weights.
-- Only static assets/model weights leave the device; never file content.
+  `fonts.googleapis.com` (typography), `sentry.io` (opt-out crash
+  diagnostics), and Hugging Face for model weights.
+- Only static assets/model weights and scrubbed crash events leave the device;
+  never file content.
 - localStorage keys: `theme` (`light`/`dark`/`system`), `cz-settings-v2`,
   `cz-recommendations-v1`, `cz-recent-tools`, `cz-favourite-tools`,
-  `cz-convert-profile`, `cz-pdfsuite-profile`, and legacy `cz-settings-v1`.
+  `cz-convert-profile`, `cz-pdfsuite-profile`, `cz-telemetry-opt-out`, and
+  legacy `cz-settings-v1`.
   Recent/pinned lists and the per-tool profiles store route names and option
   values only — never file names or contents.
 - If you add a CDN host, storage key, or data flow, update **both**
@@ -538,4 +560,4 @@ Do not claim these ship until they do:
 - Add user-visible changes under `## [Unreleased]` in `CHANGELOG.md`.
 - Versioning is `1.MM.P`, with `-a1`/`-b1` prerelease suffixes.
 - Keep `README.md`, `PRIVACY.md`, `CREDITS.md`, `CONTRIBUTING.md`, and the
-  in-app templates in `index.html` consistent with this file.
+  Svelte views in `src/routes/` consistent with this file.

@@ -25,6 +25,7 @@
   import { imagesToPdf } from "../lib/imagesToPdf";
   import { audioOptions, imageOptions } from "../lib/options";
   import { runScheduled } from "../lib/resourceManager";
+  import { downloadBatch } from "../lib/batchDownload";
   import { entryError } from "../lib/engineError";
   import { naturalOrder } from "../lib/recommendations";
   import { formatBytes, outputFilename } from "../lib/types";
@@ -220,7 +221,7 @@
       name: "Convert Video Formats",
       description: "Transcode video between MP4, WebM, MOV, MKV, or convert to animated GIF.",
       icon: "video",
-      badge: "WebCodecs GPU",
+      badge: "WebCodecs Fast Path",
     },
     {
       id: "audio",
@@ -426,6 +427,9 @@
   function applyStagedFile() {
     const staged = consumeStagedUniversalFile("convert");
     if (!staged?.file) return;
+    if (typeof window !== "undefined") {
+      lastSearch = window.location.search;
+    }
 
     // Invalidate and cancel prior run so a new conversion can start for the staged file
     conversionGeneration++;
@@ -437,44 +441,107 @@
     let matchedCat: Category | null = null;
     let matchedTarget: string | null = null;
 
-    if (staged.actionId === "pdf-to-word") {
-      matchedCat = "pdf2office";
-      matchedTarget = "docx";
-    } else if (staged.actionId === "pdf-to-excel") {
-      matchedCat = "pdf2office";
-      matchedTarget = "xlsx";
-    } else if (staged.actionId === "pdf-to-ppt") {
-      matchedCat = "pdf2office";
-      matchedTarget = "pptx";
-    } else if (staged.actionId === "pdf-to-images") {
-      matchedCat = "pdf2img";
-      matchedTarget = "png";
-    } else if (staged.actionId === "docx-to-pdf") {
-      matchedCat = "docx";
-      matchedTarget = "pdf";
-    } else if (staged.actionId === "docx-to-txt") {
-      matchedCat = "docx";
-      matchedTarget = "txt";
-    } else if (staged.actionId === "xlsx-to-pdf") {
-      matchedCat = "xlsx";
-      matchedTarget = "pdf";
-    } else if (staged.actionId === "xlsx-to-csv") {
-      matchedCat = "xlsx";
-      matchedTarget = "csv";
-    } else if (staged.actionId === "pptx-to-pdf") {
-      matchedCat = "pptx";
-      matchedTarget = "pdf";
-    } else if (staged.actionId === "pptx-to-txt") {
-      matchedCat = "pptx";
-      matchedTarget = "txt";
-    } else if (staged.actionId === "convert-image") {
-      matchedCat = "image";
-      matchedTarget = "webp";
-    } else {
-      const detected = detectCategoryForFile(staged.file);
-      if (detected) {
-        matchedCat = detected.cat;
-        matchedTarget = detected.target;
+    if (staged.targetRoute && staged.targetRoute.includes("?")) {
+      const qs = staged.targetRoute.split("?")[1];
+      const params = new URLSearchParams(qs);
+      const qFrom = params.get("from");
+      const qTo = params.get("to");
+      const qCat = params.get("cat");
+      if (qCat && Object.hasOwn(CATS, qCat)) {
+        matchedCat = qCat as Category;
+        let reqTarget = qTo || CATS[matchedCat].targets[0].value;
+        if (reqTarget === "jpg" && CATS[matchedCat].targets.some((t) => t.value === "jpeg")) {
+          reqTarget = "jpeg";
+        }
+        matchedTarget = reqTarget;
+      } else if (qFrom === "pdf" && qTo === "docx") {
+        matchedCat = "pdf2office";
+        matchedTarget = "docx";
+      } else if (qFrom === "pdf" && qTo === "xlsx") {
+        matchedCat = "pdf2office";
+        matchedTarget = "xlsx";
+      } else if (qFrom === "pdf" && qTo === "pptx") {
+        matchedCat = "pdf2office";
+        matchedTarget = "pptx";
+      } else if (qFrom === "pdf" && qTo === "images") {
+        matchedCat = "pdf2img";
+        const qFmt = params.get("fmt");
+        matchedTarget =
+          qFmt && CATS.pdf2img.targets.some((t) => t.value === qFmt)
+            ? qFmt
+            : qFmt === "jpg"
+              ? "jpeg"
+              : "png";
+      } else if (qFrom === "docx" && qTo === "pdf") {
+        matchedCat = "docx";
+        matchedTarget = "pdf";
+      } else if (qFrom === "docx" && qTo === "txt") {
+        matchedCat = "docx";
+        matchedTarget = "txt";
+      } else if (qFrom === "xlsx" && qTo === "pdf") {
+        matchedCat = "xlsx";
+        matchedTarget = "pdf";
+      } else if (qFrom === "xlsx" && qTo === "csv") {
+        matchedCat = "xlsx";
+        matchedTarget = "csv";
+      } else if (qFrom === "pptx" && qTo === "pdf") {
+        matchedCat = "pptx";
+        matchedTarget = "pdf";
+      } else if (qFrom === "pptx" && qTo === "txt") {
+        matchedCat = "pptx";
+        matchedTarget = "txt";
+      } else if (qFrom === "html" || qTo === "html") {
+        matchedCat = "html";
+        matchedTarget = "pdf";
+      }
+    }
+
+    if (!matchedCat) {
+      if (staged.actionId === "pdf-to-word") {
+        matchedCat = "pdf2office";
+        matchedTarget = "docx";
+      } else if (staged.actionId === "pdf-to-excel") {
+        matchedCat = "pdf2office";
+        matchedTarget = "xlsx";
+      } else if (staged.actionId === "pdf-to-ppt") {
+        matchedCat = "pdf2office";
+        matchedTarget = "pptx";
+      } else if (staged.actionId === "pdf-to-images" || staged.actionId === "pdf-to-images-png") {
+        matchedCat = "pdf2img";
+        matchedTarget = "png";
+      } else if (staged.actionId === "pdf-to-images-jpeg") {
+        matchedCat = "pdf2img";
+        matchedTarget = "jpeg";
+      } else if (staged.actionId === "image-to-jpeg") {
+        matchedCat = "image";
+        matchedTarget = "jpeg";
+      } else if (staged.actionId === "docx-to-pdf") {
+        matchedCat = "docx";
+        matchedTarget = "pdf";
+      } else if (staged.actionId === "docx-to-txt") {
+        matchedCat = "docx";
+        matchedTarget = "txt";
+      } else if (staged.actionId === "xlsx-to-pdf") {
+        matchedCat = "xlsx";
+        matchedTarget = "pdf";
+      } else if (staged.actionId === "xlsx-to-csv") {
+        matchedCat = "xlsx";
+        matchedTarget = "csv";
+      } else if (staged.actionId === "pptx-to-pdf") {
+        matchedCat = "pptx";
+        matchedTarget = "pdf";
+      } else if (staged.actionId === "pptx-to-txt") {
+        matchedCat = "pptx";
+        matchedTarget = "txt";
+      } else if (staged.actionId === "convert-image") {
+        matchedCat = "image";
+        matchedTarget = "webp";
+      } else {
+        const detected = detectCategoryForFile(staged.file);
+        if (detected) {
+          matchedCat = detected.cat;
+          matchedTarget = detected.target;
+        }
       }
     }
 
@@ -676,18 +743,36 @@
           } else if (cat === "pdf2office") {
             if (selectedEngine === "libreoffice" && isLibreOfficeAvailable()) {
               const bytes = new Uint8Array(await file.arrayBuffer());
-              const outBytes = await convertWithLibreOfficeWasm(bytes, "pdf", target);
+              const outBytes = await runScheduled(
+                { kind: "pdf", label: file.name, bytes: file.size },
+                () => convertWithLibreOfficeWasm(bytes, "pdf", target),
+              );
               blob = new Blob([new Uint8Array(outBytes)]);
             } else {
               if (selectedEngine === "libreoffice" && !isLibreOfficeAvailable()) {
                 toast("LibreOffice WASM not loaded in this runtime. Using fast web-native engine.", "info");
               }
-              if (target === "docx") blob = await convertPdfToWord(file);
-              else if (target === "xlsx") blob = await convertPdfToExcel(file);
-              else if (target === "pptx") blob = await convertPdfToPpt(file);
-              else if (target === "md") {
+              if (target === "docx") {
+                blob = await runScheduled(
+                  { kind: "pdf", label: file.name, bytes: file.size },
+                  () => convertPdfToWord(file),
+                );
+              } else if (target === "xlsx") {
+                blob = await runScheduled(
+                  { kind: "pdf", label: file.name, bytes: file.size },
+                  () => convertPdfToExcel(file),
+                );
+              } else if (target === "pptx") {
+                blob = await runScheduled(
+                  { kind: "pdf", label: file.name, bytes: file.size },
+                  () => convertPdfToPpt(file),
+                );
+              } else if (target === "md") {
                 const bytes = new Uint8Array(await file.arrayBuffer());
-                const mdRes = await convertPdfToMarkdown(bytes, file.name);
+                const mdRes = await runScheduled(
+                  { kind: "pdf", label: file.name, bytes: file.size },
+                  () => convertPdfToMarkdown(bytes, file.name),
+                );
                 blob = new Blob([mdRes.markdown], { type: "text/markdown;charset=utf-8" });
               }
             }
@@ -707,18 +792,32 @@
             if (target === "pdf") {
               if (selectedEngine === "libreoffice" && isLibreOfficeAvailable()) {
                 const bytes = new Uint8Array(await file.arrayBuffer());
-                const outBytes = await convertWithLibreOfficeWasm(bytes, "docx", "pdf");
+                const outBytes = await runScheduled(
+                  { kind: "document", label: file.name, bytes: file.size },
+                  () => convertWithLibreOfficeWasm(bytes, "docx", "pdf"),
+                );
                 blob = new Blob([new Uint8Array(outBytes)], { type: "application/pdf" });
               } else {
                 if (selectedEngine === "libreoffice" && !isLibreOfficeAvailable()) {
                   toast("LibreOffice WASM not loaded in this runtime. Using fast web-native engine.", "info");
                 }
-                blob = await docxToPdf(file);
+                blob = await runScheduled(
+                  { kind: "document", label: file.name, bytes: file.size },
+                  () => docxToPdf(file),
+                );
               }
             } else if (target === "html") {
-              blob = new Blob([await docxToHtml(file)], { type: "text/html" });
+              const html = await runScheduled(
+                { kind: "document", label: file.name, bytes: file.size },
+                () => docxToHtml(file),
+              );
+              blob = new Blob([html], { type: "text/html" });
             } else {
-              blob = new Blob([await docxToText(file)], { type: "text/plain" });
+              const txt = await runScheduled(
+                { kind: "document", label: file.name, bytes: file.size },
+                () => docxToText(file),
+              );
+              blob = new Blob([txt], { type: "text/plain" });
             }
           } else if (cat === "xlsx") {
             if (target === "csv") {
@@ -728,32 +827,51 @@
               );
             } else if (selectedEngine === "libreoffice" && isLibreOfficeAvailable()) {
               const bytes = new Uint8Array(await file.arrayBuffer());
-              const outBytes = await convertWithLibreOfficeWasm(bytes, "xlsx", "pdf");
+              const outBytes = await runScheduled(
+                { kind: "document", label: file.name, bytes: file.size },
+                () => convertWithLibreOfficeWasm(bytes, "xlsx", "pdf"),
+              );
               blob = new Blob([new Uint8Array(outBytes)], { type: "application/pdf" });
             } else {
               if (selectedEngine === "libreoffice" && !isLibreOfficeAvailable()) {
                 toast("LibreOffice WASM not loaded in this runtime. Using fast web-native engine.", "info");
               }
-              blob = await convertExcelToPdf(file);
+              blob = await runScheduled(
+                { kind: "document", label: file.name, bytes: file.size },
+                () => convertExcelToPdf(file),
+              );
             }
           } else if (cat === "pptx") {
             if (target === "pdf") {
               if (selectedEngine === "libreoffice" && isLibreOfficeAvailable()) {
                 const bytes = new Uint8Array(await file.arrayBuffer());
-                const outBytes = await convertWithLibreOfficeWasm(bytes, "pptx", "pdf");
+                const outBytes = await runScheduled(
+                  { kind: "document", label: file.name, bytes: file.size },
+                  () => convertWithLibreOfficeWasm(bytes, "pptx", "pdf"),
+                );
                 blob = new Blob([new Uint8Array(outBytes)], { type: "application/pdf" });
               } else {
                 if (selectedEngine === "libreoffice" && !isLibreOfficeAvailable()) {
                   toast("LibreOffice WASM not loaded in this runtime. Using fast web-native engine.", "info");
                 }
-                blob = await pptxToPdf(file);
+                blob = await runScheduled(
+                  { kind: "document", label: file.name, bytes: file.size },
+                  () => pptxToPdf(file),
+                );
               }
             } else {
-              blob = new Blob([await pptxToText(file)], { type: "text/plain" });
+              const txt = await runScheduled(
+                { kind: "document", label: file.name, bytes: file.size },
+                () => pptxToText(file),
+              );
+              blob = new Blob([txt], { type: "text/plain" });
             }
           } else if (cat === "html") {
             const htmlText = await file.text();
-            blob = await htmlToPdf(htmlText);
+            blob = await runScheduled(
+              { kind: "document", label: file.name, bytes: file.size },
+              () => htmlToPdf(htmlText),
+            );
           }
 
           if (currentGen !== conversionGeneration) return;
@@ -911,6 +1029,7 @@
             tools={OFFICE_CONVERT_TOOLS}
             activeToolId={activeCat}
             onSelectTool={(id, tool) => {
+              if (isConverting) return;
               if (tool.route) {
                 navigate(tool.route);
               } else {
@@ -924,10 +1043,11 @@
           <!-- Media & Audio Transcoding -->
           <ToolGrid
             title="Media & Audio Transcoding"
-            subtitle="GPU-accelerated and software transcode for video, audio, and image containers"
+            subtitle="Fast browser encoding and FFmpeg transcode for video, audio, and image containers"
             tools={MEDIA_CONVERT_TOOLS}
             activeToolId={activeCat}
             onSelectTool={(id, tool) => {
+              if (isConverting) return;
               if (tool.route) {
                 navigate(tool.route);
               } else {
@@ -1246,9 +1366,12 @@
             <button
               type="button"
               class="cz-btn-download-all"
-              onclick={() => {
-                for (const r of convertedResults) downloadItem(r);
-              }}
+              onclick={() =>
+                downloadBatch(
+                  convertedResults.map((r) => ({ name: r.name, blob: r.blob })),
+                  "converted-files.zip",
+                )
+              }
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>

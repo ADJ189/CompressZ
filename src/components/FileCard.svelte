@@ -68,6 +68,10 @@
         {/if}
       </div>
 
+      {#if entry.status === "done" && entry.result?.format}
+        <div class="cz-card-format-note">{entry.result.format}</div>
+      {/if}
+
       {#if entry.status === "error" && entry.error}
         <div class="cz-card-error-msg">{entry.error}</div>
         {#if entry.errorLog && entry.errorLog.length > 0}
@@ -182,6 +186,12 @@
     font-size: 0.7rem;
     font-weight: 700;
     margin-left: 0.25rem;
+  }
+  .cz-card-format-note {
+    font-size: 0.72rem;
+    color: var(--text-3);
+    margin-top: 0.15rem;
+    word-break: break-word;
   }
   .cz-card-error-msg {
     color: var(--rose);

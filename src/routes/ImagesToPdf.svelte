@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import FileDropzone from "../components/FileDropzone.svelte";
-  import { imagesToPdfStore, type ImagesToPdfState, consumeStagedUniversalFile, currentRoute } from "../store";
+  import { imagesToPdfStore, type ImagesToPdfState, consumeStagedUniversalFile, stagedUniversalFile, currentRoute } from "../store";
   import { imagesToPdf } from "../lib/imagesToPdf";
   import { imagesToPdfOptions } from "../lib/options";
   import { runScheduled } from "../lib/resourceManager";
@@ -15,12 +15,17 @@
     naturalCompare,
     type Recommendation,
   } from "../lib/recommendations";
+  import { smartAnalyze, sortByPredictedLabel } from "../lib/aiEngine";
+  import { getSettings, resolvedAiModelTier } from "../lib/settings";
 
   let imagesToPdfState = $state<ImagesToPdfState>(imagesToPdfStore.get());
   let isConverting = $state(false);
+  let isAiSorting = $state(false);
+  let aiEnabled = $state(getSettings().ai?.enabled ?? true);
   let convertedBlob = $state<Blob | null>(null);
   let dismissTrigger = $state(0);
   let draggedIndex = $state<number | null>(null);
+  let inputRevision = 0;
 
   // Thumbnail cache for files
   const thumbnailUrls = new Map<File, string>();
@@ -90,6 +95,15 @@
   }
 
   function updateStore(patch: Partial<ImagesToPdfState>) {
+    if (
+      patch.files !== undefined ||
+      patch.pageSize !== undefined ||
+      patch.quality !== undefined ||
+      patch.maxDim !== undefined
+    ) {
+      inputRevision++;
+      convertedBlob = null;
+    }
     imagesToPdfStore.update((curr) => ({ ...curr, ...patch }));
   }
 
@@ -105,16 +119,31 @@
   }
 
   onMount(() => {
+    aiEnabled = getSettings().ai?.enabled ?? true;
     applyStagedFile();
   });
 
+  function matchesRoutePrefix(route?: string | null): boolean {
+    if (!route) return false;
+    const norm = route.replace(/^\/+/, "").split("?")[0];
+    return norm === "compress/images-to-pdf" || norm.startsWith("compress/images-to-pdf/");
+  }
+
   $effect(() => {
-    const unsub = currentRoute.subscribe((r) => {
-      if (r === "compress/images-to-pdf") {
+    const unsubRoute = currentRoute.subscribe((r) => {
+      if (matchesRoutePrefix(r)) {
         applyStagedFile();
       }
     });
-    return unsub;
+    const unsubStaged = stagedUniversalFile.subscribe((item) => {
+      if (item && matchesRoutePrefix(item.targetRoute ?? currentRoute.get())) {
+        applyStagedFile();
+      }
+    });
+    return () => {
+      unsubRoute();
+      unsubStaged();
+    };
   });
 
   function handleRemove(index: number) {
@@ -156,6 +185,43 @@
     toast("Reversed image order", "success");
   }
 
+  /** Reorder images by predicted content class using on-device local AI */
+  async function handleAiSmartSort() {
+    if (imagesToPdfState.files.length < 2) return;
+    const settings = getSettings();
+    if (!settings.ai?.enabled) return;
+    isAiSorting = true;
+    toast("Organizing images with on-device AI…");
+    try {
+      const rawFiles = imagesToPdfState.files;
+      const tier = resolvedAiModelTier(settings);
+      const analyses = await smartAnalyze(rawFiles, tier);
+      const currentFiles = imagesToPdfState.files;
+      if (currentFiles.length === 0) return;
+
+      const hasPredictions = analyses.some((a) => Boolean(a.tag?.label));
+      if (!hasPredictions) {
+        const sorted = [...currentFiles].sort((a, b) => naturalCompare(a.name, b.name));
+        updateStore({ files: sorted });
+        toast("Could not classify images; sorted numerically", "warn");
+        return;
+      }
+
+      const sortedFiles = sortByPredictedLabel(rawFiles, analyses);
+      // Reconcile: keep files still in currentFiles in sorted order, append any newly added files
+      const currentSet = new Set(currentFiles);
+      const remainingSorted = sortedFiles.filter((f) => currentSet.has(f));
+      const newlyAdded = currentFiles.filter((f) => !rawFiles.includes(f));
+      updateStore({ files: [...remainingSorted, ...newlyAdded] });
+      toast("Organized images by predicted content class", "success");
+    } catch (err) {
+      console.warn("[imagesToPdf:aiSmartSort] fallback:", err);
+      sortNatural();
+    } finally {
+      isAiSorting = false;
+    }
+  }
+
   function handleDragStart(index: number, e: DragEvent) {
     draggedIndex = index;
     if (e.dataTransfer) {
@@ -190,6 +256,7 @@
     }
 
     isConverting = true;
+    const startRevision = inputRevision;
     try {
       const files = [...imagesToPdfState.files];
       const pageSizePt =
@@ -211,6 +278,7 @@
         },
         () => imagesToPdf(files, options),
       );
+      if (inputRevision !== startRevision) return;
       convertedBlob = blob;
       toast("Images successfully converted to PDF", "success");
     } catch (err) {
@@ -358,6 +426,17 @@
           >
             Reverse
           </button>
+          {#if aiEnabled}
+            <button
+              type="button"
+              class="cz-btn cz-btn-secondary cz-btn-sm cz-btn-ai"
+              disabled={isAiSorting || imagesToPdfState.files.length < 2}
+              onclick={handleAiSmartSort}
+              title="Sort images by predicted content class using on-device AI"
+            >
+              {isAiSorting ? "AI Sorting…" : "✨ AI Sort"}
+            </button>
+          {/if}
           <button
             type="button"
             class="cz-btn cz-btn-primary cz-btn-sm"

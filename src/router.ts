@@ -18,9 +18,11 @@ export function on(route: string, fn: Handler) {
 }
 
 export function navigate(route: string, opts: { replace?: boolean } = {}) {
-  if (opts.replace) history.replaceState({}, "", BASE_NORM + route);
-  else history.pushState({}, "", BASE_NORM + route);
-  dispatch(BASE_NORM + route);
+  const clean = route.replace(/^\/+/, "");
+  const full = BASE_NORM + clean;
+  if (opts.replace) history.replaceState({}, "", full);
+  else history.pushState({}, "", full);
+  dispatch(full);
 }
 
 export function getRouteFromPath(path: string): string {
@@ -36,8 +38,8 @@ export function dispatch(path: string) {
   currentRoute.set(route);
   trackRecent(route);
 
-  // Validate route pattern and safely invoke registered handler
-  if (/^[a-zA-Z0-9_\-/]+$/.test(route) && handlers.has(route)) {
+  // Validate route pattern and safely invoke registered handler (allow empty route for home)
+  if ((route === "" || /^[a-zA-Z0-9_\-/]+$/.test(route)) && handlers.has(route)) {
     const handler = handlers.get(route);
     if (typeof handler === "function") {
       handler();
@@ -72,5 +74,5 @@ export function init() {
     e.preventDefault();
     navigate(el.dataset.nav ?? "");
   });
-  dispatch(location.pathname);
+  dispatch(location.pathname + location.search);
 }

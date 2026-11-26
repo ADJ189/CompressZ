@@ -5,6 +5,7 @@
     type RedactionRegion,
     transformVisualPointToPdf,
     transformVisualRectToPdf,
+    applyTrueRedaction,
   } from "../lib/pdfTools/redactPdf";
   import { sanitizeWinAnsi } from "../lib/pdfTools/watermarkPdf";
   import SignaturePad from "./SignaturePad.svelte";
@@ -47,6 +48,7 @@
   let pageThumbnails = $state<Record<number, string>>({});
   let isDrawing = false;
   let currentStrokePoints: { x: number; y: number }[] = [];
+  let pendingTextAnnotation = $state<{ x: number; y: number; value: string; page: number } | null>(null);
 
   // Color & styling options
   let activeColor = $state<string>("#ef4444"); // Red for text
@@ -54,6 +56,36 @@
 
   let currentRenderTask: any = null;
   let renderSeq = 0;
+  let renderedPage = $state<number>(0);
+  let isRenderingPage = $state<boolean>(false);
+  let canvasWidthPx = $state<number>(0);
+  let canvasHeightPx = $state<number>(0);
+
+  function getClampedPopoverPos(pending: { x: number; y: number }): {
+    left: number;
+    top: number;
+    maxWidth: number | null;
+  } {
+    const rawLeft = pending.x * zoomLevel * 1.5;
+    const rawTop = pending.y * zoomLevel * 1.5;
+    const pad = 8;
+    const idealW = 280;
+    if (canvasWidthPx <= 0 || canvasHeightPx <= 0) {
+      return { left: Math.max(pad, rawLeft), top: Math.max(pad, rawTop), maxWidth: null };
+    }
+    const maxWidth = Math.max(80, canvasWidthPx - pad * 2);
+    const popW = Math.min(idealW, maxWidth);
+    const popH = maxWidth < idealW ? 82 : 44;
+    const maxLeft = Math.max(pad, canvasWidthPx - popW - pad);
+    const maxTop = Math.max(pad, canvasHeightPx - popH - pad);
+    const left = rawLeft > maxLeft ? rawLeft - popW : rawLeft;
+    const top = rawTop > maxTop ? rawTop - popH : rawTop;
+    return {
+      left: Math.max(pad, Math.min(maxLeft, left)),
+      top: Math.max(pad, Math.min(maxTop, top)),
+      maxWidth,
+    };
+  }
 
   async function renderPage(pageNum: number) {
     if (!pdfDocInstance || !canvasEl || !overlayCanvasEl) return;
@@ -64,15 +96,20 @@
       currentRenderTask = null;
     }
     const mySeq = ++renderSeq;
+    isRenderingPage = true;
     try {
       const page = await pdfDocInstance.getPage(pageNum);
       if (mySeq !== renderSeq) return;
       const viewport = page.getViewport({ scale: zoomLevel * 1.5 });
 
-      canvasEl.width = Math.round(viewport.width);
-      canvasEl.height = Math.round(viewport.height);
-      overlayCanvasEl.width = Math.round(viewport.width);
-      overlayCanvasEl.height = Math.round(viewport.height);
+      const w = Math.round(viewport.width);
+      const h = Math.round(viewport.height);
+      canvasEl.width = w;
+      canvasEl.height = h;
+      overlayCanvasEl.width = w;
+      overlayCanvasEl.height = h;
+      canvasWidthPx = w;
+      canvasHeightPx = h;
 
       const ctx = canvasEl.getContext("2d")!;
       const task = page.render({ canvasContext: ctx, viewport });
@@ -80,6 +117,7 @@
       await task.promise;
 
       if (mySeq === renderSeq) {
+        renderedPage = pageNum;
         redrawOverlay();
       }
     } catch (err: any) {
@@ -87,6 +125,7 @@
       console.error("PDF page render error:", err);
     } finally {
       if (mySeq === renderSeq) {
+        isRenderingPage = false;
         currentRenderTask = null;
       }
     }
@@ -141,26 +180,13 @@
 
   function handleOverlayPointerDown(e: PointerEvent) {
     if (activeTool === "select") return;
+    if (isRenderingPage || renderedPage !== currentPage) return;
     const rect = overlayCanvasEl.getBoundingClientRect();
     const x = (e.clientX - rect.left) / (zoomLevel * 1.5);
     const y = (e.clientY - rect.top) / (zoomLevel * 1.5);
 
     if (activeTool === "text") {
-      const text = prompt("Enter text annotation:", "Note");
-      if (text) {
-        const ann: Annotation = {
-          id: `ann-${Date.now()}`,
-          type: "text",
-          x,
-          y,
-          width: 120,
-          height: 30,
-          text,
-          color: activeColor,
-          fontSize: 16,
-        };
-        addAnnotation(ann);
-      }
+      pendingTextAnnotation = { x, y, value: "Note", page: renderedPage };
     } else if (activeTool === "ink" || activeTool === "highlighter") {
       isDrawing = true;
       try {
@@ -243,13 +269,44 @@
     currentStrokePoints = [];
   }
 
-  function addAnnotation(ann: Annotation) {
+  function commitPendingText() {
+    if (!pendingTextAnnotation) return;
+    const targetPage = pendingTextAnnotation.page;
+    const trimmed = pendingTextAnnotation.value.trim();
+    if (trimmed) {
+      addAnnotation(
+        {
+          id: `ann-${Date.now()}`,
+          type: "text",
+          x: pendingTextAnnotation.x,
+          y: pendingTextAnnotation.y,
+          width: 120,
+          height: 30,
+          text: trimmed,
+          color: activeColor,
+          fontSize: 16,
+        },
+        targetPage,
+      );
+    }
+    pendingTextAnnotation = null;
+  }
+
+  function addAnnotation(ann: Annotation, pageNum: number = currentPage) {
     const next = { ...annotations };
-    const list = next[currentPage] ? [...next[currentPage]] : [];
+    const list = next[pageNum] ? [...next[pageNum]] : [];
     list.push(ann);
-    next[currentPage] = list;
+    next[pageNum] = list;
     annotations = next;
-    redrawOverlay();
+    if (pageNum === currentPage) {
+      redrawOverlay();
+    }
+  }
+
+  function goToPage(pageNum: number) {
+    if (pageNum === currentPage) return;
+    pendingTextAnnotation = null;
+    currentPage = pageNum;
   }
 
   function handleSignatureSaved(dataUrl: string) {
@@ -367,7 +424,6 @@
 
     // If true redactions exist, apply irreversible raster burn-in to sanitize document
     if (trueRedactionRegions.length > 0) {
-      const { applyTrueRedaction } = await import("../lib/pdfTools/redactPdf");
       modified = await applyTrueRedaction(modified, {
         regions: trueRedactionRegions,
       });
@@ -388,6 +444,11 @@
     }
     annotations = {};
     pageThumbnails = {};
+    pendingTextAnnotation = null;
+    renderedPage = 0;
+    isRenderingPage = false;
+    isDrawing = false;
+    currentStrokePoints = [];
     currentPage = 1;
 
     try {
@@ -541,7 +602,7 @@
         <button
           type="button"
           class="cz-studio-thumb-card {currentPage === pageNum ? 'is-active' : ''}"
-          onclick={() => (currentPage = pageNum)}
+          onclick={() => goToPage(pageNum)}
         >
           {#if pageThumbnails[pageNum]}
             <img src={pageThumbnails[pageNum]} alt="Thumb {pageNum}" class="cz-thumb-img" />
@@ -560,6 +621,7 @@
         <canvas
           bind:this={overlayCanvasEl}
           class="cz-overlay-ann-canvas {activeTool !== 'select' ? 'is-interactive' : ''}"
+          data-rendered-page={renderedPage}
           style="touch-action: none;"
           onpointerdown={handleOverlayPointerDown}
           onpointermove={handleOverlayPointerMove}
@@ -585,6 +647,31 @@
             />
           {/if}
         {/each}
+
+        {#if pendingTextAnnotation}
+          {@const popPos = getClampedPopoverPos(pendingTextAnnotation)}
+          <div
+            class="cz-inline-text-popover"
+            style="left: {popPos.left}px; top: {popPos.top}px;{popPos.maxWidth !== null ? ` max-width: ${popPos.maxWidth}px;` : ''}"
+          >
+            <input
+              type="text"
+              class="cz-inline-text-input"
+              aria-label="Text annotation"
+              bind:value={pendingTextAnnotation.value}
+              onkeydown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitPendingText();
+                } else if (e.key === "Escape") {
+                  pendingTextAnnotation = null;
+                }
+              }}
+            />
+            <button type="button" class="cz-btn cz-btn-primary cz-btn-sm" onclick={commitPendingText}>Add</button>
+            <button type="button" class="cz-btn cz-btn-ghost cz-btn-sm" onclick={() => (pendingTextAnnotation = null)}>Cancel</button>
+          </div>
+        {/if}
       </div>
     </main>
   </div>
@@ -612,19 +699,21 @@
   }
 
   .cz-studio-toolbar {
-    height: 52px;
+    min-height: 52px;
     background: var(--surface);
     border-bottom: 1px solid var(--border);
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    padding: 0 1rem;
-    gap: 0.75rem;
+    padding: 0.45rem 0.75rem;
+    gap: 0.5rem 0.75rem;
     z-index: 10;
   }
 
   .cz-studio-tool-group {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 0.35rem;
   }
@@ -688,6 +777,7 @@
 
   .cz-studio-thumbnails {
     width: 120px;
+    flex-shrink: 0;
     background: var(--surface2);
     border-right: 1px solid var(--border);
     padding: 0.75rem 0.5rem;
@@ -741,16 +831,19 @@
 
   .cz-studio-canvas-wrap {
     flex: 1;
+    min-width: 0;
     overflow: auto;
     background: var(--bg2);
     display: flex;
     align-items: flex-start;
-    justify-content: center;
+    justify-content: flex-start;
     padding: 2rem;
   }
 
   .cz-canvas-layer-stack {
     position: relative;
+    flex-shrink: 0;
+    margin: 0 auto;
     box-shadow: var(--shadow-xl);
     border-radius: 4px;
     overflow: hidden;
@@ -780,6 +873,35 @@
     text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
   }
 
+  .cz-inline-text-popover {
+    position: absolute;
+    z-index: 20;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem;
+    box-sizing: border-box;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    box-shadow: var(--shadow-md);
+  }
+
+  .cz-inline-text-input {
+    width: 150px;
+    max-width: 100%;
+    min-width: 0;
+    flex: 0 1 150px;
+    box-sizing: border-box;
+    padding: 0.25rem 0.45rem;
+    border: 1px solid var(--border);
+    border-radius: var(--r-xs);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.85rem;
+  }
+
   .cz-floating-stamp {
     position: absolute;
     pointer-events: none;
@@ -795,5 +917,16 @@
     align-items: center;
     justify-content: center;
     z-index: 1000;
+  }
+
+  @media (max-width: 640px) {
+    .cz-studio-thumbnails {
+      width: 72px;
+      padding: 0.5rem 0.35rem;
+    }
+
+    .cz-studio-canvas-wrap {
+      padding: 0.75rem;
+    }
   }
 </style>

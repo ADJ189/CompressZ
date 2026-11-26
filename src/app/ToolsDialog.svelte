@@ -35,6 +35,10 @@
       icon: "pdf",
       items: [
         { route: "pdf/split", name: "Split PDF", desc: "Extract page ranges, chunk into N-parts, or burst to ZIP", icon: "split", badge: "Studio" },
+        { route: "pdf/remove-pages", name: "Remove Pages", desc: "Delete unwanted pages or ranges with instant preview", icon: "remove-pages", badge: "Fast" },
+        { route: "pdf/page-numbers", name: "Page Numbers & Bates", desc: "Add custom page numbers, header/footer, or Bates legal numbering", icon: "page-numbers", badge: "Bates" },
+        { route: "pdf/nup", name: "Multi-Page (N-Up)", desc: "Combine 2, 4, or 9 pages per sheet for compact printing", icon: "nup", badge: "Layout" },
+        { route: "pdf/metadata", name: "Edit & Strip Metadata", desc: "Inspect, update, or erase document metadata and dates for privacy", icon: "metadata", badge: "Privacy" },
         { route: "pdf/organize", name: "Organize Pages", desc: "Drag-drop visual reorder, rotate, duplicate, and delete pages", icon: "organize", badge: "Studio" },
         { route: "compress/merge-pdf", name: "Merge PDFs", desc: "Combine multiple PDF documents without rasterisation", icon: "merge" },
         { route: "pdf/edit", name: "Edit & Annotate", desc: "FreeText annotations, ink drawing, highlighting, and stamps", icon: "studio", badge: "New" },
@@ -54,9 +58,9 @@
       items: [
         { route: "compress/images", name: "Compress Images", desc: "Compress WebP, JPEG, PNG, AVIF with SSIM quality guard", icon: "image" },
         { route: "compress/pdf", name: "Compress PDF", desc: "Reduce document size via downsampling and deduplication", icon: "pdf" },
-        { route: "compress/video", name: "Compress Video", desc: "WebCodecs hardware acceleration and FFmpeg transcoding", icon: "video" },
+        { route: "compress/video", name: "Compress Video", desc: "WebCodecs + Mediabunny fast path and FFmpeg transcoding", icon: "video" },
         { route: "compress/audio", name: "Compress Audio", desc: "Optimize MP3, AAC, OGG, Opus, FLAC, and WAV", icon: "audio" },
-        { route: "compress/gif", name: "Compress GIF", desc: "Lossy LZW compression and GIF-to-video conversion", icon: "gif" },
+        { route: "compress/gif", name: "Compress GIF", desc: "FFmpeg two-pass palettegen optimization and GIF-to-WebM export", icon: "gif" },
       ],
     },
     {
@@ -88,7 +92,7 @@
       icon: "docs",
       items: [
         { route: "docs", name: "Documentation", desc: "Engine specifications, limits, and technical guides", icon: "docs" },
-        { route: "privacy", name: "Privacy Guarantee", desc: "Local-only invariants and zero-telemetry guarantee", icon: "security" },
+        { route: "privacy", name: "Privacy Guarantee", desc: "Local-only document processing & privacy guarantee", icon: "security" },
         { route: "about", name: "About CompressZ", desc: "Architecture, mission, and offline privacy model", icon: "home" },
       ],
     },
@@ -740,36 +744,103 @@
   /* Narrow-screen mobile responsiveness */
   @media (max-width: 520px) {
     .cz-dialog {
-      width: 95%;
-      max-height: 90vh;
-      border-radius: var(--r-lg, 16px);
+      width: calc(100vw - 16px);
+      max-width: calc(100vw - 16px);
+      max-height: calc(100vh - 24px);
+      max-height: 92dvh;
+      border-radius: var(--r, 16px);
+      margin: 0;
     }
     .cz-dialog-header {
-      padding: 0.85rem 0.85rem 0.75rem;
+      padding: 0.75rem 0.85rem;
+    }
+    .cz-mac-traffic-lights {
+      width: auto;
+      gap: 5px;
+    }
+    .cz-mac-dot-min,
+    .cz-mac-dot-zoom {
+      display: none;
+    }
+    .cz-mac-dot-close {
+      width: 14px;
+      height: 14px;
+    }
+    .cz-dialog-title {
+      font-size: 0.95rem;
+    }
+    .cz-dialog-count {
+      font-size: 0.68rem;
+      padding: 0.1rem 0.35rem;
+    }
+    .cz-mac-close-btn {
+      width: 32px;
+      height: 32px;
+      min-width: 32px;
+      min-height: 32px;
     }
     .cz-dialog-universal-upload {
-      padding: 0.65rem 0.85rem 0.45rem;
+      padding: 0.55rem 0.85rem 0.35rem;
     }
     .cz-dialog-toolbar {
-      padding: 0.55rem 0.85rem;
+      padding: 0.5rem 0.85rem;
+      gap: 0.5rem;
+    }
+    .cz-mac-segmented-bar {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      padding: 3px 2px;
+    }
+    .cz-mac-segmented-bar::-webkit-scrollbar {
+      display: none;
+    }
+    .cz-mac-seg-btn {
+      flex: 0 0 auto;
+      min-height: 34px;
+      padding: 0.35rem 0.65rem;
+      font-size: 0.78rem;
+    }
+    .cz-dialog-search-wrap {
+      width: 100%;
+      min-width: 0;
+    }
+    .cz-dialog-input {
+      font-size: 16px; /* Prevents iOS auto-zoom on input focus */
+      padding: 0.45rem 1.8rem 0.45rem 2rem;
     }
     .cz-dialog-body {
-      padding: 0.85rem 0.85rem 1.25rem;
+      padding: 0.85rem 0.85rem calc(1.25rem + env(safe-area-inset-bottom, 0px));
       overflow-x: hidden;
       gap: 1.15rem;
     }
     .cz-tools-grid {
       grid-template-columns: 1fr;
       gap: 0.55rem;
+      width: 100%;
     }
     .cz-tool-card {
-      padding: 0.65rem 0.8rem;
+      padding: 0.7rem 0.85rem;
+      min-height: 48px;
     }
-    .cz-mac-traffic-lights {
-      width: 48px;
+    .cz-tool-name {
+      font-size: 0.88rem;
     }
-    .cz-dialog-search-wrap {
-      min-width: 100%;
+    .cz-tool-desc {
+      font-size: 0.75rem;
+    }
+  }
+
+  @media (max-width: 360px) {
+    .cz-dialog-header {
+      padding: 0.65rem 0.65rem;
+    }
+    .cz-dialog-title-block {
+      gap: 0.35rem;
+    }
+    .cz-dialog-count {
+      display: none;
     }
   }
 

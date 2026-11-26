@@ -2,13 +2,13 @@
 
 > **Universal Contributor & AI Agent Playbook**  
 > *Targeted for Autonomous Coding Agents, LLMs, and System Engineers*  
-> *Last Updated: November 2026 | Engine Version: 1.15.0+*
+> *Last Updated: November 2026 | Engine Version: 1.15.5+*
 
 ---
 
 ## 1. Executive Summary & Core Identity
 
-**CompressZ** is a client-side, zero-backend, zero-telemetry web workstation for file compression, format conversion, PDF manipulation, and local OCR. Everything executes 100% on the user's local device within the browser sandbox using WebAssembly (WASM), WebCodecs, WebGL2, OffscreenCanvas, Web Streams, and WebCrypto.
+**CompressZ** is a client-side, zero-backend, privacy-first web workstation for file compression, format conversion, PDF manipulation, and local OCR (with opt-out scrubbed crash diagnostics via Sentry). Everything executes 100% on the user's local device within the browser sandbox using WebAssembly (WASM), WebCodecs, WebGL2, OffscreenCanvas, Web Streams, and WebCrypto.
 
 ### The Immutable Non-Negotiables
 1. **Zero External Data Upload**: No bytes, file names, or metadata may ever leave the client browser.
@@ -81,7 +81,7 @@ graph TD
 
     subgraph Runtime_APIs ["Layer 6: Browser & WASM Execution Layer"]
         EngImage --> WebGL["WebGL2 Context + OffscreenCanvas (gpu.ts/webgl.ts)"]
-        EngVideo --> WebCodecs["WebCodecs API (GPU) + Mediabunny (esm.sh)"]
+        EngVideo --> WebCodecs["WebCodecs API (HW/SW) + Mediabunny (esm.sh)"]
         EngVideo --> FFmpegWasm["FFmpeg.wasm 32-bit linear memory"]
         EngPdfSuite --> QpdfWasm["QPDF WebAssembly Bridge (qpdfWasm.ts)"]
         EngOcr --> Tesseract["Tesseract.js WASM + PaddleOCR"]
@@ -139,9 +139,9 @@ flowchart TD
     InFile["User Video File (.mp4, .webm, .mov, .mkv)"] --> Router["fileRouter.ts: Magic signature verification"]
     Router --> CheckCodecs{"Browser supports WebCodecs & target codec encodable?"}
     
-    CheckCodecs -- "Yes (GPU Hardware Acceleration)" --> FastPath["src/lib/webcodecsVideo.ts"]
+    CheckCodecs -- "Yes (WebCodecs Fast Path)" --> FastPath["src/lib/webcodecsVideo.ts"]
     FastPath --> BunnyDemux["Mediabunny: in-memory demux & frame extraction"]
-    BunnyDemux --> VideoEncoder["VideoEncoder hardware transcode (H.264/VP9)"]
+    BunnyDemux --> VideoEncoder["VideoEncoder browser HW/SW transcode"]
     VideoEncoder --> BunnyMux["Mediabunny: MP4 muxing + faststart moov placement"]
     BunnyMux --> OutputFast["Decodable, fast-streamable MP4 Blob"]
 
@@ -196,14 +196,14 @@ graph LR
 | **Option Bridge** | `src/lib/options.ts` | The single translation contract between human UI percentage/preset states and engine mathematical parameters. | Pure TypeScript, zero external dependencies. Verified by `tests/options.test.ts`. |
 | **Resource Scheduling** | `src/lib/resourceManager.ts`<br>`src/lib/platform.ts`<br>`src/lib/settings.ts`<br>`src/lib/recommendations.ts`<br>`src/lib/recents.ts`<br>`src/lib/workbench.ts` | Adaptive Resource Guard (heavy vs. light concurrency pools, memory pressure recovery), platform tier detection, deterministic recommendation hints, recents tracking. | Bounded scheduling queues. Browser free RAM is not measurable; scheduling uses estimated file/pixel weights and allocation failure traps. |
 | **Engine: Images** | `src/lib/compressImage.ts`<br>`src/lib/imageDecode.ts`<br>`src/lib/gpu.ts`<br>`src/lib/webgl.ts`<br>`src/lib/qualityGuard.ts`<br>`src/lib/optimizeSvg.ts`<br>`src/lib/thumb.ts` | WebP/AVIF/JPEG encoding, WebGL2 texture resizing with Canvas2D fallback, lazy `heic2any` decoder, SSIM ceiling check (never upscale), pure TS SVG optimizer. | Strip EXIF via canvas re-encode. Quality defaults to 82. SSIM floor = 0.90. |
-| **Engine: Video & Audio** | `src/lib/compressVideo.ts`<br>`src/lib/webcodecsVideo.ts`<br>`src/lib/compressAudio.ts`<br>`src/lib/compressGif.ts`<br>`src/lib/videoMeta.ts`<br>`src/lib/ffmpeg.ts` | WebCodecs GPU transcoding with Mediabunny demux/mux, FFmpeg.wasm singleton software fallback, 2-pass palettegen GIF conversion, audio bitrate compression. | 1.5 GiB video ceiling (WASM 32-bit linear memory limit). FastStart `+movflags` for immediate playback. |
+| **Engine: Video & Audio** | `src/lib/compressVideo.ts`<br>`src/lib/webcodecsVideo.ts`<br>`src/lib/compressAudio.ts`<br>`src/lib/compressGif.ts`<br>`src/lib/videoMeta.ts`<br>`src/lib/ffmpeg.ts` | WebCodecs (browser HW/SW) transcoding with Mediabunny demux/mux, FFmpeg.wasm singleton fallback, 2-pass palettegen GIF conversion, audio bitrate compression. | 1.5 GiB video ceiling (WASM 32-bit linear memory limit). FastStart `+movflags` for immediate playback. |
 | **Engine: PDF & Studio** | `src/lib/compressPdf.ts`<br>`src/lib/pdfLibs.ts`<br>`src/lib/qpdfWasm.ts`<br>`src/lib/pdfTools/*` (8 modules)<br>`src/lib/imagesToPdf.ts`<br>`src/lib/mergePdf.ts` | Structural image resampling vs. PDF.js rasterization, AES-256 PDF encryption, deep cross-reference salvage repair, permanent redaction stream purge. | In-memory document buffers. Coordinate math accounts for CropBox offsets. QPDF WASM stdout/stderr captured in `EngineError`. |
 | **Engine: Office & Two-Way** | `src/lib/convertOffice.ts`<br>`src/lib/convertMedia.ts`<br>`src/lib/convertPdf.ts`<br>`src/lib/conversions/*` (6 modules) | Two-way Office conversion: PDF ⇄ Word (.docx), PDF ⇄ Excel (.xlsx), PDF ⇄ PowerPoint (.pptx), Excel → PDF, HTML → PDF, LibreOffice WASM bridge. | Fast native OOXML generator via `zip.ts` with XML control character stripping. Neutralize CSV formula injections with `'`. |
 | **Engine: AI & OCR** | `src/lib/aiEngine.ts`<br>`src/lib/ocrEngines.ts`<br>`src/lib/searchablePdf.ts`<br>`src/lib/ocrHandwriting.ts`<br>`src/lib/pdfToMarkdown.ts`<br>`src/lib/markdownPreview.ts`<br>`src/lib/wasmMath.ts` | MobileNetV2 / ViT image classification via `@huggingface/transformers`, Tesseract 5 + PaddleOCR CJK, searchable PDF with invisible Noto Sans text layer, column-aware PDF to Markdown. | WebGPU probe with automatic WASM fallback. No text leaves client device. Strict ReDoS-safe linear regex scanning. |
 | **Engine: Archives & Vault** | `src/lib/archives.ts`<br>`src/lib/tar.ts`<br>`src/lib/zip.ts`<br>`src/lib/fileEncryption.ts` | Multi-file archive builder/extractor (`.tar.gz`, `.tgz`, `.gz`, `.tar`, `.zip`) with 64 KiB streaming chunking. Hardware-accelerated WebCrypto AES-256-GCM vault encryption. | Zip bomb guard: 64MB entry / 256MB aggregate ceiling. Sanitize all entry names to eliminate directory traversal (`../`). |
 | **Diagnostics & Error** | `src/lib/engineError.ts`<br>`src/lib/fileRouter.ts`<br>`src/toast.ts` | Standardized `EngineError` with exit codes and bounded logs, binary magic number format detection, non-blocking toast notifications. | Captures raw WASM stdout/stderr without console spam. Trims and summarizes logs intelligently. |
 | **State & Style** | `src/store.ts`<br>`src/router.ts`<br>`src/style.css`<br>`src/styles/workbench.css` | Reactive subscriber store (Svelte 5 contract), History API router with regex validation, CSS design tokens, Apple squircle and glassmorphism utilities. | Zero external CSS libraries. Contrast compliant. High density. |
-| **Test Suites** | `tests/*.test.ts` (30 files)<br>`tests/assert.ts`<br>`e2e/*.spec.ts` (8 files) | Headless offline unit tests (152 tests, 100% pass) under Deno & Node, Playwright multi-browser end-to-end matrix, Hallmark anti-slop checks. | Zero external test dependencies in `tests/assert.ts`. Strict test isolation. |
+| **Test Suites** | `tests/*.test.ts` (38 files)<br>`tests/assert.ts`<br>`e2e/*.spec.ts` (9 files) | Headless offline unit tests (280+ tests, 100% pass) under Deno (`--allow-read --allow-env`) & Node, Playwright multi-browser end-to-end matrix, Hallmark anti-slop checks. | Zero external test dependencies in `tests/assert.ts`. Strict test isolation. |
 | **Build & Scripts** | `scripts/strip-oversized-assets.mjs`<br>`scripts/test.mjs`<br>`scripts/bench.mjs`<br>`scripts/webcodecs-e2e.mjs`<br>`vite.config.ts`<br>`deno.json` | Cloudflare Pages asset stripping ($\ge 24\text{ MiB}$), TypeScript test transpilation, automated benchmarks, Vite build bundle configs. | Keeps deployed asset bundles under 25 MiB. |
 
 ---
@@ -251,7 +251,7 @@ Use this lookup matrix to instantly determine what files to modify and what test
 | **Upgrading OCR or Handwriting Recognition**| `src/lib/ocrEngines.ts`<br>`src/lib/searchablePdf.ts`<br>`src/lib/ocrHandwriting.ts` | `src/routes/Ocr.svelte` | `deno test --allow-read tests/ocr.test.ts tests/searchablePdf.test.ts` |
 | **Modifying Adaptive Resource Guard** | `src/lib/resourceManager.ts`<br>`src/lib/platform.ts` | `src/lib/settings.ts` | `deno test --allow-read tests/resourceManager.test.ts` |
 | **Adding Archive or Vault Formats** | `src/lib/archives.ts`<br>`src/lib/fileEncryption.ts`<br>`src/lib/tar.ts` | `src/lib/zip.ts` | `deno test --allow-read tests/archives.test.ts tests/zip.test.ts` |
-| **Styling, Icons or Accessibility** | `src/components/MacIcon.svelte`<br>`src/app/Navigation.svelte`<br>`src/style.css` | `src/utils/cn.ts` | `deno test --allow-read tests/hallmark.test.ts` |
+| **Styling, Icons or Accessibility** | `src/components/MacIcon.svelte`<br>`src/app/Navigation.svelte`<br>`src/style.css` | `src/styles/workbench.css` | `deno test --allow-read tests/hallmark.test.ts` |
 
 ---
 
@@ -289,10 +289,10 @@ Use this lookup matrix to instantly determine what files to modify and what test
 Before marking any task complete:
 
 ```powershell
-# 1. Fast offline unit suite (29 test files, 150 tests)
-deno test --allow-read
+# 1. Fast offline unit suite (38 test files)
+deno test --allow-read --allow-env
 # OR
-node scripts/test.mjs
+npm test
 
 # 2. Strict type check (covers both TypeScript and Svelte 5 templates)
 npm run typecheck
@@ -319,7 +319,7 @@ timeline
         Unified Option Contract : options.ts for all route-engine bindings
         Adaptive Resource Guard : Concurrency scheduling and OOM recovery
         29 Offline Test Suites : 100% pass under Deno and Node
-    section Phase 2 : Current Patches (1.15.0 - Unreleased)
+    section Phase 2 : Current Patches (1.15.5 - Shipped)
         Searchable PDF OCR : Invisible Noto Sans text layer embedding
         Standalone PDF -> Markdown : MathML & LaTeX $$ formula reconstruction
         Multi-File Archives : Native Streams tar.gz, tgz, tar, zip
@@ -340,7 +340,7 @@ timeline
 ### Detailed Future Roadmap Milestones
 
 #### Phase 3.1: Local AI & Neural Handwriting (TrOCR)
-- [ ] Connect `ocrHandwriting.ts` to `src/routes/Ocr.svelte` as an active UI toggle.
+- [x] Connect `ocrHandwriting.ts` to `src/routes/Ocr.svelte` as an active UI toggle.
 - [ ] Implement browser-side canvas line segmentation for continuous handwritten paragraphs.
 - [ ] Support WebGPU acceleration for `Xenova/trocr-small-handwritten` with fallback to WASM (q8).
 

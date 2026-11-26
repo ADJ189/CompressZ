@@ -4,6 +4,11 @@ import { mount } from "svelte";
 import App from "./App.svelte";
 import { init as initRouter, navigate } from "./router";
 import { initTheme } from "./lib/theme";
+import { initTelemetry } from "./lib/telemetry";
+
+// Anonymous error diagnostics are enabled by default to detect software crashes and issues,
+// with safe storage checks and a live opt-out mechanism in Settings.
+initTelemetry();
 
 // Initialize theme preference from localStorage/system
 initTheme();

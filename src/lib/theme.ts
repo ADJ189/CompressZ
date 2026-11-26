@@ -11,9 +11,41 @@
  */
 export type ThemePreference = 'light' | 'dark' | 'system';
 export type ResolvedTheme = 'light' | 'dark';
+export type ColorScheme = 'polished' | 'origin' | 'blood-moon';
 
 export const THEME_KEY = 'theme';
 export const THEME_EVENT = 'cz-theme-change';
+export const COLOR_SCHEME_KEY = 'cz-color-scheme';
+export const COLOR_SCHEME_EVENT = 'cz-color-scheme-change';
+
+export function getColorScheme(): ColorScheme {
+  try {
+    const raw = localStorage.getItem(COLOR_SCHEME_KEY);
+    if (raw === 'polished' || raw === 'origin' || raw === 'blood-moon') return raw;
+  } catch {
+    /* storage disabled */
+  }
+  return 'polished';
+}
+
+export function setColorScheme(scheme: ColorScheme): ColorScheme {
+  const chosen: ColorScheme =
+    scheme === 'origin' || scheme === 'blood-moon' ? scheme : 'polished';
+  if (typeof document !== 'undefined') {
+    document.documentElement.setAttribute('data-color-scheme', chosen);
+  }
+  try {
+    localStorage.setItem(COLOR_SCHEME_KEY, chosen);
+  } catch {
+    /* ignore */
+  }
+  if (typeof document !== 'undefined') {
+    document.dispatchEvent(
+      new CustomEvent(COLOR_SCHEME_EVENT, { detail: { scheme: chosen } }),
+    );
+  }
+  return chosen;
+}
 
 function darkQuery(): MediaQueryList | null {
   if (typeof window === 'undefined' || !window.matchMedia) return null;
@@ -69,6 +101,7 @@ let started = false;
 
 /** Apply the stored preference once and keep `system` in sync. */
 export function initTheme(): ResolvedTheme {
+  setColorScheme(getColorScheme());
   const resolved = applyThemePreference(getThemePreference());
   if (started) return resolved;
   started = true;

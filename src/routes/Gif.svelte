@@ -8,6 +8,7 @@
   import { runScheduled } from "../lib/resourceManager";
 import { entryError } from "../lib/engineError";
   import { uid, type FileEntry, outputFilename } from "../lib/types";
+  import { downloadBatch } from "../lib/batchDownload";
   import { toast } from "../toast";
 
   let gifState = $state<GifState>(gifStore.get());
@@ -59,37 +60,41 @@ import { entryError } from "../lib/engineError";
   async function compressSingle(entry: FileEntry) {
     if (entry.status === "compressing") return;
 
-    updateStore({
-      files: gifState.files.map((f) =>
+    gifStore.update((curr) => ({
+      ...curr,
+      files: curr.files.map((f) =>
         f.id === entry.id ? { ...f, status: "compressing", error: undefined } : f,
       ),
-    });
+    }));
 
     try {
-      const options = gifOptions(gifState);
+      const options = gifOptions(gifStore.get());
       const res = await runScheduled(
         { kind: "gif", label: entry.name, bytes: entry.file.size },
         () => compressGif(entry.file, options),
       );
 
-      updateStore({
-        files: gifState.files.map((f) =>
+      gifStore.update((curr) => ({
+        ...curr,
+        files: curr.files.map((f) =>
           f.id === entry.id
             ? {
                 ...f,
                 status: "done",
                 compressedBlob: res.blob,
                 compressedSize: res.blob.size,
+                result: res,
               }
             : f,
         ),
-      });
+      }));
       toast(`Compressed ${entry.name}`, "success");
     } catch (err) {
       console.error("[gifCompress] error:", err);
       const failure = entryError(err, "GIF compression failed");
-      updateStore({
-        files: gifState.files.map((f) =>
+      gifStore.update((curr) => ({
+        ...curr,
+        files: curr.files.map((f) =>
           f.id === entry.id
             ? {
                 ...f,
@@ -99,7 +104,7 @@ import { entryError } from "../lib/engineError";
               }
             : f,
         ),
-      });
+      }));
       toast(`${entry.name}: ${failure.error}`, "error", undefined, {
         log: failure.errorLog,
       });
@@ -108,11 +113,16 @@ import { entryError } from "../lib/engineError";
 
   async function handleCompressAll() {
     isBusy = true;
-    const idleEntries = gifState.files.filter((f) => f.status === "idle" || f.status === "error");
-    for (const entry of idleEntries) {
-      await compressSingle(entry);
+    try {
+      const idleEntries = gifStore
+        .get()
+        .files.filter((f) => f.status === "idle" || f.status === "error");
+      for (const entry of idleEntries) {
+        await compressSingle(entry);
+      }
+    } finally {
+      isBusy = false;
     }
-    isBusy = false;
   }
 
   function handleDownloadSingle(entry: FileEntry) {
@@ -128,11 +138,16 @@ import { entryError } from "../lib/engineError";
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   }
 
-  function handleDownloadAll() {
-    const doneEntries = gifState.files.filter((f) => f.status === "done");
-    for (const entry of doneEntries) {
-      handleDownloadSingle(entry);
-    }
+  async function handleDownloadAll() {
+    const doneEntries = gifState.files.filter((f) => f.status === "done" && f.compressedBlob);
+    const items = doneEntries.map((entry) => ({
+      name: outputFilename(entry.name, entry.compressedBlob!, {
+        suffix: "-compressed",
+        fallbackExt: "gif",
+      }),
+      blob: entry.compressedBlob!,
+    }));
+    await downloadBatch(items, "gif-compressed.zip");
   }
 
   function handleRemove(id: string) {
@@ -148,7 +163,7 @@ import { entryError } from "../lib/engineError";
   <div class="cz-tool-header">
     <h1 class="cz-tool-title">GIF Optimizer</h1>
     <p class="cz-tool-desc">
-      Compress animated GIFs using lossy LZW table optimization or convert to efficient WebM video.
+      Compress animated GIFs using FFmpeg two-pass palettegen/paletteuse optimization or convert to WebM video.
     </p>
   </div>
 

@@ -36,36 +36,58 @@ export const NOTO_SANS_UNICODE_FONT =
 // ffmpeg.ts's getFFmpeg(): the module is fetched once per page session no
 // matter how many callers ask for it.
 let _pdfjsLib: any = null;
+let _pdfjsPromise: Promise<unknown> | null = null;
 export async function getPdfJs(): Promise<any> {
   if (_pdfjsLib) return _pdfjsLib;
-  try {
-    const lib = (await import(
-      /* @vite-ignore */ `${PDFJS_BASE}/build/pdf.mjs`
-    )) as any;
-    lib.GlobalWorkerOptions.workerSrc = `${PDFJS_BASE}/build/pdf.worker.mjs`;
-    _pdfjsLib = lib;
-    return lib;
-  } catch (err) {
-    throw new EngineError(
-      `PDF.js could not be loaded: ${toErrorMessage(err, "library failed to fetch")}`,
-      "pdfjs",
-    );
-  }
+  if (_pdfjsPromise) return _pdfjsPromise;
+  _pdfjsPromise = (async () => {
+    try {
+      const lib = (await import(
+        /* @vite-ignore */ `${PDFJS_BASE}/build/pdf.mjs`
+      )) as any;
+      lib.GlobalWorkerOptions.workerSrc = `${PDFJS_BASE}/build/pdf.worker.mjs`;
+      _pdfjsLib = lib;
+      return lib;
+    } catch (err) {
+      throw new EngineError(
+        `PDF.js could not be loaded: ${toErrorMessage(err, "library failed to fetch")}`,
+        "pdfjs",
+      );
+    } finally {
+      _pdfjsPromise = null;
+    }
+  })();
+  return _pdfjsPromise;
 }
 
 let _pdfLib: any = null;
+let _pdfLibPromise: Promise<unknown> | null = null;
+export function setPdfLibForTesting(lib: any): void {
+  _pdfLib = lib;
+  _pdfLibPromise = null;
+}
+export function resetPdfLibForTesting(): void {
+  _pdfLib = null;
+  _pdfLibPromise = null;
+}
 export async function getPdfLib(): Promise<any> {
   if (_pdfLib) return _pdfLib;
-  try {
-    const lib = (await import(/* @vite-ignore */ PDFLIB_ESM)) as any;
-    _pdfLib = lib;
-    return lib;
-  } catch (err) {
-    throw new EngineError(
-      `pdf-lib could not be loaded: ${toErrorMessage(err, "library failed to fetch")}`,
-      "pdflib",
-    );
-  }
+  if (_pdfLibPromise) return _pdfLibPromise;
+  _pdfLibPromise = (async () => {
+    try {
+      const lib = (await import(/* @vite-ignore */ PDFLIB_ESM)) as any;
+      _pdfLib = lib;
+      return lib;
+    } catch (err) {
+      throw new EngineError(
+        `pdf-lib could not be loaded: ${toErrorMessage(err, "library failed to fetch")}`,
+        "pdflib",
+      );
+    } finally {
+      _pdfLibPromise = null;
+    }
+  })();
+  return _pdfLibPromise;
 }
 
 /** Open a PDF document with the standard options every caller here used

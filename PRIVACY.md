@@ -24,7 +24,7 @@ GitHub.
 - We do **not** collect names, email addresses, or any personal identifiers.
 - We do **not** use cookies for tracking or advertising.
 - We do **not** run analytics scripts (no Google Analytics, Mixpanel, or similar).
-- We do **not** sell, share, or transfer any data to third parties.
+- We do **not** sell, share, or transfer user files to third parties (anonymous crash diagnostics may be transmitted to Sentry when enabled; see §7).
 - We do **not** have a backend server that touches your files.
 
 ## 3. How file processing works
@@ -55,14 +55,14 @@ first use and cached by your browser thereafter. Full attribution and
 licenses for all of these are in [CREDITS.md](CREDITS.md); the
 privacy-relevant summary is:
 
-- **FFmpeg.wasm** — loaded from `cdn.jsdelivr.net` (video/audio/GIF). The CDN serves
-  the JavaScript wrapper, core scripts, worker, and WebAssembly binaries; no
-  file data is sent to jsDelivr.
+- **FFmpeg.wasm** — loaded from `esm.sh` and jsDelivr (`cdn.jsdelivr.net`) (video/audio/GIF). `esm.sh` serves
+  the package wrapper and utilities; jsDelivr (`cdn.jsdelivr.net`) serves the core scripts, worker, and WebAssembly binaries.
+  No file data is sent to either host.
 - **Mediabunny** — loaded from `esm.sh` only when the browser supports
   WebCodecs and the requested output codec configuration is encodable
   (video fast path). It demuxes and muxes media in-memory; no file data is
   sent to esm.sh.
-- **PDF.js** — loaded from `cdn.jsdelivr.net` (PDF rendering).
+- **PDF.js** — loaded from jsDelivr (`cdn.jsdelivr.net`) (PDF rendering).
 - **pdf-lib** — loaded from `cdn.jsdelivr.net` (PDF generation).
 - **Tesseract.js** — loaded from `cdn.jsdelivr.net` and
   `tessdata.projectnaptha.com` (OCR engine and trained language data).
@@ -73,7 +73,7 @@ privacy-relevant summary is:
   Inference is executed on-device — nothing is uploaded to Hugging Face or anywhere else.
 - **PaddleOCR / PP-OCRv3** — loaded from `cdn.jsdelivr.net` and
   `paddlejs.bj.bcebos.com` (optional OCR runtime and model weights).
-- **mammoth.js** and **html2canvas** — loaded from `cdn.jsdelivr.net`
+- **mammoth.js** and **html2canvas** — loaded from jsDelivr (`cdn.jsdelivr.net`)
   (Word document conversion).
 - **heic2any** — loaded from `esm.sh` only when a HEIC/HEIF file can't
   be decoded natively.
@@ -98,12 +98,28 @@ Google Fonts is used for typography and is loaded from
 engines are downloaded on first use and cached; there is no full
 offline pack yet.
 
+- **Anonymous Error Diagnostics (Sentry)** — to detect crashes, unhandled
+  exceptions, and WASM engine failures, anonymous diagnostics are sent to
+  `sentry.io`. This is enabled by default. Client-side error payloads strictly
+  scrub and exclude user identifiers, filenames, file paths, and document contents.
+  Client IP addresses are deleted from the event payload; as with all web requests,
+  the ingestion endpoint briefly processes socket transport metadata during the HTTPS handshake.
+  Users can opt out anytime in Settings under Privacy & data (persisted locally via `cz-telemetry-opt-out`),
+  which stops reporting immediately without requiring a reload. For complete details, see [docs/TELEMETRY_POLICY.md](docs/TELEMETRY_POLICY.md).
+
+For comprehensive technical specifications on each processing engine and on-device AI inference, see:
+- [docs/ENGINE_POLICY.md](docs/ENGINE_POLICY.md) — Media, PDF, Office, and Archive engine specifications
+- [docs/AI_ENGINE_POLICY.md](docs/AI_ENGINE_POLICY.md) — On-device AI/ML runtime and privacy policy
+- [docs/TELEMETRY_POLICY.md](docs/TELEMETRY_POLICY.md) — Complete error reporting and anonymization pipeline
+
 ## 5. Local storage
 
 CompressZ stores these keys in your browser's `localStorage`:
 
 - `theme` — your appearance preference: `light`, `dark`, or `system`
   (follow the operating system).
+- `cz-color-scheme` — the active color palette: `polished` (emerald),
+  `origin` (classic royal blue), or `blood-moon` (crimson scarlet).
 - `cz-settings-v2` — engine defaults, GPU toggles, the Adaptive Resource
   Guard mode and limits, local-AI options, and whether contextual
   suggestions are enabled.
@@ -118,6 +134,7 @@ CompressZ stores these keys in your browser's `localStorage`:
   used on the Multi-Format Converter (format names only, never file names).
 - `cz-pdfsuite-profile` — the encryption standard, render DPI and permission
   toggles you last picked in PDF Suite.
+- `cz-telemetry-opt-out` — indicates whether anonymous error diagnostics have been disabled (enabled by default).
 
 These values never leave your device. Contextual suggestions are evaluated
 locally from metadata that is already in the page (file names, byte sizes,

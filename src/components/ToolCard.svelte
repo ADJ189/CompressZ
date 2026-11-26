@@ -196,6 +196,20 @@
     color: var(--text-3);
   }
 
+  @media (max-width: 480px) {
+    .cz-tool-card {
+      padding: 0.85rem 0.95rem;
+      gap: 0.75rem;
+      min-height: auto;
+    }
+    .cz-tool-card-title {
+      font-size: 0.9rem;
+    }
+    .cz-tool-card-desc {
+      font-size: 0.76rem;
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .cz-tool-card {
       transition: none;

@@ -8,6 +8,7 @@
   import { runScheduled } from "../lib/resourceManager";
 import { entryError } from "../lib/engineError";
   import { uid, type FileEntry, type AudioFormat, outputFilename } from "../lib/types";
+  import { downloadBatch } from "../lib/batchDownload";
   import { toast } from "../toast";
 
   let audioState = $state<AudioState>(audioStore.get());
@@ -59,37 +60,41 @@ import { entryError } from "../lib/engineError";
   async function compressSingle(entry: FileEntry) {
     if (entry.status === "compressing") return;
 
-    updateStore({
-      files: audioState.files.map((f) =>
+    audioStore.update((curr) => ({
+      ...curr,
+      files: curr.files.map((f) =>
         f.id === entry.id ? { ...f, status: "compressing", error: undefined } : f,
       ),
-    });
+    }));
 
     try {
-      const options = audioOptions(audioState);
+      const options = audioOptions(audioStore.get());
       const res = await runScheduled(
         { kind: "audio", label: entry.name, bytes: entry.file.size },
         () => compressAudio(entry.file, options),
       );
 
-      updateStore({
-        files: audioState.files.map((f) =>
+      audioStore.update((curr) => ({
+        ...curr,
+        files: curr.files.map((f) =>
           f.id === entry.id
             ? {
                 ...f,
                 status: "done",
                 compressedBlob: res.blob,
                 compressedSize: res.blob.size,
+                result: res,
               }
             : f,
         ),
-      });
+      }));
       toast(`Compressed ${entry.name}`, "success");
     } catch (err) {
       console.error("[audioCompress] error:", err);
       const failure = entryError(err, "Audio compression failed");
-      updateStore({
-        files: audioState.files.map((f) =>
+      audioStore.update((curr) => ({
+        ...curr,
+        files: curr.files.map((f) =>
           f.id === entry.id
             ? {
                 ...f,
@@ -99,7 +104,7 @@ import { entryError } from "../lib/engineError";
               }
             : f,
         ),
-      });
+      }));
       toast(`${entry.name}: ${failure.error}`, "error", undefined, {
         log: failure.errorLog,
       });
@@ -108,11 +113,16 @@ import { entryError } from "../lib/engineError";
 
   async function handleCompressAll() {
     isBusy = true;
-    const idleEntries = audioState.files.filter((f) => f.status === "idle" || f.status === "error");
-    for (const entry of idleEntries) {
-      await compressSingle(entry);
+    try {
+      const idleEntries = audioStore
+        .get()
+        .files.filter((f) => f.status === "idle" || f.status === "error");
+      for (const entry of idleEntries) {
+        await compressSingle(entry);
+      }
+    } finally {
+      isBusy = false;
     }
-    isBusy = false;
   }
 
   function handleDownloadSingle(entry: FileEntry) {
@@ -128,11 +138,16 @@ import { entryError } from "../lib/engineError";
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   }
 
-  function handleDownloadAll() {
-    const doneEntries = audioState.files.filter((f) => f.status === "done");
-    for (const entry of doneEntries) {
-      handleDownloadSingle(entry);
-    }
+  async function handleDownloadAll() {
+    const doneEntries = audioState.files.filter((f) => f.status === "done" && f.compressedBlob);
+    const items = doneEntries.map((entry) => ({
+      name: outputFilename(entry.name, entry.compressedBlob!, {
+        suffix: "-compressed",
+        fallbackExt: audioState.fmt,
+      }),
+      blob: entry.compressedBlob!,
+    }));
+    await downloadBatch(items, "audio-compressed.zip");
   }
 
   function handleRemove(id: string) {

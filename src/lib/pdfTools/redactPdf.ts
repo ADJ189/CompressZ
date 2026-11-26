@@ -118,58 +118,66 @@ export async function renderSanitizedRasterPage(
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(viewport.width);
   canvas.height = Math.round(viewport.height);
-  const ctx = canvas.getContext("2d")!;
+  try {
+    const ctx = canvas.getContext("2d")!;
 
-  // Render base PDF page
-  await page.render({
-    canvasContext: ctx,
-    viewport,
-  }).promise;
+    // Render base PDF page
+    await page.render({
+      canvasContext: ctx,
+      viewport,
+    }).promise;
 
-  // Burn in permanent opaque redaction blocks using viewport transform
-  ctx.save();
-  for (const r of redactions) {
-    // Convert PDF coordinates to Canvas viewport coordinates via PDF.js transform
-    // (correctly accounts for MediaBox origin, rotation, and DPI scaling)
-    const [p1x, p1y] = viewport.convertToViewportPoint(r.x, r.y + r.height);
-    const [p2x, p2y] = viewport.convertToViewportPoint(r.x + r.width, r.y);
-    const canvasX = Math.min(p1x, p2x);
-    const canvasY = Math.min(p1y, p2y);
-    const canvasW = Math.abs(p2x - p1x);
-    const canvasH = Math.abs(p2y - p1y);
+    // Burn in permanent opaque redaction blocks using viewport transform
+    ctx.save();
+    for (const r of redactions) {
+      // Convert PDF coordinates to Canvas viewport coordinates via PDF.js transform
+      // (correctly accounts for MediaBox origin, rotation, and DPI scaling)
+      const [p1x, p1y] = viewport.convertToViewportPoint(r.x, r.y + r.height);
+      const [p2x, p2y] = viewport.convertToViewportPoint(r.x + r.width, r.y);
+      const canvasX = Math.min(p1x, p2x);
+      const canvasY = Math.min(p1y, p2y);
+      const canvasW = Math.abs(p2x - p1x);
+      const canvasH = Math.abs(p2y - p1y);
 
-    ctx.fillStyle = "#000000";
-    ctx.fillRect(canvasX, canvasY, canvasW, canvasH);
+      ctx.fillStyle = "#000000";
+      ctx.fillRect(canvasX, canvasY, canvasW, canvasH);
 
-    const label = r.reason || r.overlayText;
-    if (label) {
-      ctx.fillStyle = "#ffffff";
-      ctx.font = `bold ${Math.max(12, Math.round(10 * scale))}px sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(
-        `[${label.toUpperCase()}]`,
-        canvasX + canvasW / 2,
-        canvasY + canvasH / 2,
-        canvasW - 4,
-      );
+      const label = r.reason || r.overlayText;
+      if (label) {
+        ctx.fillStyle = "#ffffff";
+        ctx.font = `bold ${Math.max(12, Math.round(10 * scale))}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(
+          `[${label.toUpperCase()}]`,
+          canvasX + canvasW / 2,
+          canvasY + canvasH / 2,
+          canvasW - 4,
+        );
+      }
+    }
+    ctx.restore();
+
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob failed"))), "image/png");
+    });
+
+    const pngBytes = new Uint8Array(await blob.arrayBuffer());
+
+    return {
+      pngBytes,
+      widthPt: viewport.width / scale,
+      heightPt: viewport.height / scale,
+    };
+  } finally {
+    canvas.width = 0;
+    canvas.height = 0;
+    try {
+      page.cleanup?.();
+    } catch {
+      // Ignored
     }
   }
-  ctx.restore();
-
-  const blob = await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob failed"))), "image/png");
-  });
-
-  const pngBytes = new Uint8Array(await blob.arrayBuffer());
-  canvas.width = 0;
-  canvas.height = 0;
-
-  return {
-    pngBytes,
-    widthPt: viewport.width / scale,
-    heightPt: viewport.height / scale,
-  };
 }
 
 /**
@@ -183,6 +191,9 @@ export async function applyTrueRedaction(
 
   const { PDFDocument } = await getPdfLib();
   const srcDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+  if (srcDoc.isEncrypted) {
+    throw new Error("The PDF is encrypted with a password. Please unlock or decrypt it in PDF Protect / Unlock before redacting content.");
+  }
   const totalPages = srcDoc.getPageCount();
 
   const redactionsMap = groupRedactionsByPage(options.regions, totalPages);
@@ -192,38 +203,46 @@ export async function applyTrueRedaction(
   }
 
   const pdfJsDoc = await openPdfDocument(pdfBytes);
-  const outDoc = await PDFDocument.create();
+  try {
+    const outDoc = await PDFDocument.create();
 
-  for (let i = 0; i < totalPages; i++) {
-    const pageRedactions = redactionsMap.get(i);
+    for (let i = 0; i < totalPages; i++) {
+      const pageRedactions = redactionsMap.get(i);
 
-    if (pageRedactions && pageRedactions.length > 0) {
-      // Redacted page: burn in permanently into sanitized raster layer
-      const { pngBytes, widthPt, heightPt } = await renderSanitizedRasterPage(
-        pdfJsDoc,
-        i,
-        pageRedactions,
-        options.renderDpi || 300,
-      );
-      const embeddedPng = await outDoc.embedPng(pngBytes);
-      const newPage = outDoc.addPage([widthPt, heightPt]);
-      newPage.drawImage(embeddedPng, {
-        x: 0,
-        y: 0,
-        width: widthPt,
-        height: heightPt,
-      });
-    } else {
-      // Untouched page: copy structural vectors and text verbatim
-      const [copiedPage] = await outDoc.copyPages(srcDoc, [i]);
-      outDoc.addPage(copiedPage);
+      if (pageRedactions && pageRedactions.length > 0) {
+        // Redacted page: burn in permanently into sanitized raster layer
+        const { pngBytes, widthPt, heightPt } = await renderSanitizedRasterPage(
+          pdfJsDoc,
+          i,
+          pageRedactions,
+          options.renderDpi || 300,
+        );
+        const embeddedPng = await outDoc.embedPng(pngBytes);
+        const newPage = outDoc.addPage([widthPt, heightPt]);
+        newPage.drawImage(embeddedPng, {
+          x: 0,
+          y: 0,
+          width: widthPt,
+          height: heightPt,
+        });
+      } else {
+        // Untouched page: copy structural vectors and text verbatim
+        const [copiedPage] = await outDoc.copyPages(srcDoc, [i]);
+        outDoc.addPage(copiedPage);
+      }
+
+      const pct = Math.round(10 + ((i + 1) / totalPages) * 80);
+      options.onProgress?.(pct);
     }
 
-    const pct = Math.round(10 + ((i + 1) / totalPages) * 80);
-    options.onProgress?.(pct);
+    const resultBytes = await outDoc.save();
+    options.onProgress?.(100);
+    return resultBytes;
+  } finally {
+    try {
+      await pdfJsDoc.destroy();
+    } catch {
+      // Ignore worker destruction errors
+    }
   }
-
-  const resultBytes = await outDoc.save();
-  options.onProgress?.(100);
-  return resultBytes;
 }

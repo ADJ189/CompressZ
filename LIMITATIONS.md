@@ -1,6 +1,6 @@
 # Browser Engine & Architecture Limitations
 
-CompressZ executes **100% locally inside your web browser** using WebAssembly (WASM), WebCodecs, WebGL2, and HTML5 canvas APIs. No files, metadata, or telemetry are ever uploaded to an external server or cloud service.
+CompressZ executes **100% locally inside your web browser** using WebAssembly (WASM), WebCodecs, WebGL2, and HTML5 canvas APIs. No files, documents, or personal data are ever uploaded to an external server or cloud service. Anonymous crash diagnostics are enabled by default and can be opted out of in Settings (see [docs/TELEMETRY_POLICY.md](docs/TELEMETRY_POLICY.md)).
 
 Because computation takes place entirely on client hardware within the browser sandbox, specific platform and memory boundaries apply. The matrix below outlines the safe operating thresholds for in-browser execution, followed by the advanced technical breakdown.
 
@@ -10,7 +10,7 @@ Because computation takes place entirely on client hardware within the browser s
 
 | Workload | Inherent Browser Boundary | Safe Operating Ceiling | Processing Engine |
 | :--- | :--- | :--- | :--- |
-| **Video Transcoding** | 2 GiB WASM 32-bit linear memory ceiling | 1.5 GiB per file (1080p / 4K under 15 min) | WebCodecs (GPU) / ffmpeg.wasm |
+| **Video Transcoding** | 2 GiB WASM 32-bit linear memory ceiling | 1.5 GiB per file (1080p / 4K under 15 min) | WebCodecs (HW/SW) / ffmpeg.wasm |
 | **Audio Processing** | Buffer limits for uncompressed audio frames | 500 MB per batch (unlimited duration) | ffmpeg.wasm software pipeline |
 | **Image Compression** | Canvas texture limits (16384x16384 px) | 100 MB per image, 150 images per batch | OffscreenCanvas + WASM SSIM Guard |
 | **PDF Merging & Shrink** | In-memory document buffers & vector trees | 200 MB per document, 500 pages per merge | pdf-lib + PDF.js parser |
@@ -44,11 +44,11 @@ Because computation takes place entirely on client hardware within the browser s
 
 ---
 
-### 3. WebCodecs Hardware Acceleration
+### 3. WebCodecs Browser Encoding Constraints
 
-- **OS & GPU Dependency**: WebCodecs leverages hardware-accelerated video encoders and decoders through the OS graphics driver. Availability depends on the host system:
+- **Browser Hardware / Software Selection**: WebCodecs (`VideoEncoder` / `VideoDecoder`) delegates codec execution to the browser and OS media stack; whether encoding runs on dedicated hardware or software depends on the host driver and codec profile:
   - **H.264 / AVC**: Widely supported across Windows, macOS, Android, and iOS.
-  - **VP9 / AV1**: Hardware encoding is typically limited to recent GPU architectures (Intel 11th Gen+, Apple M-series, AMD RDNA3, NVIDIA RTX 30/40 series). In the absence of hardware encoder support, CompressZ gracefully falls back to WASM software encoding.
+  - **VP9 / AV1**: Hardware encoding is typically limited to recent GPU architectures (Intel 11th Gen+, Apple M-series, AMD RDNA3, NVIDIA RTX 30/40 series). When the requested configuration is unsupported or unavailable, CompressZ falls back to FFmpeg.wasm and then MediaRecorder.
 - **Variable Bitrate Control**: Some browser WebCodecs implementations restrict fine-grained CRF (Constant Rate Factor) rate control, instead operating in Constant Bitrate (CBR) or Variable Bitrate (VBR) target modes.
 
 ---
@@ -73,3 +73,16 @@ Because computation takes place entirely on client hardware within the browser s
 
 - **Zero Direct Filesystem Access**: The browser security sandbox prevents direct arbitrary writes to host disk folders. All converted files are accumulated in temporary memory Blobs and downloaded via browser download triggers or packaged into a standard ZIP archive.
 - **Blob Storage Limits**: Browser storage quotas restrict how much temporary blob data can be kept active simultaneously before being downloaded or revoked. CompressZ automatically revokes unused object URLs once jobs complete or are dismissed.
+
+---
+
+### 7. ZIP Archive 4 GiB (32-Bit) Boundaries
+
+- **Classic ZIP Specification Ceiling**: Standard single-disk ZIP archives store byte counts and central directory offsets in 32-bit unsigned integers (`0xffffffff` or 4 GiB).
+- **Overhead Pre-flight Verification**: Generating an archive whose data plus local/central headers exceed 4 GiB corrupts standard ZIP readers. CompressZ calculates total projected archive size (including 30-byte local headers, 46-byte central headers, filename lengths, and EOCD records) before reading blobs into memory.
+- **Graceful Download Fallback**: When a batch is estimated to exceed 4 GiB, CompressZ immediately falls back to sequential individual file downloads within the active user click gesture, preventing browser popup blocking and memory exhaustion.
+
+For in-depth operational policies, see:
+- [docs/ENGINE_POLICY.md](docs/ENGINE_POLICY.md) — Comprehensive engine breakdown
+- [docs/AI_ENGINE_POLICY.md](docs/AI_ENGINE_POLICY.md) — On-device AI/ML runtime specifications
+- [docs/TELEMETRY_POLICY.md](docs/TELEMETRY_POLICY.md) — Error reporting and anonymization pipeline

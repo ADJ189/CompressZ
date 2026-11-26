@@ -12,7 +12,7 @@ import {
   setProgressHandler,
 } from "./ffmpeg";
 import { get2D } from "./gpu";
-import { getVideoMeta, planVideoSize } from "./videoMeta";
+import { buildFfmpegScaleFilter, getVideoMeta, planVideoSize } from "./videoMeta";
 import { videoViaWebCodecs } from "./webcodecsVideo";
 
 export async function compressVideo(
@@ -77,6 +77,7 @@ async function videoViaFFmpeg(
 ): Promise<CompressResult> {
   // FIX 1: get actual duration BEFORE bitrate calc so we never divide by 60
   const meta = await getVideoMeta(file);
+  const planned = planVideoSize(meta.width, meta.height, opts.maxWidth);
   onProgress?.(2);
 
   const ff = (await getFFmpeg()) as any;
@@ -186,11 +187,11 @@ async function videoViaFFmpeg(
   else if (codec === "vp9")
     vArgs.push(
       "-speed",
-      preset === "slow" ? "1" : preset === "fast" ? "3" : "2",
+      preset === "slow" ? "1" : preset === "fast" ? "3" : preset === "ultrafast" ? "4" : "2",
     );
 
-  if (opts.maxWidth)
-    vArgs.push("-vf", `scale='min(${opts.maxWidth},iw)':-2:flags=lanczos`);
+  const scaleFilter = buildFfmpegScaleFilter(planned);
+  if (scaleFilter) vArgs.push("-vf", scaleFilter);
   if (opts.fps && opts.fps > 0) vArgs.push("-r", String(opts.fps));
 
   if (codec === "h265" && tenBit)
@@ -296,8 +297,8 @@ async function videoViaFFmpeg(
     compressedSize: blob.size,
     compressionRatio: file.size / blob.size,
     format: `${mime} · FFmpeg.wasm${ffHasMT() ? " MT" : ""}${tenBit ? " · 10-bit" : ""}${opts.videoProxy ? " · Proxy" : ""}${twoPass ? " · 2-pass" : ""}${audioTrackMode === "all" ? " · multi-audio" : ""}${subtitleMode === "all" ? " · subs" : ""}`,
-    width: meta.width,
-    height: meta.height,
+    width: planned.width,
+    height: planned.height,
     duration: meta.duration,
   };
 }
@@ -311,6 +312,7 @@ async function videoViaMediaRecorder(
   file: File,
   opts: CompressOptions,
   onProgress?: (pct: number) => void,
+  metadataTimeoutMs: number = 8000,
 ): Promise<CompressResult> {
   const meta = await getVideoMeta(file);
   const { width: ow, height: oh, duration } = meta;
@@ -347,6 +349,14 @@ async function videoViaMediaRecorder(
     types.find((t) => MediaRecorder.isTypeSupported(t)) ?? "video/webm";
 
   const url = URL.createObjectURL(file);
+  let urlRevoked = false;
+  const revokeUrl = () => {
+    if (!urlRevoked) {
+      urlRevoked = true;
+      URL.revokeObjectURL(url);
+    }
+  };
+
   // `muted` only silences local audio output — it does NOT affect the
   // track(s) returned by captureStream(), so we can keep the element muted
   // (required by autoplay policy in most browsers) while still capturing
@@ -356,8 +366,22 @@ async function videoViaMediaRecorder(
     muted: true,
     playsInline: true,
   });
-  await new Promise<void>((r) => {
-    vid.onloadedmetadata = () => r();
+  await new Promise<void>((r, rej) => {
+    const timer = setTimeout(() => {
+      vid.onloadedmetadata = null;
+      vid.onerror = null;
+      revokeUrl();
+      rej(new Error("Timeout loading video metadata in MediaRecorder fallback"));
+    }, metadataTimeoutMs);
+    vid.onloadedmetadata = () => {
+      clearTimeout(timer);
+      r();
+    };
+    vid.onerror = () => {
+      clearTimeout(timer);
+      revokeUrl();
+      rej(new Error("Failed to load video in MediaRecorder fallback"));
+    };
   });
 
   const canvas = document.createElement("canvas");
@@ -372,90 +396,193 @@ async function videoViaMediaRecorder(
   const ctx = get2D(canvas, "video");
 
   // FIX 2: merge canvas video stream with audio track from the video element
-  const videoStream = canvas.captureStream(opts.fps ?? 30);
-
-  // Try to get audio tracks from the hidden video element
-  let combinedStream = videoStream;
-  try {
-    const vidStream = (vid as any).captureStream?.() ?? null;
-    const audioTracks = vidStream?.getAudioTracks() ?? [];
-    if (audioTracks.length > 0) {
-      combinedStream = new MediaStream([
-        ...videoStream.getVideoTracks(),
-        ...audioTracks,
-      ]);
+  let videoStream: MediaStream | null = null;
+  let combinedStream: MediaStream | null = null;
+  let rec: MediaRecorder | null = null;
+  let playbackTimer: any = null;
+  const clearPlaybackTimer = () => {
+    if (playbackTimer !== null) {
+      clearTimeout(playbackTimer);
+      playbackTimer = null;
     }
-  } catch {
-    /**/
-  }
-
-  const rec = new MediaRecorder(combinedStream, {
-    mimeType,
-    videoBitsPerSecond: bitrate,
-  });
-  const chunks: Blob[] = [];
-  rec.ondataavailable = (e) => {
-    if (e.data.size > 0) chunks.push(e.data);
   };
-  rec.start(250);
+  const chunks: Blob[] = [];
 
   try {
-    await vid.play();
-  } catch (err) {
-    URL.revokeObjectURL(url);
-    throw new Error(
-      `MediaRecorder fallback could not start playback (autoplay blocked?): ${err}`,
-      { cause: err },
-    );
-  }
+    videoStream = canvas.captureStream(opts.fps ?? 30);
 
-  // `timeupdate` fires on a coarse, non-frame-aligned schedule (browsers
-  // throttle it to a few times per second), which produces duplicated /
-  // dropped frames and stutter when used to drive per-frame canvas capture.
-  // requestVideoFrameCallback fires once per actually-decoded frame and
-  // hands back the frame's presentation time, so drawing there is frame-
-  // accurate. Fall back to requestAnimationFrame on browsers without it.
-  await new Promise<void>((resolve) => {
-    let done = false;
-    const finish = () => {
-      if (!done) {
-        done = true;
-        resolve();
+    // Try to get audio tracks from the hidden video element
+    combinedStream = videoStream;
+    try {
+      const vidStream = (vid as any).captureStream?.() ?? null;
+      const audioTracks = vidStream?.getAudioTracks() ?? [];
+      if (audioTracks.length > 0) {
+        combinedStream = new MediaStream([
+          ...videoStream.getVideoTracks(),
+          ...audioTracks,
+        ]);
       }
-    };
-
-    const drawAndReport = (currentTime: number) => {
-      ctx.drawImage(vid, 0, 0, w, h);
-      onProgress?.(5 + Math.round((currentTime / Math.max(duration, 1)) * 90));
-    };
-
-    const rvfc = (vid as any).requestVideoFrameCallback?.bind(vid);
-    if (rvfc) {
-      const onFrame = (_now: number, metadata: { mediaTime: number }) => {
-        if (done) return;
-        drawAndReport(metadata.mediaTime);
-        rvfc(onFrame);
-      };
-      rvfc(onFrame);
-    } else {
-      const onFrame = () => {
-        if (done) return;
-        drawAndReport(vid.currentTime);
-        requestAnimationFrame(onFrame);
-      };
-      requestAnimationFrame(onFrame);
+    } catch {
+      /**/
     }
 
-    vid.onended = finish;
-    setTimeout(finish, (duration + 5) * 1000);
-  });
+    let recorderError: Error | null = null;
+    rec = new MediaRecorder(combinedStream, {
+      mimeType,
+      videoBitsPerSecond: bitrate,
+    });
+    rec.ondataavailable = (e) => {
+      if (e.data.size > 0) chunks.push(e.data);
+    };
+    rec.onerror = (e: any) => {
+      recorderError =
+        e?.error instanceof Error
+          ? e.error
+          : new Error(`MediaRecorder error: ${e?.error?.message ?? e?.message ?? "recording failed"}`);
+    };
+    rec.start(250);
 
-  rec.stop();
-  vid.pause();
-  URL.revokeObjectURL(url);
-  await new Promise<void>((r) => {
-    rec.onstop = () => r();
-  });
+    let mediaEnded = false;
+    let onPlaybackEnd: (() => void) | null = null;
+    vid.onended = () => {
+      mediaEnded = true;
+      onPlaybackEnd?.();
+    };
+
+    try {
+      await vid.play();
+    } catch (err) {
+      throw new Error(
+        `MediaRecorder fallback could not start playback (autoplay blocked?): ${err}`,
+        { cause: err },
+      );
+    }
+
+    // `timeupdate` fires on a coarse, non-frame-aligned schedule (browsers
+    // throttle it to a few times per second), which produces duplicated /
+    // dropped frames and stutter when used to drive per-frame canvas capture.
+    // requestVideoFrameCallback fires once per actually-decoded frame and
+    // hands back the frame's presentation time, so drawing there is frame-
+    // accurate. Fall back to requestAnimationFrame on browsers without it.
+    await new Promise<void>((resolve, reject) => {
+      let done = false;
+      const finish = () => {
+        clearPlaybackTimer();
+        if (!done) {
+          done = true;
+          if (recorderError) {
+            reject(recorderError);
+          } else if (rec?.state === "inactive") {
+            reject(
+              new Error("MediaRecorder stopped unexpectedly before video playback completed"),
+            );
+          } else {
+            resolve();
+          }
+        }
+      };
+
+      const checkRecorder = () => {
+        if (recorderError) {
+          clearPlaybackTimer();
+          done = true;
+          reject(recorderError);
+          return false;
+        }
+        if (rec?.state === "inactive") {
+          clearPlaybackTimer();
+          done = true;
+          reject(
+            new Error("MediaRecorder stopped unexpectedly before video playback completed"),
+          );
+          return false;
+        }
+        return true;
+      };
+
+      const drawAndReport = (currentTime: number) => {
+        if (!checkRecorder()) return;
+        ctx.drawImage(vid, 0, 0, w, h);
+        onProgress?.(5 + Math.round((currentTime / Math.max(duration, 1)) * 90));
+      };
+
+      const rvfc = (vid as any).requestVideoFrameCallback?.bind(vid);
+      if (rvfc) {
+        const onFrame = (_now: number, metadata: { mediaTime: number }) => {
+          if (done) return;
+          drawAndReport(metadata.mediaTime);
+          if (!done) rvfc(onFrame);
+        };
+        rvfc(onFrame);
+      } else {
+        const raf =
+          typeof requestAnimationFrame === "function"
+            ? requestAnimationFrame
+            : (cb: () => void) => setTimeout(cb, 16);
+        const onFrame = () => {
+          if (done) return;
+          drawAndReport(vid.currentTime);
+          if (!done) raf(onFrame);
+        };
+        raf(onFrame);
+      }
+
+      onPlaybackEnd = finish;
+      if (mediaEnded) {
+        finish();
+      } else {
+        playbackTimer = setTimeout(finish, (duration + 5) * 1000);
+      }
+    });
+
+    if (recorderError) {
+      throw recorderError;
+    }
+    if (rec.state === "inactive") {
+      throw new Error("MediaRecorder stopped unexpectedly before video playback completed");
+    }
+
+    rec.stop();
+    await new Promise<void>((resolve, reject) => {
+      if (!rec) return resolve();
+      rec.onstop = () => {
+        if (recorderError) reject(recorderError);
+        else resolve();
+      };
+      rec.onerror = (e: any) => {
+        reject(
+          e?.error instanceof Error
+            ? e.error
+            : new Error(`MediaRecorder error: ${e?.error?.message ?? e?.message ?? "recording failed"}`),
+        );
+      };
+    });
+  } finally {
+    clearPlaybackTimer();
+    try {
+      if (rec && rec.state !== "inactive") {
+        rec.stop();
+      }
+    } catch {
+      /**/
+    }
+    try {
+      vid.pause();
+    } catch {
+      /**/
+    }
+    try {
+      combinedStream?.getTracks()?.forEach((track) => track.stop());
+      videoStream?.getTracks()?.forEach((track) => track.stop());
+    } catch {
+      /**/
+    }
+    revokeUrl();
+  }
+
+  if (chunks.length === 0) {
+    throw new Error("MediaRecorder produced no video data");
+  }
 
   const blob = new Blob(chunks, { type: mimeType });
   onProgress?.(100);
@@ -470,5 +597,7 @@ async function videoViaMediaRecorder(
     duration,
   };
 }
+
+export { videoViaMediaRecorder };
 
 

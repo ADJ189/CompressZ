@@ -51,9 +51,10 @@ CompressF is still maintained as its own project.
 Settings is a dialog split into eight sections: **General**, **Appearance**, **Performance**, **AI engine**,
 **Suggestions**, **Compression**, **Privacy &amp; data**, and **Diagnostics**.
 
-- **Appearance** — `Light`, `Dark`, or `System` (follow the operating system). The header button remains a quick
+- **Appearance** — `Light`, `Dark`, or `System` (follow the operating system) theme mode, alongside three distinct Color Schemes: `Polished` (modern emerald/mint, default), `Origin` (classic blue/indigo), and `Blood Moon` (deep crimson/scarlet) with calibrated high-contrast status messages and WCAG-compliant readability. The header button remains a quick
   light/dark flip; picking a side there opts out of `System`. The resolved value is always written to
-  `data-theme`, so the whole stylesheet keeps working unchanged.
+  `data-theme` and `data-color-scheme`, so the whole stylesheet keeps working seamlessly without flicker.
+- **Universal Upload Hub** — Clicking or dropping any file in the universal upload opens a CloudConvert-style conversion modal showing file metadata, detected device capability hints (WebCodecs, WebGL2 resize, WASM SIMD, worker count), target format matrices, and direct 1-click tools.
 - **This Device / Diagnostics** — a read-only snapshot of what your browser exposes locally (OS, CPU cores,
   memory, GPU/WebGL2/WebGPU, cross-origin isolation, network type) plus the execution profile CompressZ derived
   from it. Nothing here is sent anywhere; it is computed by `src/lib/platform.ts`. **Copy diagnostics** writes a
@@ -142,7 +143,7 @@ equations. Always runs on Tesseract regardless of the engine picked above.
 | Attribute   | Detail                                                                                          |
 | ----------- | ----------------------------------------------------------------------------------------------- |
 | Technology  | Transformer encoder-decoder via Transformers.js (`Xenova/trocr-small-handwritten`)              |
-| Model size  | ~60 MB weights (downloaded on demand, cached after first use)                                   |
+| Model size  | ~145 MB estimated download (downloaded on demand, cached after first use)                      |
 | Best for    | English handwritten cursive, personal notes, handwritten forms                                  |
 | Strengths   | Cursive English recognition, line-by-line projection segmentation, WebGPU acceleration fallback |
 | Limitations | English-only; not trained on mathematical notation; requires clean line segmentation            |
@@ -231,7 +232,7 @@ compressz/
 │   ├── engines.spec.ts   # Pure Node tests: WebCodecs routing, size/bitrate planning, SSIM guard
 │   ├── bench.spec.ts     # Opt-in (BENCH=1) image-pipeline benchmark
 │   └── webcodecs.spec.ts # Opt-in (WEBCODECS_E2E=1) real MP4 encode with audio
-├── test/                 # Deno test suite (fast offline unit & compliance tests)
+├── tests/                # Offline unit & compliance test suite (38 suites)
 │   ├── assert.ts
 │   ├── hallmark.test.ts  # Anti-slop and CSS floor compliance tests
 │   ├── ocr.test.ts       # Language matrix & handwriting candidate disclosure
@@ -338,14 +339,14 @@ npm ci             # reproducible install from package-lock.json
 npm run dev        # http://localhost:5173
 npm run build      # → dist/ (also strips oversize assets)
 npm run preview    # serve dist/ locally
-npm run typecheck  # TypeScript check
+npm run typecheck  # tsc --noEmit + svelte-check
 npm run lint       # ESLint
 
 # Run unit & anti-slop compliance checks (canonical Node/npm runner):
 npm test
 
 # Optional offline local Deno runner:
-deno test --allow-read
+deno test --allow-read --allow-env
 
 npx --no-install playwright install chromium webkit firefox   # once
 npm run test:e2e   # five projects: Chromium/WebKit desktop + mobile, Firefox
@@ -356,9 +357,8 @@ npm run lighthouse # Lighthouse CI
 
 The Playwright matrix is `chromium-desktop`, `chromium-mobile`,
 `webkit-desktop`, `webkit-mobile`, and `firefox-desktop`. WebKit is a real
-engine but **not** real Safari or iOS — see the
-[real-device Safari checklist](docs/SAFARI_DEVICE_CHECKLIST.md) before claiming
-Safari/iOS support.
+engine but **not** real Safari or iOS — verify physical Safari/iOS behavior
+against [LIMITATIONS.md](LIMITATIONS.md) before claiming Safari/iOS parity.
 
 Node/npm is the only supported runner. GitHub Actions, Cloudflare Pages,
 Playwright and Lighthouse all use these scripts; there is no second toolchain
@@ -384,8 +384,8 @@ See [AGENTS.md](AGENTS.md) for the engine invariants and verification checklist.
 WebGPU AI is optional: the app probes for a real adapter/device on first use and silently uses the WASM
 classifier when the API is missing, blocked, or the model fails to load. WebCodecs is only used when the exact
 output codec configuration (`canEncodeVideo` / `canEncodeAudio`) is supported; otherwise video falls back to
-FFmpeg.wasm and then MediaRecorder. WebKit automation is not real Safari — run the
-[real-device Safari checklist](docs/SAFARI_DEVICE_CHECKLIST.md) before release.
+FFmpeg.wasm and then MediaRecorder. WebKit automation is not real Safari — verify
+Safari/iOS behavior on real hardware (see [LIMITATIONS.md](LIMITATIONS.md)) before release.
 
 ---
 
@@ -398,6 +398,13 @@ CompressZ runs 100% client-side. See [LIMITATIONS.md](LIMITATIONS.md) for detail
 ## Privacy
 
 CompressZ has no backend. Files never leave your browser. See [PRIVACY.md](PRIVACY.md) (also live at [/privacy](https://compressz.pages.dev/privacy)) for full details.
+
+### Architecture & Policy Documentation
+- [docs/ENGINE_POLICY.md](docs/ENGINE_POLICY.md) — Comprehensive media, PDF, office, and archive engine specifications.
+- [docs/AI_ENGINE_POLICY.md](docs/AI_ENGINE_POLICY.md) — On-device AI/ML runtime, zero-cloud inference, and weight caching policy.
+- [docs/TELEMETRY_POLICY.md](docs/TELEMETRY_POLICY.md) — Error reporting, payload scrubbing pipeline, and opt-out controls.
+- [LIMITATIONS.md](LIMITATIONS.md) — Operational thresholds, WebAssembly memory ceilings, and 4 GiB ZIP boundaries.
+- [SECURITY.md](SECURITY.md) — Security model, local-first isolation, and vulnerability disclosure policy.
 
 ---
 

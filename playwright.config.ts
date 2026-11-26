@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 import { execSync } from "node:child_process";
 
-const PORT = 4173;
+const PORT = Number(process.env.PORT || process.env.PW_PORT || 4173);
 const BASE_URL = process.env.BASE_URL || `http://127.0.0.1:${PORT}`;
 
 let hasNpm = false;
@@ -77,10 +77,17 @@ export default defineConfig({
       use: {
         ...devices["Desktop Firefox"],
         launchOptions: {
+          args: ["-no-remote"],
           firefoxUserPrefs: {
             // Firefox defaults to viewing webp/avif internally (opening a temp tab)
             // instead of triggering a download event. Clearing this forces downloads.
             "browser.download.viewableInternally.enabledTypes": "",
+            "browser.tabs.remote.autostart": true,
+            "toolkit.telemetry.enabled": false,
+            "toolkit.telemetry.unified": false,
+            "app.normandy.enabled": false,
+            "app.shield.optoutstudies.enabled": false,
+            "datareporting.healthreport.uploadEnabled": false,
           },
         },
       },
