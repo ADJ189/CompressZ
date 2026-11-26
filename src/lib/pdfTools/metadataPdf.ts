@@ -111,41 +111,67 @@ export async function readPdfMetadata(pdfBytes: Uint8Array): Promise<PdfMetadata
 
 const PRIVATE_PDF_DICT_KEYS = ["Metadata", "PieceInfo", "LastModified", "SpiderInfo"] as const;
 
-function collectAndDeleteRefs(
+interface PdfRefLike {
+  objectNumber: number;
+  generationNumber?: number;
+}
+
+function pdfRefKey(ref: PdfRefLike): string {
+  return `${ref.objectNumber}:${typeof ref.generationNumber === "number" ? ref.generationNumber : 0}`;
+}
+
+function walkReachableRefs(
   context: any,
-  value: unknown,
-  visited: Set<string>,
-  depth: number,
-): void {
-  if (!value || depth > 8 || typeof context?.delete !== "function") return;
-  const maybeRef = value as { objectNumber?: unknown; generationNumber?: unknown };
-  if (typeof maybeRef.objectNumber === "number") {
-    const gen = typeof maybeRef.generationNumber === "number" ? maybeRef.generationNumber : 0;
-    const refKey = `${maybeRef.objectNumber}:${gen}`;
-    if (visited.has(refKey)) return;
-    visited.add(refKey);
-    const resolved = typeof context.lookup === "function" ? context.lookup(value) : undefined;
-    if (resolved && resolved !== value) {
-      collectAndDeleteRefs(context, resolved, visited, depth + 1);
+  seeds: unknown[],
+  skipParentKey: boolean,
+): Map<string, PdfRefLike> {
+  const visited = new Map<string, PdfRefLike>();
+  const stack: unknown[] = [...seeds];
+
+  while (stack.length > 0) {
+    const val = stack.pop();
+    if (!val || typeof val !== "object") continue;
+
+    const maybeRef = val as { objectNumber?: unknown; generationNumber?: unknown };
+    if (typeof maybeRef.objectNumber === "number") {
+      const ref = val as PdfRefLike;
+      const key = pdfRefKey(ref);
+      if (visited.has(key)) continue;
+      visited.set(key, ref);
+      const resolved = typeof context?.lookup === "function" ? context.lookup(ref) : undefined;
+      if (resolved && resolved !== val) {
+        stack.push(resolved);
+      }
+      continue;
     }
-    context.delete(value);
-    return;
-  }
-  const dictLike = value as { entries?: () => Iterable<[unknown, unknown]> };
-  if (typeof dictLike.entries === "function") {
-    for (const [k, v] of dictLike.entries()) {
-      const keyText = String(k ?? "");
-      if (keyText === "/Parent" || keyText === "Parent") continue;
-      collectAndDeleteRefs(context, v, visited, depth + 1);
+
+    const dictLike = val as { entries?: () => Iterable<[unknown, unknown]> };
+    if (typeof dictLike.entries === "function") {
+      for (const [k, v] of dictLike.entries()) {
+        if (skipParentKey) {
+          const keyText = String(k ?? "");
+          if (keyText === "/Parent" || keyText === "Parent") continue;
+        }
+        stack.push(v);
+      }
+      continue;
     }
-    return;
-  }
-  const arrayLike = value as { asArray?: () => unknown[] };
-  if (typeof arrayLike.asArray === "function") {
-    for (const item of arrayLike.asArray()) {
-      collectAndDeleteRefs(context, item, visited, depth + 1);
+
+    const arrayLike = val as { asArray?: () => unknown[] };
+    if (typeof arrayLike.asArray === "function") {
+      for (const item of arrayLike.asArray()) {
+        stack.push(item);
+      }
+      continue;
+    }
+
+    const streamLike = val as { dict?: unknown };
+    if (streamLike.dict) {
+      stack.push(streamLike.dict);
     }
   }
+
+  return visited;
 }
 
 /**
@@ -166,23 +192,18 @@ export async function updatePdfMetadata(
   }
 
   if (stripAll) {
-    // Strip Info entries, timestamps, XMP Metadata streams, and private app data (PieceInfo, LastModified, SpiderInfo)
+    // 1. Remove Info entries, timestamps, XMP Metadata streams, and private app data (PieceInfo, LastModified, SpiderInfo)
+    const candidateSeeds: unknown[] = [];
+
     if (PDFName) {
-      const visitedRefs = new Set<string>();
       const stripPrivateDictKeys = (dict: any) => {
         if (!dict || typeof dict.get !== "function" || typeof dict.delete !== "function") return;
         for (const keyName of PRIVATE_PDF_DICT_KEYS) {
           const key = PDFName.of(keyName);
           const entry = dict.get(key);
           dict.delete(key);
-          if (!entry) continue;
-          if (keyName === "PieceInfo" || keyName === "SpiderInfo") {
-            collectAndDeleteRefs(pdfDoc.context, entry, visitedRefs, 0);
-          } else if (
-            typeof pdfDoc.context?.delete === "function" &&
-            typeof entry.objectNumber === "number"
-          ) {
-            pdfDoc.context.delete(entry);
+          if (entry) {
+            candidateSeeds.push(entry);
           }
         }
       };
@@ -207,9 +228,7 @@ export async function updatePdfMetadata(
             infoDict.delete(key);
           }
         }
-        if (typeof pdfDoc.context.delete === "function" && typeof infoRef.objectNumber === "number") {
-          pdfDoc.context.delete(infoRef);
-        }
+        candidateSeeds.push(infoRef);
         delete trailerInfo.Info;
       }
     } else {
@@ -219,6 +238,32 @@ export async function updatePdfMetadata(
       pdfDoc.setKeywords([]);
       pdfDoc.setCreator("");
       pdfDoc.setProducer("");
+    }
+
+    // 2. After unlinking private entries, delete only objects no longer reachable from the retained document
+    if (candidateSeeds.length > 0 && typeof pdfDoc.context?.delete === "function") {
+      const candidateRefs = walkReachableRefs(pdfDoc.context, candidateSeeds, true);
+      if (candidateRefs.size > 0) {
+        const retainedSeeds: unknown[] = [];
+        if (trailerInfo?.Root) retainedSeeds.push(trailerInfo.Root);
+        if (trailerInfo?.Info) retainedSeeds.push(trailerInfo.Info);
+        if (trailerInfo?.Encrypt) retainedSeeds.push(trailerInfo.Encrypt);
+        if (trailerInfo?.ID) retainedSeeds.push(trailerInfo.ID);
+        if (pdfDoc.catalog) retainedSeeds.push(pdfDoc.catalog);
+        if (typeof pdfDoc.getPages === "function") {
+          for (const page of pdfDoc.getPages()) {
+            if (page?.ref) retainedSeeds.push(page.ref);
+            if (page?.node) retainedSeeds.push(page.node);
+          }
+        }
+
+        const retainedRefs = walkReachableRefs(pdfDoc.context, retainedSeeds, false);
+        for (const [key, ref] of candidateRefs) {
+          if (!retainedRefs.has(key)) {
+            pdfDoc.context.delete(ref);
+          }
+        }
+      }
     }
   } else {
     if (metadata.title !== undefined) {
