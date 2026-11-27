@@ -157,11 +157,14 @@ test.describe("PDF Suite workstation", () => {
     await upload(page, fixtures.twoPagePdf);
     await expect(page.locator(".cz-suite-file-bar")).toBeVisible({ timeout: CDN_TIMEOUT });
 
-    // Select Text tool and click canvas on page 1 to open inline text popover
-    await page.getByRole("button", { name: /Text/i }).click();
+    // Wait for page 1 canvas render before activating Text tool so layout/dimensions are settled
     const overlay = page.locator(".cz-overlay-ann-canvas");
     await expect(overlay).toBeVisible({ timeout: CDN_TIMEOUT });
     await expect(overlay).toHaveAttribute("data-rendered-page", "1", { timeout: CDN_TIMEOUT });
+    const textToolBtn = page.getByRole("button", { name: /Text/i });
+    await textToolBtn.click();
+    await expect(textToolBtn).toHaveAttribute("aria-pressed", "true");
+    await expect(overlay).toHaveClass(/is-interactive/);
     await overlay.click({ position: { x: 80, y: 80 } });
     const popover = page.locator(".cz-inline-text-popover");
     await expect(popover).toBeVisible();

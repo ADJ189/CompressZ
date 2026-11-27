@@ -839,7 +839,7 @@ test.describe("mobile UI layout, Tools menus, and Settings across phone viewport
   });
 
   for (const width of [320, 390]) {
-    test(`Tools mega menu, Tools dialog, Settings sections, and tools fit within ${width}px`, async ({
+    test(`Tools mega menu, Tools dialog, and Settings sections fit within ${width}px`, async ({
       page,
     }) => {
       await page.setViewportSize({ width, height: 844 });
@@ -849,11 +849,12 @@ test.describe("mobile UI layout, Tools menus, and Settings across phone viewport
       await page.locator(".cz-tab-dropdown").click();
       const megaTray = page.locator(".cz-mega-tray");
       await expect(megaTray).toBeVisible();
-      await page.waitForTimeout(300);
-      const megaBox = await megaTray.boundingBox();
-      expect(megaBox).not.toBeNull();
-      expect(megaBox!.x).toBeGreaterThanOrEqual(-1);
-      expect(megaBox!.x + megaBox!.width).toBeLessThanOrEqual(width + 1);
+      await expect
+        .poll(async () => {
+          const megaBox = await megaTray.boundingBox();
+          return megaBox ? megaBox.x >= -1 && megaBox.x + megaBox.width <= width + 1 : false;
+        })
+        .toBe(true);
       await page.keyboard.press("Escape");
 
       // Tools Dialog must stay inside viewport
@@ -892,8 +893,10 @@ test.describe("mobile UI layout, Tools menus, and Settings across phone viewport
         expect(overflow.maxTrackOverflow).toBeLessThanOrEqual(1);
       }
       await page.keyboard.press("Escape");
+    });
 
-      // Key tool routes must not overflow horizontally on mobile
+    test(`key tool routes fit within ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 844 });
       for (const route of ["/compress/pdf", "/compress/video", "/convert", "/pdf"]) {
         await page.goto(route);
         await expect(page.locator("#page-view > *").first()).toBeVisible();
