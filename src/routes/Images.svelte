@@ -156,8 +156,8 @@ import { entryError } from "../lib/engineError";
     toast(`AI model set to ${tier}`, "success");
   }
 
-  async function compressSingle(entry: FileEntry) {
-    if (entry.status === "compressing") return;
+  async function compressSingle(entry: FileEntry, notify = true): Promise<boolean> {
+    if (entry.status === "compressing") return false;
 
     imageStore.update((curr) => ({
       ...curr,
@@ -187,7 +187,8 @@ import { entryError } from "../lib/engineError";
             : f,
         ),
       }));
-      toast(`Compressed ${entry.name}`, "success");
+      if (notify) toast(`Compressed ${entry.name}`, "success");
+      return true;
     } catch (err) {
       console.error("[imageCompress] error:", err);
       const failure = entryError(err, "Compression failed");
@@ -204,20 +205,33 @@ import { entryError } from "../lib/engineError";
             : f,
         ),
       }));
-      toast(`${entry.name}: ${failure.error}`, "error", undefined, {
-        log: failure.errorLog,
-      });
+      if (notify) {
+        toast(`${entry.name}: ${failure.error}`, "error", undefined, {
+          log: failure.errorLog,
+        });
+      }
+      return false;
     }
   }
 
   async function handleCompressAll() {
     isBusy = true;
+    let ok = 0;
+    let fail = 0;
     try {
       const idleEntries = imageStore
         .get()
         .files.filter((f) => f.status === "idle" || f.status === "error");
       for (const entry of idleEntries) {
-        await compressSingle(entry);
+        if (await compressSingle(entry, false)) ok++;
+        else fail++;
+      }
+      if (ok > 0 && fail === 0) {
+        toast(`Compressed ${ok} ${ok === 1 ? "image" : "images"}`, "success");
+      } else if (ok > 0 && fail > 0) {
+        toast(`Compressed ${ok} ${ok === 1 ? "image" : "images"} (${fail} failed)`, "warn");
+      } else if (fail > 0) {
+        toast(`${fail} ${fail === 1 ? "image" : "images"} failed to compress`, "error");
       }
     } finally {
       isBusy = false;
