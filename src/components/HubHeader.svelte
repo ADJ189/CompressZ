@@ -51,8 +51,11 @@
     const prefersReducedMotion =
       typeof window !== "undefined" &&
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    const behavior: ScrollBehavior = instant || prefersReducedMotion ? "auto" : "smooth";
-    list.scrollTo({ left: targetScroll, behavior });
+    if (instant || prefersReducedMotion) {
+      list.scrollLeft = targetScroll;
+    } else {
+      list.scrollTo({ left: targetScroll, behavior: "smooth" });
+    }
   }
 
   onMount(() => {
@@ -61,7 +64,24 @@
       void scrollActiveChipIntoView(true);
     };
     window.addEventListener("resize", onResize, { passive: true });
-    return () => window.removeEventListener("resize", onResize);
+    const ro =
+      typeof ResizeObserver !== "undefined" && tablistEl
+        ? new ResizeObserver(() => {
+            void scrollActiveChipIntoView(true);
+          })
+        : null;
+    if (ro && tablistEl) {
+      ro.observe(tablistEl);
+    }
+    if (typeof document !== "undefined" && document.fonts?.ready) {
+      void document.fonts.ready.then(() => {
+        void scrollActiveChipIntoView(true);
+      });
+    }
+    return () => {
+      window.removeEventListener("resize", onResize);
+      ro?.disconnect();
+    };
   });
 
   $effect(() => {
