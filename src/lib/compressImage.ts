@@ -2,6 +2,7 @@ import type { CompressOptions, CompressResult, ImageFormat } from "./types";
 import { makeCanvas, get2D, resizeViaWebGL } from "./gpu";
 import { decodeImageBitmap } from "./imageDecode";
 import { resolvedMaxImageDim } from "./settings";
+import { encodeAvifWasm } from "./avifEncode";
 import {
   computeSsim,
   decideQualityGuard,
@@ -10,10 +11,9 @@ import {
 } from "./qualityGuard";
 
 // AVIF *encoding* support varies a lot more than decoding support (notably
-// Safari can display AVIF but can't encode it via canvas, and older Firefox
-// versions can't either). Feature-detect once via toDataURL instead of
-// sniffing the user agent string, which is fragile and easy to get wrong
-// across Chromium forks, WebKit variants, and future browser releases.
+// Safari and Chromium can display AVIF but can't encode it via canvas).
+// Feature-detect once via toDataURL; when native canvas encoding is missing,
+// we lazily load @jsquash/avif (WASM) instead of silently downgrading to WebP.
 let _avifEncodeSupport: boolean | null = null;
 function supportsAvifEncode(): boolean {
   if (_avifEncodeSupport !== null) return _avifEncodeSupport;
@@ -30,8 +30,6 @@ function supportsAvifEncode(): boolean {
 }
 
 export function getBestFormat(requested: ImageFormat): ImageFormat {
-  if (typeof document === "undefined") return requested;
-  if (requested === "image/avif" && !supportsAvifEncode()) return "image/webp";
   return requested;
 }
 
@@ -41,7 +39,7 @@ export async function compressImage(
   onProgress?: (pct: number) => void,
 ): Promise<CompressResult> {
   onProgress?.(5);
-  const format = getBestFormat((options.format ?? "image/webp") as ImageFormat);
+  let format = getBestFormat((options.format ?? "image/webp") as ImageFormat);
   // The per-tool maxWidth/maxHeight (from the Images page's own settings)
   // is clamped further by the global Settings → Performance → "Max image
   // dimension" resource limit, if the person has set one — this is the one
@@ -97,15 +95,22 @@ export async function compressImage(
   const requestedQ = clamp(options.quality ?? defaultQ);
 
   let blob: Blob;
+  let avifFellBack: boolean;
   if (options.targetSizeKB && options.targetSizeKB > 0) {
-    blob = await binarySearch(
+    const searched = await binarySearch(
       canvas,
       format,
       options.targetSizeKB * 1024,
       onProgress,
     );
+    blob = searched.blob;
+    format = searched.actualFormat;
+    avifFellBack = searched.fellBack;
   } else {
-    blob = await encode(canvas, format, requestedQ);
+    const encoded = await encodeWithFallback(canvas, format, requestedQ);
+    blob = encoded.blob;
+    format = encoded.actualFormat;
+    avifFellBack = encoded.fellBack;
     onProgress?.(95);
   }
 
@@ -114,7 +119,7 @@ export async function compressImage(
   // The guard never lowers the requested quality or resolution: at most it
   // retries once at a *higher* quality (when no byte target is active) and
   // otherwise reports a short note on the result.
-  let guardNote = "";
+  let guardNote = avifFellBack ? "⚠ AVIF WASM unavailable, saved as WebP" : "";
   let measured: MeasuredImage | null = null;
   if (format !== "image/png") {
     measured = await measureEncoded(canvas, w, h, blob);
@@ -131,7 +136,7 @@ export async function compressImage(
         actual: measured,
       });
       if (first.action === "retry") {
-        const retried = await encode(canvas, format, clamp(first.quality));
+        const retried = (await encodeWithFallback(canvas, format, clamp(first.quality))).blob;
         const retriedMeasure = await measureEncoded(canvas, w, h, retried);
         if (retriedMeasure && retriedMeasure.ssim > measured.ssim) {
           const second = decideQualityGuard({
@@ -143,7 +148,9 @@ export async function compressImage(
           });
           blob = retried;
           measured = retriedMeasure;
-          guardNote = second.action === "warn" ? guardLabel(second.code) : "";
+          if (!guardNote) {
+            guardNote = second.action === "warn" ? guardLabel(second.code) : "";
+          }
         } else {
           const second = decideQualityGuard({
             ...base,
@@ -152,9 +159,11 @@ export async function compressImage(
             requestedQuality: first.quality,
             alreadyRetried: true,
           });
-          guardNote = guardLabel(second.action === "warn" ? second.code : "low-ssim");
+          if (!guardNote) {
+            guardNote = guardLabel(second.action === "warn" ? second.code : "low-ssim");
+          }
         }
-      } else if (first.action === "warn") {
+      } else if (first.action === "warn" && !guardNote) {
         guardNote = guardLabel(first.code);
       }
     }
@@ -402,25 +411,63 @@ async function binarySearch(
   format: ImageFormat,
   targetBytes: number,
   onProgress?: (pct: number) => void,
-): Promise<Blob> {
+): Promise<{ blob: Blob; actualFormat: ImageFormat; fellBack: boolean }> {
   if (format === "image/png") {
     onProgress?.(90);
-    return encode(canvas, format, 1);
+    return encodeWithFallback(canvas, format, 1);
   }
   let lo = 0.01,
     hi = 0.99,
-    best: Blob | null = null;
+    best: { blob: Blob; actualFormat: ImageFormat; fellBack: boolean } | null = null;
+  let activeFormat: ImageFormat = format;
   for (let i = 0; i < 10; i++) {
     const mid = (lo + hi) / 2;
-    const b = await encode(canvas, format, mid);
+    const res = await encodeWithFallback(canvas, activeFormat, mid);
+    activeFormat = res.actualFormat;
     onProgress?.(32 + Math.round((i / 14) * 60));
-    if (b.size <= targetBytes) {
-      best = b;
+    if (res.blob.size <= targetBytes) {
+      best = res;
       lo = mid;
     } else hi = mid;
     if (hi - lo < 0.004) break;
   }
-  return best ?? (await encode(canvas, format, lo));
+  return best ?? (await encodeWithFallback(canvas, activeFormat, lo));
+}
+
+function canvasToImageData(canvas: HTMLCanvasElement | OffscreenCanvas): ImageData {
+  // A canvas produced by resizeViaWebGL has a WebGL2 context, so getContext("2d") returns null.
+  const existing2d = (canvas as HTMLCanvasElement).getContext?.("2d") as
+    | CanvasRenderingContext2D
+    | OffscreenCanvasRenderingContext2D
+    | null;
+  if (existing2d) {
+    return existing2d.getImageData(0, 0, canvas.width, canvas.height);
+  }
+  const copy = makeCanvas(canvas.width, canvas.height);
+  const ctx = get2D(copy, "images");
+  ctx.drawImage(canvas, 0, 0);
+  return ctx.getImageData(0, 0, canvas.width, canvas.height);
+}
+
+async function encodeWithFallback(
+  c: HTMLCanvasElement | OffscreenCanvas,
+  fmt: ImageFormat,
+  q: number,
+): Promise<{ blob: Blob; actualFormat: ImageFormat; fellBack: boolean }> {
+  if (fmt === "image/avif" && !supportsAvifEncode()) {
+    try {
+      const blob = await encodeAvifWasm(canvasToImageData(c), q);
+      if (blob.size > 0) {
+        return { blob, actualFormat: "image/avif", fellBack: false };
+      }
+    } catch (err) {
+      console.warn("[compressImage] AVIF WASM fallback failed, falling back to WebP:", err);
+    }
+    const webpBlob = await encode(c, "image/webp", q);
+    return { blob: webpBlob, actualFormat: "image/webp", fellBack: true };
+  }
+  const blob = await encode(c, fmt, q);
+  return { blob, actualFormat: fmt, fellBack: false };
 }
 
 function encode(
