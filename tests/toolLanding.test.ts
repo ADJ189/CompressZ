@@ -171,3 +171,19 @@ Deno.test("tool landing: bare OCR route restores printed profile and PDF output 
     "Ocr.svelte must reset profile to printed and restore outputKind to pdf on bare route"
   );
 });
+
+Deno.test("tool landing: HubHeader re-centers active chip after late font loads and chip resizes", async () => {
+  const hubHeader = await Deno.readTextFile(
+    new URL("../src/components/HubHeader.svelte", import.meta.url)
+  );
+
+  assert(
+    hubHeader.includes('addEventListener?.("loadingdone"'),
+    "HubHeader must listen for document.fonts loadingdone so async webfonts re-center the active chip"
+  );
+  assert(
+    hubHeader.includes('querySelectorAll<HTMLElement>(".cz-hub-tool-chip")') &&
+      hubHeader.includes("ro.observe(chip)"),
+    "HubHeader ResizeObserver must observe individual chips as well as the scroll container"
+  );
+});
