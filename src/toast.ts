@@ -22,6 +22,19 @@ export type ToastType = 'success' | 'error' | 'info' | 'warn' | '';
  * `options.log` adds a collapsed, expandable log block. Every value is written
  * with `textContent`, so engine output can never inject markup.
  */
+const MAX_VISIBLE_TOASTS = 3;
+
+function trimToastStack(container: HTMLElement) {
+  while (container.children.length >= MAX_VISIBLE_TOASTS) {
+    const children = Array.from(container.children);
+    // Prefer evicting plain confirmation toasts before error/action toasts.
+    const expendable = children.find(
+      (c) => !c.classList.contains('has-details') && !c.querySelector('.cz-toast-action'),
+    );
+    (expendable ?? children[0])?.remove();
+  }
+}
+
 export function toast(
   msg: string,
   type: ToastType = '',
@@ -30,6 +43,8 @@ export function toast(
 ) {
   const container = document.getElementById('toast');
   if (!container) return;
+
+  trimToastStack(container);
 
   const el = document.createElement('div');
   el.className = 'toast-item' + (type ? ` ${type}` : '');
