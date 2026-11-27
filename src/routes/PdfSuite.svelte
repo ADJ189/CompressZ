@@ -65,7 +65,31 @@ import { entryError } from "../lib/engineError";
     | "security"
     | "repair";
 
-  let activeTool = $state<SubTool>("split");
+  function subToolFromPath(path: string): { tool: SubTool; nup?: 2 | 4 } | null {
+    const parts = path.split("/").filter(Boolean);
+    const sub = parts[parts.length - 1];
+    if (sub === "split") return { tool: "split" };
+    if (sub === "remove" || sub === "remove-pages" || sub === "delete-pages") return { tool: "remove" };
+    if (sub === "page-numbers" || sub === "number-pages" || sub === "bates") return { tool: "page-numbers" };
+    if (sub === "nup" || sub === "multi-page" || sub === "2-up" || sub === "4-up") {
+      return { tool: "nup", nup: sub === "2-up" ? 2 : sub === "4-up" ? 4 : undefined };
+    }
+    if (sub === "metadata" || sub === "edit-metadata" || sub === "strip-metadata") return { tool: "metadata" };
+    if (sub === "organize") return { tool: "organize" };
+    if (sub === "crop") return { tool: "crop" };
+    if (sub === "forms") return { tool: "forms" };
+    if (sub === "watermark") return { tool: "watermark" };
+    if (sub === "redact") return { tool: "redact" };
+    if (sub === "protect" || sub === "security") return { tool: "security" };
+    if (sub === "repair") return { tool: "repair" };
+    if (sub === "edit" || sub === "studio" || sub === "sign") return { tool: "studio" };
+    return null;
+  }
+
+  const initialRouteTool =
+    typeof window !== "undefined" ? subToolFromPath(window.location.pathname) : null;
+
+  let activeTool = $state<SubTool>(initialRouteTool?.tool ?? "split");
   let selectedFile = $state<File | null>(null);
   let pdfBytes = $state<Uint8Array | null>(null);
   let totalPages = $state<number>(0);
@@ -1053,25 +1077,10 @@ import { entryError } from "../lib/engineError";
   }
 
   function applyRouteSubpath(path: string) {
-    const parts = path.split("/").filter(Boolean);
-    const sub = parts[parts.length - 1];
-    if (sub === "split") activeTool = "split";
-    else if (sub === "remove" || sub === "remove-pages" || sub === "delete-pages") activeTool = "remove";
-    else if (sub === "page-numbers" || sub === "number-pages" || sub === "bates") activeTool = "page-numbers";
-    else if (sub === "nup" || sub === "multi-page" || sub === "2-up" || sub === "4-up") {
-      activeTool = "nup";
-      if (sub === "2-up") nupPagesPerSheet = 2;
-      else if (sub === "4-up") nupPagesPerSheet = 4;
-    }
-    else if (sub === "metadata" || sub === "edit-metadata" || sub === "strip-metadata") activeTool = "metadata";
-    else if (sub === "organize") activeTool = "organize";
-    else if (sub === "crop") activeTool = "crop";
-    else if (sub === "forms") activeTool = "forms";
-    else if (sub === "watermark") activeTool = "watermark";
-    else if (sub === "redact") activeTool = "redact";
-    else if (sub === "protect" || sub === "security") activeTool = "security";
-    else if (sub === "repair") activeTool = "repair";
-    else if (sub === "edit" || sub === "studio" || sub === "sign") activeTool = "studio";
+    const match = subToolFromPath(path);
+    if (!match) return;
+    activeTool = match.tool;
+    if (match.nup) nupPagesPerSheet = match.nup;
   }
 
   function applyStagedFile() {
