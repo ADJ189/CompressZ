@@ -117,6 +117,8 @@
       await task.promise;
 
       if (mySeq === renderSeq) {
+        isRenderingPage = false;
+        currentRenderTask = null;
         renderedPage = pageNum;
         redrawOverlay();
       }
@@ -514,6 +516,7 @@
       <button
         type="button"
         class="cz-studio-btn {activeTool === 'select' ? 'is-active' : ''}"
+        aria-pressed={activeTool === 'select'}
         title="Select & Move"
         onclick={() => (activeTool = 'select')}
       >
@@ -523,6 +526,7 @@
       <button
         type="button"
         class="cz-studio-btn {activeTool === 'text' ? 'is-active' : ''}"
+        aria-pressed={activeTool === 'text'}
         title="Add FreeText annotation"
         onclick={() => (activeTool = 'text')}
       >
@@ -532,6 +536,7 @@
       <button
         type="button"
         class="cz-studio-btn {activeTool === 'ink' ? 'is-active' : ''}"
+        aria-pressed={activeTool === 'ink'}
         title="Ink freehand pen"
         onclick={() => (activeTool = 'ink')}
       >
@@ -541,6 +546,7 @@
       <button
         type="button"
         class="cz-studio-btn {activeTool === 'highlighter' ? 'is-active' : ''}"
+        aria-pressed={activeTool === 'highlighter'}
         title="Highlighter tool"
         onclick={() => (activeTool = 'highlighter')}
       >
@@ -550,6 +556,7 @@
       <button
         type="button"
         class="cz-studio-btn {activeTool === 'stamp' ? 'is-active' : ''}"
+        aria-pressed={activeTool === 'stamp'}
         title="Sign or Stamp"
         onclick={() => (isSigModalOpen = true)}
       >
@@ -559,6 +566,7 @@
       <button
         type="button"
         class="cz-studio-btn {activeTool === 'redact' ? 'is-active' : ''}"
+        aria-pressed={activeTool === 'redact'}
         title="Redaction block"
         onclick={() => (activeTool = 'redact')}
       >
