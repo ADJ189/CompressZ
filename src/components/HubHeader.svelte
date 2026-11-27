@@ -59,29 +59,39 @@
   }
 
   onMount(() => {
+    let destroyed = false;
     void scrollActiveChipIntoView(true);
     const onResize = () => {
-      void scrollActiveChipIntoView(true);
+      if (!destroyed) void scrollActiveChipIntoView(true);
     };
     window.addEventListener("resize", onResize, { passive: true });
-    const ro =
-      typeof ResizeObserver !== "undefined" && tablistEl
-        ? new ResizeObserver(() => {
-            void scrollActiveChipIntoView(true);
-          })
-        : null;
-    if (ro && tablistEl) {
-      ro.observe(tablistEl);
-    }
-    if (typeof document !== "undefined" && document.fonts?.ready) {
-      void document.fonts.ready.then(() => {
-        void scrollActiveChipIntoView(true);
-      });
+    if (typeof document !== "undefined" && document.fonts) {
+      document.fonts.addEventListener?.("loadingdone", onResize);
+      if (document.fonts.ready) {
+        void document.fonts.ready.then(onResize);
+      }
     }
     return () => {
+      destroyed = true;
       window.removeEventListener("resize", onResize);
-      ro?.disconnect();
+      if (typeof document !== "undefined" && document.fonts) {
+        document.fonts.removeEventListener?.("loadingdone", onResize);
+      }
     };
+  });
+
+  $effect(() => {
+    const _list = tablistEl;
+    const _tools = tools;
+    if (!_list || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      void scrollActiveChipIntoView(true);
+    });
+    ro.observe(_list);
+    for (const chip of _list.querySelectorAll<HTMLElement>(".cz-hub-tool-chip")) {
+      ro.observe(chip);
+    }
+    return () => ro.disconnect();
   });
 
   $effect(() => {
