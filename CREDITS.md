@@ -59,11 +59,12 @@ FFmpeg's own are triggered by using it as a dynamically-loaded library.
 | **MobileNetV2 / ViT-Base (Xenova ONNX conversions)** | The two selectable model tiers (`Efficient`/`Powerful`) that back Smart Analyze and sort-by-predicted-label | Apache 2.0 | https://huggingface.co/Xenova |
 | **TrOCR Small Handwritten (Xenova ONNX conversion)** | Line-oriented candidate model powering client-side English handwriting recognition | Apache 2.0 | https://huggingface.co/Xenova/trocr-small-handwritten |
 
-## Image decoding
+## Image decoding & encoding
 
 | Project | What it does here | License | Link |
 |---|---|---|---|
 | **heic2any** | Lazy-loaded WASM fallback for decoding HEIC/HEIF photos in browsers without native support | MIT | https://github.com/alexcorvi/heic2any |
+| **@jsquash/avif** | Lazy-loaded WebAssembly AVIF encoder fallback for browsers without native Canvas AVIF encoding | Apache 2.0 | https://github.com/jamsinclair/jSquash |
 
 ## Frontend Framework & UI
 

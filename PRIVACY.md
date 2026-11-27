@@ -77,6 +77,9 @@ privacy-relevant summary is:
   (Word document conversion).
 - **heic2any** — loaded from `esm.sh` only when a HEIC/HEIF file can't
   be decoded natively.
+- **@jsquash/avif** — loaded from `esm.sh` only when AVIF output is requested
+  in a browser without native Canvas AVIF encoding. Image pixels stay in this
+  tab; nothing is uploaded.
 - **onnxruntime-web** — loaded from `cdn.jsdelivr.net` for local AI
   inference.
 - **QPDF WASM** — loaded from `cdn.jsdelivr.net` for AES-256 PDF encryption,
