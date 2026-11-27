@@ -262,7 +262,7 @@
   .cz-tab.cz-tab-dropdown {
     background: var(--surface2, rgba(255, 255, 255, 0.06));
     border: 1px solid var(--brand);
-    color: var(--brand);
+    color: var(--accent-ink, var(--accent));
     font-weight: 600;
     box-shadow: 0 0 8px var(--brand-glow), inset 0 1px 0 rgba(255, 255, 255, 0.15);
   }
@@ -270,7 +270,7 @@
     background: var(--surface3, rgba(255, 255, 255, 0.12));
     border-color: var(--brand);
     box-shadow: 0 0 14px var(--brand-glow), 0 0 0 1px var(--brand);
-    color: var(--brand);
+    color: var(--accent-ink, var(--accent));
   }
   .cz-tab.cz-tab-dropdown.is-active {
     background: var(--brand-glow);
@@ -278,7 +278,7 @@
     box-shadow: 0 0 16px var(--brand-glow), 0 0 0 1px var(--brand);
   }
   .cz-tab.is-active {
-    color: var(--accent);
+    color: var(--accent-ink, var(--accent));
     background: var(--accent-soft);
     border-color: var(--accent-glow);
     font-weight: 600;
@@ -305,7 +305,7 @@
     border-radius: 4px;
     font-size: 0.7rem;
     font-weight: 600;
-    background: var(--accent);
+    background: var(--accent-badge, #047857);
     color: #ffffff;
   }
   @media (max-width: 820px) {

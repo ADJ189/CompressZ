@@ -212,7 +212,7 @@
     transition: color var(--t);
   }
   .cz-footer-links a:hover {
-    color: var(--accent);
+    color: var(--accent-ink, var(--accent));
   }
   .cz-mobile-dock {
     display: none;
@@ -271,7 +271,7 @@
       transition: color var(--t), background-color var(--t);
     }
     .cz-dock-item.is-active {
-      color: var(--accent);
+      color: var(--accent-ink, var(--accent));
       background: var(--accent-soft);
     }
     .cz-toast-container {
