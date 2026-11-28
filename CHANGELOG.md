@@ -9,6 +9,8 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 
 ## [Unreleased]
 
+## [1.15.7] - 2026-11-28
+
 ### Added
 
 - **Per-Browser Optimization Profiles (`browserProfile.ts`, `settings.ts`, `resourceManager.ts`, `gpu.ts`, `compressImage.ts`, `compressPdf.ts`, `convertPdf.ts`, `imagesToPdf.ts`, `compressVideo.ts`, `ocrEngines.ts`, `aiEngine.ts`, `ocrHandwriting.ts`, `PdfSuite.svelte`, `SettingsDialog.svelte`)**:
@@ -21,6 +23,7 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 
 ### Fixed
 
+- **Per-Browser Optimization Profiles & Cross-Engine Fixes (`avifEncode.ts`, `compressImage.ts`, `ocrHandwriting.ts`, `settings.ts`, `PdfSuite.svelte`, `Ocr.svelte`, `AppShell.svelte`, `SettingsDialog.svelte`, `ToolCard.svelte`, `ToolGrid.svelte`, `toast.ts`, `style.css`)**: Mapped `@jsquash/avif` WASM quality to inverted `cqLevel` (0–63 range), added white-background compositing for JPEG fallbacks in `compressImage.ts` while preserving fallback flags/metadata across target-size binary search and SSIM retries, re-evaluated `aiBackendPreference` changes in `loadHandwritingPipeline()`, aligned Balanced-mode concurrency caps with `getResourcePolicy()`, recorded `PdfSuite` eager thumbnail budget across lazy loading and `loadFile()` handoff, surfaced batch OCR text-layer gap notes in aggregate summaries, restored Settings focus to whichever trigger opened it (including mobile dock), excluded `.error` toasts from preferred eviction, moved `@container` onto `.cz-tool-grid-item` after viewport breakpoints, and raised mobile `.home-eyebrow`/`.htc-tag` font sizes to `0.75rem`.
 - **Handwriting OCR CDN WASM & Crop Bounds (`ocrHandwriting.ts`)**: Configured `@huggingface/transformers` CDN `wasmPaths` and `allowLocalModels = false` matching `aiEngine.ts` (avoiding 404s after `strip-oversized-assets.mjs`), destroyed the temporary WebGPU probe device, and fixed `detectTextLines()` bottom-edge crop height calculation.
 - **PDF → Markdown Column Detection (`pdfToMarkdown.ts`)**: Passed scale-1 PDF point page dimensions (instead of DPI-scaled pixels) to `reconstructReadingOrder()` so multi-column detection works at all DPIs, and ensured `page.cleanup()` runs in `finally`. Also revoked previous preview blob URLs in `PdfMarkdown.svelte` via `$effect` cleanup.
 - **PDF Encryption & Grayscale Guards (`compressPdf.ts`, `pdfTools/*`)**: Checked `pdfDoc.isEncrypted` in `structuralCompress()` (routing encrypted files cleanly to canvas render fallback) and across `cropPdf`, `formPdf`, `metadataPdf`, `nupPdf`, `organizePdf`, `pageNumbersPdf`, `redactPdf`, `splitPdf`, and `watermarkPdf`; fixed `/ColorSpace` `PDFName.of("ColorSpace")` lookup for raw grayscale streams; added `try/finally` canvas/page cleanup in `compressPdf.ts`, `convertPdf.ts`, `redactPdf.ts`, and `Ocr.svelte`.
