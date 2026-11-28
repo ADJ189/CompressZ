@@ -9,6 +9,12 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 
 ## [Unreleased]
 
+### Added
+
+- **Per-Browser Optimization Profiles (`browserProfile.ts`, `settings.ts`, `resourceManager.ts`, `gpu.ts`, `compressImage.ts`, `compressPdf.ts`, `convertPdf.ts`, `imagesToPdf.ts`, `compressVideo.ts`, `ocrEngines.ts`, `aiEngine.ts`, `ocrHandwriting.ts`, `PdfSuite.svelte`, `SettingsDialog.svelte`)**:
+  - Added 6 dedicated runtime profiles: `chromium-desktop`, `chromium-mobile`, `webkit-desktop`, `webkit-mobile`, `gecko-desktop`, and `gecko-mobile` (selectable or auto-detected via `resolveExecutionProfile()`, surfaced in Settings → Performance & Diagnostics, and synced to `document.documentElement.dataset.browserProfile` and `--chrome-blur`).
+  - Added cross-browser engine safeguards: iOS WebKit 16 MP / 4096px canvas area clamping and eager backing-store release (`width = 0`), WebKit WebGL2 context release (`WEBGL_lose_context`), runtime WebP canvas-encode verification with JPEG fallback when browsers emit PNG, Firefox `mozCaptureStream()` audio capture in MediaRecorder fallback, WASM SIMD feature probing with non-SIMD Tesseract core fallback (`tesseract-core-lstm.wasm.js`), ONNX WASM thread caps per profile, and mobile backdrop-blur / PDF thumbnail budget tuning.
+
 ### Changed
 
 - **macOS / Apple-Inspired Tool Cards, Squircle Icons & Chrome Vibrancy (`ToolCard.svelte`, `ToolGrid.svelte`, `MacIcon.svelte`, `Header.svelte`, `Navigation.svelte`, `HubHeader.svelte`, `ToolsDialog.svelte`, `ToolsMegaMenu.svelte`, `AppShell.svelte`, `style.css`)**: Moved tool badges (e.g., `Fast`, `Bates`, `Layout`, `Studio`, `AES-256`, `New`) out from floating over the squircle icon and placed them inline beside each tool title inside the card as semantic macOS-tinted capsules; upgraded `.cz-squircle` icons with specular top-gloss and inner refraction layers; added translucent vibrancy (`--material-chrome` / `--material-elevated`), hairline edge highlights, and pointer-aware (`hover: hover`) interaction layers across the shell, cards, and navigation.

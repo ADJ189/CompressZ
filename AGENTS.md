@@ -152,6 +152,7 @@ src/lib/                   pure framework-independent TypeScript engines
   motion.ts                native Web Animations API (zero dependencies)
   zip.ts                   secure ZIP read/write with path sanitization
   settings.ts              cz-settings-v2 + resolveExecutionProfile()
+  browserProfile.ts        Chromium/WebKit/Gecko (Desktop & Mobile) optimization profiles
   resourceManager.ts       Adaptive Resource Guard (admission, queue, snapshot)
   recommendations.ts       deterministic contextual suggestions + dismissals
   recents.ts               cz-recent-tools / cz-favourite-tools helpers
