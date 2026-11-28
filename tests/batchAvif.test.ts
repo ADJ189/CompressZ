@@ -1,11 +1,51 @@
 import { assert, assertEquals } from "./assert.ts";
 import {
+  AVIF_DEFAULT_OPTIONS,
+  JSQUASH_AVIF_ST_URL,
   avifCqLevelFromUnit,
   avifQualityFromUnit,
   encodeAvifWasm,
   setAvifEncoderForTesting,
 } from "../src/lib/avifEncode.ts";
 import { deduplicateBatchNames } from "../src/lib/batchDownload.ts";
+
+Deno.test("avifEncode: targets single-threaded codec/enc/avif_enc.js (never avif_enc_mt)", async () => {
+  assertEquals(
+    JSQUASH_AVIF_ST_URL,
+    "https://esm.sh/@jsquash/avif@1.3.0/codec/enc/avif_enc.js",
+  );
+  assert(!JSQUASH_AVIF_ST_URL.includes("avif_enc_mt"));
+  assertEquals(AVIF_DEFAULT_OPTIONS.speed, 6);
+
+  const workerSrc = await Deno.readTextFile(
+    new URL("../src/lib/avifWorker.ts", import.meta.url),
+  );
+  const codeOnly = workerSrc.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert(codeOnly.includes("avif_enc.js"));
+  assert(!codeOnly.includes("avif_enc_mt"));
+});
+
+Deno.test("avifEncode: falls back cleanly when global Worker is undefined", async () => {
+  const globalObj = globalThis as unknown as { Worker?: unknown };
+  const origWorker = globalObj.Worker;
+  globalObj.Worker = undefined;
+  const fakeImage = { width: 2, height: 2, data: new Uint8ClampedArray(2 * 2 * 4) } as ImageData;
+
+  setAvifEncoderForTesting(async (_data, options = {}) => {
+    assertEquals(options.speed, 6);
+    assertEquals(options.cqLevel, 19);
+    return new Uint8Array([0, 0, 0, 16, 0x66, 0x74, 0x79, 0x70]).buffer;
+  });
+
+  try {
+    const blob = await encodeAvifWasm(fakeImage, 0.7);
+    assertEquals(blob.type, "image/avif");
+    assertEquals(blob.size, 8);
+  } finally {
+    setAvifEncoderForTesting(null);
+    globalObj.Worker = origWorker;
+  }
+});
 
 Deno.test("avifEncode: avifQualityFromUnit maps 0.01..0.99 to 1..100", () => {
   assertEquals(avifQualityFromUnit(0.01), 1);
