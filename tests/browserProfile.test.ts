@@ -121,4 +121,22 @@ Deno.test("browserProfile: resolveExecutionProfile integrates browser limits and
   assertEquals(sanitized.browserProfile, "auto");
   assertEquals(resolveBrowserProfile("auto", null).id, "chromium-desktop");
   assertEquals(BROWSER_PROFILE_IDS.length, 6);
+
+  // Balanced mode with browserProfile 'auto' still enforces the detected profile concurrency cap,
+  // while preserving explicit concurrency overrides.
+  const balancedIos = resolveExecutionProfile(
+    mergeSettings(s, { resourceMode: "balanced", browserProfile: "auto" }),
+    fakePlatform("WebKit", "mobile", "iOS", { tier: "balanced" }),
+  );
+  assertEquals(balancedIos.maxConcurrentImages, 1);
+
+  const balancedExplicit = resolveExecutionProfile(
+    mergeSettings(s, {
+      resourceMode: "balanced",
+      browserProfile: "auto",
+      resourceLimits: { ...s.resourceLimits, concurrency: 3 },
+    }),
+    fakePlatform("WebKit", "mobile", "iOS", { tier: "balanced" }),
+  );
+  assertEquals(balancedExplicit.maxConcurrentImages, 3);
 });
