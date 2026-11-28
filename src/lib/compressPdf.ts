@@ -1,5 +1,10 @@
-import type { CompressOptions, CompressResult, PdfLevel } from "./types";
-import { PDFLIB_ESM, openPdfDocument } from "./pdfLibs";
+import type { CompressOptions, CompressResult, EngineWarning, PdfLevel } from "./types";
+import {
+  PDFLIB_ESM,
+  getPdfWorkerFallbackWarning,
+  openPdfDocument,
+} from "./pdfLibs";
+import { toErrorMessage } from "./engineError";
 import { get2D } from "./gpu";
 import { resolveExecutionProfile } from "./settings";
 import { clampCanvasDimensions } from "./browserProfile";
@@ -63,6 +68,7 @@ export async function compressPdf(
   const arrayBuffer = await file.arrayBuffer();
 
   // Strategy A: structural — only resamples embedded images, text/vectors untouched
+  let structuralFallbackDetail: string | undefined;
   if (!preset.forceCanvas) {
     try {
       const result = await structuralCompress(
@@ -82,12 +88,13 @@ export async function compressPdf(
       if (result.compressedSize < file.size * 0.98) return result;
     } catch (e) {
       console.warn("[pdf] structural pass failed, trying canvas render:", e);
+      structuralFallbackDetail = toErrorMessage(e, "structural pass failed");
     }
   }
 
   // Strategy B: canvas re-render (fallback + extreme preset)
   onProgress?.(10);
-  return canvasRender(
+  const res = await canvasRender(
     arrayBuffer,
     file,
     level,
@@ -98,6 +105,20 @@ export async function compressPdf(
     PDFDocument,
     onProgress,
   );
+  const warnings: EngineWarning[] = [];
+  if (structuralFallbackDetail) {
+    warnings.push({
+      code: "pdf-canvas-fallback",
+      engine: "pdf",
+      severity: "warn",
+      message:
+        "Structural PDF compression failed; pages were rasterized to images (text is no longer selectable).",
+      detail: structuralFallbackDetail,
+    });
+  }
+  const workerWarn = getPdfWorkerFallbackWarning();
+  if (workerWarn) warnings.push(workerWarn);
+  return warnings.length > 0 ? { ...res, warnings } : res;
 }
 
 // ── Strategy A: structural image resampling ───────────────────

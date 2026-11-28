@@ -11,6 +11,7 @@
  */
 
 import { EngineError, toErrorMessage } from "./engineError";
+import type { EngineWarning } from "./types";
 
 export const PDFJS_VERSION = "4.4.168";
 export const PDFJS_BASE = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}`;
@@ -37,15 +38,57 @@ export const NOTO_SANS_UNICODE_FONT =
 // matter how many callers ask for it.
 let _pdfjsLib: any = null;
 let _pdfjsPromise: Promise<unknown> | null = null;
+let _pdfWorkerBlobUrl: string | null = null;
+let _pdfWorkerFallbackWarning: EngineWarning | null = null;
+
+export function getPdfWorkerFallbackWarning(): EngineWarning | null {
+  return _pdfWorkerFallbackWarning;
+}
+
+async function resolvePdfWorkerSrc(cdnWorkerUrl: string): Promise<string> {
+  if (_pdfWorkerBlobUrl) return _pdfWorkerBlobUrl;
+  try {
+    if (
+      typeof fetch === "function" &&
+      typeof URL !== "undefined" &&
+      typeof URL.createObjectURL === "function"
+    ) {
+      const res = await fetch(cdnWorkerUrl);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const code = await res.text();
+      _pdfWorkerBlobUrl = URL.createObjectURL(
+        new Blob([code], { type: "text/javascript" }),
+      );
+      _pdfWorkerFallbackWarning = null;
+      return _pdfWorkerBlobUrl;
+    }
+    throw new Error("Blob Worker URL creation unavailable");
+  } catch (err) {
+    _pdfWorkerFallbackWarning = {
+      code: "pdf-worker-cdn-fallback",
+      engine: "pdfjs",
+      severity: "info",
+      message:
+        "PDF.js worker could not be isolated as a same-origin blob; using CDN worker URL (Safari/WebKit may fall back to main-thread parsing).",
+      detail: toErrorMessage(err, "worker fetch failed"),
+    };
+    return cdnWorkerUrl;
+  }
+}
+
 export async function getPdfJs(): Promise<any> {
   if (_pdfjsLib) return _pdfjsLib;
   if (_pdfjsPromise) return _pdfjsPromise;
   _pdfjsPromise = (async () => {
     try {
-      const lib = (await import(
-        /* @vite-ignore */ `${PDFJS_BASE}/build/pdf.mjs`
-      )) as any;
-      lib.GlobalWorkerOptions.workerSrc = `${PDFJS_BASE}/build/pdf.worker.mjs`;
+      const cdnWorkerUrl = `${PDFJS_BASE}/build/pdf.worker.mjs`;
+      const [lib, workerSrc] = await Promise.all([
+        import(/* @vite-ignore */ `${PDFJS_BASE}/build/pdf.mjs`) as Promise<any>,
+        resolvePdfWorkerSrc(cdnWorkerUrl),
+      ]);
+      lib.GlobalWorkerOptions.workerSrc = workerSrc;
       _pdfjsLib = lib;
       return lib;
     } catch (err) {
