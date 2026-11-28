@@ -72,6 +72,22 @@
         <div class="cz-card-format-note">{entry.result.format}</div>
       {/if}
 
+      {#if entry.status === "done" && entry.warnings && entry.warnings.length > 0}
+        <div class="cz-card-warn-box" role="status">
+          {#each entry.warnings as w, i (`${w.code}:${i}`)}
+            <div class="cz-card-warn-item">
+              <span class="cz-card-warn-text">{w.message}</span>
+              {#if w.detail}
+                <details class="cz-card-warn-details">
+                  <summary>Details</summary>
+                  <pre>{w.detail}</pre>
+                </details>
+              {/if}
+            </div>
+          {/each}
+        </div>
+      {/if}
+
       {#if entry.status === "error" && entry.error}
         <div class="cz-card-error-msg">{entry.error}</div>
         {#if entry.errorLog && entry.errorLog.length > 0}
@@ -117,10 +133,18 @@
         <span>{busyLabel}</span>
       </div>
     {:else if entry.status === "done"}
-      <div class="cz-status-pill is-done">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="20 6 9 17 4 12"/>
-        </svg>
+      <div class="cz-status-pill {entry.warnings && entry.warnings.length > 0 ? 'is-warn' : 'is-done'}">
+        {#if entry.warnings && entry.warnings.length > 0}
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+        {:else}
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        {/if}
         <span>{doneLabel}</span>
       </div>
       <button
