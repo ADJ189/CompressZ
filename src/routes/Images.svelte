@@ -16,15 +16,27 @@ import { entryError } from "../lib/engineError";
     naturalOrder,
     type Recommendation,
   } from "../lib/recommendations";
-  import { smartAnalyze, sortByPredictedLabel, type AiModelTier } from "../lib/aiEngine";
+  import {
+    smartAnalyze,
+    sortByPredictedLabel,
+    getAiRuntimeInfo,
+    type AiModelTier,
+  } from "../lib/aiEngine";
   import { getPlatformInfo } from "../lib/platform";
   import { getSettings, resolvedConcurrency, updateSettings } from "../lib/settings";
   import MacIcon from "../components/MacIcon.svelte";
+  import WarningBanner from "../components/WarningBanner.svelte";
+  import type { EngineWarning } from "../lib/types";
 
   let imageState = $state<ImageState>(imageStore.get());
   let isBusy = $state(false);
   let isAiSorting = $state(false);
   let dismissTrigger = $state(0);
+  let aiWarnings = $state<EngineWarning[]>([]);
+  const queueWarnings = $derived([
+    ...aiWarnings,
+    ...imageState.files.flatMap((f) => f.warnings ?? []),
+  ]);
 
   const platform = $derived(getPlatformInfo());
   let settings = $state(getSettings());
@@ -135,11 +147,18 @@ import { entryError } from "../lib/engineError";
       const rawFiles = imageState.files.map((f) => f.file);
       const tier: AiModelTier = (settings.ai?.modelTier as AiModelTier) ?? "efficient";
       const analyses = await smartAnalyze(rawFiles, tier);
+      const aiWarn = getAiRuntimeInfo()?.lastFallbackWarning;
+      aiWarnings = aiWarn ? [aiWarn] : [];
       const sortedFiles = sortByPredictedLabel(rawFiles, analyses);
       const fileMap = new Map(imageState.files.map((f) => [f.file, f]));
       const sortedEntries = sortedFiles.map((f) => fileMap.get(f)!).filter(Boolean);
       updateStore({ files: sortedEntries });
-      toast("Organized files by predicted content label", "success");
+      toast(
+        aiWarn
+          ? "Organized files using CPU/WASM fallback (WebGPU unavailable)"
+          : "Organized files by predicted content label",
+        aiWarn ? "warn" : "success",
+      );
     } catch (err) {
       console.warn("[aiSmartSort] fallback:", err);
       handleNaturalSort();
@@ -162,7 +181,9 @@ import { entryError } from "../lib/engineError";
     imageStore.update((curr) => ({
       ...curr,
       files: curr.files.map((f) =>
-        f.id === entry.id ? { ...f, status: "compressing", error: undefined } : f,
+        f.id === entry.id
+          ? { ...f, status: "compressing", error: undefined, warnings: undefined }
+          : f,
       ),
     }));
 
@@ -183,11 +204,18 @@ import { entryError } from "../lib/engineError";
                 compressedBlob: res.blob,
                 compressedSize: res.blob.size,
                 result: res,
+                warnings: res.warnings,
               }
             : f,
         ),
       }));
-      if (notify) toast(`Compressed ${entry.name}`, "success");
+      if (notify) {
+        if (res.warnings && res.warnings.length > 0) {
+          toast(`Compressed ${entry.name} with fallback/quality notices`, "warn");
+        } else {
+          toast(`Compressed ${entry.name}`, "success");
+        }
+      }
       return true;
     } catch (err) {
       console.error("[imageCompress] error:", err);
@@ -226,8 +254,16 @@ import { entryError } from "../lib/engineError";
         if (await compressSingle(entry, false)) ok++;
         else fail++;
       }
+      const hasWarnings = imageStore
+        .get()
+        .files.some((f) => f.warnings && f.warnings.length > 0);
       if (ok > 0 && fail === 0) {
-        toast(`Compressed ${ok} ${ok === 1 ? "image" : "images"}`, "success");
+        toast(
+          hasWarnings
+            ? `Compressed ${ok} ${ok === 1 ? "image" : "images"} with fallback/quality notices`
+            : `Compressed ${ok} ${ok === 1 ? "image" : "images"}`,
+          hasWarnings ? "warn" : "success",
+        );
       } else if (ok > 0 && fail > 0) {
         toast(`Compressed ${ok} ${ok === 1 ? "image" : "images"} (${fail} failed)`, "warn");
       } else if (fail > 0) {
@@ -268,6 +304,7 @@ import { entryError } from "../lib/engineError";
   }
 
   function handleClear() {
+    aiWarnings = [];
     updateStore({ files: [] });
   }
 </script>
@@ -436,6 +473,8 @@ import { entryError } from "../lib/engineError";
       hasFiles={imageState.files.length > 0}
       onFiles={handleFilesAdded}
     />
+
+    <WarningBanner warnings={queueWarnings} />
 
     <!-- Inset File Queue Table -->
     {#if imageState.files.length > 0}

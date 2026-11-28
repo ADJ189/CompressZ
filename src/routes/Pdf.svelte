@@ -10,9 +10,11 @@ import { entryError } from "../lib/engineError";
   import { uid, type FileEntry, type PdfLevel, outputFilename } from "../lib/types";
   import { downloadBatch } from "../lib/batchDownload";
   import { toast } from "../toast";
+  import WarningBanner from "../components/WarningBanner.svelte";
 
   let pdfState = $state<PdfState>(pdfStore.get());
   let isBusy = $state(false);
+  const queueWarnings = $derived(pdfState.files.flatMap((f) => f.warnings ?? []));
 
   $effect(() => {
     const unsub = pdfStore.subscribe((val) => {
@@ -63,7 +65,9 @@ import { entryError } from "../lib/engineError";
     pdfStore.update((curr) => ({
       ...curr,
       files: curr.files.map((f) =>
-        f.id === entry.id ? { ...f, status: "compressing", error: undefined } : f,
+        f.id === entry.id
+          ? { ...f, status: "compressing", error: undefined, warnings: undefined }
+          : f,
       ),
     }));
 
@@ -84,11 +88,18 @@ import { entryError } from "../lib/engineError";
                 compressedBlob: res.blob,
                 compressedSize: res.blob.size,
                 result: res,
+                warnings: res.warnings,
               }
             : f,
         ),
       }));
-      if (notify) toast(`Compressed ${entry.name}`, "success");
+      if (notify) {
+        if (res.warnings && res.warnings.length > 0) {
+          toast(`Compressed ${entry.name} with fallback notices`, "warn");
+        } else {
+          toast(`Compressed ${entry.name}`, "success");
+        }
+      }
       return true;
     } catch (err) {
       console.error("[pdfCompress] error:", err);
@@ -127,8 +138,16 @@ import { entryError } from "../lib/engineError";
         if (await compressSingle(entry, false)) ok++;
         else fail++;
       }
+      const hasWarnings = pdfStore
+        .get()
+        .files.some((f) => f.warnings && f.warnings.length > 0);
       if (ok > 0 && fail === 0) {
-        toast(`Compressed ${ok} ${ok === 1 ? "PDF" : "PDFs"}`, "success");
+        toast(
+          hasWarnings
+            ? `Compressed ${ok} ${ok === 1 ? "PDF" : "PDFs"} with fallback notices`
+            : `Compressed ${ok} ${ok === 1 ? "PDF" : "PDFs"}`,
+          hasWarnings ? "warn" : "success",
+        );
       } else if (ok > 0 && fail > 0) {
         toast(`Compressed ${ok} ${ok === 1 ? "PDF" : "PDFs"} (${fail} failed)`, "warn");
       } else if (fail > 0) {
@@ -246,6 +265,8 @@ import { entryError } from "../lib/engineError";
     hasFiles={pdfState.files.length > 0}
     onFiles={handleFilesAdded}
   />
+
+  <WarningBanner warnings={queueWarnings} />
 
   {#if pdfState.files.length > 0}
     <FileQueue

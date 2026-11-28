@@ -31,7 +31,8 @@
   import { formatBytes, outputFilename } from "../lib/types";
   import MacIcon from "../components/MacIcon.svelte";
   import ToolGrid, { type ToolItem } from "../components/ToolGrid.svelte";
-  import type { AudioFormat, ImageFormat } from "../lib/types";
+  import WarningBanner from "../components/WarningBanner.svelte";
+  import type { AudioFormat, EngineWarning, ImageFormat } from "../lib/types";
   import { toast } from "../toast";
   import { getPlatformInfo } from "../lib/platform";
   import { onMount } from "svelte";
@@ -252,7 +253,16 @@
   let selectedFiles = $state<File[]>([]);
   let targetFormat = $state<string>("mp4");
   let isConverting = $state(false);
-  let convertedResults = $state<Array<{ fileId: string; name: string; blob: Blob }>>([]);
+  let convertedResults = $state<
+    Array<{
+      fileId: string;
+      name: string;
+      blob: Blob;
+      format?: string;
+      warnings?: EngineWarning[];
+    }>
+  >([]);
+  const batchWarnings = $derived(convertedResults.flatMap((r) => r.warnings ?? []));
   let selectedEngine = $state<"web-native" | "libreoffice">("web-native");
 
   // macOS Inspector Advanced State
@@ -695,6 +705,8 @@
         try {
           let blob: Blob | null = null;
           let suffix = "";
+          let formatNote: string | undefined;
+          let itemWarnings: EngineWarning[] | undefined;
 
           if (cat === "video") {
             const res = await runScheduled(
@@ -711,6 +723,7 @@
                 }),
             );
             blob = res.blob;
+            formatNote = res.format;
           } else if (cat === "audio") {
             const kbps = Number(audioBitrate.replace(/k$/i, ""));
             const res = await runScheduled(
@@ -725,6 +738,8 @@
                 ),
             );
             blob = res.blob;
+            formatNote = res.format;
+            itemWarnings = res.warnings;
           } else if (cat === "image") {
             const mime: ImageFormat =
               target === "jpeg"
@@ -740,6 +755,8 @@
                 compressImage(file, imageOptions({ quality: convertQuality, format: mime })),
             );
             blob = res.blob;
+            formatNote = res.format;
+            itemWarnings = res.warnings;
           } else if (cat === "pdf2office") {
             if (selectedEngine === "libreoffice" && isLibreOfficeAvailable()) {
               const bytes = new Uint8Array(await file.arrayBuffer());
@@ -788,6 +805,7 @@
             );
             blob = res.blob;
             suffix = "-images";
+            itemWarnings = res.warnings;
           } else if (cat === "docx") {
             if (target === "pdf") {
               if (selectedEngine === "libreoffice" && isLibreOfficeAvailable()) {
@@ -885,6 +903,8 @@
                   fallbackExt: target === "jpeg" ? "jpg" : target,
                 }),
                 blob,
+                ...(formatNote ? { format: formatNote } : {}),
+                ...(itemWarnings && itemWarnings.length > 0 ? { warnings: itemWarnings } : {}),
               },
             ];
           }
@@ -899,7 +919,14 @@
       }
 
       if (currentGen === conversionGeneration && convertedResults.length > 0) {
-        toast("Conversion completed", "success");
+        const hasFallbackWarnings = convertedResults.some(
+          (r) => r.warnings && r.warnings.length > 0,
+        );
+        if (hasFallbackWarnings) {
+          toast("Completed with codec/engine fallbacks — check warnings", "warn");
+        } else {
+          toast("Conversion completed", "success");
+        }
       }
     } finally {
       if (currentGen === conversionGeneration) {
@@ -1338,6 +1365,8 @@
           </div>
         </div>
 
+        <WarningBanner warnings={batchWarnings} title="Conversion notices & fallbacks" />
+
         <div id="file-list" class="cz-inset-table">
           {#each selectedFiles as file, idx}
             {@const fileId = getFileId(file)}
@@ -1348,6 +1377,24 @@
                 <div class="cz-card-meta">
                   <span class="cz-inset-row-name" title={file.name}>{file.name}</span>
                   <span class="cz-inset-row-meta">{formatBytes(file.size)}</span>
+                  {#if res?.format}
+                    <span class="cz-card-format-note">{res.format}</span>
+                  {/if}
+                  {#if res?.warnings && res.warnings.length > 0}
+                    <div class="cz-card-warn-box" role="status">
+                      {#each res.warnings as w, wi (`${w.code}:${wi}`)}
+                        <div>
+                          <span>{w.message}</span>
+                          {#if w.detail}
+                            <details class="cz-card-warn-details">
+                              <summary>Details</summary>
+                              <pre>{w.detail}</pre>
+                            </details>
+                          {/if}
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
                 </div>
               </div>
 
@@ -1355,10 +1402,18 @@
                 {#if isConverting}
                   <div class="cz-status-pill is-busy">Converting...</div>
                 {:else if res}
-                  <div class="cz-status-pill is-done">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                      <polyline points="20 6 9 17 4 12"/>
-                    </svg>
+                  <div class="cz-status-pill {res.warnings && res.warnings.length > 0 ? 'is-warn' : 'is-done'}">
+                    {#if res.warnings && res.warnings.length > 0}
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                        <line x1="12" y1="9" x2="12" y2="13" />
+                        <line x1="12" y1="17" x2="12.01" y2="17" />
+                      </svg>
+                    {:else}
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                    {/if}
                     <span>{formatBytes(res.blob.size)}</span>
                   </div>
                   <button
