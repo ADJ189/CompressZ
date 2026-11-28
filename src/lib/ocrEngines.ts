@@ -15,6 +15,7 @@
 
 import { EngineError, toErrorMessage } from "./engineError";
 import { supportsWasmSimd } from "./browserProfile";
+import type { EngineWarning } from "./types";
 
 export type OcrProfile = "auto" | "printed" | "handwriting" | "mixed";
 export type OcrEngineId = "auto" | "tesseract" | "paddle" | "trocr";
@@ -68,6 +69,7 @@ export interface OcrPageResult {
   language: OcrLanguage;
   profile: OcrProfile;
   warnings?: string[];
+  engineWarnings?: EngineWarning[];
   executionTimeMs?: number;
 }
 
@@ -291,6 +293,7 @@ export async function runPrintedOcr(
   options: {
     language?: OcrLanguage;
     symbolMode?: boolean;
+    preferredEngine?: OcrEngineId;
     onProgress?: (progress: number, status: string) => void;
   } = {},
 ): Promise<OcrPageResult> {
@@ -323,6 +326,18 @@ export async function runPrintedOcr(
 
   const lines: OcrLineResult[] = [];
   const warnings: string[] = [];
+  const engineWarnings: EngineWarning[] = [];
+
+  if (options.preferredEngine === "paddle") {
+    const msg = "PaddleOCR is not enabled in this build; ran Tesseract OCR instead.";
+    warnings.push(msg);
+    engineWarnings.push({
+      code: "paddle-fallback-tesseract",
+      engine: "ocr",
+      severity: "warn",
+      message: msg,
+    });
+  }
 
   const rawLines = result.data?.lines ?? [];
   for (const l of rawLines) {
@@ -350,7 +365,15 @@ export async function runPrintedOcr(
 
   const overallConfidence = Math.round(result.data?.confidence ?? 0);
   if (overallConfidence < 60 && lines.length > 0) {
-    warnings.push("Low OCR confidence detected; review page preview for fidelity.");
+    const msg = "Low OCR confidence detected; review page preview for fidelity.";
+    warnings.push(msg);
+    engineWarnings.push({
+      code: "ocr-low-confidence",
+      engine: "ocr",
+      severity: "warn",
+      message: msg,
+      detail: `Page confidence: ${overallConfidence}%`,
+    });
   }
 
   return {
@@ -361,6 +384,7 @@ export async function runPrintedOcr(
     language: (options.language ?? "eng"),
     profile: "printed",
     warnings: warnings.length > 0 ? warnings : undefined,
+    ...(engineWarnings.length > 0 ? { engineWarnings } : {}),
     executionTimeMs: Math.round(performance.now() - startTime),
   };
 }

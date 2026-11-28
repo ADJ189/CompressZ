@@ -7,7 +7,8 @@
  * in compressPdf.ts and pages/ocr.ts, so there's nothing new to audit.
  */
 import { zipToBlob, zipSupported } from "./zip";
-import { openPdfDocument } from "./pdfLibs";
+import { getPdfWorkerFallbackWarning, openPdfDocument } from "./pdfLibs";
+import type { EngineWarning } from "./types";
 import { get2D } from "./gpu";
 import { resolveExecutionProfile } from "./settings";
 import { clampCanvasDimensions } from "./browserProfile";
@@ -18,6 +19,7 @@ export interface PdfToImagesResult {
   blob: Blob; // single image, or a .zip if multiple pages
   isZip: boolean;
   pageCount: number;
+  warnings?: EngineWarning[];
 }
 
 export async function pdfToImages(
@@ -95,6 +97,9 @@ export async function pdfToImages(
   }
   onProgress?.(100);
 
+  const workerWarn = getPdfWorkerFallbackWarning();
+  const warnings = workerWarn ? [workerWarn] : undefined;
+
   if (pages.length === 1) {
     // Re-wrap in a fresh Uint8Array so TS sees a concrete ArrayBuffer (not
     // ArrayBufferLike/SharedArrayBuffer) backing — Blob's type requires
@@ -104,6 +109,7 @@ export async function pdfToImages(
       blob: new Blob([new Uint8Array(pages[0].data)], { type: pages[0].mime }),
       isZip: false,
       pageCount: 1,
+      ...(warnings ? { warnings } : {}),
     };
   }
   if (!zipSupported()) {
@@ -111,5 +117,10 @@ export async function pdfToImages(
       "Multi-page PDF → image needs one file per page, which requires ZIP support (CompressionStream) — please use a current version of Chrome, Firefox, Safari, or Edge.",
     );
   }
-  return { blob: await zipToBlob(pages), isZip: true, pageCount: pages.length };
+  return {
+    blob: await zipToBlob(pages),
+    isZip: true,
+    pageCount: pages.length,
+    ...(warnings ? { warnings } : {}),
+  };
 }

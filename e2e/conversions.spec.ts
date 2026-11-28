@@ -436,6 +436,39 @@ test.describe("conversion matrix", () => {
     expect(bytes.length).toBeGreaterThan(200);
   });
 
+  test("Images: PNG → AVIF encodes real ftypavif bytes with zero fallback warnings", async ({ page }) => {
+    test.setTimeout(CDN_TIMEOUT);
+    await page.goto("/compress/images");
+    await page.locator("#fmt-sel").selectOption("image/avif");
+    await upload(page, fixtures.png);
+    await page.getByRole("button", { name: "Compress all" }).click();
+    await waitForCards(page, 1, CDN_TIMEOUT);
+
+    const { name, bytes } = await clickDownload(page);
+    expect(name).toMatch(/-compressed\.avif$/);
+    expect(bytes.subarray(4, 12).toString("latin1")).toBe("ftypavif");
+    await expect(page.locator(".cz-warn-banner")).toHaveCount(0);
+  });
+
+  test("Images: CDN-blocked AVIF fallback surfaces WarningBanner and row warning badge", async ({ page }) => {
+    test.setTimeout(CDN_TIMEOUT);
+    await page.route("**/avif_enc*", (route) => route.abort());
+    await page.goto("/compress/images");
+    await page.locator("#fmt-sel").selectOption("image/avif");
+    await upload(page, fixtures.png);
+    await page.getByRole("button", { name: "Compress all" }).click();
+    await waitForCards(page, 1, CDN_TIMEOUT);
+
+    await expect(page.locator(".cz-warn-banner")).toBeVisible();
+    await expect(page.locator(".cz-warn-banner")).toContainText(/AVIF/i);
+    await expect(page.locator("#file-list .cz-status-pill.is-warn")).toBeVisible();
+    await expect(page.locator("#file-list .cz-card-warn-box")).toBeVisible();
+    await expect(page.locator(".toast-item")).toContainText(/fallback|notice/i);
+
+    const { name } = await clickDownload(page);
+    expect(name).toMatch(/-compressed\.(webp|jpg)$/);
+  });
+
   test("Images → PDF: two images become one readable PDF", async ({ page }) => {
     test.setTimeout(CDN_TIMEOUT);
     await page.goto("/compress/images-to-pdf");
@@ -493,6 +526,46 @@ test.describe("conversion matrix", () => {
     const { name, bytes } = await clickConvertDownload(page, 60_000);
     expect(name).toMatch(/\.webp$/);
     expect(bytes.subarray(8, 12).toString("latin1")).toBe("WEBP");
+  });
+
+  test("Convert: image → AVIF", async ({ page }) => {
+    test.setTimeout(CDN_TIMEOUT);
+    await page.goto("/convert");
+    await expect(async () => {
+      await category(page, "Image").click();
+      await expect(category(page, "Image")).toHaveAttribute("aria-selected", "true");
+    }).toPass({ timeout: 10_000 });
+    await page.getByRole("button", { name: "AVIF", exact: true }).click();
+    await upload(page, fixtures.png);
+    await page.getByRole("button", { name: "Convert All" }).click();
+    await expect(page.locator(".cz-status-pill.is-done").first()).toBeVisible({
+      timeout: CDN_TIMEOUT,
+    });
+
+    const { name, bytes } = await clickConvertDownload(page, CDN_TIMEOUT);
+    expect(name).toMatch(/\.avif$/);
+    expect(bytes.subarray(4, 12).toString("latin1")).toBe("ftypavif");
+  });
+
+  test("Convert: CDN-blocked AVIF fallback surfaces WarningBanner and row warning badge", async ({ page }) => {
+    test.setTimeout(CDN_TIMEOUT);
+    await page.route("**/avif_enc*", (route) => route.abort());
+    await page.goto("/convert");
+    await expect(async () => {
+      await category(page, "Image").click();
+      await expect(category(page, "Image")).toHaveAttribute("aria-selected", "true");
+    }).toPass({ timeout: 10_000 });
+    await page.getByRole("button", { name: "AVIF", exact: true }).click();
+    await upload(page, fixtures.png);
+    await page.getByRole("button", { name: "Convert All" }).click();
+    await expect(page.locator(".cz-status-pill.is-warn").first()).toBeVisible({
+      timeout: CDN_TIMEOUT,
+    });
+
+    await expect(page.locator(".cz-warn-banner")).toBeVisible();
+    await expect(page.locator("#file-list .cz-card-warn-box")).toBeVisible();
+    const { name } = await clickConvertDownload(page, CDN_TIMEOUT);
+    expect(name).toMatch(/\.(webp|jpg)$/);
   });
 
   test("Convert: images → PDF", async ({ page }) => {

@@ -2,7 +2,10 @@ import {
   randomToken,
   type CompressOptions,
   type CompressResult,
+  type EngineWarning,
 } from "./types";
+import { toErrorMessage } from "./engineError";
+import { mergeWarnings } from "./warnings";
 import {
   getFFmpeg,
   ffExec,
@@ -21,6 +24,8 @@ export async function compressVideo(
   options: CompressOptions,
   onProgress?: (pct: number) => void,
 ): Promise<CompressResult> {
+  const warnings: EngineWarning[] = [];
+
   // Fast path: browser-native WebCodecs encode/decode muxed by Mediabunny.
   // It only runs for simple, verified codec configurations; every other
   // request — and every failed probe — falls through to FFmpeg.wasm below.
@@ -32,21 +37,43 @@ export async function compressVideo(
       "[video] WebCodecs/Mediabunny route failed, falling back to FFmpeg:",
       e,
     );
+    warnings.push({
+      code: "webcodecs-fallback",
+      engine: "video",
+      severity: "info",
+      message: "WebCodecs encoding failed; fell back to FFmpeg.wasm.",
+      detail: toErrorMessage(e, "WebCodecs error"),
+    });
   }
 
   // Compatibility path: FFmpeg.wasm — filters, 10-bit, multi-track audio,
   // subtitle passthrough, two-pass and every codec the browser can't encode.
   try {
-    return await ffJob(() => videoViaFFmpeg(file, options, onProgress));
+    const ffRes = await ffJob(() => videoViaFFmpeg(file, options, onProgress));
+    const merged = mergeWarnings(ffRes.warnings, warnings);
+    return merged ? { ...ffRes, warnings: merged } : ffRes;
   } catch (e) {
     console.warn("[video] FFmpeg failed, falling back to MediaRecorder:", e);
+    const ffDetail = toErrorMessage(e, "FFmpeg error");
+    const mrRes = await videoViaMediaRecorder(file, options, onProgress);
+    const requestedCodec = (options.videoCodec ?? "h264").toUpperCase();
+    const requestedContainer =
+      options.subtitleMode === "all" || options.audioTrackMode === "all"
+        ? "mkv"
+        : options.videoCodec === "vp8" || options.videoCodec === "vp9"
+          ? "webm"
+          : "mp4";
+    const actualMime = mrRes.blob.type || "video/webm";
+    warnings.push({
+      code: "ffmpeg-mediarecorder-fallback",
+      engine: "video",
+      severity: "warn",
+      message: `FFmpeg failed; recorded via MediaRecorder as ${actualMime} instead of requested ${requestedCodec} (.${requestedContainer}).`,
+      detail: ffDetail,
+    });
+    const merged = mergeWarnings(mrRes.warnings, warnings);
+    return merged ? { ...mrRes, warnings: merged } : mrRes;
   }
-
-  // Last resort: MediaRecorder — browser-native recording of a canvas + the
-  // source video's audio track. Produces a valid container on every browser
-  // that still supports MediaRecorder, but cannot honour codec/container
-  // choices beyond what the recorder supports.
-  return videoViaMediaRecorder(file, options, onProgress);
 }
 
 // Counts audio streams in a file already written into ffmpeg's virtual FS,

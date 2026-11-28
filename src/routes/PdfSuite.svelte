@@ -41,14 +41,15 @@
   import { runScheduled } from "../lib/resourceManager";
   import { resolveExecutionProfile } from "../lib/settings";
   import { consumeStagedUniversalFile, currentRoute } from "../store";
-  import { formatBytes } from "../lib/types";
-import { entryError } from "../lib/engineError";
+  import { formatBytes, type EngineWarning } from "../lib/types";
+  import { entryError } from "../lib/engineError";
   import { toast } from "../toast";
   import { onMount, onDestroy } from "svelte";
   import { navigate } from "../router";
   import MacIcon from "../components/MacIcon.svelte";
   import ToolCard from "../components/ToolCard.svelte";
   import ToolGrid, { type ToolItem } from "../components/ToolGrid.svelte";
+  import WarningBanner from "../components/WarningBanner.svelte";
 
   type SubTool =
     | "split"
@@ -97,6 +98,7 @@ import { entryError } from "../lib/engineError";
   let isFileLoading = $state<boolean>(false);
   let isProcessing = $state<boolean>(false);
   let progressPct = $state<number>(0);
+  let suiteWarnings = $state<EngineWarning[]>([]);
 
   // Split tool state
   let splitMode = $state<"ranges" | "chunk" | "burst">("ranges");
@@ -869,6 +871,7 @@ import { entryError } from "../lib/engineError";
 
     isProcessing = true;
     progressPct = 10;
+    suiteWarnings = [];
 
     try {
       const jobBytes = snapBytes?.byteLength ?? snapFile?.size ?? 0;
@@ -1050,11 +1053,12 @@ import { entryError } from "../lib/engineError";
             toast(rep.message, "success");
           } else {
             const rep = await repairCorruptPdf(bytes, (p) => (progressPct = p));
+            suiteWarnings = rep.warnings ?? [];
             downloadBlob(
               bytesBlob(rep.repairedBytes, "application/pdf"),
               `repaired-${snapFileName || "document.pdf"}`,
             );
-            toast(rep.message, "success");
+            toast(rep.message, suiteWarnings.length > 0 ? "warn" : "success");
           }
         } else if (snapTool === "redact") {
           const out = await applyTrueRedaction(snapBytes!, {
@@ -2328,6 +2332,12 @@ import { entryError } from "../lib/engineError";
                 <h3>File Recovery & Repair</h3>
                 <p>Rebuilds damaged PDF xref tables and trailers, and inspects MP4 containers for a missing index.</p>
               </div>
+
+              <WarningBanner
+                warnings={suiteWarnings}
+                title="Repair fallback & structural notices"
+                onDismiss={() => (suiteWarnings = [])}
+              />
 
               <div class="cz-repair-status-box">
                 <div class="cz-repair-icon"><MacIcon name="repair" size={32} /></div>

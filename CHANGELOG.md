@@ -7,12 +7,16 @@ carry an `-a`/`-b` prerelease suffix (`-a` = early/alpha, `-b` = beta,
 close to ready) with a trailing counter, e.g. `1.12.0-b1`, `1.12.0-b2`.
 The suffix is dropped on the release that ships it (`1.12.0`).
 
-## [Unreleased]
 
 ## [1.15.7] - 2026-11-28
 
 ### Added
 
+- **Unified Engine Warning System (`types.ts`, `warnings.ts`, `WarningBanner.svelte`, `FileCard.svelte`, `style.css`, `Convert.svelte`, `Images.svelte`, `Video.svelte`, `Pdf.svelte`, `Ocr.svelte`, `PdfSuite.svelte`, `ImagesToPdf.svelte`)**:
+  - Added structured `EngineWarning` metadata across `CompressResult`, `FileEntry`, `PdfToImagesResult`, `RepairPdfResult`, `OcrPageResult`, and `getAiRuntimeInfo()` with `deduplicateWarnings()` aggregation.
+  - Added accessible `<WarningBanner>` (`role="status"`, `aria-live="polite"`, expandable `Details`, WCAG AA light/dark contrast) and `.cz-status-pill.is-warn` / `.cz-card-warn-box` row indicators across compression, conversion, OCR, and PDF repair routes; fallback runs now emit `"warn"` toasts instead of silent `"success"` toasts.
+  - Instrumented fallback reporting for AVIF→WebP/JPEG, WebP→JPEG, SSIM/dimension guards, WebCodecs→FFmpeg→MediaRecorder (naming substituted MIME/container), structural PDF→canvas raster, PDF.js CDN worker fallback, QPDF exit `3` / JS XREF salvage, `paddle`→Tesseract OCR substitution, low OCR confidence, text-layer script gaps, and WebGPU→WASM AI fallback.
+- **Consolidated Technical Reference (`docs/TECHNICAL_REFERENCE.md`)**: Combined `docs/` engine/AI/telemetry policies, implemented `docs/superpowers/plans/`, and `docs/security/AUDIT-REPORT.md` into a single up-to-date reference aligned with the codebase.
 - **Per-Browser Optimization Profiles (`browserProfile.ts`, `settings.ts`, `resourceManager.ts`, `gpu.ts`, `compressImage.ts`, `compressPdf.ts`, `convertPdf.ts`, `imagesToPdf.ts`, `compressVideo.ts`, `ocrEngines.ts`, `aiEngine.ts`, `ocrHandwriting.ts`, `PdfSuite.svelte`, `SettingsDialog.svelte`)**:
   - Added 6 dedicated runtime profiles: `chromium-desktop`, `chromium-mobile`, `webkit-desktop`, `webkit-mobile`, `gecko-desktop`, and `gecko-mobile` (selectable or auto-detected via `resolveExecutionProfile()`, surfaced in Settings → Performance & Diagnostics, and synced to `document.documentElement.dataset.browserProfile` and `--chrome-blur`).
   - Added cross-browser engine safeguards: iOS WebKit 16 MP / 4096px canvas area clamping and eager backing-store release (`width = 0`), WebKit WebGL2 context release (`WEBGL_lose_context`), runtime WebP canvas-encode verification with JPEG fallback when browsers emit PNG, Firefox `mozCaptureStream()` audio capture in MediaRecorder fallback, WASM SIMD feature probing with non-SIMD Tesseract core fallback (`tesseract-core-lstm.wasm.js`), ONNX WASM thread caps per profile, and mobile backdrop-blur / PDF thumbnail budget tuning.
@@ -23,6 +27,9 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 
 ### Fixed
 
+- **Same-Origin AVIF & WebKit PDF.js Workers (`avifEncode.ts`, `avifWorker.ts`, `pdfLibs.ts`, `tests/batchAvif.test.ts`, `tests/warnings.test.ts`, `e2e/conversions.spec.ts`)**:
+  - Fixed AVIF WASM encoding failures in Chromium and Firefox under `COOP: same-origin` / `COEP: credentialless` and strict CSP `worker-src` by routing `@jsquash/avif@1.3.0` to its single-threaded `codec/enc/avif_enc.js` build inside a same-origin `'self'` module worker (`avifWorker.ts`) with main-thread fallback and WASM heap copy safety.
+  - Fixed silent PDF.js fake-worker main-thread degradation on Safari/WebKit by fetching `pdf.worker.mjs` once into a same-origin `blob:` URL in `pdfLibs.ts`, with clean CDN URL fallback and warning reporting.
 - **Per-Browser Optimization Profiles & Cross-Engine Fixes (`avifEncode.ts`, `compressImage.ts`, `ocrHandwriting.ts`, `settings.ts`, `PdfSuite.svelte`, `Ocr.svelte`, `AppShell.svelte`, `SettingsDialog.svelte`, `ToolCard.svelte`, `ToolGrid.svelte`, `toast.ts`, `style.css`)**: Mapped `@jsquash/avif` WASM quality to inverted `cqLevel` (0–63 range), added white-background compositing for JPEG fallbacks in `compressImage.ts` while preserving fallback flags/metadata across target-size binary search and SSIM retries, re-evaluated `aiBackendPreference` changes in `loadHandwritingPipeline()`, aligned Balanced-mode concurrency caps with `getResourcePolicy()`, recorded `PdfSuite` eager thumbnail budget across lazy loading and `loadFile()` handoff, surfaced batch OCR text-layer gap notes in aggregate summaries, restored Settings focus to whichever trigger opened it (including mobile dock), excluded `.error` toasts from preferred eviction, moved `@container` onto `.cz-tool-grid-item` after viewport breakpoints, and raised mobile `.home-eyebrow`/`.htc-tag` font sizes to `0.75rem`.
 - **Handwriting OCR CDN WASM & Crop Bounds (`ocrHandwriting.ts`)**: Configured `@huggingface/transformers` CDN `wasmPaths` and `allowLocalModels = false` matching `aiEngine.ts` (avoiding 404s after `strip-oversized-assets.mjs`), destroyed the temporary WebGPU probe device, and fixed `detectTextLines()` bottom-edge crop height calculation.
 - **PDF → Markdown Column Detection (`pdfToMarkdown.ts`)**: Passed scale-1 PDF point page dimensions (instead of DPI-scaled pixels) to `reconstructReadingOrder()` so multi-column detection works at all DPIs, and ensured `page.cleanup()` runs in `finally`. Also revoked previous preview blob URLs in `PdfMarkdown.svelte` via `$effect` cleanup.

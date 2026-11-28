@@ -5,7 +5,7 @@
   import { imagesToPdf } from "../lib/imagesToPdf";
   import { imagesToPdfOptions } from "../lib/options";
   import { runScheduled } from "../lib/resourceManager";
-  import { formatBytes } from "../lib/types";
+  import { formatBytes, type EngineWarning } from "../lib/types";
   import { toast } from "../toast";
   import { flip } from "svelte/animate";
   import { onDestroy } from "svelte";
@@ -15,13 +15,15 @@
     naturalCompare,
     type Recommendation,
   } from "../lib/recommendations";
-  import { smartAnalyze, sortByPredictedLabel } from "../lib/aiEngine";
+  import { smartAnalyze, sortByPredictedLabel, getAiRuntimeInfo } from "../lib/aiEngine";
   import { getSettings, resolvedAiModelTier } from "../lib/settings";
+  import WarningBanner from "../components/WarningBanner.svelte";
 
   let imagesToPdfState = $state<ImagesToPdfState>(imagesToPdfStore.get());
   let isConverting = $state(false);
   let isAiSorting = $state(false);
   let aiEnabled = $state(getSettings().ai?.enabled ?? true);
+  let aiWarnings = $state<EngineWarning[]>([]);
   let convertedBlob = $state<Blob | null>(null);
   let dismissTrigger = $state(0);
   let draggedIndex = $state<number | null>(null);
@@ -196,6 +198,8 @@
       const rawFiles = imagesToPdfState.files;
       const tier = resolvedAiModelTier(settings);
       const analyses = await smartAnalyze(rawFiles, tier);
+      const aiWarn = getAiRuntimeInfo()?.lastFallbackWarning;
+      aiWarnings = aiWarn ? [aiWarn] : [];
       const currentFiles = imagesToPdfState.files;
       if (currentFiles.length === 0) return;
 
@@ -213,7 +217,12 @@
       const remainingSorted = sortedFiles.filter((f) => currentSet.has(f));
       const newlyAdded = currentFiles.filter((f) => !rawFiles.includes(f));
       updateStore({ files: [...remainingSorted, ...newlyAdded] });
-      toast("Organized images by predicted content class", "success");
+      toast(
+        aiWarn
+          ? "Organized images using CPU/WASM fallback (WebGPU unavailable)"
+          : "Organized images by predicted content class",
+        aiWarn ? "warn" : "success",
+      );
     } catch (err) {
       console.warn("[imagesToPdf:aiSmartSort] fallback:", err);
       sortNatural();
@@ -304,6 +313,7 @@
       URL.revokeObjectURL(url);
     }
     thumbnailUrls.clear();
+    aiWarnings = [];
     updateStore({ files: [] });
     convertedBlob = null;
   }
@@ -402,6 +412,8 @@
     hasFiles={imagesToPdfState.files.length > 0}
     onFiles={handleFilesAdded}
   />
+
+  <WarningBanner warnings={aiWarnings} onDismiss={() => (aiWarnings = [])} />
 
   {#if imagesToPdfState.files.length > 0}
     <div class="cz-merge-queue">

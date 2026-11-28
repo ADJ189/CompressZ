@@ -39,6 +39,8 @@
 
 import { decodeImageBitmap } from "./imageDecode";
 import { getSettings, resolveExecutionProfile } from "./settings";
+import { toErrorMessage } from "./engineError";
+import type { EngineWarning } from "./types";
 // The exact onnxruntime-web version bundled with @huggingface/transformers —
 // injected at build time (see vite.config.ts) by reading the installed
 // package directly, since onnxruntime-web's package.json isn't exposed
@@ -122,6 +124,7 @@ type Classifier = (
 const pipelines = new Map<AiModelTier, Promise<Classifier>>();
 const loadedBackends = new Map<AiModelTier, AiBackend>();
 let _lastLoaded: { tier: AiModelTier; backend: AiBackend } | null = null;
+let _lastFallbackWarning: EngineWarning | null = null;
 
 /**
  * What the last successful model load actually used. Null until a model has
@@ -132,12 +135,14 @@ export function getAiRuntimeInfo(): {
   tier: AiModelTier;
   model: string;
   backend: AiBackend;
+  lastFallbackWarning?: EngineWarning;
 } | null {
   if (!_lastLoaded) return null;
   return {
     tier: _lastLoaded.tier,
     model: MODEL_IDS[_lastLoaded.tier],
     backend: _lastLoaded.backend,
+    ...(_lastFallbackWarning ? { lastFallbackWarning: _lastFallbackWarning } : {}),
   };
 }
 
@@ -180,10 +185,12 @@ async function configureTransformersEnv(): Promise<any> {
 async function loadClassifier(
   tier: AiModelTier,
   attempts: LoadAttempt[],
+  webGpuRequested: boolean,
   onProgress?: (pct: number, note: string) => void,
 ): Promise<Classifier> {
   const pipeline = await configureTransformersEnv();
   let lastError: unknown = null;
+  let webGpuError: unknown = null;
 
   for (const attempt of attempts) {
     try {
@@ -209,10 +216,24 @@ async function loadClassifier(
       });
       loadedBackends.set(tier, attempt.backend);
       _lastLoaded = { tier, backend: attempt.backend };
+      if (webGpuRequested && attempt.backend === "wasm") {
+        _lastFallbackWarning = {
+          code: "ai-webgpu-wasm-fallback",
+          engine: "ai",
+          severity: "warn",
+          message: "WebGPU AI inference failed; fell back to CPU/WASM execution.",
+          ...(webGpuError ? { detail: toErrorMessage(webGpuError, "WebGPU unavailable") } : {}),
+        };
+      } else {
+        _lastFallbackWarning = null;
+      }
       onProgress?.(100, "Ready");
       return ((input: any, opts?: any) => clf(input, opts)) as Classifier;
     } catch (err) {
       lastError = err;
+      if (attempt.backend === "webgpu" && !webGpuError) {
+        webGpuError = err;
+      }
       console.warn(
         `[ai] ${tier} model failed on ${attempt.backend}${attempt.dtype ? ` (${attempt.dtype})` : ""}, trying next backend:`,
         err,
@@ -257,7 +278,7 @@ async function getClassifier(
           { backend: "wasm", dtype: "q8" },
           { backend: "wasm" },
         ];
-    return loadClassifier(tier, attempts, onProgress);
+    return loadClassifier(tier, attempts, preferWebGpu, onProgress);
   })();
 
   // Don't cache a failed load — otherwise one offline/transient failure
@@ -276,6 +297,7 @@ export function unloadModels() {
   pipelines.clear();
   loadedBackends.clear();
   _lastLoaded = null;
+  _lastFallbackWarning = null;
 }
 
 // ── Classification ────────────────────────────────────────────

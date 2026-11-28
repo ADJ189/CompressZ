@@ -8,10 +8,10 @@ This document specifies the technical architecture, operational boundaries, and 
 
 | Engine | Primary Duties | Technologies / Libraries | Isolation Mode | Maximum Memory Cap |
 | :--- | :--- | :--- | :--- | :--- |
-| **Image Engine** | Compression, format conversion (WebP, AVIF, JPEG, PNG, SVG) | Canvas 2D, OffscreenCanvas, WebAssembly codecs | Dedicated Web Worker / Main thread | Resource Guard concurrency & admission |
-| **Video Engine** | Transcoding, bitrate budgeting, downscaling | WebCodecs API (browser HW/SW), Mediabunny, FFmpeg WASM | Dedicated Web Worker | 1.5 GiB per task |
-| **Audio Engine** | Transcoding (MP3, WAV, OGG, AAC), sample rate conversion | Web Audio API (`AudioContext`), LAME WASM | Dedicated Web Worker | 256 MiB per task |
-| **PDF Suite & Studio** | Splitting, merging, watermarking, redaction, AcroForms, repair | QPDF WASM, pdf-lib, PDF.js | Web Worker / Virtual FS | 1.0 GiB per task |
+| **Image Engine** | Compression, format conversion (WebP, AVIF, JPEG, PNG, SVG) | Canvas 2D, OffscreenCanvas, WebGL2 resize, `@jsquash/avif` ST WASM | Same-origin `'self'` module worker (`avifWorker.ts`) / Main thread | Resource Guard concurrency & admission |
+| **Video Engine** | Transcoding, bitrate budgeting, downscaling | WebCodecs API (browser HW/SW), Mediabunny, FFmpeg WASM | Dedicated `blob:` Web Worker | 1.5 GiB per task |
+| **Audio Engine** | Transcoding (MP3, WAV, OGG, AAC), sample rate conversion | Web Audio API (`AudioContext`), LAME WASM | Dedicated `blob:` Web Worker | 256 MiB per task |
+| **PDF Suite & Studio** | Splitting, merging, watermarking, redaction, AcroForms, repair | QPDF WASM, pdf-lib, PDF.js (same-origin `blob:` worker) | Same-origin `blob:` Worker / Virtual FS | 1.0 GiB per task |
 | **Office Conversion** | Two-way conversions (PDF ↔ Word, Excel, PPTX) | Native OOXML streaming, LibreOffice WASM | Web Worker / Isolated WASM | 1.0 GiB per task |
 | **OCR Engine** | Printed text extraction, CJK character recognition, handwriting | Tesseract.js, PaddleOCR ONNX, Transformers.js | Web Worker / WebGPU | 1.0 GiB per task |
 | **Archive Engine** | Multi-file packaging, ZIP and TAR creation/extraction | Native `CompressionStream`, `DecompressionStream`, pure TS | In-memory stream | 4 GiB hard boundary (32-bit ZIP) |

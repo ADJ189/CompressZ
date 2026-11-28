@@ -13,20 +13,22 @@
   } from "../lib/ocrEngines";
   import { runHandwritingOcr } from "../lib/ocrHandwriting";
   import { decodeImageBitmap } from "../lib/imageDecode";
-  import { openPdfDocument } from "../lib/pdfLibs";
+  import { openPdfDocument, getPdfWorkerFallbackWarning } from "../lib/pdfLibs";
   import { getSettings } from "../lib/settings";
   import {
     createSearchablePdfBuilder,
     describeTextLayerGap,
   } from "../lib/searchablePdf";
   import { runScheduled } from "../lib/resourceManager";
-import { entryError } from "../lib/engineError";
-  import { uid, type FileEntry } from "../lib/types";
+  import { entryError } from "../lib/engineError";
+  import { uid, type EngineWarning, type FileEntry } from "../lib/types";
   import { downloadBatch } from "../lib/batchDownload";
   import { toast } from "../toast";
+  import WarningBanner from "../components/WarningBanner.svelte";
 
   let ocrState = $state<OcrState>(ocrStore.get());
   let isBusy = $state(false);
+  const queueWarnings = $derived(ocrState.files.flatMap((f) => f.warnings ?? []));
 
   $effect(() => {
     const unsub = ocrStore.subscribe((val) => {
@@ -192,7 +194,12 @@ import { entryError } from "../lib/engineError";
   ): Promise<boolean> {
     if (entry.status === "compressing") return false;
 
-    patchEntry(entry.id, { status: "compressing", progress: 0, error: undefined });
+    patchEntry(entry.id, {
+      status: "compressing",
+      progress: 0,
+      error: undefined,
+      warnings: undefined,
+    });
 
     try {
       const handwriting = ocrState.profile === "handwriting";
@@ -213,6 +220,7 @@ import { entryError } from "../lib/engineError";
           let skipped = 0;
           const unsupported = new Set<number>();
           const textPages: string[] = [];
+          const entryWarnings: EngineWarning[] = [];
 
           let pdfDoc: any = null;
           try {
@@ -230,6 +238,7 @@ import { entryError } from "../lib/engineError";
               const res = await runPrintedOcr(canvas, {
                 language: ocrState.language,
                 symbolMode: ocrState.symbolMode,
+                preferredEngine: ocrState.engine,
                 onProgress: (pct, status) => {
                   patchEntry(entry.id, {
                     progress: Math.min(90, Math.round((pageNumber - 1) / pageCount * 90 + (pct / 100) * (90 / pageCount))),
@@ -237,6 +246,9 @@ import { entryError } from "../lib/engineError";
                   void status;
                 },
               });
+              if (res.engineWarnings) {
+                entryWarnings.push(...res.engineWarnings);
+              }
               const words: OcrWordBox[] = [];
               for (const line of res.lines) words.push(...line.words);
               return { text: res.text, words };
@@ -325,6 +337,9 @@ import { entryError } from "../lib/engineError";
               }
             }
 
+            const workerWarn = !image ? getPdfWorkerFallbackWarning() : null;
+            if (workerWarn) entryWarnings.push(workerWarn);
+
             const text = textPages.join("\n\n").trim();
             const base = entry.name.replace(/\.[^/.]+$/, "");
 
@@ -337,13 +352,23 @@ import { entryError } from "../lib/engineError";
                 ocrState.outputKind === "both"
                   ? new Blob([text], { type: "text/plain;charset=utf-8" })
                   : undefined;
+              const gapNote = describeTextLayerGap([...unsupported]) ?? undefined;
+              if (gapNote) {
+                entryWarnings.push({
+                  code: "ocr-text-layer-gap",
+                  engine: "ocr",
+                  severity: "info",
+                  message: gapNote,
+                });
+              }
               return {
                 blob: pdfBlob,
                 name: `${base}-searchable.pdf`,
                 extraBlob: txtBlob,
                 extraName: txtBlob ? `${base}-ocr.txt` : undefined,
-                note: describeTextLayerGap([...unsupported]) ?? undefined,
+                note: gapNote,
                 skipped,
+                warnings: entryWarnings,
               };
             }
 
@@ -354,6 +379,7 @@ import { entryError } from "../lib/engineError";
               extraName: undefined,
               note: undefined,
               skipped: 0,
+              warnings: entryWarnings,
             };
           } finally {
             // A thrown page must not leak the pdf.js document.
@@ -370,11 +396,18 @@ import { entryError } from "../lib/engineError";
         extraBlob: result.extraBlob,
         extraName: result.extraName,
         error: undefined,
+        warnings: result.warnings.length > 0 ? result.warnings : undefined,
       });
 
+      const hasWarn = result.warnings.some((w) => w.severity !== "info");
       if (notify) {
         if (result.note) toast(result.note, "info");
-        toast(`OCR completed for ${entry.name}`, "success");
+        toast(
+          hasWarn
+            ? `OCR completed for ${entry.name} with fallback/confidence notices`
+            : `OCR completed for ${entry.name}`,
+          hasWarn ? "warn" : "success",
+        );
       } else if (result.note && gapNotes) {
         gapNotes.push(result.note);
       }
@@ -413,10 +446,13 @@ import { entryError } from "../lib/engineError";
       }
       const uniqueGaps = [...new Set(gapNotes)];
       const gapSuffix = uniqueGaps.length > 0 ? ` — ${uniqueGaps.join(" ")}` : "";
+      const hasWarnings = ocrStore
+        .get()
+        .files.some((f) => f.warnings && f.warnings.some((w) => w.severity !== "info"));
       if (ok > 0 && fail === 0) {
         toast(
           `OCR completed for ${ok} ${ok === 1 ? "file" : "files"}${gapSuffix}`,
-          uniqueGaps.length > 0 ? "info" : "success",
+          hasWarnings ? "warn" : uniqueGaps.length > 0 ? "info" : "success",
         );
       } else if (ok > 0 && fail > 0) {
         toast(`OCR completed for ${ok} ${ok === 1 ? "file" : "files"} (${fail} failed)${gapSuffix}`, "warn");
@@ -583,6 +619,8 @@ import { entryError } from "../lib/engineError";
     hasFiles={ocrState.files.length > 0}
     onFiles={handleFilesAdded}
   />
+
+  <WarningBanner warnings={queueWarnings} />
 
   {#if ocrState.files.length > 0}
     <FileQueue

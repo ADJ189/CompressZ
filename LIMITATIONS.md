@@ -83,6 +83,7 @@ Because computation takes place entirely on client hardware within the browser s
 - **Graceful Download Fallback**: When a batch is estimated to exceed 4 GiB, CompressZ immediately falls back to sequential individual file downloads within the active user click gesture, preventing browser popup blocking and memory exhaustion.
 
 For in-depth operational policies, see:
+- [docs/TECHNICAL_REFERENCE.md](docs/TECHNICAL_REFERENCE.md) — Consolidated technical reference, engine invariants & audit summary
 - [docs/ENGINE_POLICY.md](docs/ENGINE_POLICY.md) — Comprehensive engine breakdown
 - [docs/AI_ENGINE_POLICY.md](docs/AI_ENGINE_POLICY.md) — On-device AI/ML runtime specifications
 - [docs/TELEMETRY_POLICY.md](docs/TELEMETRY_POLICY.md) — Error reporting and anonymization pipeline

@@ -9,11 +9,13 @@
 import { runQpdfCommand } from "../qpdfWasm";
 import { EngineError, cleanLogLines, summarizeLog, toErrorMessage } from "../engineError";
 import { getPdfLib } from "../pdfLibs";
+import type { EngineWarning } from "../types";
 
 export interface RepairPdfResult {
   repairedBytes: Uint8Array;
   method: "qpdf-deep-repair" | "js-salvage-xref";
   message: string;
+  warnings?: EngineWarning[];
 }
 
 export interface SalvagedPdf {
@@ -155,10 +157,24 @@ export async function repairCorruptPdf(
       (result.exitCode === 0 || result.exitCode === 3)
     ) {
       onProgress?.(100);
+      const warnings: EngineWarning[] =
+        result.exitCode === 3
+          ? [
+              {
+                code: "qpdf-repair-warnings",
+                engine: "qpdf",
+                severity: "warn",
+                message:
+                  "QPDF repaired the document with structural warnings; verify the output pages.",
+                ...(result.stdout ? { detail: summarizeLog(result.stdout) } : {}),
+              },
+            ]
+          : [];
       return {
         repairedBytes: out.data,
         method: "qpdf-deep-repair",
         message: "Successfully rebuilt PDF xref table and recovered document structure.",
+        ...(warnings.length > 0 ? { warnings } : {}),
       };
     }
     qpdfDiagnostic = result.stdout;
@@ -229,10 +245,21 @@ export async function repairCorruptPdf(
   }
 
   onProgress?.(100);
+  const warnings: EngineWarning[] = [
+    {
+      code: "qpdf-js-salvage-fallback",
+      engine: "qpdf",
+      severity: "warn",
+      message:
+        "QPDF repair could not parse this file; rebuilt a synthetic XREF table using JavaScript salvage.",
+      ...(qpdfDiagnostic ? { detail: summarizeLog(qpdfDiagnostic) } : {}),
+    },
+  ];
   return {
     repairedBytes: combined,
     method: "js-salvage-xref",
     message: `Salvaged ${objectOffsets.size} PDF objects and appended synthetic cross-reference table.`,
+    warnings,
   };
 }
 
