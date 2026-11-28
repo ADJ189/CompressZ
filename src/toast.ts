@@ -29,7 +29,10 @@ function trimToastStack(container: HTMLElement) {
     const children = Array.from(container.children);
     // Prefer evicting plain confirmation toasts before error/action toasts.
     const expendable = children.find(
-      (c) => !c.classList.contains('has-details') && !c.querySelector('.cz-toast-action'),
+      (c) =>
+        !c.classList.contains('has-details') &&
+        !c.classList.contains('error') &&
+        !c.querySelector('.cz-toast-action'),
     );
     (expendable ?? children[0])?.remove();
   }

@@ -1423,7 +1423,7 @@ input[type="range"].slider::-webkit-slider-thumb:hover {
   .home-wrap  { padding: 1.25rem 0.9rem 2.5rem; }
   .tool-wrap  { padding: 1.25rem 0.9rem 2.5rem; }
   .home-hero  { padding: 1.25rem 0 1.35rem; }
-  .home-eyebrow { font-size: .68rem; margin-bottom: 1rem; max-width: 100%; flex-wrap: wrap; }
+  .home-eyebrow { font-size: .75rem; margin-bottom: 1rem; max-width: 100%; flex-wrap: wrap; }
   .home-title { font-size: 2rem; line-height: 1.15; margin-bottom: .85rem; }
   .home-sub   { font-size: .94rem; line-height: 1.6; margin-bottom: 1.35rem; }
   .home-actions { gap: .55rem; margin-bottom: 1.5rem; }
@@ -1433,7 +1433,7 @@ input[type="range"].slider::-webkit-slider-thumb:hover {
   .htc { padding: .85rem .75rem; border: 1px solid var(--border); border-radius: var(--r); }
   .htc-head { margin-bottom: .5rem; }
   .htc-tags { gap: .25rem; }
-  .htc-tag { font-size: .62rem; padding: .14rem .4rem; }
+  .htc-tag { font-size: .75rem; padding: .14rem .4rem; }
   .priv-highlight { padding: 1.5rem 1.15rem; border-radius: var(--r-xl); margin-bottom: 1.75rem; }
   .ph-title { font-size: 1.18rem; }
   .ph-sub { font-size: .82rem; }
