@@ -2,12 +2,13 @@ import { assert, assertEquals } from "./assert.ts";
 import {
   BROWSER_PROFILES,
   BROWSER_PROFILE_IDS,
+  type BrowserProfileId,
   clampCanvasDimensions,
   detectBrowserProfileId,
   resolveBrowserProfile,
 } from "../src/lib/browserProfile.ts";
+import { detectPlatform, type PlatformInfo } from "../src/lib/platform.ts";
 import { defaultSettings, mergeSettings, resolveExecutionProfile } from "../src/lib/settings.ts";
-import type { PlatformInfo } from "../src/lib/platform.ts";
 
 function fakePlatform(
   engine: PlatformInfo["engine"],
@@ -16,56 +17,40 @@ function fakePlatform(
   overrides: Partial<PlatformInfo> = {},
 ): PlatformInfo {
   return {
+    ...detectPlatform(),
     deviceClass,
     os,
     engine,
     cores: 8,
     memoryGB: engine === "Blink" ? 8 : null,
     touch: deviceClass !== "desktop",
-    gpuRenderer: null,
     webgl2: true,
     webgpu: true,
     offscreenCanvas: true,
     webCodecs: true,
     crossOriginIsolated: true,
-    connection: null,
-    saveData: false,
-    reducedMotion: false,
     tier: deviceClass === "mobile" ? "balanced" : "powerful",
     ...overrides,
   };
 }
 
-Deno.test("browserProfile: detects all 6 engine/form-factor profiles accurately", () => {
-  assertEquals(
-    detectBrowserProfileId(fakePlatform("Blink", "desktop", "Windows")),
-    "chromium-desktop",
-  );
-  assertEquals(
-    detectBrowserProfileId(fakePlatform("Blink", "mobile", "Android")),
-    "chromium-mobile",
-  );
-  assertEquals(
-    detectBrowserProfileId(fakePlatform("WebKit", "desktop", "macOS")),
-    "webkit-desktop",
-  );
-  assertEquals(
-    detectBrowserProfileId(fakePlatform("WebKit", "mobile", "iOS")),
-    "webkit-mobile",
-  );
+const DETECTION_CASES: ReadonlyArray<
+  [PlatformInfo["engine"], PlatformInfo["deviceClass"], PlatformInfo["os"], BrowserProfileId]
+> = [
+  ["Blink", "desktop", "Windows", "chromium-desktop"],
+  ["Blink", "mobile", "Android", "chromium-mobile"],
+  ["WebKit", "desktop", "macOS", "webkit-desktop"],
+  ["WebKit", "mobile", "iOS", "webkit-mobile"],
   // All iOS browsers run on WebKit even if engine label varies
-  assertEquals(
-    detectBrowserProfileId(fakePlatform("Blink", "tablet", "iOS")),
-    "webkit-mobile",
-  );
-  assertEquals(
-    detectBrowserProfileId(fakePlatform("Gecko", "desktop", "Linux")),
-    "gecko-desktop",
-  );
-  assertEquals(
-    detectBrowserProfileId(fakePlatform("Gecko", "mobile", "Android")),
-    "gecko-mobile",
-  );
+  ["Blink", "tablet", "iOS", "webkit-mobile"],
+  ["Gecko", "desktop", "Linux", "gecko-desktop"],
+  ["Gecko", "mobile", "Android", "gecko-mobile"],
+];
+
+Deno.test("browserProfile: detects all 6 engine/form-factor profiles accurately", () => {
+  for (const [engine, deviceClass, os, expected] of DETECTION_CASES) {
+    assertEquals(detectBrowserProfileId(fakePlatform(engine, deviceClass, os)), expected);
+  }
 });
 
 Deno.test("browserProfile: clampCanvasDimensions enforces iOS WebKit 16 MP ceiling without upscaling", () => {
@@ -92,12 +77,24 @@ Deno.test("browserProfile: resolveExecutionProfile integrates browser limits and
     s,
     fakePlatform("WebKit", "mobile", "iOS", { tier: "balanced" }),
   );
-  assertEquals(iosProfile.browserProfile.id, "webkit-mobile");
-  assertEquals(iosProfile.maxConcurrentImages, 1);
-  assertEquals(iosProfile.maxDecodedImageDimension, 4096);
-  assertEquals(iosProfile.aiBackendPreference, "wasm");
-  assertEquals(iosProfile.browserProfile.canvas.releaseWebGLContextAfterResize, true);
-  assertEquals(iosProfile.browserProfile.canvas.useOffscreenCanvas, false);
+  assertEquals(
+    {
+      id: iosProfile.browserProfile.id,
+      maxConcurrentImages: iosProfile.maxConcurrentImages,
+      maxDecodedImageDimension: iosProfile.maxDecodedImageDimension,
+      aiBackend: iosProfile.aiBackendPreference,
+      releaseWebGL: iosProfile.browserProfile.canvas.releaseWebGLContextAfterResize,
+      offscreen: iosProfile.browserProfile.canvas.useOffscreenCanvas,
+    },
+    {
+      id: "webkit-mobile",
+      maxConcurrentImages: 1,
+      maxDecodedImageDimension: 4096,
+      aiBackend: "wasm",
+      releaseWebGL: true,
+      offscreen: false,
+    },
+  );
 
   const geckoDesktop = resolveExecutionProfile(
     s,
