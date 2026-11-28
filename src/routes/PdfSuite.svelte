@@ -465,6 +465,7 @@ import { entryError } from "../lib/engineError";
   }
 
   let loadSeq = 0;
+  let loadedEagerLimit = resolveExecutionProfile().browserProfile.ui.eagerThumbnailCount;
   let thumbPdfDoc: PdfJsDocHandle | null = null;
   let thumbQueue: number[] = [];
   const requestedThumbPages = new Set<number>();
@@ -559,8 +560,7 @@ import { entryError } from "../lib/engineError";
   }
 
   function observeThumbVisibility(node: HTMLElement, pageIndex0: number) {
-    const eagerLimit = resolveExecutionProfile().browserProfile.ui.eagerThumbnailCount;
-    if (pageIndex0 < eagerLimit || pageThumbnails[pageIndex0]) return {};
+    if (pageIndex0 < loadedEagerLimit || pageThumbnails[pageIndex0]) return {};
     if (typeof IntersectionObserver === "undefined") {
       requestPageThumbnail(pageIndex0);
       return {};
@@ -633,8 +633,8 @@ import { entryError } from "../lib/engineError";
       }));
 
       // Generate thumbnails eagerly within the active browser profile's budget; remaining pages render lazily via IntersectionObserver
-      const eagerLimit = resolveExecutionProfile().browserProfile.ui.eagerThumbnailCount;
-      const eagerCount = Math.min(totalPages, eagerLimit);
+      loadedEagerLimit = resolveExecutionProfile().browserProfile.ui.eagerThumbnailCount;
+      const eagerCount = Math.min(totalPages, loadedEagerLimit);
       for (let i = 0; i < eagerCount; i++) {
         if (mySeq !== loadSeq) return;
         requestedThumbPages.add(i);
@@ -670,9 +670,10 @@ import { entryError } from "../lib/engineError";
         console.warn("[PdfSuite] Metadata inspection error:", mErr);
       }
 
-      if (mySeq === loadSeq && totalPages > 24 && pdfJs) {
+      if (mySeq === loadSeq && totalPages > eagerCount && pdfJs) {
         thumbPdfDoc = pdfJs;
         pdfJs = null;
+        isFileLoading = false;
         if (thumbQueue.length > 0) {
           void drainThumbnailQueue();
         }

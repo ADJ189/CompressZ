@@ -185,7 +185,11 @@ import { entryError } from "../lib/engineError";
     return canvas;
   }
 
-  async function processOcrSingle(entry: FileEntry, notify = true): Promise<boolean> {
+  async function processOcrSingle(
+    entry: FileEntry,
+    notify = true,
+    gapNotes?: string[],
+  ): Promise<boolean> {
     if (entry.status === "compressing") return false;
 
     patchEntry(entry.id, { status: "compressing", progress: 0, error: undefined });
@@ -371,6 +375,8 @@ import { entryError } from "../lib/engineError";
       if (notify) {
         if (result.note) toast(result.note, "info");
         toast(`OCR completed for ${entry.name}`, "success");
+      } else if (result.note && gapNotes) {
+        gapNotes.push(result.note);
       }
       return true;
     } catch (err) {
@@ -395,19 +401,25 @@ import { entryError } from "../lib/engineError";
     isBusy = true;
     let ok = 0;
     let fail = 0;
+    const gapNotes: string[] = [];
     try {
       const idleEntries = ocrStore
         .get()
         .files.filter((f) => f.status === "idle" || f.status === "error");
       // Sequential by design: one OCR worker and one page raster in memory.
       for (const entry of idleEntries) {
-        if (await processOcrSingle(entry, false)) ok++;
+        if (await processOcrSingle(entry, false, gapNotes)) ok++;
         else fail++;
       }
+      const uniqueGaps = [...new Set(gapNotes)];
+      const gapSuffix = uniqueGaps.length > 0 ? ` — ${uniqueGaps.join(" ")}` : "";
       if (ok > 0 && fail === 0) {
-        toast(`OCR completed for ${ok} ${ok === 1 ? "file" : "files"}`, "success");
+        toast(
+          `OCR completed for ${ok} ${ok === 1 ? "file" : "files"}${gapSuffix}`,
+          uniqueGaps.length > 0 ? "info" : "success",
+        );
       } else if (ok > 0 && fail > 0) {
-        toast(`OCR completed for ${ok} ${ok === 1 ? "file" : "files"} (${fail} failed)`, "warn");
+        toast(`OCR completed for ${ok} ${ok === 1 ? "file" : "files"} (${fail} failed)${gapSuffix}`, "warn");
       } else if (fail > 0) {
         toast(`OCR failed for ${fail} ${fail === 1 ? "file" : "files"}`, "error");
       }
