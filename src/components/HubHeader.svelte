@@ -178,8 +178,8 @@
     gap: 1.5rem;
     padding: 1.25rem 1.5rem;
     background: var(--material-chrome, var(--surface2));
-    backdrop-filter: blur(16px) saturate(160%);
-    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    backdrop-filter: blur(var(--chrome-blur, 16px)) saturate(160%);
+    -webkit-backdrop-filter: blur(var(--chrome-blur, 16px)) saturate(160%);
     border: 1px solid var(--border);
     border-radius: var(--r-xl);
     margin-bottom: 1.5rem;
