@@ -247,16 +247,17 @@ export function resolveExecutionProfile(
   const browserProfileSource: 'auto' | 'manual' =
     s.browserProfile && s.browserProfile !== 'auto' ? 'manual' : 'auto';
 
-  const autoConcurrency =
-    s.resourceMode === 'auto' && info
-      ? Math.max(1, Math.min(rec.batchConcurrency, browserProfile.wasm.maxBatchConcurrency))
-      : rec.batchConcurrency;
+  const applyProfileConcurrencyCap =
+    (s.resourceMode === 'auto' && Boolean(info)) ||
+    s.resourceMode === 'balanced' ||
+    browserProfileSource === 'manual';
+  const autoConcurrency = applyProfileConcurrencyCap
+    ? Math.max(1, Math.min(rec.batchConcurrency, browserProfile.wasm.maxBatchConcurrency))
+    : rec.batchConcurrency;
   const maxConcurrentImages =
     s.resourceLimits.concurrency !== 'auto'
       ? s.resourceLimits.concurrency
-      : browserProfileSource === 'manual'
-        ? Math.min(autoConcurrency, browserProfile.wasm.maxBatchConcurrency)
-        : autoConcurrency;
+      : autoConcurrency;
 
   const baseImageCap = tierImageCap(tier);
   const profileDimCap = browserProfile.canvas.maxCanvasDim;

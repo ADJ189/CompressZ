@@ -109,7 +109,7 @@ export async function compressImage(
   let blob!: Blob;
   let avifFellBack!: boolean;
   let webpFellBack!: boolean;
-  let guardNote = "";
+  let guardNote!: string;
   let measured: MeasuredImage | null = null;
   let outFormat!: ImageFormat;
   let outW!: number;
@@ -136,11 +136,7 @@ export async function compressImage(
       onProgress?.(95);
     }
 
-    if (avifFellBack) {
-      guardNote = "⚠ AVIF WASM unavailable, saved as WebP";
-    } else if (webpFellBack) {
-      guardNote = "⚠ Browser lacks WebP encode, saved as JPEG";
-    }
+    guardNote = fallbackNote(avifFellBack, webpFellBack);
     if (format !== "image/png") {
       measured = await measureEncoded(canvas, w, h, blob);
       if (measured) {
@@ -156,21 +152,25 @@ export async function compressImage(
           actual: measured,
         });
         if (first.action === "retry") {
-          const retried = (await encodeWithFallback(canvas, format, clamp(first.quality))).blob;
-          const retriedMeasure = await measureEncoded(canvas, w, h, retried);
+          const retryRes = await encodeWithFallback(canvas, format, clamp(first.quality));
+          const retriedMeasure = await measureEncoded(canvas, w, h, retryRes.blob);
           if (retriedMeasure && retriedMeasure.ssim > measured.ssim) {
             const second = decideQualityGuard({
               ...base,
+              format: retryRes.actualFormat,
               ssim: retriedMeasure.ssim,
               actual: retriedMeasure,
               requestedQuality: first.quality,
               alreadyRetried: true,
             });
-            blob = retried;
+            blob = retryRes.blob;
+            format = retryRes.actualFormat;
+            avifFellBack = avifFellBack || retryRes.fellBack;
+            webpFellBack = webpFellBack || retryRes.webpFellBack;
             measured = retriedMeasure;
-            if (!guardNote) {
-              guardNote = second.action === "warn" ? guardLabel(second.code) : "";
-            }
+            guardNote =
+              fallbackNote(avifFellBack, webpFellBack) ||
+              (second.action === "warn" ? guardLabel(second.code) : "");
           } else {
             const second = decideQualityGuard({
               ...base,
@@ -410,6 +410,19 @@ function guardLabel(code: string): string {
   }
 }
 
+function fallbackNote(avifFellBack: boolean, webpFellBack: boolean): string {
+  if (avifFellBack && webpFellBack) {
+    return "⚠ AVIF WASM unavailable, saved as JPEG";
+  }
+  if (avifFellBack) {
+    return "⚠ AVIF WASM unavailable, saved as WebP";
+  }
+  if (webpFellBack) {
+    return "⚠ Browser lacks WebP encode, saved as JPEG";
+  }
+  return "";
+}
+
 // Browsers often leave File.type empty (e.g. some drag-and-drop sources, or
 // unusual OS MIME mappings) even though the Images page accepts the file by
 // extension — so don't trust `type` alone. Content wins over names: once the
@@ -444,10 +457,14 @@ async function binarySearch(
     hi = 0.99,
     best: { blob: Blob; actualFormat: ImageFormat; fellBack: boolean; webpFellBack: boolean } | null = null;
   let activeFormat: ImageFormat = format;
+  let fellBack = false;
+  let webpFellBack = false;
   for (let i = 0; i < 10; i++) {
     const mid = (lo + hi) / 2;
     const res = await encodeWithFallback(canvas, activeFormat, mid);
     activeFormat = res.actualFormat;
+    fellBack = fellBack || res.fellBack;
+    webpFellBack = webpFellBack || res.webpFellBack;
     onProgress?.(32 + Math.round((i / 14) * 60));
     if (res.blob.size <= targetBytes) {
       best = res;
@@ -455,7 +472,13 @@ async function binarySearch(
     } else hi = mid;
     if (hi - lo < 0.004) break;
   }
-  return best ?? (await encodeWithFallback(canvas, activeFormat, lo));
+  const chosen = best ?? (await encodeWithFallback(canvas, activeFormat, lo));
+  return {
+    blob: chosen.blob,
+    actualFormat: chosen.actualFormat,
+    fellBack: fellBack || chosen.fellBack,
+    webpFellBack: webpFellBack || chosen.webpFellBack,
+  };
 }
 
 function canvasToImageData(canvas: HTMLCanvasElement | OffscreenCanvas): ImageData {
@@ -478,37 +501,61 @@ function canvasToImageData(canvas: HTMLCanvasElement | OffscreenCanvas): ImageDa
   }
 }
 
+async function encodeJpegWithWhiteBg(
+  c: HTMLCanvasElement | OffscreenCanvas,
+  q: number,
+): Promise<Blob> {
+  const copy = makeCanvas(c.width, c.height);
+  try {
+    const ctx = get2D(copy, "images");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, copy.width, copy.height);
+    ctx.drawImage(c, 0, 0);
+    return await encode(copy, "image/jpeg", q);
+  } finally {
+    copy.width = 0;
+    copy.height = 0;
+  }
+}
+
 async function encodeWithFallback(
   c: HTMLCanvasElement | OffscreenCanvas,
   fmt: ImageFormat,
   q: number,
 ): Promise<{ blob: Blob; actualFormat: ImageFormat; fellBack: boolean; webpFellBack: boolean }> {
   if (fmt === "image/avif" && !supportsAvifEncode()) {
+    let avifError: unknown = null;
     try {
       const blob = await encodeAvifWasm(canvasToImageData(c), q);
       if (blob.size > 0) {
         return { blob, actualFormat: "image/avif", fellBack: false, webpFellBack: false };
       }
     } catch (err) {
-      console.warn("[compressImage] AVIF WASM fallback failed, falling back to WebP:", err);
+      avifError = err;
     }
     if (supportsWebpCanvasEncode()) {
       const webpBlob = await encode(c, "image/webp", q);
       if (webpBlob.type === "image/webp") {
+        if (avifError) {
+          console.warn("[compressImage] AVIF WASM unavailable, falling back to WebP:", avifError);
+        }
         return { blob: webpBlob, actualFormat: "image/webp", fellBack: true, webpFellBack: false };
       }
     }
-    const jpegBlob = await encode(c, "image/jpeg", q);
+    if (avifError) {
+      console.warn("[compressImage] AVIF WASM unavailable, falling back to JPEG:", avifError);
+    }
+    const jpegBlob = await encodeJpegWithWhiteBg(c, q);
     return { blob: jpegBlob, actualFormat: "image/jpeg", fellBack: true, webpFellBack: true };
   }
   if (fmt === "image/webp" && !supportsWebpCanvasEncode()) {
-    const jpegBlob = await encode(c, "image/jpeg", q);
+    const jpegBlob = await encodeJpegWithWhiteBg(c, q);
     return { blob: jpegBlob, actualFormat: "image/jpeg", fellBack: false, webpFellBack: true };
   }
   const blob = await encode(c, fmt, q);
   if (fmt === "image/webp" && blob.type !== "image/webp") {
     // Older Safari/WebKit silently downgrades unsupported WebP to PNG.
-    const jpegBlob = await encode(c, "image/jpeg", q);
+    const jpegBlob = await encodeJpegWithWhiteBg(c, q);
     return { blob: jpegBlob, actualFormat: "image/jpeg", fellBack: false, webpFellBack: true };
   }
   return { blob, actualFormat: fmt, fellBack: false, webpFellBack: false };
