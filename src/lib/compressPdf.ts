@@ -1,6 +1,8 @@
 import type { CompressOptions, CompressResult, PdfLevel } from "./types";
 import { PDFLIB_ESM, openPdfDocument } from "./pdfLibs";
 import { get2D } from "./gpu";
+import { resolveExecutionProfile } from "./settings";
+import { clampCanvasDimensions } from "./browserProfile";
 
 interface Preset {
   targetDpi: number;
@@ -1094,7 +1096,14 @@ async function canvasRender(
 
   const newPdf = await PDFDocument.create();
   const total = srcDoc.numPages;
-  const hasOSC = typeof OffscreenCanvas !== "undefined";
+  const execProfile = resolveExecutionProfile();
+  const hasOSC =
+    execProfile.browserProfile.canvas.useOffscreenCanvas &&
+    typeof OffscreenCanvas !== "undefined";
+  const effectiveScale = Math.min(
+    renderScale,
+    execProfile.browserProfile.wasm.pdfMaxRenderScale,
+  );
 
   try {
     for (let i = 1; i <= total; i++) {
@@ -1104,29 +1113,48 @@ async function canvasRender(
         const pageW = pointsVp.width;
         const pageH = pointsVp.height;
 
-        const vp = page.getViewport({ scale: renderScale });
-        const w = Math.floor(vp.width);
-        const h = Math.floor(vp.height);
+        let vp = page.getViewport({ scale: effectiveScale });
+        const clamped = clampCanvasDimensions(
+          vp.width,
+          vp.height,
+          execProfile.browserProfile,
+        );
+        if (clamped.clamped) {
+          const adj =
+            effectiveScale *
+            Math.min(
+              clamped.width / Math.max(1, vp.width),
+              clamped.height / Math.max(1, vp.height),
+            );
+          vp = page.getViewport({ scale: adj });
+        }
+        const w = Math.max(1, Math.floor(vp.width));
+        const h = Math.max(1, Math.floor(vp.height));
 
         let jpegBytes: Uint8Array;
 
         if (hasOSC) {
           const osc = new OffscreenCanvas(w, h);
-          const ctx = get2D(osc, "pdf", { alpha: false, colorSpace: "srgb" });
-          ctx.fillStyle = "#ffffff";
-          ctx.fillRect(0, 0, w, h);
-          await page.render({ canvasContext: ctx, viewport: vp, intent: "print" })
-            .promise;
+          try {
+            const ctx = get2D(osc, "pdf", { alpha: false, colorSpace: "srgb" });
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, w, h);
+            await page.render({ canvasContext: ctx, viewport: vp, intent: "print" })
+              .promise;
 
-          const q =
-            targetSizeKB > 0
-              ? await oscBinarySearch(osc, (targetSizeKB * 1024) / total)
-              : jpegQuality;
-          const outBlob = await osc.convertToBlob({
-            type: "image/jpeg",
-            quality: q,
-          });
-          jpegBytes = new Uint8Array(await outBlob.arrayBuffer());
+            const q =
+              targetSizeKB > 0
+                ? await oscBinarySearch(osc, (targetSizeKB * 1024) / total)
+                : jpegQuality;
+            const outBlob = await osc.convertToBlob({
+              type: "image/jpeg",
+              quality: q,
+            });
+            jpegBytes = new Uint8Array(await outBlob.arrayBuffer());
+          } finally {
+            osc.width = 0;
+            osc.height = 0;
+          }
         } else {
           const canvas = document.createElement("canvas");
           canvas.width = w;

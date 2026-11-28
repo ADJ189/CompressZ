@@ -1,7 +1,11 @@
 import type { CompressOptions, CompressResult, ImageFormat } from "./types";
 import { makeCanvas, get2D, resizeViaWebGL } from "./gpu";
 import { decodeImageBitmap } from "./imageDecode";
-import { resolvedMaxImageDim } from "./settings";
+import { resolveExecutionProfile } from "./settings";
+import {
+  clampCanvasDimensions,
+  supportsWebpCanvasEncode,
+} from "./browserProfile";
 import { encodeAvifWasm } from "./avifEncode";
 import {
   computeSsim,
@@ -46,7 +50,8 @@ export async function compressImage(
   // guardrail that applies no matter what a specific tool's own settings
   // say, so a manual RAM cap actually holds even if someone left an
   // individual tool set to "no limit".
-  const resourceCap = resolvedMaxImageDim();
+  const execProfile = resolveExecutionProfile();
+  const resourceCap = execProfile.maxDecodedImageDimension;
   const maxW = Math.min(options.maxWidth ?? 16384, resourceCap || 16384);
   const maxH = Math.min(options.maxHeight ?? 16384, resourceCap || 16384);
 
@@ -57,10 +62,17 @@ export async function compressImage(
     origH = bitmap.height;
   // planOutputSize() never upscales: a max dimension is a ceiling, so a
   // 1200px source stays 1200px even when the cap is 4000px.
-  const size = planOutputSize(origW, origH, maxW, maxH);
-  const w = size.width,
-    h = size.height;
-  const needsResize = size.resized;
+  const plannedSize = planOutputSize(origW, origH, maxW, maxH);
+  // Clamp against the active browser profile's safe canvas area ceiling
+  // (e.g. 16 MP on iOS WebKit so canvases never silently blank out).
+  const safeBounds = clampCanvasDimensions(
+    plannedSize.width,
+    plannedSize.height,
+    execProfile.browserProfile,
+  );
+  const w = safeBounds.width,
+    h = safeBounds.height;
+  const needsResize = plannedSize.resized || safeBounds.clamped;
 
   // GPU path: when we're actually downscaling, run the resize as a WebGL2
   // texture draw (hardware bilinear filtering) instead of Canvas2D's
@@ -94,102 +106,109 @@ export async function compressImage(
     format === "image/png" ? 1 : Math.max(0.01, Math.min(0.99, q));
   const requestedQ = clamp(options.quality ?? defaultQ);
 
-  let blob: Blob;
-  let avifFellBack: boolean;
-  if (options.targetSizeKB && options.targetSizeKB > 0) {
-    const searched = await binarySearch(
-      canvas,
-      format,
-      options.targetSizeKB * 1024,
-      onProgress,
-    );
-    blob = searched.blob;
-    format = searched.actualFormat;
-    avifFellBack = searched.fellBack;
-  } else {
-    const encoded = await encodeWithFallback(canvas, format, requestedQ);
-    blob = encoded.blob;
-    format = encoded.actualFormat;
-    avifFellBack = encoded.fellBack;
-    onProgress?.(95);
-  }
-
-  // Post-encode quality guard. It measures a ≤96×96 luma sample, so a 6000px
-  // photo costs a small fixed amount of work instead of a second full decode.
-  // The guard never lowers the requested quality or resolution: at most it
-  // retries once at a *higher* quality (when no byte target is active) and
-  // otherwise reports a short note on the result.
-  let guardNote = avifFellBack ? "⚠ AVIF WASM unavailable, saved as WebP" : "";
+  let blob!: Blob;
+  let avifFellBack!: boolean;
+  let webpFellBack!: boolean;
+  let guardNote = "";
   let measured: MeasuredImage | null = null;
-  if (format !== "image/png") {
-    measured = await measureEncoded(canvas, w, h, blob);
-    if (measured) {
-      const base = {
+  let outFormat!: ImageFormat;
+  let outW!: number;
+  let outH!: number;
+
+  try {
+    if (options.targetSizeKB && options.targetSizeKB > 0) {
+      const searched = await binarySearch(
+        canvas,
         format,
-        requestedQuality: requestedQ,
-        targetSizeKB: options.targetSizeKB,
-        planned: { width: w, height: h },
-      };
-      const first = decideQualityGuard({
-        ...base,
-        ssim: measured.ssim,
-        actual: measured,
-      });
-      if (first.action === "retry") {
-        const retried = (await encodeWithFallback(canvas, format, clamp(first.quality))).blob;
-        const retriedMeasure = await measureEncoded(canvas, w, h, retried);
-        if (retriedMeasure && retriedMeasure.ssim > measured.ssim) {
-          const second = decideQualityGuard({
-            ...base,
-            ssim: retriedMeasure.ssim,
-            actual: retriedMeasure,
-            requestedQuality: first.quality,
-            alreadyRetried: true,
-          });
-          blob = retried;
-          measured = retriedMeasure;
-          if (!guardNote) {
-            guardNote = second.action === "warn" ? guardLabel(second.code) : "";
+        options.targetSizeKB * 1024,
+        onProgress,
+      );
+      blob = searched.blob;
+      format = searched.actualFormat;
+      avifFellBack = searched.fellBack;
+      webpFellBack = searched.webpFellBack;
+    } else {
+      const encoded = await encodeWithFallback(canvas, format, requestedQ);
+      blob = encoded.blob;
+      format = encoded.actualFormat;
+      avifFellBack = encoded.fellBack;
+      webpFellBack = encoded.webpFellBack;
+      onProgress?.(95);
+    }
+
+    if (avifFellBack) {
+      guardNote = "⚠ AVIF WASM unavailable, saved as WebP";
+    } else if (webpFellBack) {
+      guardNote = "⚠ Browser lacks WebP encode, saved as JPEG";
+    }
+    if (format !== "image/png") {
+      measured = await measureEncoded(canvas, w, h, blob);
+      if (measured) {
+        const base = {
+          format,
+          requestedQuality: requestedQ,
+          targetSizeKB: options.targetSizeKB,
+          planned: { width: w, height: h },
+        };
+        const first = decideQualityGuard({
+          ...base,
+          ssim: measured.ssim,
+          actual: measured,
+        });
+        if (first.action === "retry") {
+          const retried = (await encodeWithFallback(canvas, format, clamp(first.quality))).blob;
+          const retriedMeasure = await measureEncoded(canvas, w, h, retried);
+          if (retriedMeasure && retriedMeasure.ssim > measured.ssim) {
+            const second = decideQualityGuard({
+              ...base,
+              ssim: retriedMeasure.ssim,
+              actual: retriedMeasure,
+              requestedQuality: first.quality,
+              alreadyRetried: true,
+            });
+            blob = retried;
+            measured = retriedMeasure;
+            if (!guardNote) {
+              guardNote = second.action === "warn" ? guardLabel(second.code) : "";
+            }
+          } else {
+            const second = decideQualityGuard({
+              ...base,
+              ssim: measured.ssim,
+              actual: measured,
+              requestedQuality: first.quality,
+              alreadyRetried: true,
+            });
+            if (!guardNote) {
+              guardNote = guardLabel(second.action === "warn" ? second.code : "low-ssim");
+            }
           }
-        } else {
-          const second = decideQualityGuard({
-            ...base,
-            ssim: measured.ssim,
-            actual: measured,
-            requestedQuality: first.quality,
-            alreadyRetried: true,
-          });
-          if (!guardNote) {
-            guardNote = guardLabel(second.action === "warn" ? second.code : "low-ssim");
-          }
+        } else if (first.action === "warn" && !guardNote) {
+          guardNote = guardLabel(first.code);
         }
-      } else if (first.action === "warn" && !guardNote) {
-        guardNote = guardLabel(first.code);
       }
     }
-  }
 
-  // If PNG re-encoding didn't actually shrink the file, returning the
-  // original is a reasonable choice — but the metadata describing the
-  // returned blob has to describe the blob we're actually returning, not
-  // the resized/re-encoded one we discarded. Otherwise the UI can show
-  // "resized to WxH, PNG" while the downloaded bytes are the original file
-  // at its original dimensions/format, and metadata-stripping guarantees
-  // silently don't hold.
-  let outFormat: ImageFormat = format;
-  let outW = measured?.width || w,
+    outFormat = format;
+    outW = measured?.width || w;
     outH = measured?.height || h;
-  if (
-    !needsResize &&
-    format === "image/png" &&
-    blob.size >= file.size &&
-    (await isPngSource(file))
-  ) {
-    blob = file;
-    outFormat = "image/png";
-    outW = origW;
-    outH = origH;
-    guardNote = "";
+    if (
+      !needsResize &&
+      format === "image/png" &&
+      blob.size >= file.size &&
+      (await isPngSource(file))
+    ) {
+      blob = file;
+      outFormat = "image/png";
+      outW = origW;
+      outH = origH;
+      guardNote = "";
+    }
+  } finally {
+    // Release backing store eagerly — critical on iOS WebKit / mobile browsers
+    // with strict canvas memory budgets during batch jobs.
+    canvas.width = 0;
+    canvas.height = 0;
   }
   onProgress?.(100);
 
@@ -369,10 +388,15 @@ async function sampleCanvasLuma(
   const sw = Math.max(1, Math.round(width * scale));
   const sh = Math.max(1, Math.round(height * scale));
   const small = makeCanvas(sw, sh);
-  const ctx = get2D(small, "images");
-  ctx.drawImage(source, 0, 0, sw, sh);
-  const data = ctx.getImageData(0, 0, sw, sh).data;
-  return sampleLuma(data, sw, sh, MAX_SIDE);
+  try {
+    const ctx = get2D(small, "images");
+    ctx.drawImage(source, 0, 0, sw, sh);
+    const data = ctx.getImageData(0, 0, sw, sh).data;
+    return sampleLuma(data, sw, sh, MAX_SIDE);
+  } finally {
+    small.width = 0;
+    small.height = 0;
+  }
 }
 
 function guardLabel(code: string): string {
@@ -411,14 +435,14 @@ async function binarySearch(
   format: ImageFormat,
   targetBytes: number,
   onProgress?: (pct: number) => void,
-): Promise<{ blob: Blob; actualFormat: ImageFormat; fellBack: boolean }> {
+): Promise<{ blob: Blob; actualFormat: ImageFormat; fellBack: boolean; webpFellBack: boolean }> {
   if (format === "image/png") {
     onProgress?.(90);
     return encodeWithFallback(canvas, format, 1);
   }
   let lo = 0.01,
     hi = 0.99,
-    best: { blob: Blob; actualFormat: ImageFormat; fellBack: boolean } | null = null;
+    best: { blob: Blob; actualFormat: ImageFormat; fellBack: boolean; webpFellBack: boolean } | null = null;
   let activeFormat: ImageFormat = format;
   for (let i = 0; i < 10; i++) {
     const mid = (lo + hi) / 2;
@@ -444,30 +468,50 @@ function canvasToImageData(canvas: HTMLCanvasElement | OffscreenCanvas): ImageDa
     return existing2d.getImageData(0, 0, canvas.width, canvas.height);
   }
   const copy = makeCanvas(canvas.width, canvas.height);
-  const ctx = get2D(copy, "images");
-  ctx.drawImage(canvas, 0, 0);
-  return ctx.getImageData(0, 0, canvas.width, canvas.height);
+  try {
+    const ctx = get2D(copy, "images");
+    ctx.drawImage(canvas, 0, 0);
+    return ctx.getImageData(0, 0, canvas.width, canvas.height);
+  } finally {
+    copy.width = 0;
+    copy.height = 0;
+  }
 }
 
 async function encodeWithFallback(
   c: HTMLCanvasElement | OffscreenCanvas,
   fmt: ImageFormat,
   q: number,
-): Promise<{ blob: Blob; actualFormat: ImageFormat; fellBack: boolean }> {
+): Promise<{ blob: Blob; actualFormat: ImageFormat; fellBack: boolean; webpFellBack: boolean }> {
   if (fmt === "image/avif" && !supportsAvifEncode()) {
     try {
       const blob = await encodeAvifWasm(canvasToImageData(c), q);
       if (blob.size > 0) {
-        return { blob, actualFormat: "image/avif", fellBack: false };
+        return { blob, actualFormat: "image/avif", fellBack: false, webpFellBack: false };
       }
     } catch (err) {
       console.warn("[compressImage] AVIF WASM fallback failed, falling back to WebP:", err);
     }
-    const webpBlob = await encode(c, "image/webp", q);
-    return { blob: webpBlob, actualFormat: "image/webp", fellBack: true };
+    if (supportsWebpCanvasEncode()) {
+      const webpBlob = await encode(c, "image/webp", q);
+      if (webpBlob.type === "image/webp") {
+        return { blob: webpBlob, actualFormat: "image/webp", fellBack: true, webpFellBack: false };
+      }
+    }
+    const jpegBlob = await encode(c, "image/jpeg", q);
+    return { blob: jpegBlob, actualFormat: "image/jpeg", fellBack: true, webpFellBack: true };
+  }
+  if (fmt === "image/webp" && !supportsWebpCanvasEncode()) {
+    const jpegBlob = await encode(c, "image/jpeg", q);
+    return { blob: jpegBlob, actualFormat: "image/jpeg", fellBack: false, webpFellBack: true };
   }
   const blob = await encode(c, fmt, q);
-  return { blob, actualFormat: fmt, fellBack: false };
+  if (fmt === "image/webp" && blob.type !== "image/webp") {
+    // Older Safari/WebKit silently downgrades unsupported WebP to PNG.
+    const jpegBlob = await encode(c, "image/jpeg", q);
+    return { blob: jpegBlob, actualFormat: "image/jpeg", fellBack: false, webpFellBack: true };
+  }
+  return { blob, actualFormat: fmt, fellBack: false, webpFellBack: false };
 }
 
 function encode(

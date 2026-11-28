@@ -14,6 +14,7 @@
  */
 
 import { EngineError, toErrorMessage } from "./engineError";
+import { supportsWasmSimd } from "./browserProfile";
 
 export type OcrProfile = "auto" | "printed" | "handwriting" | "mixed";
 export type OcrEngineId = "auto" | "tesseract" | "paddle" | "trocr";
@@ -75,6 +76,8 @@ export const TESS_UMD =
   "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
 export const TESS_CORE =
   "https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.0/tesseract-core-simd-lstm.wasm.js";
+export const TESS_CORE_NOSIMD =
+  "https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.0/tesseract-core-lstm.wasm.js";
 export const TESS_LANGS = "https://tessdata.projectnaptha.com/4.0.0";
 export const TESS_WKR =
   "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js";
@@ -190,7 +193,7 @@ async function getTesseractWorkerInternal(
     activeTessLang = targetLang;
     const worker = await Tesseract.createWorker(targetLang, 1, {
       workerPath: TESS_WKR,
-      corePath: TESS_CORE,
+      corePath: supportsWasmSimd() ? TESS_CORE : TESS_CORE_NOSIMD,
       langPath: TESS_LANGS,
       logger: (m: any) => {
         if (m.status === "recognizing text" && typeof m.progress === "number") {

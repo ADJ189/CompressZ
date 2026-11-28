@@ -27,7 +27,7 @@
  * pipelines) have a settings entry for consistency but it's a documented
  * no-op; see settings.ts's GPU_CAPABLE list.
  */
-import { getSettings, type GpuSettings } from "./settings";
+import { getSettings, resolveExecutionProfile, type GpuSettings } from "./settings";
 import { hasWebGL2 } from "./webgl";
 
 export { hasWebGL2 };
@@ -59,7 +59,10 @@ export function makeCanvas(
   w: number,
   h: number,
 ): HTMLCanvasElement | OffscreenCanvas {
-  if (hasOffscreenCanvas()) return new OffscreenCanvas(w, h);
+  const allowOffscreen =
+    typeof document === "undefined" ||
+    resolveExecutionProfile().browserProfile.canvas.useOffscreenCanvas;
+  if (allowOffscreen && hasOffscreenCanvas()) return new OffscreenCanvas(w, h);
   const c = document.createElement("canvas");
   c.width = w;
   c.height = h;
@@ -68,7 +71,8 @@ export function makeCanvas(
 
 /**
  * getContext('2d', ...) with the GPU compositing hint applied when the
- * given engine's toggle is on in Settings. `engine` must be a key of
+ * given engine's toggle is on in Settings and the active browser profile
+ * benefits from `desynchronized: true`. `engine` must be a key of
  * GpuSettings — pass the tool this canvas belongs to ('images', 'pdf',
  * 'ocr', 'video'); the two WASM-only engines ('audio', 'gif') never call
  * this because they never create a canvas.
@@ -79,9 +83,11 @@ export function get2D(
   opts: Record<string, unknown> = {},
 ): CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D {
   const gpuOn = getSettings().gpu[engine];
+  const useDesync =
+    gpuOn && resolveExecutionProfile().browserProfile.canvas.prefer2DDesynchronized;
   const ctx = (c as any).getContext(
     "2d",
-    gpuOn ? { desynchronized: true, ...opts } : opts,
+    useDesync ? { desynchronized: true, ...opts } : opts,
   );
   if (!ctx) throw new Error("Canvas 2D unavailable");
   return ctx;
@@ -180,7 +186,11 @@ export function resizeViaWebGL(
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
     const out = makeCanvas(w, h);
-    const ctx2d = (out as any).getContext("2d")!;
+    const ctx2d = (out as any).getContext("2d") as
+      | CanvasRenderingContext2D
+      | OffscreenCanvasRenderingContext2D
+      | null;
+    if (!ctx2d) return null;
     if (bg) {
       ctx2d.fillStyle = bg;
       ctx2d.fillRect(0, 0, w, h);
@@ -192,12 +202,20 @@ export function resizeViaWebGL(
     return null;
   } finally {
     // WebGL objects are tied to their (short-lived, GC'd) context, but
-    // free them explicitly rather than waiting on GC pressure — this runs
-    // once per file in a batch job, not once per frame.
+    // free them explicitly rather than waiting on GC pressure — and on
+    // WebKit/mobile profiles immediately release the context itself so batch
+    // jobs never exceed Safari's 8-16 simultaneous WebGL context cap.
     if (gl) {
       if (tex) gl.deleteTexture(tex);
       if (buf) gl.deleteBuffer(buf);
       if (prog) gl.deleteProgram(prog);
+      if (resolveExecutionProfile().browserProfile.canvas.releaseWebGLContextAfterResize) {
+        try {
+          gl.getExtension("WEBGL_lose_context")?.loseContext();
+        } catch {
+          /* best-effort context release */
+        }
+      }
     }
   }
 }

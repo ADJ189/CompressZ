@@ -8,6 +8,12 @@ import type { ImageFormat, AudioFormat, VideoCodec, PdfLevel } from './types';
 import { detectPlatform, recommend } from './platform';
 import type { EngineRecommendation, PerformanceTier, PlatformInfo } from './platform';
 import type { AiModelTier } from './aiEngine';
+import {
+  BROWSER_PROFILE_IDS,
+  resolveBrowserProfile,
+  type BrowserProfile,
+  type BrowserProfileSetting,
+} from './browserProfile';
 
 const KEY = 'cz-settings-v2';
 const LEGACY_KEY = 'cz-settings-v1';
@@ -78,6 +84,7 @@ export interface AppSettings {
    */
   performanceMode: PerformanceTier | 'auto';
   resourceMode: ResourceMode;
+  browserProfile: BrowserProfileSetting;
   ai:      AiSettings;
   recommendations: RecommendationSettings;
   resourceLimits: ResourceLimits;
@@ -106,6 +113,7 @@ function defaults(): AppSettings {
     },
     performanceMode: 'auto',
     resourceMode: 'auto',
+    browserProfile: 'auto',
     ai: { enabled: true, modelTier: 'auto', backend: 'auto', autoApplySuggestions: false },
     recommendations: { enabled: true, allowAi: true },
     resourceLimits: { concurrency: 'auto', maxImageDim: 'auto' },
@@ -147,12 +155,14 @@ function applyAutoDefaults(s: AppSettings, isFirstRun: boolean): AppSettings {
   try {
     const info = detectPlatform();
     const rec = recommend(info);
+    const bp = resolveBrowserProfile(s.browserProfile ?? 'auto', info);
     if (isFirstRun) {
       s.gpu.images = rec.gpu.images;
       s.gpu.pdf    = rec.gpu.pdf;
       s.gpu.ocr    = rec.gpu.ocr;
       s.gpu.video  = rec.gpu.video;
-      s.engines.video.preset = rec.videoPreset;
+      s.engines.video.preset = bp.formFactor === 'mobile' ? bp.media.defaultVideoPreset : rec.videoPreset;
+      s.engines.images.quality = bp.canvas.preferredImageQuality;
     }
   } catch {
     // detection failed (non-browser test env, locked-down sandbox) — keep hand-picked defaults
@@ -180,6 +190,9 @@ export interface ExecutionProfile {
   /** User-facing Resource Guard profile. */
   resourceMode: ResourceMode;
   modeSource: 'auto' | 'manual';
+  /** Active browser optimization profile (Chromium/WebKit/Gecko, Desktop/Mobile). */
+  browserProfile: BrowserProfile;
+  browserProfileSource: 'auto' | 'manual';
   aiModelTier: AiModelTier;
   /** Preferred inference backend. aiEngine still feature-tests it and falls back to WASM at load time. */
   aiBackendPreference: 'webgpu' | 'wasm';
@@ -230,22 +243,44 @@ export function resolveExecutionProfile(
     info?.tier ?? 'balanced',
   );
   const rec = info ? recommend(info, tier) : fallbackRecommendation(tier);
+  const browserProfile = resolveBrowserProfile(s.browserProfile ?? 'auto', info);
+  const browserProfileSource: 'auto' | 'manual' =
+    s.browserProfile && s.browserProfile !== 'auto' ? 'manual' : 'auto';
 
+  const autoConcurrency =
+    s.resourceMode === 'auto' && info
+      ? Math.max(1, Math.min(rec.batchConcurrency, browserProfile.wasm.maxBatchConcurrency))
+      : rec.batchConcurrency;
   const maxConcurrentImages =
     s.resourceLimits.concurrency !== 'auto'
       ? s.resourceLimits.concurrency
-      : rec.batchConcurrency;
+      : browserProfileSource === 'manual'
+        ? Math.min(autoConcurrency, browserProfile.wasm.maxBatchConcurrency)
+        : autoConcurrency;
+
+  const baseImageCap = tierImageCap(tier);
+  const profileDimCap = browserProfile.canvas.maxCanvasDim;
+  const effectiveAutoImageCap =
+    s.resourceMode === 'auto' && (info || browserProfileSource === 'manual')
+      ? baseImageCap === 0
+        ? profileDimCap
+        : Math.min(baseImageCap, profileDimCap)
+      : browserProfileSource === 'manual'
+        ? baseImageCap === 0
+          ? profileDimCap
+          : Math.min(baseImageCap, profileDimCap)
+        : baseImageCap;
   const maxDecodedImageDimension =
     s.resourceLimits.maxImageDim !== 'auto'
       ? s.resourceLimits.maxImageDim
-      : tierImageCap(tier);
+      : effectiveAutoImageCap;
 
   const aiBackendPreference: 'webgpu' | 'wasm' =
     s.ai.backend === 'webgpu'
       ? 'webgpu'
       : s.ai.backend === 'wasm'
         ? 'wasm'
-        : info?.webgpu
+        : info?.webgpu && browserProfile.wasm.preferWebGpu
           ? 'webgpu'
           : 'wasm';
 
@@ -253,6 +288,8 @@ export function resolveExecutionProfile(
     mode: tier,
     resourceMode: s.resourceMode,
     modeSource: s.resourceMode === 'auto' ? 'auto' : 'manual',
+    browserProfile,
+    browserProfileSource,
     aiModelTier: s.ai.modelTier !== 'auto' ? s.ai.modelTier : rec.aiModelTier,
     aiBackendPreference,
     maxConcurrentImages,
@@ -316,6 +353,7 @@ type SavedSettings = {
   engines?: Partial<EngineDefaults>;
   performanceMode?: PerformanceTier | 'auto';
   resourceMode?: string;
+  browserProfile?: string;
   ai?: Partial<AiSettings>;
   recommendations?: Partial<RecommendationSettings>;
   resourceLimits?: Partial<ResourceLimits>;
@@ -356,6 +394,10 @@ const AI_MODEL_TIERS: readonly (AiModelTier | 'auto')[] = [
   'powerful',
 ];
 const AI_BACKENDS: readonly AiSettings['backend'][] = ['auto', 'webgpu', 'wasm'];
+const BROWSER_PROFILE_SETTINGS: readonly BrowserProfileSetting[] = [
+  'auto',
+  ...BROWSER_PROFILE_IDS,
+];
 
 function asBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback;
@@ -468,6 +510,11 @@ export function mergeSettings(base: AppSettings, raw: unknown): AppSettings {
       base.performanceMode,
     ),
     resourceMode,
+    browserProfile: asEnum(
+      saved.browserProfile,
+      BROWSER_PROFILE_SETTINGS,
+      base.browserProfile,
+    ),
     ai: {
       enabled: asBoolean(ai.enabled, base.ai.enabled),
       modelTier: asEnum(ai.modelTier, AI_MODEL_TIERS, base.ai.modelTier),

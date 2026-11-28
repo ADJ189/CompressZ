@@ -15,6 +15,7 @@
  */
 
 import type { OcrLineResult, OcrPageResult } from "./ocrEngines";
+import { resolveExecutionProfile } from "./settings";
 
 declare const __ORT_VERSION__: string;
 
@@ -70,15 +71,26 @@ export async function loadHandwritingPipeline(
     const { pipeline, env } = await import("@huggingface/transformers");
     env.allowLocalModels = false;
     env.useBrowserCache = true;
+    const execProfile = resolveExecutionProfile();
     if (env.backends.onnx?.wasm) {
       const ortVer =
         typeof __ORT_VERSION__ !== "undefined" ? __ORT_VERSION__ : "1.21.0";
       env.backends.onnx.wasm.wasmPaths = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ortVer}/dist/`;
+      const isolated =
+        typeof globalThis !== "undefined" &&
+        Boolean((globalThis as { crossOriginIsolated?: boolean }).crossOriginIsolated);
+      env.backends.onnx.wasm.numThreads = isolated
+        ? Math.max(1, execProfile.browserProfile.wasm.onnxMaxThreads)
+        : 1;
     }
 
-    // Probe WebGPU availability
+    // Probe WebGPU availability only when the resolved profile / settings want it
     let device: "webgpu" | "wasm" = "wasm";
-    if (typeof navigator !== "undefined" && "gpu" in navigator) {
+    if (
+      execProfile.aiBackendPreference !== "wasm" &&
+      typeof navigator !== "undefined" &&
+      "gpu" in navigator
+    ) {
       try {
         const adapter = await (navigator as any).gpu?.requestAdapter();
         if (adapter) {

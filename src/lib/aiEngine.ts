@@ -38,7 +38,7 @@
  */
 
 import { decodeImageBitmap } from "./imageDecode";
-import { getSettings } from "./settings";
+import { getSettings, resolveExecutionProfile } from "./settings";
 // The exact onnxruntime-web version bundled with @huggingface/transformers —
 // injected at build time (see vite.config.ts) by reading the installed
 // package directly, since onnxruntime-web's package.json isn't exposed
@@ -166,6 +166,13 @@ async function configureTransformersEnv(): Promise<any> {
   // scripts/strip-oversized-assets.mjs, run as part of `npm run build`.
   if (env.backends.onnx?.wasm) {
     env.backends.onnx.wasm.wasmPaths = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${__ORT_VERSION__}/dist/`;
+    const execProfile = resolveExecutionProfile();
+    const isolated =
+      typeof globalThis !== "undefined" &&
+      Boolean((globalThis as { crossOriginIsolated?: boolean }).crossOriginIsolated);
+    env.backends.onnx.wasm.numThreads = isolated
+      ? Math.max(1, execProfile.browserProfile.wasm.onnxMaxThreads)
+      : 1;
   }
   return pipeline;
 }

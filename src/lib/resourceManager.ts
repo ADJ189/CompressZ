@@ -105,6 +105,7 @@ export function getResourcePolicy(): ResourcePolicy {
   const s = getSettings();
   const key = [
     s.resourceMode,
+    s.browserProfile,
     s.resourceLimits.concurrency,
     s.resourceLimits.maxImageDim,
   ].join('|');
@@ -132,17 +133,19 @@ export function getResourcePolicy(): ResourcePolicy {
       lightBase = Math.max(2, Math.min(4, Math.floor(cores / 2)));
       break;
     case 'balanced':
-      lightBase = 2;
+      lightBase = Math.min(2, profile.browserProfile.wasm.maxBatchConcurrency);
       break;
     default:
-      lightBase =
-        profile.mode === 'efficient' ? 1 : profile.mode === 'powerful' ? 3 : 2;
+      lightBase = Math.min(
+        profile.mode === 'efficient' ? 1 : profile.mode === 'powerful' ? 3 : 2,
+        profile.browserProfile.wasm.maxBatchConcurrency,
+      );
   }
 
   const lightCapacity = Math.max(1, Math.min(lightBase, userCeiling));
   const heavyLimit =
     s.resourceMode === 'maximum' && profile.mode === 'powerful' && cores >= 8
-      ? 2
+      ? Math.min(2, profile.browserProfile.wasm.maxHeavyJobs)
       : 1;
 
   const policy: ResourcePolicy = {
