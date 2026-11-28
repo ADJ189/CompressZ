@@ -929,14 +929,17 @@ test.describe("mobile UI layout, Tools menus, and Settings across phone viewport
       })
       .toBe(true);
 
-    // Selecting another tool updates active state and keeps it within the viewport
-    const repairChip = page.locator(".cz-hub-tool-chip", { hasText: "Repair File" });
-    await repairChip.click();
-    await expect(repairChip).toHaveClass(/is-active/);
-    await expect(repairChip).toHaveAttribute("aria-selected", "true");
+    // Selecting an offscreen tool updates active state and scrolls it into the mobile strip viewport
+    const splitChip = page.locator(".cz-hub-tool-chip", { hasText: "Split PDF" });
+    const initialSplitBox = await splitChip.boundingBox();
+    expect(initialSplitBox).not.toBeNull();
+    expect(initialSplitBox!.x < 0 || initialSplitBox!.x + initialSplitBox!.width > 390).toBe(true);
+    await splitChip.dispatchEvent("click");
+    await expect(splitChip).toHaveClass(/is-active/);
+    await expect(splitChip).toHaveAttribute("aria-selected", "true");
     await expect
       .poll(async () => {
-        const box = await repairChip.boundingBox();
+        const box = await splitChip.boundingBox();
         return box ? box.x >= 0 && box.x + box.width <= 390 : false;
       })
       .toBe(true);
