@@ -6,7 +6,7 @@
 
   interface Props {
     onOpenTools: () => void;
-    onOpenSettings: () => void;
+    onOpenSettings: (opener?: HTMLElement | null) => void;
   }
 
   let { onOpenTools, onOpenSettings }: Props = $props();
@@ -83,7 +83,7 @@
       type="button"
       aria-label="Open settings"
       title="Settings"
-      onclick={onOpenSettings}
+      onclick={(e) => onOpenSettings(e.currentTarget)}
     >
       <MacIcon name="settings" size={16} />
     </button>

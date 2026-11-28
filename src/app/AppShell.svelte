@@ -28,11 +28,19 @@
   let activeRoute = $state("");
   let toolsOpen = $state(false);
   let settingsOpen = $state(false);
+  let settingsReturnFocusEl = $state<HTMLElement | null>(null);
+
+  function openSettings(opener?: HTMLElement | null) {
+    toolsOpen = false;
+    settingsReturnFocusEl =
+      opener ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    settingsOpen = true;
+  }
 
   $effect(() => {
     const unsub = currentRoute.subscribe((r) => {
       if (r === "settings") {
-        settingsOpen = true;
+        openSettings();
         history.replaceState({}, "", "/");
         activeRoute = "";
         return;
@@ -47,7 +55,7 @@
 <div class="cz-shell">
   <Header
     onOpenTools={() => (toolsOpen = true)}
-    onOpenSettings={() => (settingsOpen = true)}
+    onOpenSettings={openSettings}
   />
 
   <Navigation />
@@ -106,7 +114,11 @@
   </footer>
 
   <ToolsDialog open={toolsOpen} onClose={() => (toolsOpen = false)} />
-  <SettingsDialog open={settingsOpen} onClose={() => (settingsOpen = false)} />
+  <SettingsDialog
+    open={settingsOpen}
+    returnFocusTo={settingsReturnFocusEl}
+    onClose={() => (settingsOpen = false)}
+  />
 
   <!-- Mobile Bottom Navigation Dock (visible only on <=768px) -->
   <nav class="cz-mobile-dock" aria-label="Mobile quick navigation">
@@ -150,7 +162,7 @@
       type="button"
       class="cz-dock-item {settingsOpen ? 'is-active' : ''}"
       aria-label="Settings"
-      onclick={() => { toolsOpen = false; settingsOpen = true; }}
+      onclick={(e) => openSettings(e.currentTarget)}
     >
       <MacIcon name="settings" size={18} />
       <span>Settings</span>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  const appVersion = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.15.5";
+  const appVersion = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.15.7";
 
   import {
     getSettings,
@@ -54,9 +54,10 @@
   interface Props {
     open: boolean;
     onClose: () => void;
+    returnFocusTo?: HTMLElement | null;
   }
 
-  let { open, onClose }: Props = $props();
+  let { open, onClose, returnFocusTo = null }: Props = $props();
 
   let settings = $state<Settings>(getSettings());
   let themePref = $state<"light" | "dark" | "system">(getThemePreference());
@@ -231,9 +232,13 @@
   }
 
   function handleClose() {
+    const target =
+      returnFocusTo && returnFocusTo.isConnected
+        ? returnFocusTo
+        : document.getElementById("settings-btn");
     onClose();
     setTimeout(() => {
-      document.getElementById("settings-btn")?.focus();
+      target?.focus();
     }, 0);
   }
 
