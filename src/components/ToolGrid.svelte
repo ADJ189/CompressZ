@@ -98,6 +98,7 @@
   .cz-tool-grid-item {
     display: flex;
     min-width: 0;
+    container-type: inline-size;
   }
 
   @media (max-width: 640px) {

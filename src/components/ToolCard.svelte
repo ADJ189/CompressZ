@@ -102,7 +102,6 @@
     user-select: none;
     -webkit-user-select: none;
     min-height: 94px;
-    container-type: inline-size;
     box-shadow: var(--hairline, inset 0 1px 0 rgba(255, 255, 255, 0.7)), var(--shadow-xs, 0 1px 2px rgba(0, 0, 0, 0.04));
     transition:
       transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
@@ -308,13 +307,6 @@
     color: var(--text-3);
   }
 
-  @container (max-width: 240px) {
-    .cz-tool-card {
-      padding: 0.85rem;
-      gap: 0.7rem;
-    }
-  }
-
   @media (max-width: 480px) {
     .cz-tool-card {
       padding: 0.85rem 0.95rem;
@@ -326,6 +318,13 @@
     }
     .cz-tool-card-desc {
       font-size: 0.76rem;
+    }
+  }
+
+  @container (max-width: 240px) {
+    .cz-tool-card {
+      padding: 0.85rem;
+      gap: 0.7rem;
     }
   }
 
