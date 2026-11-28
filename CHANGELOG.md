@@ -9,6 +9,10 @@ The suffix is dropped on the release that ships it (`1.12.0`).
 
 ## [Unreleased]
 
+### Changed
+
+- **macOS / Apple-Inspired Tool Cards, Squircle Icons & Chrome Vibrancy (`ToolCard.svelte`, `ToolGrid.svelte`, `MacIcon.svelte`, `Header.svelte`, `Navigation.svelte`, `HubHeader.svelte`, `ToolsDialog.svelte`, `ToolsMegaMenu.svelte`, `AppShell.svelte`, `style.css`)**: Moved tool badges (e.g., `Fast`, `Bates`, `Layout`, `Studio`, `AES-256`, `New`) out from floating over the squircle icon and placed them inline beside each tool title inside the card as semantic macOS-tinted capsules; upgraded `.cz-squircle` icons with specular top-gloss and inner refraction layers; added translucent vibrancy (`--material-chrome` / `--material-elevated`), hairline edge highlights, and pointer-aware (`hover: hover`) interaction layers across the shell, cards, and navigation.
+
 ### Fixed
 
 - **Handwriting OCR CDN WASM & Crop Bounds (`ocrHandwriting.ts`)**: Configured `@huggingface/transformers` CDN `wasmPaths` and `allowLocalModels = false` matching `aiEngine.ts` (avoiding 404s after `strip-oversized-assets.mjs`), destroyed the temporary WebGPU probe device, and fixed `detectTextLines()` bottom-edge crop height calculation.
