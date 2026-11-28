@@ -193,7 +193,7 @@
     position: sticky;
     top: var(--header-h);
     z-index: 90;
-    background: var(--surface);
+    background: var(--material-chrome, var(--surface));
     border-bottom: 1px solid var(--border);
     height: var(--tabbar-h);
     display: flex;
@@ -201,8 +201,8 @@
     justify-content: center;
     width: 100%;
     overflow: hidden;
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
   }
   .cz-tabbar-center {
     width: 100%;
@@ -230,10 +230,10 @@
     position: absolute;
     bottom: 0;
     left: 0;
-    height: 3px;
+    height: 2.5px;
     background: linear-gradient(90deg, var(--accent), var(--accent-2));
     border-radius: 3px 3px 0 0;
-    box-shadow: 0 0 10px var(--accent-glow);
+    box-shadow: 0 0 8px var(--accent-glow);
     transition: transform var(--t2), width var(--t2), opacity var(--t);
     pointer-events: none;
     z-index: 2;
@@ -249,40 +249,47 @@
     color: var(--text-2);
     white-space: nowrap;
     border-radius: 100px;
-    transition: color var(--t), background var(--t), border-color var(--t), box-shadow var(--t);
+    transition: color var(--t), background var(--t), border-color var(--t), box-shadow var(--t), transform var(--t);
     text-decoration: none;
     border: 1px solid transparent;
     cursor: pointer;
     background: transparent;
   }
-  .cz-tab:hover {
-    color: var(--text);
-    background: var(--bg2);
+  @media (hover: hover) and (pointer: fine) {
+    .cz-tab:hover {
+      color: var(--text);
+      background: var(--bg2);
+    }
+  }
+  .cz-tab:active {
+    transform: scale(0.97);
   }
   .cz-tab.cz-tab-dropdown {
     background: var(--surface2, rgba(255, 255, 255, 0.06));
-    border: 1px solid var(--brand);
+    border: 1px solid color-mix(in oklab, var(--brand) 40%, var(--border));
     color: var(--accent-ink, var(--accent));
     font-weight: 600;
-    box-shadow: 0 0 8px var(--brand-glow), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    box-shadow: var(--hairline, inset 0 1px 0 rgba(255, 255, 255, 0.15)), var(--shadow-xs);
   }
-  .cz-tab.cz-tab-dropdown:hover {
-    background: var(--surface3, rgba(255, 255, 255, 0.12));
-    border-color: var(--brand);
-    box-shadow: 0 0 14px var(--brand-glow), 0 0 0 1px var(--brand);
-    color: var(--accent-ink, var(--accent));
+  @media (hover: hover) and (pointer: fine) {
+    .cz-tab.cz-tab-dropdown:hover {
+      background: var(--surface3, var(--surface2));
+      border-color: var(--brand);
+      box-shadow: 0 0 0 1px color-mix(in oklab, var(--brand) 30%, transparent), var(--shadow-xs);
+      color: var(--accent-ink, var(--accent));
+    }
   }
   .cz-tab.cz-tab-dropdown.is-active {
-    background: var(--brand-glow);
+    background: var(--accent-soft);
     border-color: var(--brand);
-    box-shadow: 0 0 16px var(--brand-glow), 0 0 0 1px var(--brand);
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--brand) 35%, transparent);
   }
   .cz-tab.is-active {
     color: var(--accent-ink, var(--accent));
     background: var(--accent-soft);
-    border-color: var(--accent-glow);
+    border-color: color-mix(in oklab, var(--accent) 28%, transparent);
     font-weight: 600;
-    box-shadow: 0 1px 6px var(--accent-glow);
+    box-shadow: var(--hairline, inset 0 1px 0 rgba(255, 255, 255, 0.15)), 0 1px 4px var(--accent-glow);
   }
   .cz-tab-icon {
     display: flex;
@@ -301,12 +308,23 @@
     opacity: 1;
   }
   .cz-tab-badge {
-    padding: 0.05rem 0.35rem;
-    border-radius: 4px;
-    font-size: 0.7rem;
+    padding: 0.08rem 0.42rem;
+    border-radius: 6px;
+    font-size: 0.68rem;
     font-weight: 600;
-    background: var(--accent-badge, #047857);
-    color: #ffffff;
+    background: var(--accent-soft);
+    color: var(--accent-ink, var(--accent));
+    border: 1px solid color-mix(in oklab, var(--accent) 24%, transparent);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cz-tabbar-thumb,
+    .cz-tab,
+    .cz-tab-chevron {
+      transition: none;
+    }
+    .cz-tab:active {
+      transform: none;
+    }
   }
   @media (max-width: 820px) {
     .cz-tabbar-center {

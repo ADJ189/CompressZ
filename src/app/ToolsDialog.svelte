@@ -314,10 +314,12 @@
     width: 92%;
     max-width: 760px;
     max-height: 86vh;
-    background: var(--surface);
+    background: var(--material-elevated, var(--surface));
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
     border: 1px solid var(--border);
     border-radius: var(--r-xl, 20px);
-    box-shadow: 0 24px 64px -12px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.08);
+    box-shadow: var(--hairline, inset 0 1px 0 rgba(255, 255, 255, 0.08)), 0 24px 64px -12px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.08);
     z-index: 1001;
     display: flex;
     flex-direction: column;

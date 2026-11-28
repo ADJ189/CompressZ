@@ -109,8 +109,11 @@
     align-items: center;
     justify-content: space-between;
     padding: 0 1.25rem;
-    background: var(--surface);
+    background: var(--material-chrome, var(--surface));
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
     border-bottom: 1px solid var(--border);
+    box-shadow: var(--hairline, inset 0 1px 0 rgba(255, 255, 255, 0.5));
     position: sticky;
     top: 0;
     z-index: 100;
@@ -146,11 +149,26 @@
     justify-content: center;
     border-radius: var(--r-sm);
     color: var(--text-2);
-    transition: background var(--t), color var(--t);
+    border: 1px solid transparent;
+    transition: background var(--t), color var(--t), border-color var(--t), transform var(--t);
   }
-  .cz-hdr-btn:hover {
-    background: var(--bg2);
-    color: var(--text);
+  @media (hover: hover) and (pointer: fine) {
+    .cz-hdr-btn:hover {
+      background: var(--bg2);
+      border-color: var(--border);
+      color: var(--text);
+    }
+  }
+  .cz-hdr-btn:active {
+    transform: scale(0.95);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cz-hdr-btn {
+      transition: none;
+    }
+    .cz-hdr-btn:active {
+      transform: none;
+    }
   }
   @media (max-width: 680px) {
     .cz-header {

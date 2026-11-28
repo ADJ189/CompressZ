@@ -248,7 +248,9 @@
       display: grid;
       grid-template-columns: repeat(5, 1fr);
       align-items: stretch;
-      background: var(--surface);
+      background: var(--material-chrome, var(--surface));
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
       border-top: 1px solid var(--border);
       padding: 0.3rem 0.25rem calc(0.3rem + env(safe-area-inset-bottom, 0px));
       box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
