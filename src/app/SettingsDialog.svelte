@@ -12,6 +12,15 @@
     type AppSettings as Settings,
     type ResourceMode,
   } from "../lib/settings";
+  import {
+    BROWSER_PROFILES,
+    BROWSER_PROFILE_IDS,
+    detectBrowserProfileId,
+    supportsWasmSimd,
+    supportsWebpCanvasEncode,
+    type BrowserProfileSetting,
+  } from "../lib/browserProfile";
+  import { detectPlatform } from "../lib/platform";
   import { syncEngineSettingsToStores } from "../store";
   import {
     getThemePreference,
@@ -117,16 +126,19 @@
     const ua = typeof navigator !== "undefined" ? navigator.userAgent : "Unknown";
     const cores = typeof navigator !== "undefined" ? navigator.hardwareConcurrency : "Unknown";
     const screenRes = typeof window !== "undefined" ? `${window.screen.width}x${window.screen.height} (DPR ${window.devicePixelRatio})` : "N/A";
+    const activeProfile = resolveExecutionProfile(settings);
 
     return [
       `### CompressZ Diagnostic Information`,
       `- **App Version:** ${appVersion}`,
+      `- **Browser Profile:** ${activeProfile.browserProfile.label} (${activeProfile.browserProfileSource})`,
       `- **User Agent:** ${ua}`,
       `- **Screen:** ${screenRes}`,
       `- **Hardware Cores:** ${cores}`,
       `- **Cross-Origin Isolation:** ${isIsolated ? "Enabled (COOP/COEP active)" : "Disabled"}`,
       `- **WebCodecs Support:** ${hasWebCodecs ? "Available" : "Unavailable (Fallback to WASM)"}`,
       `- **WebGPU Support:** ${hasWebGpu ? "Available" : "Unavailable (Fallback to CPU/WASM)"}`,
+      `- **WASM SIMD / WebP Encode:** ${supportsWasmSimd() ? "SIMD ✓" : "Non-SIMD"} · ${supportsWebpCanvasEncode() ? "WebP ✓" : "JPEG fallback"}`,
       `- **Resource Mode:** ${settings.resourceMode} (${resolvedConcurrency(settings)} concurrent jobs)`,
       `- **Anonymous Diagnostics:** ${telemetryEnabled ? "Active" : "Opted out (Disabled)"}`,
     ].join("\n");
@@ -177,6 +189,7 @@
   function saveChanges(patch: Partial<Settings>) {
     updateSettings((s) => {
       if (patch.resourceMode !== undefined) s.resourceMode = patch.resourceMode;
+      if (patch.browserProfile !== undefined) s.browserProfile = patch.browserProfile;
       if (patch.resourceLimits !== undefined) {
         s.resourceLimits = { ...s.resourceLimits, ...patch.resourceLimits };
       }
@@ -253,6 +266,13 @@
   }
 
   const profile = $derived(resolveExecutionProfile(settings));
+  const detectedProfileLabel = $derived.by(() => {
+    try {
+      return BROWSER_PROFILES[detectBrowserProfileId(detectPlatform())].shortLabel;
+    } catch {
+      return "Blink Desktop";
+    }
+  });
   const autoConcurrency = $derived(
     resolvedConcurrency({
       ...settings,
@@ -607,6 +627,27 @@
                 {settings.gpu.images ? "Enabled" : "Disabled"}
               </button>
             </div>
+
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">Browser Optimization Profile</div>
+                <div class="cz-settings-desc">{profile.browserProfile.summary}</div>
+              </div>
+              <select
+                class="cz-select-pill"
+                aria-label="Browser optimization profile"
+                value={settings.browserProfile ?? "auto"}
+                onchange={(e) =>
+                  saveChanges({
+                    browserProfile: (e.target as HTMLSelectElement).value as BrowserProfileSetting,
+                  })}
+              >
+                <option value="auto">Auto ({detectedProfileLabel})</option>
+                {#each BROWSER_PROFILE_IDS as id}
+                  <option value={id}>{BROWSER_PROFILES[id].label}</option>
+                {/each}
+              </select>
+            </div>
           </div>
 
           <div data-testid="resource-status" class="cz-sidebar-card">
@@ -959,6 +1000,24 @@
                 <div class="cz-settings-desc">WebCodecs + Mediabunny (browser selects HW/SW)</div>
               </div>
               <span class="cz-tier-tag device-info-val">WebCodecs + Mediabunny (FFmpeg fallback)</span>
+            </div>
+            <div class="cz-settings-row device-info-row">
+              <div>
+                <div class="cz-settings-label">Browser profile</div>
+                <div class="cz-settings-desc">Active engine & form-factor optimization profile</div>
+              </div>
+              <span class="cz-tier-tag device-info-val">
+                {profile.browserProfile.label} ({profile.browserProfileSource === "auto" ? "Auto" : "Manual"})
+              </span>
+            </div>
+            <div class="cz-settings-row device-info-row">
+              <div>
+                <div class="cz-settings-label">Profile limits & capabilities</div>
+                <div class="cz-settings-desc">Canvas cap, ONNX WASM threads, WebP encode & SIMD</div>
+              </div>
+              <span class="cz-tier-tag device-info-val">
+                ≤{profile.browserProfile.canvas.maxCanvasDim}px · {profile.browserProfile.wasm.onnxMaxThreads} threads · {supportsWebpCanvasEncode() ? "WebP ✓" : "JPEG fallback"} · {supportsWasmSimd() ? "SIMD ✓" : "Non-SIMD"}
+              </span>
             </div>
             <div class="cz-settings-row device-info-row">
               <div>

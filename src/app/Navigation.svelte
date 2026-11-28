@@ -201,8 +201,8 @@
     justify-content: center;
     width: 100%;
     overflow: hidden;
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(var(--chrome-blur, 20px)) saturate(180%);
+    -webkit-backdrop-filter: blur(var(--chrome-blur, 20px)) saturate(180%);
   }
   .cz-tabbar-center {
     width: 100%;

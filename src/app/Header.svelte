@@ -110,8 +110,8 @@
     justify-content: space-between;
     padding: 0 1.25rem;
     background: var(--material-chrome, var(--surface));
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(var(--chrome-blur, 20px)) saturate(180%);
+    -webkit-backdrop-filter: blur(var(--chrome-blur, 20px)) saturate(180%);
     border-bottom: 1px solid var(--border);
     box-shadow: var(--hairline, inset 0 1px 0 rgba(255, 255, 255, 0.5));
     position: sticky;
