@@ -31,6 +31,7 @@
   --glass-border: rgba(255,255,255,0.65);
   --material-chrome: rgba(255, 255, 255, 0.76);
   --material-elevated: rgba(255, 255, 255, 0.88);
+  --chrome-blur:  20px;
   --hairline:     inset 0 1px 0 rgba(255, 255, 255, 0.75);
   --border:       #e0e0da;
   --border-mid:   #ccccc5;
