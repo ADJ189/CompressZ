@@ -2588,13 +2588,13 @@ import { entryError } from "../lib/engineError";
   }
 
   .cz-suite-target-badge {
-    padding: 0.2rem 0.55rem;
-    font-size: 0.72rem;
-    font-weight: 700;
-    border-radius: 100px;
+    padding: 0.16rem 0.52rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    border-radius: 6px;
     background: var(--accent-soft, rgba(16, 185, 129, 0.1));
-    color: var(--accent);
-    border: 1px solid var(--green-border, rgba(16, 185, 129, 0.24));
+    color: var(--accent-ink, var(--accent));
+    border: 1px solid color-mix(in oklab, var(--accent) 24%, transparent);
     flex-shrink: 0;
   }
 

@@ -1810,13 +1810,13 @@
   }
 
   .cz-active-target-badge {
-    padding: 0.15rem 0.5rem;
-    font-size: 0.72rem;
-    font-weight: 700;
-    border-radius: 100px;
+    padding: 0.16rem 0.52rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    border-radius: 6px;
     background: var(--accent-soft, rgba(16, 185, 129, 0.1));
-    color: var(--accent);
-    border: 1px solid var(--green-border, rgba(16, 185, 129, 0.24));
+    color: var(--accent-ink, var(--accent));
+    border: 1px solid color-mix(in oklab, var(--accent) 24%, transparent);
   }
   .cz-card-side {
     display: flex;
