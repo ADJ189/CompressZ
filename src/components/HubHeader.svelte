@@ -126,17 +126,15 @@
 <div class="cz-hub-banner">
   <div class="cz-hub-main">
     <div class="cz-hub-heading">
-      <span class="cz-hub-icon" aria-hidden="true">
-        {#if /^[a-z0-9_-]+$/.test(icon)}
-          <MacIcon name={icon} size={22} />
-        {:else if icon === "📄"}
-          <MacIcon name="pdf" size={22} />
-        {:else if icon === "🔄"}
-          <MacIcon name="convert" size={22} />
-        {:else}
-          {icon}
-        {/if}
-      </span>
+      {#if /^[a-z0-9_-]+$/.test(icon)}
+        <MacIcon name={icon} variant="squircle" squircleSize={44} strokeWidth={2.05} />
+      {:else if icon === "📄"}
+        <MacIcon name="pdf" variant="squircle" squircleSize={44} strokeWidth={2.05} />
+      {:else if icon === "🔄"}
+        <MacIcon name="convert" variant="squircle" squircleSize={44} strokeWidth={2.05} />
+      {:else}
+        <span class="cz-hub-icon" aria-hidden="true">{icon}</span>
+      {/if}
       <div>
         <h1 class="cz-hub-title">{title}</h1>
         <p class="cz-hub-desc">{description}</p>
@@ -179,11 +177,13 @@
     align-items: flex-start;
     gap: 1.5rem;
     padding: 1.25rem 1.5rem;
-    background: var(--surface2);
+    background: var(--material-chrome, var(--surface2));
+    backdrop-filter: blur(16px) saturate(160%);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
     border: 1px solid var(--border);
     border-radius: var(--r-xl);
     margin-bottom: 1.5rem;
-    box-shadow: var(--shadow-sm);
+    box-shadow: var(--hairline, inset 0 1px 0 rgba(255, 255, 255, 0.5)), var(--shadow-sm);
     min-width: 0;
     max-width: 100%;
   }
@@ -245,12 +245,18 @@
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
-    transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+    transition: color var(--t), border-color var(--t), background var(--t), transform var(--t), box-shadow var(--t);
   }
-  .cz-hub-tool-chip:hover {
-    color: var(--text);
-    border-color: var(--border-hover, var(--brand));
-    background: var(--surface3, var(--surface));
+  @media (hover: hover) and (pointer: fine) {
+    .cz-hub-tool-chip:hover {
+      color: var(--text);
+      border-color: var(--border-strong, var(--brand));
+      background: var(--surface3, var(--surface));
+      box-shadow: var(--shadow-xs);
+    }
+  }
+  .cz-hub-tool-chip:active {
+    transform: scale(0.97);
   }
   .cz-hub-tool-chip.is-active {
     background: var(--brand);
@@ -260,6 +266,16 @@
   }
   .cz-hub-tool-icon {
     font-size: 0.9rem;
+    display: inline-flex;
+    align-items: center;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cz-hub-tool-chip {
+      transition: none;
+    }
+    .cz-hub-tool-chip:active {
+      transform: none;
+    }
   }
   .cz-hub-action-box {
     display: flex;

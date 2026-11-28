@@ -40,7 +40,7 @@
 
   <div class="cz-tool-grid" role="list">
     {#each tools as tool (tool.id)}
-      <div role="listitem">
+      <div class="cz-tool-grid-item" role="listitem">
         <ToolCard
           id={tool.id}
           name={tool.name}
@@ -92,6 +92,12 @@
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
     gap: 0.85rem;
     width: 100%;
+    align-items: stretch;
+  }
+
+  .cz-tool-grid-item {
+    display: flex;
+    min-width: 0;
   }
 
   @media (max-width: 640px) {

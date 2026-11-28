@@ -257,14 +257,16 @@
     width: min(1080px, calc(100vw - 24px));
     max-height: calc(100vh - var(--header-h) - var(--tabbar-h) - 28px);
     z-index: 190;
-    background: var(--surface);
+    background: var(--material-elevated, var(--surface));
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
     border: 1px solid var(--border-mid);
     border-radius: 20px;
-    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28), 0 4px 16px rgba(0, 0, 0, 0.12), inset 0 1px 1px rgba(255, 255, 255, 0.15);
+    box-shadow: var(--hairline, inset 0 1px 0 rgba(255, 255, 255, 0.15)), 0 24px 64px rgba(0, 0, 0, 0.24), 0 4px 16px rgba(0, 0, 0, 0.1);
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    animation: czTraySlide 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation: czTraySlide 0.24s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   }
 
   @keyframes czTraySlide {
@@ -396,15 +398,20 @@
     cursor: pointer;
   }
 
-  .cz-tool-box:hover {
-    transform: translateY(-2px) scale(1.012);
-    background: var(--surface);
-    border-color: var(--accent);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.10), 0 2px 6px rgba(0, 0, 0, 0.06);
+  @media (hover: hover) and (pointer: fine) {
+    .cz-tool-box:hover {
+      transform: translateY(-2px);
+      background: var(--surface);
+      border-color: var(--border-strong, var(--accent));
+      box-shadow: var(--hairline, inset 0 1px 0 rgba(255, 255, 255, 0.4)), 0 8px 24px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
+    }
+    .cz-tool-box:hover .cz-tool-box-icon :global(.cz-squircle) {
+      transform: translateY(-1px) scale(1.03);
+    }
   }
 
   .cz-tool-box:active {
-    transform: translateY(0) scale(0.99);
+    transform: translateY(0) scale(0.985);
   }
 
   .cz-tool-box-icon {
@@ -434,14 +441,14 @@
   }
 
   .cz-tool-box-badge {
-    font-size: 0.65rem;
-    font-weight: 700;
-    padding: 0.1rem 0.35rem;
-    border-radius: 4px;
+    font-size: 0.67rem;
+    font-weight: 600;
+    padding: 0.1rem 0.42rem;
+    border-radius: 6px;
     background: var(--accent-soft);
-    color: var(--accent);
-    border: 1px solid var(--accent-glow);
-    text-transform: uppercase;
+    color: var(--accent-ink, var(--accent));
+    border: 1px solid color-mix(in oklab, var(--accent) 22%, transparent);
+    flex-shrink: 0;
   }
 
   .cz-tool-box-desc {
@@ -521,6 +528,22 @@
     to {
       opacity: 1;
       transform: translateY(0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cz-mega-tray,
+    .cz-tool-box,
+    .cz-mega-close,
+    .cz-mega-clear-btn {
+      animation: none;
+      transition: none;
+    }
+    .cz-tool-box:hover,
+    .cz-tool-box:active,
+    .cz-tool-box:hover .cz-tool-box-icon :global(.cz-squircle),
+    .cz-mega-close:hover {
+      transform: none;
     }
   }
 </style>
