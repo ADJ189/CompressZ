@@ -943,3 +943,36 @@ test.describe("mobile UI layout, Tools menus, and Settings across phone viewport
   });
 });
 
+test("browser optimization profile matches active engine and updates via Settings", async ({
+  page,
+}, testInfo) => {
+  await page.goto("/");
+
+  const projectToProfile: Record<string, string> = {
+    "firefox-desktop": "gecko-desktop",
+    "firefox-mobile": "gecko-mobile",
+  };
+  const expectedProfile = projectToProfile[testInfo.project.name] ?? testInfo.project.name;
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-browser-profile",
+    expectedProfile,
+  );
+
+  let dialog = await openSettingsSection(page, "Performance");
+  const profileSelect = dialog.getByLabel("Browser optimization profile");
+  await expect(profileSelect).toHaveValue("auto");
+
+  await profileSelect.selectOption("webkit-mobile");
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-browser-profile",
+    "webkit-mobile",
+  );
+
+  dialog = await openSettingsSection(page, "Diagnostics");
+  await expect(
+    dialog
+      .locator(".device-info-row", { hasText: "Browser profile" })
+      .locator(".device-info-val"),
+  ).toContainText("Safari (WebKit · Mobile) (Manual)");
+});
+
