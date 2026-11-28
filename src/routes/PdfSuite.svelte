@@ -39,6 +39,7 @@
   import { repairCorruptPdf, inspectAndRepairMp4Moov } from "../lib/pdfTools/repairPdf";
   import { openPdfDocument, getPdfLib } from "../lib/pdfLibs";
   import { runScheduled } from "../lib/resourceManager";
+  import { resolveExecutionProfile } from "../lib/settings";
   import { consumeStagedUniversalFile, currentRoute } from "../store";
   import { formatBytes } from "../lib/types";
 import { entryError } from "../lib/engineError";
@@ -488,9 +489,10 @@ import { entryError } from "../lib/engineError";
     let p: PdfJsPageHandle | null = null;
     let canvas: HTMLCanvasElement | null = null;
     try {
+      const thumbScale = resolveExecutionProfile().browserProfile.ui.thumbnailScale;
       p = await doc.getPage(pageIndex0 + 1);
       if (mySeq !== loadSeq) return;
-      const vp = p.getViewport({ scale: 0.25 });
+      const vp = p.getViewport({ scale: thumbScale });
       canvas = document.createElement("canvas");
       canvas.width = Math.max(1, Math.round(vp.width));
       canvas.height = Math.max(1, Math.round(vp.height));
@@ -557,7 +559,8 @@ import { entryError } from "../lib/engineError";
   }
 
   function observeThumbVisibility(node: HTMLElement, pageIndex0: number) {
-    if (pageIndex0 < 24 || pageThumbnails[pageIndex0]) return {};
+    const eagerLimit = resolveExecutionProfile().browserProfile.ui.eagerThumbnailCount;
+    if (pageIndex0 < eagerLimit || pageThumbnails[pageIndex0]) return {};
     if (typeof IntersectionObserver === "undefined") {
       requestPageThumbnail(pageIndex0);
       return {};
@@ -629,8 +632,9 @@ import { entryError } from "../lib/engineError";
         rotation: 0,
       }));
 
-      // Generate thumbnails eagerly for the first 24 pages; pages 25+ render lazily via IntersectionObserver
-      const eagerCount = Math.min(totalPages, 24);
+      // Generate thumbnails eagerly within the active browser profile's budget; remaining pages render lazily via IntersectionObserver
+      const eagerLimit = resolveExecutionProfile().browserProfile.ui.eagerThumbnailCount;
+      const eagerCount = Math.min(totalPages, eagerLimit);
       for (let i = 0; i < eagerCount; i++) {
         if (mySeq !== loadSeq) return;
         requestedThumbPages.add(i);
