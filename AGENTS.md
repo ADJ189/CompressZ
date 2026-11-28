@@ -130,6 +130,7 @@ src/components/            reusable UI atoms (Svelte 5)
   ToolCard.svelte         rectangular interactive tool card with squircle icon
   ToolGrid.svelte         responsive CSS grid container for tool discovery
   ActionPalette.svelte    CloudConvert-style universal upload modal with device acceleration & format matrix
+  WarningBanner.svelte    accessible deduplicated EngineWarning banner with expandable details
 src/router.ts              History API router, dispatches to store
 src/store.ts               pure TypeScript reactive store (Svelte 5 contract)
 src/toast.ts               toast notifications
@@ -144,6 +145,7 @@ src/lib/                   pure framework-independent TypeScript engines
   fileEncryption.ts        hardware-accelerated WebCrypto AES-256-GCM vault encryption
   qpdfWasm.ts              isolated QPDF WebAssembly execution bridge
   engineError.ts           typed EngineError diagnostic reports & bounded logging
+  warnings.ts              EngineWarning deduplication & merge helpers
   pdfToMarkdown.ts         column-aware PDF to Markdown + ZIP bundle
   markdownPreview.ts       safe Markdown & math preview renderer with XSS sanitization
   ocrEngines.ts            unified OCR engines (Tesseract.js 5 + PaddleOCR)
@@ -165,7 +167,8 @@ src/lib/                   pure framework-independent TypeScript engines
   batch.ts                 concurrency-limited batch runner
   thumb.ts                 cached preview thumbnails
   ffmpeg.ts                FFmpeg.wasm singleton + single progress handler
-  pdfLibs.ts               cached pdf.js / pdf-lib loaders
+  pdfLibs.ts               cached pdf.js (same-origin blob: worker) / pdf-lib loaders
+  avifEncode.ts / avifWorker.ts  single-threaded @jsquash/avif in 'self' module worker
   compressImage.ts / compressPdf.ts / compressVideo.ts / compressAudio.ts
   webcodecsVideo.ts        capability-gated WebCodecs + Mediabunny route
   videoMeta.ts             shared video metadata + no-upscale size planner
@@ -244,7 +247,20 @@ match. Several were previously wrong; don't regress them.
   guard retries **once at a higher quality** — never lower — unless a byte
   target is active (then it warns) or the user explicitly requested quality
   <0.70 (an intentional soft look). It never rescales to chase a score, and a
-  remaining warning is shown on the file card via the result `format` note.
+  remaining warning is shown on the file card via the result `format` note and
+  unified `EngineWarning` / `WarningBanner` UI.
+- AVIF fallback (`avifEncode.ts` + `avifWorker.ts`) uses single-threaded
+  `@jsquash/avif` (`codec/enc/avif_enc.js`) inside a same-origin `'self'` module
+  worker (never cross-origin `avif_enc_mt` pthreads under COOP/COEP).
+- `pdfLibs.ts` fetches `pdf.worker.mjs` into a same-origin `blob:` URL so
+  Safari/WebKit does not silently degrade to main-thread PDF parsing.
+- Any codec/engine fallback (AVIF → WebP/JPEG, WebP → JPEG, WebCodecs → FFmpeg
+  → MediaRecorder, structural PDF → canvas raster, QPDF → JS salvage, `paddle`
+  OCR → Tesseract, WebGPU AI → WASM) surfaces an `EngineWarning` via
+  `WarningBanner.svelte` / `FileCard.svelte` and uses `"warn"` toasts instead
+  of plain `"success"` toasts.
+- Consolidated policies, implemented plan contracts, and audit notes live in
+  [docs/TECHNICAL_REFERENCE.md](docs/TECHNICAL_REFERENCE.md).
 
 ### PDF & PDF → Markdown
 - Structural strategy (Low/Recommended): walk XObjects, downscale embedded
