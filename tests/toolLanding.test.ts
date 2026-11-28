@@ -28,6 +28,13 @@ Deno.test("tool landing: ToolCard and ToolGrid components exist and comply with 
   assert(cardSvelte.includes('role="button"'), 'ToolCard must have role="button"');
   assert(cardSvelte.includes("tabindex="), "ToolCard must be keyboard focusable");
   assert(gridSvelte.includes('role="list"'), 'ToolGrid must have role="list"');
+
+  // Badge must sit inline beside the title inside the card body, never floating over the icon
+  assert(
+    cardSvelte.includes("cz-tool-card-title-group") &&
+      !cardSvelte.includes("top: -6px"),
+    "ToolCard badge must be placed inline beside the title, not floating above the icon"
+  );
 });
 
 Deno.test("tool landing: PdfSuite and Convert implement tool-first interactive landings", async () => {
