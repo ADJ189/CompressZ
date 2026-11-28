@@ -12,6 +12,7 @@ import {
   setProgressHandler,
 } from "./ffmpeg";
 import { get2D } from "./gpu";
+import { resolveExecutionProfile } from "./settings";
 import { buildFfmpegScaleFilter, getVideoMeta, planVideoSize } from "./videoMeta";
 import { videoViaWebCodecs } from "./webcodecsVideo";
 
@@ -332,21 +333,14 @@ async function videoViaMediaRecorder(
   const w = size.width;
   const h = size.height;
 
-  const ua = navigator.userAgent;
-  const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
-  const isFirefox = ua.includes("Firefox/");
-  const types = isSafari
-    ? ["video/mp4", "video/webm;codecs=vp9", "video/webm"]
-    : isFirefox
-      ? ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"]
-      : [
-          "video/webm;codecs=vp9",
-          "video/webm;codecs=vp8",
-          "video/webm",
-          "video/mp4",
-        ];
+  if (typeof MediaRecorder === "undefined") {
+    throw new Error("MediaRecorder is not supported in this browser");
+  }
+  const profile = resolveExecutionProfile().browserProfile;
   const mimeType =
-    types.find((t) => MediaRecorder.isTypeSupported(t)) ?? "video/webm";
+    profile.media.mediaRecorderMimeOrder.find((t) =>
+      MediaRecorder.isTypeSupported(t),
+    ) ?? "video/webm";
 
   const url = URL.createObjectURL(file);
   let urlRevoked = false;
@@ -411,10 +405,17 @@ async function videoViaMediaRecorder(
   try {
     videoStream = canvas.captureStream(opts.fps ?? 30);
 
-    // Try to get audio tracks from the hidden video element
+    // Try to get audio tracks from the hidden video element (including Firefox mozCaptureStream)
     combinedStream = videoStream;
     try {
-      const vidStream = (vid as any).captureStream?.() ?? null;
+      const streamable = vid as HTMLVideoElement & {
+        captureStream?: () => MediaStream;
+        mozCaptureStream?: () => MediaStream;
+      };
+      const vidStream =
+        streamable.captureStream?.() ??
+        streamable.mozCaptureStream?.() ??
+        null;
       const audioTracks = vidStream?.getAudioTracks() ?? [];
       if (audioTracks.length > 0) {
         combinedStream = new MediaStream([

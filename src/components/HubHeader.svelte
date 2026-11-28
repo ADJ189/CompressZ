@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount, tick } from "svelte";
   import UniversalUpload from "./UniversalUpload.svelte";
   import MacIcon from "./MacIcon.svelte";
 
@@ -28,6 +29,79 @@
   }: Props = $props();
 
   let tablistEl: HTMLElement | undefined = $state();
+  let hasScrolledInitial = false;
+
+  async function scrollActiveChipIntoView(instant = false) {
+    await tick();
+    const list = tablistEl;
+    if (!list || list.scrollWidth <= list.clientWidth) return;
+
+    const activeChip = list.querySelector<HTMLElement>(".cz-hub-tool-chip.is-active");
+    if (!activeChip) return;
+
+    const listRect = list.getBoundingClientRect();
+    const chipRect = activeChip.getBoundingClientRect();
+    const chipLeftInScroll = chipRect.left - listRect.left + list.scrollLeft;
+    const maxScroll = Math.max(0, list.scrollWidth - list.clientWidth);
+    const targetScroll = Math.min(
+      maxScroll,
+      Math.max(0, chipLeftInScroll - (list.clientWidth - chipRect.width) / 2),
+    );
+
+    const prefersReducedMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (instant || prefersReducedMotion) {
+      list.scrollLeft = targetScroll;
+    } else {
+      list.scrollTo({ left: targetScroll, behavior: "smooth" });
+    }
+  }
+
+  onMount(() => {
+    let destroyed = false;
+    void scrollActiveChipIntoView(true);
+    const onResize = () => {
+      if (!destroyed) void scrollActiveChipIntoView(true);
+    };
+    window.addEventListener("resize", onResize, { passive: true });
+    if (typeof document !== "undefined" && document.fonts) {
+      document.fonts.addEventListener?.("loadingdone", onResize);
+      if (document.fonts.ready) {
+        void document.fonts.ready.then(onResize);
+      }
+    }
+    return () => {
+      destroyed = true;
+      window.removeEventListener("resize", onResize);
+      if (typeof document !== "undefined" && document.fonts) {
+        document.fonts.removeEventListener?.("loadingdone", onResize);
+      }
+    };
+  });
+
+  $effect(() => {
+    const _list = tablistEl;
+    const _tools = tools;
+    if (!_list || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      void scrollActiveChipIntoView(true);
+    });
+    ro.observe(_list);
+    for (const chip of _list.querySelectorAll<HTMLElement>(".cz-hub-tool-chip")) {
+      ro.observe(chip);
+    }
+    return () => ro.disconnect();
+  });
+
+  $effect(() => {
+    const _tool = activeToolId;
+    const _list = tablistEl;
+    if (!_list) return;
+    const instant = !hasScrolledInitial;
+    hasScrolledInitial = true;
+    void scrollActiveChipIntoView(instant);
+  });
 
   function handleTabKeydown(e: KeyboardEvent, idx: number) {
     if (!tools.length) return;
@@ -52,17 +126,15 @@
 <div class="cz-hub-banner">
   <div class="cz-hub-main">
     <div class="cz-hub-heading">
-      <span class="cz-hub-icon" aria-hidden="true">
-        {#if /^[a-z0-9_-]+$/.test(icon)}
-          <MacIcon name={icon} size={22} />
-        {:else if icon === "📄"}
-          <MacIcon name="pdf" size={22} />
-        {:else if icon === "🔄"}
-          <MacIcon name="convert" size={22} />
-        {:else}
-          {icon}
-        {/if}
-      </span>
+      {#if /^[a-z0-9_-]+$/.test(icon)}
+        <MacIcon name={icon} variant="squircle" squircleSize={44} strokeWidth={2.05} />
+      {:else if icon === "📄"}
+        <MacIcon name="pdf" variant="squircle" squircleSize={44} strokeWidth={2.05} />
+      {:else if icon === "🔄"}
+        <MacIcon name="convert" variant="squircle" squircleSize={44} strokeWidth={2.05} />
+      {:else}
+        <span class="cz-hub-icon" aria-hidden="true">{icon}</span>
+      {/if}
       <div>
         <h1 class="cz-hub-title">{title}</h1>
         <p class="cz-hub-desc">{description}</p>
@@ -105,21 +177,15 @@
     align-items: flex-start;
     gap: 1.5rem;
     padding: 1.25rem 1.5rem;
-    background: var(--surface2);
+    background: var(--material-chrome, var(--surface2));
+    backdrop-filter: blur(var(--chrome-blur, 16px)) saturate(160%);
+    -webkit-backdrop-filter: blur(var(--chrome-blur, 16px)) saturate(160%);
     border: 1px solid var(--border);
     border-radius: var(--r-xl);
     margin-bottom: 1.5rem;
-    box-shadow: var(--shadow-sm);
+    box-shadow: var(--hairline, inset 0 1px 0 rgba(255, 255, 255, 0.5)), var(--shadow-sm);
     min-width: 0;
     max-width: 100%;
-  }
-  @media (max-width: 768px) {
-    .cz-hub-banner {
-      flex-direction: column;
-      align-items: stretch;
-      padding: 1rem;
-      gap: 1rem;
-    }
   }
   .cz-hub-main {
     flex: 1;
@@ -179,12 +245,18 @@
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
-    transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+    transition: color var(--t), border-color var(--t), background var(--t), transform var(--t), box-shadow var(--t);
   }
-  .cz-hub-tool-chip:hover {
-    color: var(--text);
-    border-color: var(--border-hover, var(--brand));
-    background: var(--surface3, var(--surface));
+  @media (hover: hover) and (pointer: fine) {
+    .cz-hub-tool-chip:hover {
+      color: var(--text);
+      border-color: var(--border-strong, var(--brand));
+      background: var(--surface3, var(--surface));
+      box-shadow: var(--shadow-xs);
+    }
+  }
+  .cz-hub-tool-chip:active {
+    transform: scale(0.97);
   }
   .cz-hub-tool-chip.is-active {
     background: var(--brand);
@@ -194,6 +266,16 @@
   }
   .cz-hub-tool-icon {
     font-size: 0.9rem;
+    display: inline-flex;
+    align-items: center;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cz-hub-tool-chip {
+      transition: none;
+    }
+    .cz-hub-tool-chip:active {
+      transform: none;
+    }
   }
   .cz-hub-action-box {
     display: flex;
@@ -202,8 +284,51 @@
     flex-shrink: 0;
   }
   @media (max-width: 768px) {
+    .cz-hub-banner {
+      flex-direction: column;
+      align-items: stretch;
+      padding: 0.9rem;
+      gap: 0.85rem;
+      border-radius: var(--r-lg);
+      margin-bottom: 1rem;
+    }
+    .cz-hub-heading {
+      gap: 0.65rem;
+      margin-bottom: 0.65rem;
+    }
+    .cz-hub-icon {
+      width: 38px;
+      height: 38px;
+    }
+    .cz-hub-title {
+      font-size: 1.1rem;
+    }
+    .cz-hub-desc {
+      font-size: 0.78rem;
+      line-height: 1.35;
+    }
+    .cz-hub-tools-row {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      padding-bottom: 0.2rem;
+      gap: 0.4rem;
+    }
+    .cz-hub-tools-row::-webkit-scrollbar {
+      display: none;
+    }
+    .cz-hub-tool-chip {
+      min-height: 36px;
+      padding: 0.35rem 0.7rem;
+    }
     .cz-hub-action-box {
-      align-items: flex-start;
+      align-items: stretch;
+      width: 100%;
+    }
+    .cz-hub-action-box :global(.cz-universal-upload-btn) {
+      width: 100%;
+      justify-content: center;
     }
   }
 </style>

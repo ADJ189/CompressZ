@@ -142,7 +142,7 @@
 
 <div class="home-wrap page-enter cz-workbench" bind:this={rootEl}>
   <!-- Progressive-enhancement queue and settings links -->
-  <div class="cz-wb-panel__head" style="position: fixed; bottom: 8px; right: 8px; z-index: 10; opacity: 0.05;">
+  <div class="cz-wb-panel__head cz-wb-quick-settings">
     <button type="button" data-nav="settings" onclick={(e) => handleNav("settings", e)}>Settings</button>
   </div>
   <div id="wb-queue" style="display: none;">Idle — nothing is being processed</div>
@@ -315,3 +315,18 @@
     </div>
   </div>
 </div>
+
+<style>
+  .cz-wb-quick-settings {
+    position: fixed;
+    bottom: 8px;
+    right: 8px;
+    z-index: 10;
+    opacity: 0.05;
+  }
+  @media (max-width: 768px) {
+    .cz-wb-quick-settings {
+      bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+    }
+  }
+</style>

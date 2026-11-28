@@ -3,6 +3,7 @@
   import Navigation from "./Navigation.svelte";
   import ToolsDialog from "./ToolsDialog.svelte";
   import SettingsDialog from "./SettingsDialog.svelte";
+  import MacIcon from "../components/MacIcon.svelte";
   import { currentRoute } from "../store";
   import { navigate } from "../router";
 
@@ -27,11 +28,19 @@
   let activeRoute = $state("");
   let toolsOpen = $state(false);
   let settingsOpen = $state(false);
+  let settingsReturnFocusEl = $state<HTMLElement | null>(null);
+
+  function openSettings(opener?: HTMLElement | null) {
+    toolsOpen = false;
+    settingsReturnFocusEl =
+      opener ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    settingsOpen = true;
+  }
 
   $effect(() => {
     const unsub = currentRoute.subscribe((r) => {
       if (r === "settings") {
-        settingsOpen = true;
+        openSettings();
         history.replaceState({}, "", "/");
         activeRoute = "";
         return;
@@ -46,7 +55,7 @@
 <div class="cz-shell">
   <Header
     onOpenTools={() => (toolsOpen = true)}
-    onOpenSettings={() => (settingsOpen = true)}
+    onOpenSettings={openSettings}
   />
 
   <Navigation />
@@ -105,7 +114,60 @@
   </footer>
 
   <ToolsDialog open={toolsOpen} onClose={() => (toolsOpen = false)} />
-  <SettingsDialog open={settingsOpen} onClose={() => (settingsOpen = false)} />
+  <SettingsDialog
+    open={settingsOpen}
+    returnFocusTo={settingsReturnFocusEl}
+    onClose={() => (settingsOpen = false)}
+  />
+
+  <!-- Mobile Bottom Navigation Dock (visible only on <=768px) -->
+  <nav class="cz-mobile-dock" aria-label="Mobile quick navigation">
+    <button
+      type="button"
+      class="cz-dock-item {activeRoute === '' || activeRoute === 'home' ? 'is-active' : ''}"
+      aria-label="Home"
+      onclick={() => { toolsOpen = false; settingsOpen = false; navigate(""); }}
+    >
+      <MacIcon name="home" size={18} />
+      <span>Home</span>
+    </button>
+    <button
+      type="button"
+      class="cz-dock-item {toolsOpen ? 'is-active' : ''}"
+      aria-label="All tools"
+      onclick={() => { settingsOpen = false; toolsOpen = true; }}
+    >
+      <MacIcon name="tools" size={18} />
+      <span>Tools</span>
+    </button>
+    <button
+      type="button"
+      class="cz-dock-item {activeRoute === 'pdf' || activeRoute.startsWith('pdf/') || activeRoute === 'compress/pdf' ? 'is-active' : ''}"
+      aria-label="PDF Suite"
+      onclick={() => { toolsOpen = false; settingsOpen = false; navigate("pdf"); }}
+    >
+      <MacIcon name="pdf" size={18} />
+      <span>PDF</span>
+    </button>
+    <button
+      type="button"
+      class="cz-dock-item {activeRoute === 'convert' || activeRoute.startsWith('convert/') ? 'is-active' : ''}"
+      aria-label="Convert"
+      onclick={() => { toolsOpen = false; settingsOpen = false; navigate("convert"); }}
+    >
+      <MacIcon name="convert" size={18} />
+      <span>Convert</span>
+    </button>
+    <button
+      type="button"
+      class="cz-dock-item {settingsOpen ? 'is-active' : ''}"
+      aria-label="Settings"
+      onclick={(e) => openSettings(e.currentTarget)}
+    >
+      <MacIcon name="settings" size={18} />
+      <span>Settings</span>
+    </button>
+  </nav>
 
   <!-- Global toast notifications host -->
   <div id="toast" class="cz-toast-container" aria-live="polite"></div>
@@ -162,7 +224,10 @@
     transition: color var(--t);
   }
   .cz-footer-links a:hover {
-    color: var(--accent);
+    color: var(--accent-ink, var(--accent));
+  }
+  .cz-mobile-dock {
+    display: none;
   }
   .cz-toast-container {
     position: fixed;
@@ -176,5 +241,57 @@
   }
   :global(.cz-toast-container > *) {
     pointer-events: auto;
+  }
+  @media (max-width: 768px) {
+    .cz-footer {
+      padding: 1.25rem 1rem calc(5.25rem + env(safe-area-inset-bottom, 0px));
+    }
+    .cz-footer-left {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.25rem;
+    }
+    .cz-mobile-dock {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 150;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      align-items: stretch;
+      background: var(--material-chrome, var(--surface));
+      backdrop-filter: blur(var(--chrome-blur, 20px)) saturate(180%);
+      -webkit-backdrop-filter: blur(var(--chrome-blur, 20px)) saturate(180%);
+      border-top: 1px solid var(--border);
+      padding: 0.3rem 0.25rem calc(0.3rem + env(safe-area-inset-bottom, 0px));
+      box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
+    }
+    .cz-dock-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.18rem;
+      min-height: 46px;
+      padding: 0.2rem 0.15rem;
+      border-radius: var(--r-sm);
+      color: var(--text-3);
+      font-size: 0.68rem;
+      font-weight: 600;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      transition: color var(--t), background-color var(--t);
+    }
+    .cz-dock-item.is-active {
+      color: var(--accent-ink, var(--accent));
+      background: var(--accent-soft);
+    }
+    .cz-toast-container {
+      bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+      left: 0.75rem;
+      right: 0.75rem;
+    }
   }
 </style>

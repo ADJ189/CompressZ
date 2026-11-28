@@ -185,15 +185,19 @@ import { entryError } from "../lib/engineError";
     return canvas;
   }
 
-  async function processOcrSingle(entry: FileEntry) {
-    if (entry.status === "compressing") return;
+  async function processOcrSingle(
+    entry: FileEntry,
+    notify = true,
+    gapNotes?: string[],
+  ): Promise<boolean> {
+    if (entry.status === "compressing") return false;
 
     patchEntry(entry.id, { status: "compressing", progress: 0, error: undefined });
 
     try {
       const handwriting = ocrState.profile === "handwriting";
       const wantsPdf = ocrState.outputKind !== "txt" && !handwriting;
-      if (handwriting && ocrState.outputKind !== "txt") {
+      if (notify && handwriting && ocrState.outputKind !== "txt") {
         toast(
           "Handwriting recognition produces plain text only — the searchable PDF text layer needs printed-text OCR.",
           "info",
@@ -368,8 +372,13 @@ import { entryError } from "../lib/engineError";
         error: undefined,
       });
 
-      if (result.note) toast(result.note, "info");
-      toast(`OCR completed for ${entry.name}`, "success");
+      if (notify) {
+        if (result.note) toast(result.note, "info");
+        toast(`OCR completed for ${entry.name}`, "success");
+      } else if (result.note && gapNotes) {
+        gapNotes.push(result.note);
+      }
+      return true;
     } catch (err) {
       console.error("[ocrProcess] error:", err);
       const failure = entryError(err, "OCR recognition failed");
@@ -379,21 +388,40 @@ import { entryError } from "../lib/engineError";
         error: failure.error,
         errorLog: failure.errorLog,
       });
-      toast(`${entry.name}: ${failure.error}`, "error", undefined, {
-        log: failure.errorLog,
-      });
+      if (notify) {
+        toast(`${entry.name}: ${failure.error}`, "error", undefined, {
+          log: failure.errorLog,
+        });
+      }
+      return false;
     }
   }
 
   async function handleProcessAll() {
     isBusy = true;
+    let ok = 0;
+    let fail = 0;
+    const gapNotes: string[] = [];
     try {
       const idleEntries = ocrStore
         .get()
         .files.filter((f) => f.status === "idle" || f.status === "error");
       // Sequential by design: one OCR worker and one page raster in memory.
       for (const entry of idleEntries) {
-        await processOcrSingle(entry);
+        if (await processOcrSingle(entry, false, gapNotes)) ok++;
+        else fail++;
+      }
+      const uniqueGaps = [...new Set(gapNotes)];
+      const gapSuffix = uniqueGaps.length > 0 ? ` — ${uniqueGaps.join(" ")}` : "";
+      if (ok > 0 && fail === 0) {
+        toast(
+          `OCR completed for ${ok} ${ok === 1 ? "file" : "files"}${gapSuffix}`,
+          uniqueGaps.length > 0 ? "info" : "success",
+        );
+      } else if (ok > 0 && fail > 0) {
+        toast(`OCR completed for ${ok} ${ok === 1 ? "file" : "files"} (${fail} failed)${gapSuffix}`, "warn");
+      } else if (fail > 0) {
+        toast(`OCR failed for ${fail} ${fail === 1 ? "file" : "files"}`, "error");
       }
     } finally {
       isBusy = false;
@@ -724,6 +752,35 @@ import { entryError } from "../lib/engineError";
     flex: 0 0 auto;
   }
   @media (max-width: 640px) {
+    .cz-tool-view {
+      padding: 1rem 0.85rem 2.5rem;
+      gap: 1.1rem;
+    }
+    .cz-tool-title {
+      font-size: 1.45rem;
+    }
+    .cz-tool-desc {
+      font-size: 0.86rem;
+    }
+    .cz-tool-settings-bar {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.85rem;
+      padding: 0.85rem;
+    }
+    .cz-setting-item {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.35rem;
+      width: 100%;
+    }
+    .cz-setting-item .cz-select {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      min-height: 40px;
+      font-size: 16px;
+    }
     .cz-ocr-output-row {
       flex-wrap: wrap;
     }

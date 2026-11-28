@@ -1,7 +1,7 @@
 {
   "name": "compressz",
   "private": true,
-  "version": "1.15.5",
+  "version": "1.15.7",
   "type": "module",
   "engines": {
     "node": ">=24.0.0",

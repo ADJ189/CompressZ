@@ -57,8 +57,8 @@ import { entryError } from "../lib/engineError";
     return unsub;
   });
 
-  async function compressSingle(entry: FileEntry) {
-    if (entry.status === "compressing") return;
+  async function compressSingle(entry: FileEntry, notify = true): Promise<boolean> {
+    if (entry.status === "compressing") return false;
 
     pdfStore.update((curr) => ({
       ...curr,
@@ -88,7 +88,8 @@ import { entryError } from "../lib/engineError";
             : f,
         ),
       }));
-      toast(`Compressed ${entry.name}`, "success");
+      if (notify) toast(`Compressed ${entry.name}`, "success");
+      return true;
     } catch (err) {
       console.error("[pdfCompress] error:", err);
       const failure = entryError(err, "PDF compression failed");
@@ -105,20 +106,33 @@ import { entryError } from "../lib/engineError";
             : f,
         ),
       }));
-      toast(`${entry.name}: ${failure.error}`, "error", undefined, {
-        log: failure.errorLog,
-      });
+      if (notify) {
+        toast(`${entry.name}: ${failure.error}`, "error", undefined, {
+          log: failure.errorLog,
+        });
+      }
+      return false;
     }
   }
 
   async function handleCompressAll() {
     isBusy = true;
+    let ok = 0;
+    let fail = 0;
     try {
       const idleEntries = pdfStore
         .get()
         .files.filter((f) => f.status === "idle" || f.status === "error");
       for (const entry of idleEntries) {
-        await compressSingle(entry);
+        if (await compressSingle(entry, false)) ok++;
+        else fail++;
+      }
+      if (ok > 0 && fail === 0) {
+        toast(`Compressed ${ok} ${ok === 1 ? "PDF" : "PDFs"}`, "success");
+      } else if (ok > 0 && fail > 0) {
+        toast(`Compressed ${ok} ${ok === 1 ? "PDF" : "PDFs"} (${fail} failed)`, "warn");
+      } else if (fail > 0) {
+        toast(`${fail} ${fail === 1 ? "PDF" : "PDFs"} failed to compress`, "error");
       }
     } finally {
       isBusy = false;
@@ -326,10 +340,20 @@ import { entryError } from "../lib/engineError";
   }
 
   @media (max-width: 640px) {
+    .cz-tool-view {
+      padding: 1rem 0.85rem 2.5rem;
+      gap: 1.1rem;
+    }
+    .cz-tool-title {
+      font-size: 1.45rem;
+    }
+    .cz-tool-desc {
+      font-size: 0.86rem;
+    }
     .cz-tool-settings-bar {
       flex-direction: column;
       align-items: stretch;
-      gap: 1rem;
+      gap: 0.9rem;
       padding: 0.85rem;
     }
     .cz-setting-item {
@@ -341,13 +365,18 @@ import { entryError } from "../lib/engineError";
     .cz-segmented-track {
       width: 100%;
       display: flex;
+      flex-wrap: wrap;
+      border-radius: var(--r-sm);
     }
     .cz-segmented-item {
-      flex: 1;
+      flex: 1 1 84px;
+      min-height: 36px;
       justify-content: center;
       text-align: center;
-      padding: 0.35rem 0.4rem;
-      font-size: 0.72rem;
+      white-space: normal;
+      line-height: 1.2;
+      padding: 0.35rem 0.45rem;
+      font-size: 0.74rem;
     }
   }
 </style>

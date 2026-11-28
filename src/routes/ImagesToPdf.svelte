@@ -627,7 +627,7 @@
   }
   .cz-merge-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
     gap: 0.85rem;
   }
   .cz-reorder-card {
@@ -803,5 +803,37 @@
   .cz-recommendation__actions {
     display: flex;
     gap: 0.5rem;
+  }
+  @media (max-width: 640px) {
+    .cz-tool-view {
+      padding: 1rem 0.85rem 2.5rem;
+      gap: 1.1rem;
+    }
+    .cz-tool-title {
+      font-size: 1.45rem;
+    }
+    .cz-tool-desc {
+      font-size: 0.86rem;
+    }
+    .cz-tool-settings-bar {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.85rem;
+      padding: 0.85rem;
+    }
+    .cz-setting-item {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.35rem;
+      width: 100%;
+    }
+    .cz-btn-group {
+      width: 100%;
+      flex-wrap: wrap;
+    }
+    .cz-btn-group .cz-btn {
+      flex: 1 1 80px;
+      min-height: 36px;
+    }
   }
 </style>

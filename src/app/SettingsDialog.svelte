@@ -1,5 +1,5 @@
 <script lang="ts">
-  const appVersion = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.15.5";
+  const appVersion = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.15.7";
 
   import {
     getSettings,
@@ -12,6 +12,15 @@
     type AppSettings as Settings,
     type ResourceMode,
   } from "../lib/settings";
+  import {
+    BROWSER_PROFILES,
+    BROWSER_PROFILE_IDS,
+    detectBrowserProfileId,
+    supportsWasmSimd,
+    supportsWebpCanvasEncode,
+    type BrowserProfileSetting,
+  } from "../lib/browserProfile";
+  import { detectPlatform } from "../lib/platform";
   import { syncEngineSettingsToStores } from "../store";
   import {
     getThemePreference,
@@ -45,9 +54,10 @@
   interface Props {
     open: boolean;
     onClose: () => void;
+    returnFocusTo?: HTMLElement | null;
   }
 
-  let { open, onClose }: Props = $props();
+  let { open, onClose, returnFocusTo = null }: Props = $props();
 
   let settings = $state<Settings>(getSettings());
   let themePref = $state<"light" | "dark" | "system">(getThemePreference());
@@ -117,16 +127,19 @@
     const ua = typeof navigator !== "undefined" ? navigator.userAgent : "Unknown";
     const cores = typeof navigator !== "undefined" ? navigator.hardwareConcurrency : "Unknown";
     const screenRes = typeof window !== "undefined" ? `${window.screen.width}x${window.screen.height} (DPR ${window.devicePixelRatio})` : "N/A";
+    const activeProfile = resolveExecutionProfile(settings);
 
     return [
       `### CompressZ Diagnostic Information`,
       `- **App Version:** ${appVersion}`,
+      `- **Browser Profile:** ${activeProfile.browserProfile.label} (${activeProfile.browserProfileSource})`,
       `- **User Agent:** ${ua}`,
       `- **Screen:** ${screenRes}`,
       `- **Hardware Cores:** ${cores}`,
       `- **Cross-Origin Isolation:** ${isIsolated ? "Enabled (COOP/COEP active)" : "Disabled"}`,
       `- **WebCodecs Support:** ${hasWebCodecs ? "Available" : "Unavailable (Fallback to WASM)"}`,
       `- **WebGPU Support:** ${hasWebGpu ? "Available" : "Unavailable (Fallback to CPU/WASM)"}`,
+      `- **WASM SIMD / WebP Encode:** ${supportsWasmSimd() ? "SIMD ✓" : "Non-SIMD"} · ${supportsWebpCanvasEncode() ? "WebP ✓" : "JPEG fallback"}`,
       `- **Resource Mode:** ${settings.resourceMode} (${resolvedConcurrency(settings)} concurrent jobs)`,
       `- **Anonymous Diagnostics:** ${telemetryEnabled ? "Active" : "Opted out (Disabled)"}`,
     ].join("\n");
@@ -177,6 +190,7 @@
   function saveChanges(patch: Partial<Settings>) {
     updateSettings((s) => {
       if (patch.resourceMode !== undefined) s.resourceMode = patch.resourceMode;
+      if (patch.browserProfile !== undefined) s.browserProfile = patch.browserProfile;
       if (patch.resourceLimits !== undefined) {
         s.resourceLimits = { ...s.resourceLimits, ...patch.resourceLimits };
       }
@@ -218,9 +232,13 @@
   }
 
   function handleClose() {
+    const target =
+      returnFocusTo && returnFocusTo.isConnected
+        ? returnFocusTo
+        : document.getElementById("settings-btn");
     onClose();
     setTimeout(() => {
-      document.getElementById("settings-btn")?.focus();
+      target?.focus();
     }, 0);
   }
 
@@ -253,6 +271,13 @@
   }
 
   const profile = $derived(resolveExecutionProfile(settings));
+  const detectedProfileLabel = $derived.by(() => {
+    try {
+      return BROWSER_PROFILES[detectBrowserProfileId(detectPlatform())].shortLabel;
+    } catch {
+      return "Blink Desktop";
+    }
+  });
   const autoConcurrency = $derived(
     resolvedConcurrency({
       ...settings,
@@ -607,6 +632,27 @@
                 {settings.gpu.images ? "Enabled" : "Disabled"}
               </button>
             </div>
+
+            <div class="cz-settings-row">
+              <div>
+                <div class="cz-settings-label">Browser Optimization Profile</div>
+                <div class="cz-settings-desc">{profile.browserProfile.summary}</div>
+              </div>
+              <select
+                class="cz-select-pill"
+                aria-label="Browser optimization profile"
+                value={settings.browserProfile ?? "auto"}
+                onchange={(e) =>
+                  saveChanges({
+                    browserProfile: (e.target as HTMLSelectElement).value as BrowserProfileSetting,
+                  })}
+              >
+                <option value="auto">Auto ({detectedProfileLabel})</option>
+                {#each BROWSER_PROFILE_IDS as id}
+                  <option value={id}>{BROWSER_PROFILES[id].label}</option>
+                {/each}
+              </select>
+            </div>
           </div>
 
           <div data-testid="resource-status" class="cz-sidebar-card">
@@ -760,7 +806,7 @@
                 <div class="cz-settings-label">Default Image Quality ({settings.engines.images.quality}%)</div>
                 <div class="cz-settings-desc">Baseline encoding quality; best-effort SSIM guard targets 0.90 and warns if lower</div>
               </div>
-              <div style="display: flex; align-items: center; gap: 0.75rem;">
+              <div class="cz-settings-range-wrap">
                 <input
                   type="range"
                   min="30"
@@ -959,6 +1005,24 @@
                 <div class="cz-settings-desc">WebCodecs + Mediabunny (browser selects HW/SW)</div>
               </div>
               <span class="cz-tier-tag device-info-val">WebCodecs + Mediabunny (FFmpeg fallback)</span>
+            </div>
+            <div class="cz-settings-row device-info-row">
+              <div>
+                <div class="cz-settings-label">Browser profile</div>
+                <div class="cz-settings-desc">Active engine & form-factor optimization profile</div>
+              </div>
+              <span class="cz-tier-tag device-info-val">
+                {profile.browserProfile.label} ({profile.browserProfileSource === "auto" ? "Auto" : "Manual"})
+              </span>
+            </div>
+            <div class="cz-settings-row device-info-row">
+              <div>
+                <div class="cz-settings-label">Profile limits & capabilities</div>
+                <div class="cz-settings-desc">Canvas cap, ONNX WASM threads, WebP encode & SIMD</div>
+              </div>
+              <span class="cz-tier-tag device-info-val">
+                ≤{profile.browserProfile.canvas.maxCanvasDim}px · {profile.browserProfile.wasm.onnxMaxThreads} threads · {supportsWebpCanvasEncode() ? "WebP ✓" : "JPEG fallback"} · {supportsWasmSimd() ? "SIMD ✓" : "Non-SIMD"}
+              </span>
             </div>
             <div class="cz-settings-row device-info-row">
               <div>
@@ -1264,6 +1328,15 @@
     transition: background var(--t), color var(--t), border-color var(--t);
     flex-shrink: 0;
   }
+  .cz-btn-primary {
+    background: var(--accent);
+    color: #ffffff;
+    border: 1px solid var(--accent);
+  }
+  .cz-btn-primary:hover {
+    background: var(--accent-2);
+    border-color: var(--accent-2);
+  }
   .cz-btn-secondary {
     background: var(--surface2);
     color: var(--text);
@@ -1293,6 +1366,21 @@
   .cz-btn-pill {
     border-radius: 9999px;
   }
+  .cz-settings-range-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .cz-select-pill {
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    border-radius: var(--r-sm);
+    padding: 0.4rem 0.7rem;
+    font-size: 0.82rem;
+    font-family: inherit;
+    max-width: 100%;
+  }
   .cz-warning-banner {
     padding: 0.75rem 1rem;
     border-radius: var(--r-sm);
@@ -1309,23 +1397,78 @@
     align-items: center;
     gap: 0.35rem;
   }
+  .cz-sidebar-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 0.95rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .cz-sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  .cz-sidebar-title {
+    font-size: 0.86rem;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .cz-sidebar-meta {
+    font-size: 0.78rem;
+    color: var(--text-3);
+    line-height: 1.45;
+  }
 
   @media (max-width: 680px) {
     .cz-settings-dialog {
-      width: 95vw;
-      max-height: 90vh;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      transform: none;
+      width: 100%;
+      max-width: 100%;
+      height: 100vh;
+      height: 100dvh;
+      max-height: 100dvh;
+      border-radius: 0;
+      border: none;
+    }
+    .cz-dialog-header {
+      padding: 0.8rem 1rem;
+    }
+    .cz-dialog-sub {
+      display: none;
+    }
+    .cz-dialog-close {
+      width: 38px;
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--surface);
+      border: 1px solid var(--border);
     }
     .cz-settings-body {
       flex-direction: column;
-      min-height: auto;
+      min-height: 0;
+      max-height: none;
+      flex: 1;
     }
     .cz-settings-nav {
       width: 100%;
       flex-direction: row;
-      overflow-x: auto;
+      flex-wrap: wrap;
+      overflow-x: visible;
+      overflow-y: auto;
+      max-height: 132px;
       border-right: none;
       border-bottom: 1px solid var(--border);
-      padding: 0.5rem;
+      padding: 0.55rem 0.75rem;
       gap: 0.35rem;
       scrollbar-width: none;
     }
@@ -1334,27 +1477,81 @@
     }
     .cz-settings-nav-btn {
       white-space: nowrap;
-      padding: 0.35rem 0.75rem;
+      padding: 0.36rem 0.72rem;
+      min-height: 34px;
       border-radius: 100px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      font-size: 0.78rem;
+    }
+    .cz-settings-nav-btn.is-active {
+      border-color: var(--accent);
+      background: var(--accent-soft);
     }
     .cz-settings-content {
-      padding: 1rem;
+      padding: 0.85rem 0.85rem calc(1.5rem + env(safe-area-inset-bottom, 0px));
+      scrollbar-width: none;
+    }
+    .cz-settings-content::-webkit-scrollbar {
+      display: none;
+    }
+    .cz-settings-group {
+      padding: 0.85rem;
+      gap: 0.85rem;
     }
     .cz-settings-row {
       flex-direction: column;
-      align-items: flex-start;
-      gap: 0.6rem;
+      align-items: stretch;
+      gap: 0.55rem;
     }
     .cz-settings-row > div:first-child {
+      flex: 0 0 auto;
       width: 100%;
     }
     .cz-segmented-track {
       width: 100%;
-      justify-content: stretch;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+      gap: 3px;
+      border-radius: var(--r-sm);
     }
     .cz-segmented-item {
-      flex: 1;
+      width: 100%;
+      min-height: 36px;
+      padding: 0.35rem 0.45rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.3rem;
       text-align: center;
+      white-space: normal;
+      line-height: 1.2;
+      font-size: 0.78rem;
+    }
+    .cz-tier-tag {
+      align-self: flex-start;
+      max-width: 100%;
+      white-space: normal;
+      border-radius: var(--r-sm);
+      line-height: 1.35;
+    }
+    .device-info-val {
+      text-align: left;
+    }
+    .cz-select-pill {
+      width: 100%;
+      font-size: 16px;
+    }
+    .cz-settings-range-wrap {
+      width: 100%;
+    }
+    .cz-settings-range-wrap input[type="range"] {
+      flex: 1;
+      min-width: 0;
+    }
+    .cz-btn {
+      width: 100%;
+      min-height: 40px;
     }
   }
 </style>

@@ -15,6 +15,7 @@
  */
 
 import type { OcrLineResult, OcrPageResult } from "./ocrEngines";
+import { resolveExecutionProfile } from "./settings";
 
 declare const __ORT_VERSION__: string;
 
@@ -24,6 +25,8 @@ export const TROCR_ESTIMATED_DOWNLOAD_MB = 145;
 let pipelineInstance: any = null;
 let pipelinePromise: Promise<any> | null = null;
 let activeBackend: "webgpu" | "wasm" = "wasm";
+let cachedBackendPreference: "webgpu" | "wasm" | null = null;
+let loadingBackendPreference: "webgpu" | "wasm" | null = null;
 
 /**
  * Checks if the handwriting model is already cached or requires a first-use download.
@@ -52,6 +55,8 @@ export async function unloadHandwritingModel(): Promise<void> {
   }
   pipelineInstance = null;
   pipelinePromise = null;
+  cachedBackendPreference = null;
+  loadingBackendPreference = null;
 }
 
 /**
@@ -60,9 +65,27 @@ export async function unloadHandwritingModel(): Promise<void> {
 export async function loadHandwritingPipeline(
   onProgress?: (progress: number, status: string) => void,
 ): Promise<any> {
-  if (pipelineInstance) return pipelineInstance;
-  if (pipelinePromise) return pipelinePromise;
+  const execProfile = resolveExecutionProfile();
+  const requestedPreference = execProfile.aiBackendPreference;
 
+  if (pipelineInstance) {
+    if (cachedBackendPreference === requestedPreference) return pipelineInstance;
+    await unloadHandwritingModel();
+  }
+  if (pipelinePromise) {
+    if (loadingBackendPreference === requestedPreference) return pipelinePromise;
+    try {
+      await pipelinePromise;
+    } catch {
+      // Stale failed load; proceed with fresh load for requestedPreference
+    }
+    if (pipelineInstance && cachedBackendPreference === requestedPreference) {
+      return pipelineInstance;
+    }
+    await unloadHandwritingModel();
+  }
+
+  loadingBackendPreference = requestedPreference;
   pipelinePromise = (async () => {
     onProgress?.(0.05, "Initializing handwriting model runtime...");
 
@@ -74,11 +97,21 @@ export async function loadHandwritingPipeline(
       const ortVer =
         typeof __ORT_VERSION__ !== "undefined" ? __ORT_VERSION__ : "1.21.0";
       env.backends.onnx.wasm.wasmPaths = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ortVer}/dist/`;
+      const isolated =
+        typeof globalThis !== "undefined" &&
+        Boolean((globalThis as { crossOriginIsolated?: boolean }).crossOriginIsolated);
+      env.backends.onnx.wasm.numThreads = isolated
+        ? Math.max(1, execProfile.browserProfile.wasm.onnxMaxThreads)
+        : 1;
     }
 
-    // Probe WebGPU availability
+    // Probe WebGPU availability only when the resolved profile / settings want it
     let device: "webgpu" | "wasm" = "wasm";
-    if (typeof navigator !== "undefined" && "gpu" in navigator) {
+    if (
+      requestedPreference !== "wasm" &&
+      typeof navigator !== "undefined" &&
+      "gpu" in navigator
+    ) {
       try {
         const adapter = await (navigator as any).gpu?.requestAdapter();
         if (adapter) {
@@ -112,12 +145,15 @@ export async function loadHandwritingPipeline(
     });
 
     pipelineInstance = pipe;
+    cachedBackendPreference = requestedPreference;
+    loadingBackendPreference = null;
     onProgress?.(1.0, "Handwriting model ready.");
     return pipe;
   })();
 
   pipelinePromise.catch(() => {
     pipelinePromise = null;
+    loadingBackendPreference = null;
   });
 
   return pipelinePromise;

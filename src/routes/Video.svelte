@@ -57,8 +57,8 @@ import { entryError } from "../lib/engineError";
     return unsub;
   });
 
-  async function compressSingle(entry: FileEntry) {
-    if (entry.status === "compressing") return;
+  async function compressSingle(entry: FileEntry, notify = true): Promise<boolean> {
+    if (entry.status === "compressing") return false;
 
     videoStore.update((curr) => ({
       ...curr,
@@ -88,7 +88,8 @@ import { entryError } from "../lib/engineError";
             : f,
         ),
       }));
-      toast(`Compressed ${entry.name}`, "success");
+      if (notify) toast(`Compressed ${entry.name}`, "success");
+      return true;
     } catch (err) {
       console.error("[videoCompress] error:", err);
       const failure = entryError(err, "Video compression failed");
@@ -105,20 +106,33 @@ import { entryError } from "../lib/engineError";
             : f,
         ),
       }));
-      toast(`${entry.name}: ${failure.error}`, "error", undefined, {
-        log: failure.errorLog,
-      });
+      if (notify) {
+        toast(`${entry.name}: ${failure.error}`, "error", undefined, {
+          log: failure.errorLog,
+        });
+      }
+      return false;
     }
   }
 
   async function handleCompressAll() {
     isBusy = true;
+    let ok = 0;
+    let fail = 0;
     try {
       const idleEntries = videoStore
         .get()
         .files.filter((f) => f.status === "idle" || f.status === "error");
       for (const entry of idleEntries) {
-        await compressSingle(entry);
+        if (await compressSingle(entry, false)) ok++;
+        else fail++;
+      }
+      if (ok > 0 && fail === 0) {
+        toast(`Compressed ${ok} ${ok === 1 ? "video" : "videos"}`, "success");
+      } else if (ok > 0 && fail > 0) {
+        toast(`Compressed ${ok} ${ok === 1 ? "video" : "videos"} (${fail} failed)`, "warn");
+      } else if (fail > 0) {
+        toast(`${fail} ${fail === 1 ? "video" : "videos"} failed to compress`, "error");
       }
     } finally {
       isBusy = false;
@@ -301,5 +315,48 @@ import { entryError } from "../lib/engineError";
   }
   .cz-range {
     width: 110px;
+  }
+  .cz-select {
+    padding: 0.42rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: var(--surface2);
+    color: var(--text);
+    font-size: 0.84rem;
+    max-width: 100%;
+  }
+  @media (max-width: 640px) {
+    .cz-tool-view {
+      padding: 1rem 0.85rem 2.5rem;
+      gap: 1.1rem;
+    }
+    .cz-tool-title {
+      font-size: 1.45rem;
+    }
+    .cz-tool-desc {
+      font-size: 0.86rem;
+    }
+    .cz-tool-settings-bar {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.85rem;
+      padding: 0.85rem;
+    }
+    .cz-setting-item {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.35rem;
+      width: 100%;
+    }
+    .cz-select,
+    .cz-range {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+    }
+    .cz-select {
+      min-height: 40px;
+      font-size: 16px;
+    }
   }
 </style>

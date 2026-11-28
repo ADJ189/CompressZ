@@ -358,7 +358,7 @@
   }
   .cz-merge-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr));
     gap: 0.85rem;
   }
   .cz-reorder-card {
@@ -504,5 +504,17 @@
   .cz-btn-ghost:hover:not(:disabled) {
     color: var(--text);
     background: var(--surface2);
+  }
+  @media (max-width: 640px) {
+    .cz-tool-view {
+      padding: 1rem 0.85rem 2.5rem;
+      gap: 1.1rem;
+    }
+    .cz-tool-title {
+      font-size: 1.45rem;
+    }
+    .cz-tool-desc {
+      font-size: 0.86rem;
+    }
   }
 </style>

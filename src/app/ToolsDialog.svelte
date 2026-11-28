@@ -314,10 +314,12 @@
     width: 92%;
     max-width: 760px;
     max-height: 86vh;
-    background: var(--surface);
+    background: var(--material-elevated, var(--surface));
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
     border: 1px solid var(--border);
     border-radius: var(--r-xl, 20px);
-    box-shadow: 0 24px 64px -12px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.08);
+    box-shadow: var(--hairline, inset 0 1px 0 rgba(255, 255, 255, 0.08)), 0 24px 64px -12px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.08);
     z-index: 1001;
     display: flex;
     flex-direction: column;
@@ -741,43 +743,53 @@
     cursor: pointer;
   }
 
-  /* Narrow-screen mobile responsiveness */
-  @media (max-width: 520px) {
+  /* Mobile sheet responsiveness */
+  @media (max-width: 680px) {
     .cz-dialog {
-      width: calc(100vw - 16px);
-      max-width: calc(100vw - 16px);
-      max-height: calc(100vh - 24px);
+      top: auto;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      transform: none;
+      width: 100%;
+      max-width: 100%;
+      height: 92dvh;
       max-height: 92dvh;
-      border-radius: var(--r, 16px);
+      border-radius: 20px 20px 0 0;
+      border-bottom: none;
       margin: 0;
     }
+    .cz-mac-traffic-lights {
+      display: none;
+    }
+    .cz-dialog-header {
+      padding: 0.85rem 1rem;
+    }
+    .cz-mac-close-btn {
+      width: 36px;
+      height: 36px;
+      min-width: 36px;
+      min-height: 36px;
+    }
+    .cz-dialog-universal-upload :global(.cz-universal-pill-shortcut) {
+      display: none;
+    }
+    .cz-dialog-universal-upload :global(.cz-universal-hint) {
+      white-space: normal;
+      line-height: 1.3;
+    }
+  }
+
+  @media (max-width: 520px) {
     .cz-dialog-header {
       padding: 0.75rem 0.85rem;
     }
-    .cz-mac-traffic-lights {
-      width: auto;
-      gap: 5px;
-    }
-    .cz-mac-dot-min,
-    .cz-mac-dot-zoom {
-      display: none;
-    }
-    .cz-mac-dot-close {
-      width: 14px;
-      height: 14px;
-    }
     .cz-dialog-title {
-      font-size: 0.95rem;
+      font-size: 0.98rem;
     }
     .cz-dialog-count {
       font-size: 0.68rem;
       padding: 0.1rem 0.35rem;
-    }
-    .cz-mac-close-btn {
-      width: 32px;
-      height: 32px;
-      min-width: 32px;
-      min-height: 32px;
     }
     .cz-dialog-universal-upload {
       padding: 0.55rem 0.85rem 0.35rem;
@@ -798,7 +810,7 @@
     }
     .cz-mac-seg-btn {
       flex: 0 0 auto;
-      min-height: 34px;
+      min-height: 36px;
       padding: 0.35rem 0.65rem;
       font-size: 0.78rem;
     }
@@ -821,8 +833,8 @@
       width: 100%;
     }
     .cz-tool-card {
-      padding: 0.7rem 0.85rem;
-      min-height: 48px;
+      padding: 0.75rem 0.85rem;
+      min-height: 52px;
     }
     .cz-tool-name {
       font-size: 0.88rem;

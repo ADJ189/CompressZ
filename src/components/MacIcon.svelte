@@ -346,17 +346,57 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 22.37%;
+    border-radius: 23.5%;
     position: relative;
-    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.4), 0 3px 10px rgba(0, 0, 0, 0.16);
+    overflow: hidden;
+    isolation: isolate;
+    box-shadow:
+      inset 0 1px 1px rgba(255, 255, 255, 0.45),
+      inset 0 -1px 1px rgba(0, 0, 0, 0.12),
+      0 2px 6px rgba(0, 0, 0, 0.12),
+      0 6px 14px rgba(0, 0, 0, 0.08);
     flex-shrink: 0;
-    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  /* Apple-style specular top curvature gloss & hairline refraction edge */
+  .cz-squircle::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.38) 0%,
+      rgba(255, 255, 255, 0.09) 42%,
+      rgba(255, 255, 255, 0) 64%
+    );
+    pointer-events: none;
+    z-index: 0;
+  }
+  .cz-squircle::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+    pointer-events: none;
+    z-index: 2;
+  }
+  .cz-squircle svg {
+    position: relative;
+    z-index: 1;
+    filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.22));
   }
   .cz-mac-glyph {
     display: inline-block;
     vertical-align: middle;
     flex-shrink: 0;
     transition: color 0.16s ease, transform 0.16s ease;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cz-squircle,
+    .cz-mac-glyph {
+      transition: none;
+    }
   }
 
   /* Authentic Apple macOS System Gradients */

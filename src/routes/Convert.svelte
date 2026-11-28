@@ -1310,6 +1310,23 @@
             >
               {isConverting ? "Converting…" : "Convert All"}
             </button>
+            {#if convertedResults.length > 0 && !isConverting}
+              <button
+                type="button"
+                class="cz-btn-download-all cz-btn-sm"
+                onclick={() =>
+                  downloadBatch(
+                    convertedResults.map((r) => ({ name: r.name, blob: r.blob })),
+                    "converted-files.zip",
+                  )
+                }
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                <span>{convertedResults.length >= 2 ? "Download All (.zip)" : "Download"}</span>
+              </button>
+            {/if}
             <button
               type="button"
               class="cz-btn cz-btn-ghost cz-btn-sm"
@@ -1376,7 +1393,7 @@
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
               </svg>
-              <span>Download All</span>
+              <span>{convertedResults.length >= 2 ? "Download All (.zip)" : "Download"}</span>
             </button>
           </div>
         {/if}
@@ -1793,13 +1810,13 @@
   }
 
   .cz-active-target-badge {
-    padding: 0.15rem 0.5rem;
-    font-size: 0.72rem;
-    font-weight: 700;
-    border-radius: 100px;
+    padding: 0.16rem 0.52rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    border-radius: 6px;
     background: var(--accent-soft, rgba(16, 185, 129, 0.1));
-    color: var(--accent);
-    border: 1px solid var(--green-border, rgba(16, 185, 129, 0.24));
+    color: var(--accent-ink, var(--accent));
+    border: 1px solid color-mix(in oklab, var(--accent) 24%, transparent);
   }
   .cz-card-side {
     display: flex;
@@ -2261,7 +2278,7 @@
   }
   .cz-drawer-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
     gap: 1.25rem;
     align-items: center;
   }
@@ -2385,23 +2402,78 @@
   @media (max-width: 960px) {
     .cz-apple-workbench {
       grid-template-columns: minmax(0, 1fr);
-      padding: 1.25rem 1rem 3.5rem;
+      padding: 1rem 0.85rem 2.5rem;
     }
   }
 
   @media (max-width: 768px) {
+    .cz-convert-landing {
+      gap: 1.25rem;
+    }
+    .cz-convert-landing-title {
+      font-size: 1.4rem;
+    }
+    .cz-cat-segmented {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      width: 100%;
+    }
+    .cz-cat-segmented::-webkit-scrollbar {
+      display: none;
+    }
+    .cz-cat-segmented .cz-segmented-item {
+      flex: 0 0 auto;
+      min-height: 36px;
+    }
+    .cz-convert-active-box {
+      padding: 0.85rem;
+      border-radius: var(--r-lg, 18px);
+    }
     .cz-convert-active-header {
       flex-direction: column;
       align-items: stretch;
       gap: 0.75rem;
+      padding: 0.75rem;
+    }
+    .cz-suite-target-desc {
+      white-space: normal;
+      line-height: 1.35;
     }
     .cz-options-pill-bar {
       width: 100%;
       box-sizing: border-box;
-      padding: 0.5rem 0.75rem;
+      padding: 0.55rem 0.7rem;
     }
     .cz-opt-group {
       width: 100%;
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .cz-options-pill-bar .cz-segmented-track {
+      width: 100%;
+      display: flex;
+      flex-wrap: wrap;
+      border-radius: var(--r-sm);
+    }
+    .cz-options-pill-bar .cz-segmented-item {
+      flex: 1 1 110px;
+      min-height: 36px;
+      justify-content: center;
+      text-align: center;
+      white-space: normal;
+      line-height: 1.2;
+    }
+    .cz-advanced-drawer-toggle {
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      padding: 0.7rem 0.85rem;
+    }
+    .cz-drawer-summary {
+      order: 3;
+      flex-basis: 100%;
+      font-size: 0.72rem;
     }
   }
 </style>

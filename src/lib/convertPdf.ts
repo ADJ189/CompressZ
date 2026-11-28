@@ -9,6 +9,8 @@
 import { zipToBlob, zipSupported } from "./zip";
 import { openPdfDocument } from "./pdfLibs";
 import { get2D } from "./gpu";
+import { resolveExecutionProfile } from "./settings";
+import { clampCanvasDimensions } from "./browserProfile";
 
 export { imagesToPdf } from "./imagesToPdf";
 
@@ -27,7 +29,9 @@ export async function pdfToImages(
   const bytes = new Uint8Array(await file.arrayBuffer());
   const doc = await openPdfDocument(bytes);
 
-  const scale = dpi / 72;
+  const execProfile = resolveExecutionProfile();
+  const maxScale = execProfile.browserProfile.wasm.pdfMaxRenderScale;
+  const scale = Math.min(dpi / 72, maxScale);
   const total = doc.numPages;
   const pages: { name: string; data: Uint8Array; mime: string }[] = [];
   const mime =
@@ -41,9 +45,14 @@ export async function pdfToImages(
   try {
     for (let i = 1; i <= total; i++) {
       const page = await doc.getPage(i);
-      const vp = page.getViewport({ scale });
-      const w = Math.floor(vp.width),
-        h = Math.floor(vp.height);
+      let vp = page.getViewport({ scale });
+      const clamped = clampCanvasDimensions(vp.width, vp.height, execProfile.browserProfile);
+      if (clamped.clamped) {
+        const adjustedScale = scale * Math.min(clamped.width / Math.max(1, vp.width), clamped.height / Math.max(1, vp.height));
+        vp = page.getViewport({ scale: adjustedScale });
+      }
+      const w = Math.max(1, Math.floor(vp.width)),
+        h = Math.max(1, Math.floor(vp.height));
 
       const c = document.createElement("canvas");
       c.width = w;

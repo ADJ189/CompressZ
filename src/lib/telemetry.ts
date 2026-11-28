@@ -214,7 +214,7 @@ export function initTelemetry(dsnOverride?: string): boolean {
     return true;
   }
 
-  const appVersion = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.15.5";
+  const appVersion = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.15.7";
   const envMode =
     typeof import.meta !== "undefined" && (import.meta as any).env
       ? (import.meta as any).env.MODE || ((import.meta as any).env.DEV ? "development" : "production")

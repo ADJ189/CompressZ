@@ -5,6 +5,8 @@ import App from "./App.svelte";
 import { init as initRouter, navigate } from "./router";
 import { initTheme } from "./lib/theme";
 import { initTelemetry } from "./lib/telemetry";
+import { onSettingsChange, resolveExecutionProfile } from "./lib/settings";
+import { applyBrowserProfileDom } from "./lib/browserProfile";
 
 // Anonymous error diagnostics are enabled by default to detect software crashes and issues,
 // with safe storage checks and a live opt-out mechanism in Settings.
@@ -12,6 +14,12 @@ initTelemetry();
 
 // Initialize theme preference from localStorage/system
 initTheme();
+
+// Apply browser optimization profile attributes/tokens to documentElement
+applyBrowserProfileDom(resolveExecutionProfile().browserProfile);
+onSettingsChange(() => {
+  applyBrowserProfileDom(resolveExecutionProfile().browserProfile);
+});
 
 // Initialize History API router
 initRouter();

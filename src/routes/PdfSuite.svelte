@@ -39,6 +39,7 @@
   import { repairCorruptPdf, inspectAndRepairMp4Moov } from "../lib/pdfTools/repairPdf";
   import { openPdfDocument, getPdfLib } from "../lib/pdfLibs";
   import { runScheduled } from "../lib/resourceManager";
+  import { resolveExecutionProfile } from "../lib/settings";
   import { consumeStagedUniversalFile, currentRoute } from "../store";
   import { formatBytes } from "../lib/types";
 import { entryError } from "../lib/engineError";
@@ -65,7 +66,31 @@ import { entryError } from "../lib/engineError";
     | "security"
     | "repair";
 
-  let activeTool = $state<SubTool>("split");
+  function subToolFromPath(path: string): { tool: SubTool; nup?: 2 | 4 } | null {
+    const parts = path.split("/").filter(Boolean);
+    const sub = parts[parts.length - 1];
+    if (sub === "split") return { tool: "split" };
+    if (sub === "remove" || sub === "remove-pages" || sub === "delete-pages") return { tool: "remove" };
+    if (sub === "page-numbers" || sub === "number-pages" || sub === "bates") return { tool: "page-numbers" };
+    if (sub === "nup" || sub === "multi-page" || sub === "2-up" || sub === "4-up") {
+      return { tool: "nup", nup: sub === "2-up" ? 2 : sub === "4-up" ? 4 : undefined };
+    }
+    if (sub === "metadata" || sub === "edit-metadata" || sub === "strip-metadata") return { tool: "metadata" };
+    if (sub === "organize") return { tool: "organize" };
+    if (sub === "crop") return { tool: "crop" };
+    if (sub === "forms") return { tool: "forms" };
+    if (sub === "watermark") return { tool: "watermark" };
+    if (sub === "redact") return { tool: "redact" };
+    if (sub === "protect" || sub === "security") return { tool: "security" };
+    if (sub === "repair") return { tool: "repair" };
+    if (sub === "edit" || sub === "studio" || sub === "sign") return { tool: "studio" };
+    return null;
+  }
+
+  const initialRouteTool =
+    typeof window !== "undefined" ? subToolFromPath(window.location.pathname) : null;
+
+  let activeTool = $state<SubTool>(initialRouteTool?.tool ?? "split");
   let selectedFile = $state<File | null>(null);
   let pdfBytes = $state<Uint8Array | null>(null);
   let totalPages = $state<number>(0);
@@ -440,6 +465,7 @@ import { entryError } from "../lib/engineError";
   }
 
   let loadSeq = 0;
+  let loadedEagerLimit = resolveExecutionProfile().browserProfile.ui.eagerThumbnailCount;
   let thumbPdfDoc: PdfJsDocHandle | null = null;
   let thumbQueue: number[] = [];
   const requestedThumbPages = new Set<number>();
@@ -464,9 +490,10 @@ import { entryError } from "../lib/engineError";
     let p: PdfJsPageHandle | null = null;
     let canvas: HTMLCanvasElement | null = null;
     try {
+      const thumbScale = resolveExecutionProfile().browserProfile.ui.thumbnailScale;
       p = await doc.getPage(pageIndex0 + 1);
       if (mySeq !== loadSeq) return;
-      const vp = p.getViewport({ scale: 0.25 });
+      const vp = p.getViewport({ scale: thumbScale });
       canvas = document.createElement("canvas");
       canvas.width = Math.max(1, Math.round(vp.width));
       canvas.height = Math.max(1, Math.round(vp.height));
@@ -533,7 +560,7 @@ import { entryError } from "../lib/engineError";
   }
 
   function observeThumbVisibility(node: HTMLElement, pageIndex0: number) {
-    if (pageIndex0 < 24 || pageThumbnails[pageIndex0]) return {};
+    if (pageIndex0 < loadedEagerLimit || pageThumbnails[pageIndex0]) return {};
     if (typeof IntersectionObserver === "undefined") {
       requestPageThumbnail(pageIndex0);
       return {};
@@ -605,8 +632,9 @@ import { entryError } from "../lib/engineError";
         rotation: 0,
       }));
 
-      // Generate thumbnails eagerly for the first 24 pages; pages 25+ render lazily via IntersectionObserver
-      const eagerCount = Math.min(totalPages, 24);
+      // Generate thumbnails eagerly within the active browser profile's budget; remaining pages render lazily via IntersectionObserver
+      loadedEagerLimit = resolveExecutionProfile().browserProfile.ui.eagerThumbnailCount;
+      const eagerCount = Math.min(totalPages, loadedEagerLimit);
       for (let i = 0; i < eagerCount; i++) {
         if (mySeq !== loadSeq) return;
         requestedThumbPages.add(i);
@@ -642,9 +670,10 @@ import { entryError } from "../lib/engineError";
         console.warn("[PdfSuite] Metadata inspection error:", mErr);
       }
 
-      if (mySeq === loadSeq && totalPages > 24 && pdfJs) {
+      if (mySeq === loadSeq && totalPages > eagerCount && pdfJs) {
         thumbPdfDoc = pdfJs;
         pdfJs = null;
+        isFileLoading = false;
         if (thumbQueue.length > 0) {
           void drainThumbnailQueue();
         }
@@ -1053,25 +1082,10 @@ import { entryError } from "../lib/engineError";
   }
 
   function applyRouteSubpath(path: string) {
-    const parts = path.split("/").filter(Boolean);
-    const sub = parts[parts.length - 1];
-    if (sub === "split") activeTool = "split";
-    else if (sub === "remove" || sub === "remove-pages" || sub === "delete-pages") activeTool = "remove";
-    else if (sub === "page-numbers" || sub === "number-pages" || sub === "bates") activeTool = "page-numbers";
-    else if (sub === "nup" || sub === "multi-page" || sub === "2-up" || sub === "4-up") {
-      activeTool = "nup";
-      if (sub === "2-up") nupPagesPerSheet = 2;
-      else if (sub === "4-up") nupPagesPerSheet = 4;
-    }
-    else if (sub === "metadata" || sub === "edit-metadata" || sub === "strip-metadata") activeTool = "metadata";
-    else if (sub === "organize") activeTool = "organize";
-    else if (sub === "crop") activeTool = "crop";
-    else if (sub === "forms") activeTool = "forms";
-    else if (sub === "watermark") activeTool = "watermark";
-    else if (sub === "redact") activeTool = "redact";
-    else if (sub === "protect" || sub === "security") activeTool = "security";
-    else if (sub === "repair") activeTool = "repair";
-    else if (sub === "edit" || sub === "studio" || sub === "sign") activeTool = "studio";
+    const match = subToolFromPath(path);
+    if (!match) return;
+    activeTool = match.tool;
+    if (match.nup) nupPagesPerSheet = match.nup;
   }
 
   function applyStagedFile() {
@@ -2579,13 +2593,13 @@ import { entryError } from "../lib/engineError";
   }
 
   .cz-suite-target-badge {
-    padding: 0.2rem 0.55rem;
-    font-size: 0.72rem;
-    font-weight: 700;
-    border-radius: 100px;
+    padding: 0.16rem 0.52rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    border-radius: 6px;
     background: var(--accent-soft, rgba(16, 185, 129, 0.1));
-    color: var(--accent);
-    border: 1px solid var(--green-border, rgba(16, 185, 129, 0.24));
+    color: var(--accent-ink, var(--accent));
+    border: 1px solid color-mix(in oklab, var(--accent) 24%, transparent);
     flex-shrink: 0;
   }
 
@@ -2681,7 +2695,7 @@ import { entryError } from "../lib/engineError";
 
   .cz-crop-inputs-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
     gap: 1rem;
     margin-bottom: 1.5rem;
   }
@@ -2895,7 +2909,7 @@ import { entryError } from "../lib/engineError";
   }
   .cz-drawer-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
     gap: 1rem;
     align-items: end;
   }
@@ -3286,6 +3300,71 @@ import { entryError } from "../lib/engineError";
     .cz-remove-card, .cz-chip-btn {
       transition: none !important;
       transform: none !important;
+    }
+  }
+
+  @media (max-width: 680px) {
+    .cz-pdf-suite-page {
+      padding: 0.9rem 0.75rem 2.5rem;
+      gap: 1rem;
+    }
+    .cz-suite-landing {
+      gap: 1.25rem;
+    }
+    .cz-suite-landing-title {
+      font-size: 1.4rem;
+    }
+    .cz-suite-active-dropzone-box {
+      padding: 0.85rem;
+      border-radius: var(--r-lg, 18px);
+    }
+    .cz-suite-target-banner {
+      flex-wrap: wrap;
+      padding: 0.75rem;
+      gap: 0.6rem;
+    }
+    .cz-suite-target-desc {
+      white-space: normal;
+      line-height: 1.35;
+    }
+    .cz-suite-file-bar {
+      flex-wrap: wrap;
+      gap: 0.65rem;
+      padding: 0.75rem 0.9rem;
+    }
+    .cz-file-meta-pill {
+      flex-wrap: wrap;
+    }
+    .cz-tool-workspace-panel {
+      padding: 0.95rem;
+    }
+    .cz-pos-grid {
+      gap: 0.35rem;
+    }
+    .cz-pos-btn {
+      padding: 0.5rem 0.35rem;
+      font-size: 0.74rem;
+    }
+    .cz-permissions-box {
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+    .cz-advanced-drawer-toggle {
+      flex-wrap: wrap;
+      gap: 0.35rem;
+    }
+    .cz-drawer-summary {
+      order: 3;
+      flex-basis: 100%;
+    }
+    .cz-action-footer,
+    .cz-action-dual {
+      justify-content: stretch;
+    }
+    .cz-action-footer :global(.cz-btn),
+    .cz-action-dual :global(.cz-btn) {
+      width: 100%;
+      min-height: 42px;
     }
   }
 </style>

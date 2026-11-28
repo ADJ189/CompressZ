@@ -35,11 +35,45 @@ function triggerDownload(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
+function splitNameExt(name: string): { stem: string; ext: string } {
+  const idx = name.lastIndexOf(".");
+  if (idx <= 0) return { stem: name, ext: "" };
+  return { stem: name.slice(0, idx), ext: name.slice(idx) };
+}
+
+/**
+ * Ensure every item in a batch has a unique filename (case-insensitive)
+ * before packaging into a ZIP archive, so e.g. `photo.png` and `photo.jpg`
+ * converted to `.avif` become `photo.avif` and `photo (2).avif`.
+ */
+export function deduplicateBatchNames(items: BatchFileItem[]): BatchFileItem[] {
+  const seen = new Map<string, number>();
+  return items.map((item) => {
+    const raw = item.name || "file";
+    const lower = raw.toLowerCase();
+    const count = seen.get(lower) ?? 0;
+    if (count === 0) {
+      seen.set(lower, 1);
+      return item;
+    }
+    const { stem, ext } = splitNameExt(raw);
+    let n = count + 1;
+    let candidate = `${stem} (${n})${ext}`;
+    while (seen.has(candidate.toLowerCase())) {
+      n++;
+      candidate = `${stem} (${n})${ext}`;
+    }
+    seen.set(lower, n);
+    seen.set(candidate.toLowerCase(), 1);
+    return { ...item, name: candidate };
+  });
+}
+
 export async function downloadBatch(
   items: BatchFileItem[],
   archiveName: string,
 ): Promise<void> {
-  const validItems = items.filter((item) => item && item.blob);
+  const validItems = deduplicateBatchNames(items.filter((item) => item && item.blob));
   if (validItems.length === 0) return;
 
   if (validItems.length === 1) {

@@ -19,7 +19,7 @@ try {
 
 // App version for Settings → General. The fallback only matters when
 // package.json cannot be read; keep it in sync with package.json's version.
-let appVersion = "1.15.5";
+let appVersion = "1.15.7";
 try {
   appVersion =
     (JSON.parse(
