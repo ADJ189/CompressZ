@@ -1875,6 +1875,170 @@ input[type="range"].slider::-webkit-slider-thumb:hover {
 [data-theme="dark"] .cz-status-pill.is-busy {
   color: #fbbf24;
 }
+.cz-status-pill.is-warn {
+  background: rgba(245, 158, 11, 0.14);
+  color: #92400e;
+  border: 1px solid rgba(217, 119, 6, 0.35);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .cz-status-pill.is-warn {
+    background: rgba(245, 158, 11, 0.16);
+    color: #fde68a;
+    border-color: rgba(251, 191, 36, 0.35);
+  }
+}
+[data-theme="dark"] .cz-status-pill.is-warn {
+  background: rgba(245, 158, 11, 0.16);
+  color: #fde68a;
+  border-color: rgba(251, 191, 36, 0.35);
+}
+
+/* Unified Engine Warning System */
+.cz-warn-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.8rem 1rem;
+  border-radius: var(--r);
+  background: #fffbeb;
+  border: 1px solid rgba(217, 119, 6, 0.42);
+  color: #78350f;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  transition: border-color var(--t), background var(--t);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .cz-warn-banner {
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(251, 191, 36, 0.38);
+    color: #fef3c7;
+  }
+}
+[data-theme="dark"] .cz-warn-banner {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(251, 191, 36, 0.38);
+  color: #fef3c7;
+}
+.cz-warn-banner-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.cz-warn-banner-title-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.cz-warn-banner-icon {
+  flex-shrink: 0;
+  color: #b45309;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .cz-warn-banner-icon {
+    color: #fbbf24;
+  }
+}
+[data-theme="dark"] .cz-warn-banner-icon {
+  color: #fbbf24;
+}
+.cz-warn-banner-title {
+  font-weight: 700;
+  font-size: 0.84rem;
+}
+.cz-warn-banner-dismiss {
+  border: 1px solid rgba(180, 83, 9, 0.35);
+  background: transparent;
+  color: inherit;
+  border-radius: 9999px;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--t), border-color var(--t);
+}
+.cz-warn-banner-dismiss:hover {
+  background: rgba(217, 119, 6, 0.12);
+}
+.cz-warn-banner-dismiss:focus-visible,
+.cz-warn-banner-details summary:focus-visible,
+.cz-card-warn-details summary:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+.cz-warn-banner-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.cz-warn-banner-item {
+  word-break: break-word;
+}
+.cz-warn-banner-count {
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  font-weight: 700;
+  margin-left: 0.35rem;
+}
+.cz-warn-banner-details,
+.cz-card-warn-details {
+  margin-top: 0.2rem;
+  font-size: 0.72rem;
+}
+.cz-warn-banner-details summary,
+.cz-card-warn-details summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.cz-warn-banner-details pre,
+.cz-card-warn-details pre {
+  margin: 0.25rem 0 0;
+  padding: 0.45rem 0.6rem;
+  border-radius: var(--r-xs);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  max-height: 8rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+.cz-card-warn-box {
+  margin-top: 0.3rem;
+  padding: 0.4rem 0.55rem;
+  border-radius: var(--r-xs);
+  background: #fffbeb;
+  border: 1px solid rgba(217, 119, 6, 0.38);
+  color: #78350f;
+  font-size: 0.74rem;
+  line-height: 1.4;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .cz-card-warn-box {
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(251, 191, 36, 0.34);
+    color: #fef3c7;
+  }
+}
+[data-theme="dark"] .cz-card-warn-box {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(251, 191, 36, 0.34);
+  color: #fef3c7;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cz-warn-banner,
+  .cz-warn-banner-dismiss {
+    transition: none;
+  }
+}
 
 /* Bottom summary bar */
 .cz-summary-bar {
