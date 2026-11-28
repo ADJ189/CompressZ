@@ -48,6 +48,16 @@ export interface CompressOptions {
   gifToVideo?: boolean;
 }
 
+export type WarningSeverity = "warn" | "info";
+
+export interface EngineWarning {
+  code: string;
+  engine: string;
+  message: string;
+  severity?: WarningSeverity;
+  detail?: string;
+}
+
 export interface CompressResult {
   blob: Blob;
   originalSize: number;
@@ -57,6 +67,7 @@ export interface CompressResult {
   width?: number;
   height?: number;
   duration?: number;
+  warnings?: EngineWarning[];
 }
 
 export interface FileEntry {
@@ -77,6 +88,8 @@ export interface FileEntry {
   error?: string;
   /** Bounded engine log for an error, shown behind a "Details" disclosure. */
   errorLog?: string[];
+  /** Non-fatal fallback or fidelity warnings produced during processing. */
+  warnings?: EngineWarning[];
   options?: CompressOptions;
   aiLabel?: string; // set by the local AI engine's "Smart Analyze" (see lib/aiEngine.ts) — undefined until run
 }
